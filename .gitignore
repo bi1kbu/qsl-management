@@ -1,0 +1,13 @@
+target/
+.idea/
+.vscode/
+*.iml
+*.log
+data/*.mv.db
+data/*.trace.db
+data/*.json
+uploads/
+build/
+.gradle/
+gradle/
+halo-plugin-standard/
