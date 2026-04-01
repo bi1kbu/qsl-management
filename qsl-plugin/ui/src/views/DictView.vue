@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { VButton, VCard } from '@halo-dev/components'
 import { adminApi } from '../api'
+import QslPageLayout from '../components/QslPageLayout.vue'
 
 const systemConfig = ref<Record<string, unknown>>({})
 const equipments = ref<Array<Record<string, unknown>>>([])
@@ -48,64 +50,39 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="page">
-    <h1>字典配置</h1>
-
-    <div class="block">
-      <h2>系统参数</h2>
+  <QslPageLayout title="字典配置">
+    <VCard title="系统参数">
       <div class="config-form">
-        <label>游客每分钟查询次数</label>
-        <input v-model="systemConfig.queryLimitPerMin" />
+        <label>游客每分钟查询次数</label><input v-model="systemConfig.queryLimitPerMin" class="qsl-input" />
         <label>是否启用补卡</label>
-        <select v-model="systemConfig.reissueEnabled">
-          <option :value="true">启用</option>
-          <option :value="false">禁用</option>
-        </select>
-        <label>补卡间隔天数</label>
-        <input v-model="systemConfig.reissueIntervalDays" />
+        <select v-model="systemConfig.reissueEnabled" class="qsl-input"><option :value="true">启用</option><option :value="false">禁用</option></select>
+        <label>补卡间隔天数</label><input v-model="systemConfig.reissueIntervalDays" class="qsl-input" />
         <label>换卡是否需审核</label>
-        <select v-model="systemConfig.requestNeedReview">
-          <option :value="true">是</option>
-          <option :value="false">否</option>
-        </select>
+        <select v-model="systemConfig.requestNeedReview" class="qsl-input"><option :value="true">是</option><option :value="false">否</option></select>
       </div>
-      <button @click="saveSystemConfig">保存系统参数</button>
-    </div>
+      <template #footer><VButton type="secondary" @click="saveSystemConfig">保存系统参数</VButton></template>
+    </VCard>
 
     <div class="grid">
-      <div class="block">
-        <h2>设备</h2>
-        <div class="inline">
-          <input v-model="equipmentName" placeholder="设备名" />
-          <button @click="addEquipment">新增</button>
-        </div>
+      <VCard title="设备">
+        <div class="inline"><input v-model="equipmentName" class="qsl-input" placeholder="设备名" /><VButton size="sm" type="secondary" @click="addEquipment">新增</VButton></div>
         <ul><li v-for="row in equipments" :key="String(row.id)">{{ row.name }}</li></ul>
-      </div>
-      <div class="block">
-        <h2>天线</h2>
-        <div class="inline">
-          <input v-model="antennaName" placeholder="天线名" />
-          <button @click="addAntenna">新增</button>
-        </div>
+      </VCard>
+      <VCard title="天线">
+        <div class="inline"><input v-model="antennaName" class="qsl-input" placeholder="天线名" /><VButton size="sm" type="secondary" @click="addAntenna">新增</VButton></div>
         <ul><li v-for="row in antennas" :key="String(row.id)">{{ row.name }}</li></ul>
-      </div>
-      <div class="block">
-        <h2>功率</h2>
-        <div class="inline">
-          <input v-model="powerName" placeholder="功率描述" />
-          <button @click="addPower">新增</button>
-        </div>
+      </VCard>
+      <VCard title="功率">
+        <div class="inline"><input v-model="powerName" class="qsl-input" placeholder="功率描述" /><VButton size="sm" type="secondary" @click="addPower">新增</VButton></div>
         <ul><li v-for="row in powers" :key="String(row.id)">{{ row.name }}</li></ul>
-      </div>
+      </VCard>
     </div>
-  </section>
+  </QslPageLayout>
 </template>
 
 <style scoped>
-.page { padding: 20px; }
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.block { background: #fff; border: 1px solid #d9e2ec; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
 .inline { display: flex; gap: 8px; margin-bottom: 8px; }
-.config-form { display: grid; grid-template-columns: 220px 1fr; gap: 8px; margin-bottom: 8px; }
+.config-form { display: grid; grid-template-columns: 220px 1fr; gap: 8px; }
 ul { margin: 0; padding-left: 20px; }
 </style>

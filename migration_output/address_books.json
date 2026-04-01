@@ -1,0 +1,821 @@
+[
+  {
+    "callsign": "BG2MBC",
+    "name": "邵利凯",
+    "phone": "17767707653",
+    "postcode": "130013",
+    "address": "吉林省长春市绿园区皓月大路11111号皓月大厦",
+    "source": "SQLite",
+    "toRadio": "BG2MBC"
+  },
+  {
+    "callsign": "BG9JYY",
+    "name": "",
+    "phone": "18049184299",
+    "postcode": "710600",
+    "address": "陕西省西安市临潼区开发区小区中国福利彩票店",
+    "source": "SQLite",
+    "toRadio": "BG9JYY"
+  },
+  {
+    "callsign": "BI3SPP",
+    "name": "王擎昊",
+    "phone": "18935198005",
+    "postcode": "030032",
+    "address": "山西省太原市小店区化章北街7号中国华能",
+    "source": "SQLite",
+    "toRadio": "BI3SPP"
+  },
+  {
+    "callsign": "BG9JGN",
+    "name": "杨明",
+    "phone": "17709799888",
+    "postcode": "816499",
+    "address": "青海省海西蒙古族藏族自治州茫崖市花土沟镇大兴实业有限公司",
+    "source": "SQLite",
+    "toRadio": "BG9JGN"
+  },
+  {
+    "callsign": "BI2RHX",
+    "name": "",
+    "phone": "15555665541",
+    "postcode": "122000",
+    "address": "辽宁省朝阳市双塔区新华路二段76号",
+    "source": "SQLite",
+    "toRadio": "BI2RHX"
+  },
+  {
+    "callsign": "BD7LBQ",
+    "name": "黄先生",
+    "phone": "18122523926",
+    "postcode": "517000",
+    "address": "广东省河源市源城区大同路金碧花园55栋-河源市无线电协会",
+    "source": "SQLite",
+    "toRadio": "BD7LBQ"
+  },
+  {
+    "callsign": "BI2RRA",
+    "name": "王昌斌",
+    "phone": "18741365086",
+    "postcode": "110170",
+    "address": "辽宁省沈阳市浑南区泰奕桃源",
+    "source": "SQLite",
+    "toRadio": "BI2RRA"
+  },
+  {
+    "callsign": "BH3SNE",
+    "name": "闫风华",
+    "phone": "13935720686",
+    "postcode": "031400",
+    "address": "山西省临汾市霍州市兴霍路煤炭运销公司家属楼",
+    "source": "SQLite",
+    "toRadio": "BH3SNE"
+  },
+  {
+    "callsign": "BA4TMX",
+    "name": "崔先生",
+    "phone": "18061729953",
+    "postcode": "210009",
+    "address": "江苏省南京市鼓楼区虎啸花园11幢1403",
+    "source": "SQLite",
+    "toRadio": "BA4TMX"
+  },
+  {
+    "callsign": "BG6HTY",
+    "name": "刘军益",
+    "phone": "18205603908",
+    "postcode": "230000",
+    "address": "安徽省合肥市高新区复兴家园17栋",
+    "source": "SQLite",
+    "toRadio": "BG6HTY"
+  },
+  {
+    "callsign": "BI3SGI",
+    "name": "",
+    "phone": "15935487359",
+    "postcode": "032100",
+    "address": "山西省介休市绵山镇西海峰煤业",
+    "source": "SQLite",
+    "toRadio": "BI3SGI"
+  },
+  {
+    "callsign": "BA4TAY",
+    "name": "",
+    "phone": "021-58223996",
+    "postcode": "201399",
+    "address": "上海市399-5邮政信箱",
+    "source": "SQLite",
+    "toRadio": "BA4TAY"
+  },
+  {
+    "callsign": "BI8SML",
+    "name": "段炜",
+    "phone": "13700600950",
+    "postcode": "650118",
+    "address": "云南省昆明市五华区龙润路8号西南驿1幢1718室",
+    "source": "SQLite",
+    "toRadio": "BI8SML"
+  },
+  {
+    "callsign": "BI4AXH",
+    "name": "张康仪",
+    "phone": "13512113807",
+    "postcode": "201401",
+    "address": "上海市奉贤区西渡水帘洞新村9栋20号102室",
+    "source": "SQLite",
+    "toRadio": "BI4AXH"
+  },
+  {
+    "callsign": "BI4SID",
+    "name": "沙叶彬",
+    "phone": "18051306881",
+    "postcode": "226001",
+    "address": "江苏省南通市崇川区人民西路五龙云璟10幢1204室(投单元门口信报箱)",
+    "source": "SQLite",
+    "toRadio": "BI4SID"
+  },
+  {
+    "callsign": "BH3FRD",
+    "name": "陈晓坚",
+    "phone": "18805974168",
+    "postcode": "364000",
+    "address": "福建省龙岩市新罗区西安南路89号医药公司宿舍601(艺邦幼儿园旁)",
+    "source": "SQLite",
+    "toRadio": "BH3FRD"
+  },
+  {
+    "callsign": "BH4BXV",
+    "name": "周嘉",
+    "phone": "18016493768",
+    "postcode": "200072",
+    "address": "上海市静安区万荣路970弄47号501室",
+    "source": "SQLite",
+    "toRadio": "BH4BXV"
+  },
+  {
+    "callsign": "BG8LGF",
+    "name": "陈林",
+    "phone": "18002333526",
+    "postcode": "401331",
+    "address": "重庆市沙坪坝区崇贤路1号学府悦园D组团",
+    "source": "SQLite",
+    "toRadio": "BG8LGF"
+  },
+  {
+    "callsign": "BG5EYK",
+    "name": "何迪",
+    "phone": "18917773503",
+    "postcode": "314050",
+    "address": "浙江省嘉兴市南湖区中环南路839号星禾广场1号楼808",
+    "source": "SQLite",
+    "toRadio": "BG5EYK"
+  },
+  {
+    "callsign": "BA4RQO",
+    "name": "",
+    "phone": "17315886569",
+    "postcode": "214100",
+    "address": "江苏省无锡市东港镇东鹏服饰",
+    "source": "SQLite",
+    "toRadio": "BA4RQO"
+  },
+  {
+    "callsign": "BH3HRH",
+    "name": "",
+    "phone": "15148927777",
+    "postcode": "137500",
+    "address": "内蒙古自治区兴安盟突泉县晟嘉新城小区4-3-701",
+    "source": "SQLite",
+    "toRadio": "BH3HRH"
+  },
+  {
+    "callsign": "BG5JQP",
+    "name": "卢赣鸿",
+    "phone": "13707977847",
+    "postcode": "341000",
+    "address": "江西省赣州市章贡区宋城路23号",
+    "source": "SQLite",
+    "toRadio": "BG5JQP"
+  },
+  {
+    "callsign": "BA4JPO",
+    "name": "",
+    "phone": "13869572766",
+    "postcode": "252600",
+    "address": "山东省临清市安竣永青小区东区",
+    "source": "SQLite",
+    "toRadio": "BA4JPO"
+  },
+  {
+    "callsign": "BI7CZK",
+    "name": "",
+    "phone": "18107484156",
+    "postcode": "410005",
+    "address": "湖南省长沙市开福区洪山街道三一大道459号金鹰小区8栋一单元",
+    "source": "SQLite",
+    "toRadio": "BI7CZK"
+  },
+  {
+    "callsign": "BD4VEM",
+    "name": "孙熙铭",
+    "phone": "15351590667",
+    "postcode": "210023",
+    "address": "江苏省南京市栖霞区 南京师范大学仙林校区 西区收发室 麦考瑞学院",
+    "source": "SQLite",
+    "toRadio": "BD4VEM"
+  },
+  {
+    "callsign": "BI4TNK",
+    "name": "",
+    "phone": "021-58223996",
+    "postcode": "201399",
+    "address": "上海市399-5邮政信箱",
+    "source": "SQLite",
+    "toRadio": "BI4TNK"
+  },
+  {
+    "callsign": "BH4HJR",
+    "name": "",
+    "phone": "021-58223996",
+    "postcode": "201399",
+    "address": "上海市399-5邮政信箱",
+    "source": "SQLite",
+    "toRadio": "BH4HJR"
+  },
+  {
+    "callsign": "BH6BRS",
+    "name": "",
+    "phone": "13721155954",
+    "postcode": "314100",
+    "address": "浙江省嘉兴市嘉善县魏塘街道木业大道700号嘉洲阳光花园18-3",
+    "source": "SQLite",
+    "toRadio": "BH6BRS"
+  },
+  {
+    "callsign": "BI7CEQ",
+    "name": "",
+    "phone": "021-58223996",
+    "postcode": "201399",
+    "address": "上海市399-5邮政信箱",
+    "source": "SQLite",
+    "toRadio": "BI7CEQ"
+  },
+  {
+    "callsign": "BA4QMP",
+    "name": "Mr.丰",
+    "phone": "13611513689",
+    "postcode": "650011",
+    "address": "云南省昆明市春城路 20 号 50 号信箱",
+    "source": "SQLite",
+    "toRadio": "BA4QMP"
+  },
+  {
+    "callsign": "BA4QHC",
+    "name": "杨亮",
+    "phone": "13942806626",
+    "postcode": "116600",
+    "address": "辽宁省大连市金州区马桥子街道万国宫馆1号楼1单元",
+    "source": "SQLite",
+    "toRadio": "BA4QHC"
+  },
+  {
+    "callsign": "BH6BQJ",
+    "name": "谢同学",
+    "phone": "16655162694",
+    "postcode": "230601",
+    "address": "安徽省合肥市经开区九龙路111号安徽大学磬苑校区",
+    "source": "SQLite",
+    "toRadio": "BH6BQJ"
+  },
+  {
+    "callsign": "BG5BUT",
+    "name": "",
+    "phone": "13023632932",
+    "postcode": "310000",
+    "address": "浙江省杭州市西湖区云州国际中心2号楼D区505",
+    "source": "SQLite",
+    "toRadio": "BG5BUT"
+  },
+  {
+    "callsign": "BG4KJC",
+    "name": "",
+    "phone": "18563541305",
+    "postcode": "252400",
+    "address": "山东省聊城市莘县皇行家园1-2-903",
+    "source": "SQLite",
+    "toRadio": "BG4KJC"
+  },
+  {
+    "callsign": "BD1BIT",
+    "name": "祝知非",
+    "phone": "18729056883",
+    "postcode": "100061",
+    "address": "北京市东城区左安门内大街左安漪园5-2-1503",
+    "source": "SQLite",
+    "toRadio": "BD1BIT"
+  },
+  {
+    "callsign": "BI4ASX",
+    "name": "杜博轩",
+    "phone": "18705236583",
+    "postcode": "201699",
+    "address": "上海市松江区普照路75弄27号401",
+    "source": "SQLite",
+    "toRadio": "BI4ASX"
+  },
+  {
+    "callsign": "BA3MMA",
+    "name": "宋林涛",
+    "phone": "18631977801",
+    "postcode": "054000",
+    "address": "河北省邢台市信都区泉西街道和园小区",
+    "source": "SQLite",
+    "toRadio": "BA3MMA"
+  },
+  {
+    "callsign": "BA7JBV",
+    "name": "曹玉广",
+    "phone": "13726118380",
+    "postcode": "528476",
+    "address": "广东省中山市大涌镇旗山路376号来发商行",
+    "source": "SQLite",
+    "toRadio": "BA7JBV"
+  },
+  {
+    "callsign": "BG7ZJL",
+    "name": "",
+    "phone": "15620353020",
+    "postcode": "571100",
+    "address": "海南省海口市琼山区招商雍江湾4-1002",
+    "source": "SQLite",
+    "toRadio": "BG7ZJL"
+  },
+  {
+    "callsign": "BD3PDN",
+    "name": "李亚南",
+    "phone": "13933089660",
+    "postcode": "050000",
+    "address": "河北省石家庄市新华区红星街56号红星花园1-4-301室",
+    "source": "SQLite",
+    "toRadio": "BD3PDN"
+  },
+  {
+    "callsign": "BG4GYZ",
+    "name": "",
+    "phone": "021-58223996",
+    "postcode": "201399",
+    "address": "上海市399-5邮政信箱",
+    "source": "SQLite",
+    "toRadio": "BG4GYZ"
+  },
+  {
+    "callsign": "BG5EWN",
+    "name": "谢先生",
+    "phone": "13486321810",
+    "postcode": "314000",
+    "address": "浙江省嘉兴市秀洲区秀清路188号嘉禾绿洲门卫室",
+    "source": "SQLite",
+    "toRadio": "BG5EWN"
+  },
+  {
+    "callsign": "BH8DDD",
+    "name": "冯建",
+    "phone": "18080808030",
+    "postcode": "610100",
+    "address": "成都市龙泉驿区公园路一段258号",
+    "source": "SQLite",
+    "toRadio": "BH8DDD"
+  },
+  {
+    "callsign": "BG4LDK",
+    "name": "丁凯",
+    "phone": "18561321107",
+    "postcode": "266000",
+    "address": "青岛市市北区萍乡路22号中庭山景11-1-302",
+    "source": "SQLite",
+    "toRadio": "BG4LDK"
+  },
+  {
+    "callsign": "BG5JRK",
+    "name": "",
+    "phone": "17288480062",
+    "postcode": "510700",
+    "address": "广东省广州市黄埔区云埔街道观达路17号(达意隆)西门",
+    "source": "SQLite",
+    "toRadio": "BG5JRK"
+  },
+  {
+    "callsign": "BG9SKA",
+    "name": "赵一卓",
+    "phone": "15737978911",
+    "postcode": "471000",
+    "address": "河南省洛阳市西工区九都路香榭里阳光小区六号楼八单元102室",
+    "source": "SQLite",
+    "toRadio": "BG9SKA"
+  },
+  {
+    "callsign": "BI6PWL",
+    "name": "刘春海",
+    "phone": "18751565795",
+    "postcode": "450007",
+    "address": "河南省郑州市中原区岳岗社区南苑2-1-3103",
+    "source": "SQLite",
+    "toRadio": "BI6PWL"
+  },
+  {
+    "callsign": "BI4ALT",
+    "name": "",
+    "phone": "15670552209",
+    "postcode": "201210",
+    "address": "上海浦东新区张江镇黄埔花园11号楼202",
+    "source": "SQLite",
+    "toRadio": "BI4ALT"
+  },
+  {
+    "callsign": "BG5WIV",
+    "name": "Ade",
+    "phone": "13400532509",
+    "postcode": "350200",
+    "address": "福建省福州市长乐区吴航街道长乐一中菜鸟驿站",
+    "source": "SQLite",
+    "toRadio": "BG5WIV"
+  },
+  {
+    "callsign": "BI1LWV",
+    "name": "高昕禹",
+    "phone": "15601021832",
+    "postcode": "100069",
+    "address": "北京市丰台区玉林东里三区八楼302号",
+    "source": "SQLite",
+    "toRadio": "BI1LWV"
+  },
+  {
+    "callsign": "BG4KQI",
+    "name": "刘元松",
+    "phone": "13153128432",
+    "postcode": "253100",
+    "address": "山东省德州市平原县润德家园5-2-201",
+    "source": "SQLite",
+    "toRadio": "BG4KQI"
+  },
+  {
+    "callsign": "BH3GUC",
+    "name": "刚特木勒",
+    "phone": "15249552197",
+    "postcode": "026300",
+    "address": "内蒙古自治区锡林郭勒盟东乌珠穆沁旗博奥小区7号楼3单元501",
+    "source": "SQLite",
+    "toRadio": "BH3GUC"
+  },
+  {
+    "callsign": "BM2EMV",
+    "name": "王为圣",
+    "phone": "02-29364052 / 0922319151",
+    "postcode": "116016",
+    "address": "中国台湾省台北市文山区新光路2段32号3楼(台北捷运动物园站)",
+    "source": "SQLite",
+    "toRadio": "BM2EMV"
+  },
+  {
+    "callsign": "BG9JZZ",
+    "name": "赵政",
+    "phone": "18393919299",
+    "postcode": "731516",
+    "address": "甘肃省临夏回族自治州康乐县莲麓镇寺址",
+    "source": "SQLite",
+    "toRadio": "BG9JZZ"
+  },
+  {
+    "callsign": "BA3MEM",
+    "name": "张振豪",
+    "phone": "19831297285",
+    "postcode": "050000",
+    "address": "河北省石家庄市鹿泉区上庄邮政支局",
+    "source": "SQLite",
+    "toRadio": "BA3MEM"
+  },
+  {
+    "callsign": "BA4SOE",
+    "name": "裔武林",
+    "phone": "17834869888",
+    "postcode": "224300",
+    "address": "江苏省盐城市射阳县幸福大道199号丰和名都25号楼二单元1506室",
+    "source": "SQLite",
+    "toRadio": "BA4SOE"
+  },
+  {
+    "callsign": "BA7OOR",
+    "name": "高天垚",
+    "phone": "18355321711",
+    "postcode": "401120",
+    "address": "重庆市两江新区高科太阳座大厦",
+    "source": "SQLite",
+    "toRadio": "BA7OOR"
+  },
+  {
+    "callsign": "BI1VOW",
+    "name": "姚昕祺",
+    "phone": "17319311282",
+    "postcode": "100028",
+    "address": "北京市朝阳区静安里14号楼4门4号",
+    "source": "SQLite",
+    "toRadio": "BI1VOW"
+  },
+  {
+    "callsign": "BG0FFH",
+    "name": "凯德",
+    "phone": "18599128267",
+    "postcode": "830000",
+    "address": "新疆乌鲁木齐市沙依巴克区友好北路地矿局北院",
+    "source": "SQLite",
+    "toRadio": "BG0FFH"
+  },
+  {
+    "callsign": "BD1CNJ",
+    "name": "姜力逞",
+    "phone": "",
+    "postcode": "102488",
+    "address": "北京市房山区良乡镇鸿顺园22-1-101",
+    "source": "SQLite",
+    "toRadio": "BD1CNJ"
+  },
+  {
+    "callsign": "BD3RQM",
+    "name": "张宁",
+    "phone": "13315617820",
+    "postcode": "065500",
+    "address": "河北省廊坊市固安县太阳公园3期4号楼1单元703",
+    "source": "SQLite",
+    "toRadio": "BD3RQM"
+  },
+  {
+    "callsign": "BI1PPA",
+    "name": "吴小桐",
+    "phone": "",
+    "postcode": "100000",
+    "address": "北京市朝阳区南磨房乡酷车小镇西门集装箱区（阳光无线俱乐部）",
+    "source": "SQLite",
+    "toRadio": "BI1PPA"
+  },
+  {
+    "callsign": "BD1DQI",
+    "name": "邓承钧",
+    "phone": "13501336821",
+    "postcode": "100012",
+    "address": "北京市朝阳区北苑路76号1号楼4单元203号门口信箱",
+    "source": "SQLite",
+    "toRadio": "BD1DQI"
+  },
+  {
+    "callsign": "BH1KOA",
+    "name": "师帅",
+    "phone": "18610173636",
+    "postcode": "100021",
+    "address": "北京市朝阳区首图东路5号院御景园1号楼30G",
+    "source": "SQLite",
+    "toRadio": "BH1KOA"
+  },
+  {
+    "callsign": "BD1DYI",
+    "name": "王亚鹏",
+    "phone": "18500122014",
+    "postcode": "102304",
+    "address": "北京市门头沟区大台街道玉皇庙社区玉西3-1-202",
+    "source": "SQLite",
+    "toRadio": "BD1DYI"
+  },
+  {
+    "callsign": "BI2QEY",
+    "name": "",
+    "phone": "",
+    "postcode": "844000",
+    "address": "新疆维吾尔自治区喀什地区喀什市西域社区托克扎克路158号西郊变电所",
+    "source": "SQLite",
+    "toRadio": "BI2QEY"
+  },
+  {
+    "callsign": "BI1FRJ",
+    "name": "李昭",
+    "phone": "18513665387",
+    "postcode": "100045",
+    "address": "北京市西城区月坛街道白云观街9号北京敕建白云观",
+    "source": "SQLite",
+    "toRadio": "BI1FRJ"
+  },
+  {
+    "callsign": "BG9SHO",
+    "name": "Jiaqing Meng",
+    "phone": "",
+    "postcode": "810001",
+    "address": "青海省西宁市城西区虎台二巷15号",
+    "source": "SQLite",
+    "toRadio": "BG9SHO"
+  },
+  {
+    "callsign": "BH6BOL",
+    "name": "胡学缙",
+    "phone": "13305538917",
+    "postcode": "241000",
+    "address": "安徽省芜湖市镜湖区劳动新村18号楼601室",
+    "source": "SQLite",
+    "toRadio": "BH6BOL"
+  },
+  {
+    "callsign": "BH6SNU",
+    "name": "程带伦",
+    "phone": "13307165350",
+    "postcode": "430058",
+    "address": "湖北省武汉市蔡甸区沌口街道听涛路6号听涛观海87栋609-6",
+    "source": "SQLite",
+    "toRadio": "BH6SNU"
+  },
+  {
+    "callsign": "BG2GWS",
+    "name": "牛浩宇",
+    "phone": "15545329979",
+    "postcode": "157399",
+    "address": "黑龙江省牡丹江市绥芬河市福宁雅居8号楼2单元401",
+    "source": "SQLite",
+    "toRadio": "BG2GWS"
+  },
+  {
+    "callsign": "BA4JAE",
+    "name": "BA4JAE",
+    "phone": "",
+    "postcode": "801225",
+    "address": "山东省泰安市肥城市康城丽都东区17753",
+    "source": "SQLite",
+    "toRadio": "BA4JAE"
+  },
+  {
+    "callsign": "BD3QFF",
+    "name": "",
+    "phone": "15511159577",
+    "postcode": "050000",
+    "address": "河北石家庄裕华区南郊新村牡丹园",
+    "source": "SQLite",
+    "toRadio": "BD3QFF"
+  },
+  {
+    "callsign": "BA4SLH",
+    "name": "尹卫东",
+    "phone": "17805096967",
+    "postcode": "223400",
+    "address": "江苏省淮安市涟水县涟城镇红日大道象富华庭",
+    "source": "SQLite",
+    "toRadio": "BA4SLH"
+  },
+  {
+    "callsign": "BH2VPQ",
+    "name": "吴俊宇",
+    "phone": "17642090975",
+    "postcode": "110000",
+    "address": "辽宁省沈阳市和平区南昌街8号1-1-1吴焱水果生活超市",
+    "source": "SQLite",
+    "toRadio": "BH2VPQ"
+  },
+  {
+    "callsign": "BG4BPN",
+    "name": "施东",
+    "phone": "",
+    "postcode": "202157",
+    "address": "上海市崇明岛堡镇玉屏新村42幢604室",
+    "source": "SQLite",
+    "toRadio": "BG4BPN"
+  },
+  {
+    "callsign": "BH6RFE",
+    "name": "胡叶涛",
+    "phone": "13581292203",
+    "postcode": "435000",
+    "address": "湖北省黄石市黄石港区沈家营八栋口笠山路三单元301室",
+    "source": "SQLite",
+    "toRadio": "BH6RFE"
+  },
+  {
+    "callsign": "BA4SUY",
+    "name": "徐浩然",
+    "phone": "15852588032",
+    "postcode": "214433",
+    "address": "江苏省江阴市澄江街道天庆路256号芙蓉华都43栋901室",
+    "source": "SQLite",
+    "toRadio": "BA4SUY"
+  },
+  {
+    "callsign": "BI3TPQ",
+    "name": "任哲奇",
+    "phone": "13015359898",
+    "postcode": "048026",
+    "address": "山西省晋城市泽州县金村镇黄头村",
+    "source": "SQLite",
+    "toRadio": "BI3TPQ"
+  },
+  {
+    "callsign": "BH4SVO",
+    "name": "周德宏",
+    "phone": "",
+    "postcode": "215007",
+    "address": "江苏苏州市沧浪区内马路9-4号8幢704室",
+    "source": "SQLite",
+    "toRadio": "BH4SVO"
+  },
+  {
+    "callsign": "BG2HEG",
+    "name": "于春江",
+    "phone": "15846206252",
+    "postcode": "161000",
+    "address": "中国黑龙江省齐齐哈尔市建华区西园北区63号楼4号门室",
+    "source": "SQLite",
+    "toRadio": "BG2HEG"
+  },
+  {
+    "callsign": "BG5JFW",
+    "name": "钟肖柱",
+    "phone": "",
+    "postcode": "330063",
+    "address": "江西省南昌市红谷滩区丰和南大道696号南昌航空大学前湖校区",
+    "source": "SQLite",
+    "toRadio": "BG5JFW"
+  },
+  {
+    "callsign": "BD6KAM",
+    "name": "宋林",
+    "phone": "",
+    "postcode": "457000",
+    "address": "河南河南省濮阳市华龙区振兴南路31号 濮阳市自然资源和规划局",
+    "source": "SQLite",
+    "toRadio": "BD6KAM"
+  },
+  {
+    "callsign": "BI3SJN",
+    "name": "张一鸣",
+    "phone": "18835664061",
+    "postcode": "048026",
+    "address": "山西省晋城市四季花城小区17号楼一单元601",
+    "source": "SQLite",
+    "toRadio": "BI3SJN"
+  },
+  {
+    "callsign": "BI1TRT",
+    "name": "张馨",
+    "phone": "",
+    "postcode": "101300",
+    "address": "北京北京市顺义区旺泉街道石门苑49-1-401",
+    "source": "SQLite",
+    "toRadio": "BI1TRT"
+  },
+  {
+    "callsign": "BI3AXL",
+    "name": "黄涛",
+    "phone": "13752303732",
+    "postcode": "300142",
+    "address": "天津市河北区辰纬路3号",
+    "source": "SQLite",
+    "toRadio": "BI3AXL"
+  },
+  {
+    "callsign": "BG0FPB",
+    "name": "钱鸿毅",
+    "phone": "18609906784",
+    "postcode": "834000",
+    "address": "新疆克拉玛地依市克拉玛依区康城社区如意苑4栋2单元1003室",
+    "source": "SQLite",
+    "toRadio": "BG0FPB"
+  },
+  {
+    "callsign": "BD1DQG",
+    "name": "米永剑",
+    "phone": "",
+    "postcode": "101400",
+    "address": "北京怀柔区北房镇裕华园一区12号楼二单元503",
+    "source": "SQLite",
+    "toRadio": "BD1DQG"
+  },
+  {
+    "callsign": "BD4TRG",
+    "name": "张金垂",
+    "phone": "13063929222",
+    "postcode": "223611",
+    "address": "江苏省沭阳县塘沟镇沭阳塘沟医院",
+    "source": "SQLite",
+    "toRadio": "BD4TRG"
+  },
+  {
+    "callsign": "BI1JNP",
+    "name": "钟瑞鑫",
+    "phone": "",
+    "postcode": "100037",
+    "address": "北京市西城区展览馆路（三塔社区）18-1-402",
+    "source": "SQLite",
+    "toRadio": "BI1JNP"
+  },
+  {
+    "callsign": "BD1DSC",
+    "name": "黄坤",
+    "phone": "13269600565",
+    "postcode": "100048",
+    "address": "北京市海淀区车公庄西路 35 号院 9 号楼 3 单元 503",
+    "source": "SQLite",
+    "toRadio": "BD1DSC"
+  }
+]

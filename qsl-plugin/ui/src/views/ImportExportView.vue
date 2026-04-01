@@ -1,12 +1,20 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { VButton, VCard, VEmpty, VLoading, VSpace } from '@halo-dev/components'
 import { adminApi } from '../api'
+import QslPageLayout from '../components/QslPageLayout.vue'
 
+const loading = ref(false)
 const tasks = ref<Array<Record<string, unknown>>>([])
 const selectedIds = ref('')
 
 async function load() {
-  tasks.value = await adminApi.listImportExportTasks()
+  loading.value = true
+  try {
+    tasks.value = await adminApi.listImportExportTasks()
+  } finally {
+    loading.value = false
+  }
 }
 
 async function backupExport() {
@@ -55,36 +63,60 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="page">
-    <h1>导入导出任务</h1>
-    <div class="toolbar">
-      <button @click="backupExport">备份导出</button>
-      <button @click="backupImport">备份导入</button>
-    </div>
-    <div class="toolbar">
-      <input v-model="selectedIds" placeholder="卡片ID列表，逗号分隔（可空=全部）" />
-      <button @click="exportCards">导出卡片 CSV</button>
-      <button @click="exportEnvelopes">导出信封 CSV</button>
-    </div>
-    <table>
-      <thead><tr><th>ID</th><th>任务类型</th><th>状态</th><th>文件</th><th>摘要</th><th>时间</th></tr></thead>
-      <tbody>
-        <tr v-for="row in tasks" :key="String(row.id)">
-          <td>{{ row.id }}</td>
-          <td>{{ row.taskType }}</td>
-          <td>{{ row.status }}</td>
-          <td>{{ row.fileName }}</td>
-          <td>{{ row.summary }}</td>
-          <td>{{ row.createdAt }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
+  <QslPageLayout title="导入导出任务">
+    <template #actions>
+      <VSpace>
+        <VButton @click="backupExport">备份导出</VButton>
+        <VButton @click="backupImport">备份导入</VButton>
+      </VSpace>
+    </template>
+
+    <VCard>
+      <div class="qsl-list-header">
+        <div class="qsl-list-toolbar">
+          <span class="qsl-list-title">CSV 导出</span>
+        </div>
+      </div>
+      <div class="qsl-list-body">
+        <div class="toolbar">
+          <input v-model="selectedIds" class="qsl-input toolbar-input" placeholder="卡片ID列表，逗号分隔（可空=全部）" />
+          <VButton type="secondary" @click="exportCards">导出卡片 CSV</VButton>
+          <VButton @click="exportEnvelopes">导出信封 CSV</VButton>
+        </div>
+      </div>
+    </VCard>
+
+    <VCard>
+      <div class="qsl-list-header">
+        <div class="qsl-list-toolbar">
+          <span class="qsl-list-title">任务列表</span>
+        </div>
+      </div>
+
+      <div class="qsl-list-body">
+        <VLoading v-if="loading" />
+        <VEmpty v-else-if="tasks.length === 0" title="暂无任务" />
+        <div v-else class="table-wrap">
+          <table class="qsl-table">
+            <thead><tr><th>ID</th><th>任务类型</th><th>状态</th><th>文件</th><th>摘要</th><th>时间</th></tr></thead>
+            <tbody>
+              <tr v-for="row in tasks" :key="String(row.id)">
+                <td>{{ row.id }}</td><td>{{ row.taskType }}</td><td>{{ row.status }}</td><td>{{ row.fileName }}</td><td>{{ row.summary }}</td><td>{{ row.createdAt }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="qsl-list-footer">
+        <div class="qsl-list-footer__total">共 {{ tasks.length }} 项数据</div>
+      </div>
+    </VCard>
+  </QslPageLayout>
 </template>
 
 <style scoped>
-.page { padding: 20px; }
-.toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
-table { width: 100%; border-collapse: collapse; background: #fff; }
-th, td { border: 1px solid #d9e2ec; padding: 8px; text-align: left; }
+.toolbar { display: flex; gap: 8px; align-items: center; min-height: 56px; padding: 0 16px; }
+.toolbar-input { width: 360px; }
+.table-wrap { overflow: auto; }
 </style>

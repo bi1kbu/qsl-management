@@ -1,6 +1,7 @@
 import { definePlugin } from '@halo-dev/console-shared'
 import { markRaw } from 'vue'
 import { IconPlug } from '@halo-dev/components'
+import './styles/qsl-theme.css'
 import RouteLayoutView from './views/RouteLayoutView.vue'
 import DashboardView from './views/DashboardView.vue'
 import StationView from './views/StationView.vue'
