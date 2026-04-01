@@ -25,13 +25,13 @@ public class UserController {
     }
 
     @GetMapping("/my/cards")
-    public List<Map<String, Object>> myCards(@RequestParam(required = false) String callsign,
+    public List<Map<String, Object>> myCards(@RequestParam(value = "callsign", required = false) String callsign,
         @RequestHeader(value = "X-User-Id") String userId) {
         return dataService.queryMyCards(userId, callsign);
     }
 
     @GetMapping("/my/qso-records")
-    public List<Map<String, Object>> myQso(@RequestParam(required = false) String callsign,
+    public List<Map<String, Object>> myQso(@RequestParam(value = "callsign", required = false) String callsign,
         @RequestHeader(value = "X-User-Id") String userId) {
         return dataService.queryMyQso(userId, callsign);
     }
@@ -65,7 +65,7 @@ public class UserController {
     }
 
     @PostMapping("/my/exchange-requests/{id}/cancel")
-    public Map<String, Object> cancelRequest(@PathVariable Long id,
+    public Map<String, Object> cancelRequest(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "ham-user") String operator) {
         var updated = dataService.update("request", id, Map.of("status", "CANCELED"), operator);
         return updated == null ? Map.of("canceled", false) : Map.of("canceled", true, "item", updated);

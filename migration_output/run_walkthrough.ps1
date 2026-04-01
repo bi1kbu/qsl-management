@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $base = "http://127.0.0.1:8090"
-$cookie = "device_id=0f4a0042a35544bb81bbb13a1386a5ce; language=zh-CN; XSRF-TOKEN=1a3ff8e3-c423-4946-a1cf-4c95910fc553; SESSION=5ce05192-94bc-4641-b159-dde8a7b8c163"
+$cookie = "device_id=0f4a0042a35544bb81bbb13a1386a5ce; language=zh-CN; XSRF-TOKEN=1a3ff8e3-c423-4946-a1cf-4c95910fc553; SESSION=d827c096-550a-4160-a0c6-d2177d094043"
 $headers = @{
   Cookie = $cookie
   Referer = "http://127.0.0.1:8090/console/qsl/data/import-export"
@@ -48,11 +48,11 @@ $qsoRecords = Get-Content -Raw -Path $qsoPath -Encoding UTF8 | ConvertFrom-Json
 $addressBooks = Get-Content -Raw -Path $addrPath -Encoding UTF8 | ConvertFrom-Json
 $cardSeeds = Get-Content -Raw -Path $cardSeedPath -Encoding UTF8 | ConvertFrom-Json
 
-$cards = @(Invoke-QslApi -Method GET -Path "/apis/qsl.admin/v1/qsl-card-records")
+$cards = @((Invoke-QslApi -Method GET -Path "/apis/qsl.admin/v1/qsl-card-records") | Where-Object { $_ -and $_.id })
 foreach ($c in $cards) { [void](Invoke-QslApi -Method DELETE -Path "/apis/qsl.admin/v1/qsl-card-records/$($c.id)") }
-$qso = @(Invoke-QslApi -Method GET -Path "/apis/qsl.admin/v1/qso-records")
+$qso = @((Invoke-QslApi -Method GET -Path "/apis/qsl.admin/v1/qso-records") | Where-Object { $_ -and $_.id })
 foreach ($q in $qso) { [void](Invoke-QslApi -Method DELETE -Path "/apis/qsl.admin/v1/qso-records/$($q.id)") }
-$addr = @(Invoke-QslApi -Method GET -Path "/apis/qsl.admin/v1/address-books")
+$addr = @((Invoke-QslApi -Method GET -Path "/apis/qsl.admin/v1/address-books") | Where-Object { $_ -and $_.id })
 foreach ($a in $addr) { [void](Invoke-QslApi -Method DELETE -Path "/apis/qsl.admin/v1/address-books/$($a.id)") }
 
 $importStage1 = Invoke-QslApi -Method POST -Path "/apis/qsl.admin/v1/backup/import" -Body @{
@@ -120,14 +120,45 @@ $sendReissue = Invoke-QslApi -Method POST -Path "/apis/qsl.admin/v1/qsl-card-rec
 
 $bindingEvidence = Invoke-QslApi -Method POST -Path "/apis/qsl.user/v1/my/callsign-bindings" -Body @{ callsign = "BI1TEST"; verifyMethod = "EVIDENCE"; evidenceUrl = "https://example.com/license.png" } -ExtraHeaders @{"X-User-Id"="u-walk-1"; "X-Operator"="ham-user"}
 $bindingPhone = Invoke-QslApi -Method POST -Path "/apis/qsl.user/v1/my/callsign-bindings" -Body @{ callsign = "BI1AUTO"; verifyMethod = "PHONE"; phone = "13800000000" } -ExtraHeaders @{"X-User-Id"="u-walk-1"; "X-Operator"="ham-user"}
-$bindingApprove = Invoke-QslApi -Method POST -Path "/apis/qsl.admin/v1/callsign-bindings/$($bindingEvidence.id)/approve"
+$bindingEvidenceId = $bindingEvidence.id
+if (-not $bindingEvidenceId) {
+  $bindingEvidenceId = (Invoke-QslApi -Method GET -Path "/apis/qsl.admin/v1/callsign-bindings" |
+    Where-Object { $_.callsign -eq "BI1TEST" } |
+    Sort-Object id -Descending |
+    Select-Object -ExpandProperty id -First 1)
+}
+if (-not $bindingEvidenceId) { throw "cannot resolve binding id for BI1TEST" }
+$bindingApprove = Invoke-QslApi -Method POST -Path "/apis/qsl.admin/v1/callsign-bindings/$bindingEvidenceId/approve"
 
 $reqNormal = Invoke-QslApi -Method POST -Path "/apis/qsl.user/v1/my/exchange-requests" -Body @{ requestType = "NORMAL"; bindCallsign = "BH1WALK"; note = "eyeball" } -ExtraHeaders @{"X-Role"="HAM"; "X-Operator"="ham-user"}
 $reqReissue = Invoke-QslApi -Method POST -Path "/apis/qsl.user/v1/my/exchange-requests" -Body @{ requestType = "REISSUE"; qslCardRecordId = [int64]$qsoCard.id; reason = "mail lost" } -ExtraHeaders @{"X-Role"="HAM"; "X-Operator"="ham-user"}
-$reqNormalApprove = Invoke-QslApi -Method POST -Path "/apis/qsl.admin/v1/exchange-requests/$($reqNormal.id)/approve"
-$reqReissueApprove = Invoke-QslApi -Method POST -Path "/apis/qsl.admin/v1/exchange-requests/$($reqReissue.id)/approve"
+$reqNormalId = $reqNormal.id
+if (-not $reqNormalId) {
+  $reqNormalId = (Invoke-QslApi -Method GET -Path "/apis/qsl.admin/v1/exchange-requests" |
+    Where-Object { $_.bindCallsign -eq "BH1WALK" } |
+    Sort-Object id -Descending |
+    Select-Object -ExpandProperty id -First 1)
+}
+$reqReissueId = $reqReissue.id
+if (-not $reqReissueId) {
+  $reqReissueId = (Invoke-QslApi -Method GET -Path "/apis/qsl.admin/v1/exchange-requests" |
+    Where-Object { $_.requestType -eq "REISSUE" -and $_.qslCardRecordId -eq $qsoCard.id } |
+    Sort-Object id -Descending |
+    Select-Object -ExpandProperty id -First 1)
+}
+if (-not $reqNormalId -or -not $reqReissueId) { throw "cannot resolve exchange request ids" }
+$reqNormalApprove = Invoke-QslApi -Method POST -Path "/apis/qsl.admin/v1/exchange-requests/$reqNormalId/approve"
+$reqReissueApprove = Invoke-QslApi -Method POST -Path "/apis/qsl.admin/v1/exchange-requests/$reqReissueId/approve"
 $reqReject = Invoke-QslApi -Method POST -Path "/apis/qsl.user/v1/my/exchange-requests" -Body @{ requestType = "NORMAL"; bindCallsign = "BH1REJECT"; note = "reject" } -ExtraHeaders @{"X-Role"="HAM"; "X-Operator"="ham-user"}
-$reqRejectDone = Invoke-QslApi -Method POST -Path "/apis/qsl.admin/v1/exchange-requests/$($reqReject.id)/reject" -Body @{ reason = "incomplete" }
+$reqRejectId = $reqReject.id
+if (-not $reqRejectId) {
+  $reqRejectId = (Invoke-QslApi -Method GET -Path "/apis/qsl.admin/v1/exchange-requests" |
+    Where-Object { $_.bindCallsign -eq "BH1REJECT" } |
+    Sort-Object id -Descending |
+    Select-Object -ExpandProperty id -First 1)
+}
+if (-not $reqRejectId) { throw "cannot resolve reject request id" }
+$reqRejectDone = Invoke-QslApi -Method POST -Path "/apis/qsl.admin/v1/exchange-requests/$reqRejectId/reject" -Body @{ reason = "incomplete" }
 
 $publicQuery1 = Invoke-QslApi -Method GET -Path "/apis/qsl.public/v1/query/cards?callsign=BG"
 $rateLimitResults = @()

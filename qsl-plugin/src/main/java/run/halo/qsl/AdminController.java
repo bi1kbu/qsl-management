@@ -61,13 +61,13 @@ public class AdminController {
     }
 
     @PutMapping("/bureau-configs/{id}")
-    public Map<String, Object> updateBureau(@PathVariable Long id, @RequestBody Map<String, Object> payload,
+    public Map<String, Object> updateBureau(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.update("bureau", id, payload, operator);
     }
 
     @DeleteMapping("/bureau-configs/{id}")
-    public Map<String, Object> deleteBureau(@PathVariable Long id,
+    public Map<String, Object> deleteBureau(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return Map.of("deleted", dataService.softDelete("bureau", id, operator));
     }
@@ -84,13 +84,13 @@ public class AdminController {
     }
 
     @PutMapping("/equipments/{id}")
-    public Map<String, Object> updateEquipment(@PathVariable Long id, @RequestBody Map<String, Object> payload,
+    public Map<String, Object> updateEquipment(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.update("equipment", id, payload, operator);
     }
 
     @DeleteMapping("/equipments/{id}")
-    public Map<String, Object> deleteEquipment(@PathVariable Long id,
+    public Map<String, Object> deleteEquipment(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return Map.of("deleted", dataService.softDelete("equipment", id, operator));
     }
@@ -107,13 +107,13 @@ public class AdminController {
     }
 
     @PutMapping("/antennas/{id}")
-    public Map<String, Object> updateAntenna(@PathVariable Long id, @RequestBody Map<String, Object> payload,
+    public Map<String, Object> updateAntenna(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.update("antenna", id, payload, operator);
     }
 
     @DeleteMapping("/antennas/{id}")
-    public Map<String, Object> deleteAntenna(@PathVariable Long id,
+    public Map<String, Object> deleteAntenna(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return Map.of("deleted", dataService.softDelete("antenna", id, operator));
     }
@@ -130,13 +130,13 @@ public class AdminController {
     }
 
     @PutMapping("/power-presets/{id}")
-    public Map<String, Object> updatePower(@PathVariable Long id, @RequestBody Map<String, Object> payload,
+    public Map<String, Object> updatePower(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.update("power", id, payload, operator);
     }
 
     @DeleteMapping("/power-presets/{id}")
-    public Map<String, Object> deletePower(@PathVariable Long id,
+    public Map<String, Object> deletePower(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return Map.of("deleted", dataService.softDelete("power", id, operator));
     }
@@ -153,13 +153,13 @@ public class AdminController {
     }
 
     @PutMapping("/address-books/{id}")
-    public Map<String, Object> updateAddress(@PathVariable Long id, @RequestBody Map<String, Object> payload,
+    public Map<String, Object> updateAddress(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.update("address", id, payload, operator);
     }
 
     @DeleteMapping("/address-books/{id}")
-    public Map<String, Object> deleteAddress(@PathVariable Long id,
+    public Map<String, Object> deleteAddress(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return Map.of("deleted", dataService.softDelete("address", id, operator));
     }
@@ -176,18 +176,18 @@ public class AdminController {
     }
 
     @GetMapping("/qso-records/{id}")
-    public Map<String, Object> getQso(@PathVariable Long id) {
+    public Map<String, Object> getQso(@PathVariable("id") Long id) {
         return dataService.get("qso", id);
     }
 
     @PutMapping("/qso-records/{id}")
-    public Map<String, Object> updateQso(@PathVariable Long id, @RequestBody Map<String, Object> payload,
+    public Map<String, Object> updateQso(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.update("qso", id, payload, operator);
     }
 
     @DeleteMapping("/qso-records/{id}")
-    public Map<String, Object> deleteQso(@PathVariable Long id,
+    public Map<String, Object> deleteQso(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return Map.of("deleted", dataService.softDelete("qso", id, operator));
     }
@@ -204,18 +204,18 @@ public class AdminController {
     }
 
     @GetMapping("/qsl-card-records/{id}")
-    public Map<String, Object> getCard(@PathVariable Long id) {
+    public Map<String, Object> getCard(@PathVariable("id") Long id) {
         return dataService.get("card", id);
     }
 
     @PutMapping("/qsl-card-records/{id}")
-    public Map<String, Object> updateCard(@PathVariable Long id, @RequestBody Map<String, Object> payload,
+    public Map<String, Object> updateCard(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.update("card", id, payload, operator);
     }
 
     @DeleteMapping("/qsl-card-records/{id}")
-    public Map<String, Object> deleteCard(@PathVariable Long id,
+    public Map<String, Object> deleteCard(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return Map.of("deleted", dataService.softDelete("card", id, operator));
     }
@@ -272,7 +272,7 @@ public class AdminController {
     }
 
     @GetMapping("/import-export-tasks/{id}")
-    public Map<String, Object> getTask(@PathVariable Long id) {
+    public Map<String, Object> getTask(@PathVariable("id") Long id) {
         return dataService.get("task", id);
     }
 
@@ -282,13 +282,13 @@ public class AdminController {
     }
 
     @PostMapping("/exchange-requests/{id}/approve")
-    public Map<String, Object> approveRequest(@PathVariable Long id,
+    public Map<String, Object> approveRequest(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.approveRequest(id, operator);
     }
 
     @PostMapping("/exchange-requests/{id}/reject")
-    public Map<String, Object> rejectRequest(@PathVariable Long id, @RequestBody Map<String, Object> payload,
+    public Map<String, Object> rejectRequest(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.rejectRequest(id, String.valueOf(payload.getOrDefault("reason", "")), operator);
     }
@@ -299,13 +299,13 @@ public class AdminController {
     }
 
     @PostMapping("/callsign-bindings/{id}/approve")
-    public Map<String, Object> approveBinding(@PathVariable Long id,
+    public Map<String, Object> approveBinding(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.approveBinding(id, operator);
     }
 
     @PostMapping("/callsign-bindings/{id}/reject")
-    public Map<String, Object> rejectBinding(@PathVariable Long id, @RequestBody Map<String, Object> payload,
+    public Map<String, Object> rejectBinding(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.rejectBinding(id, String.valueOf(payload.getOrDefault("reason", "")), operator);
     }

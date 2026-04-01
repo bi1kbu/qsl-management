@@ -24,7 +24,7 @@ public class PublicController {
     }
 
     @GetMapping("/query/cards")
-    public List<Map<String, Object>> queryCards(@RequestParam(required = false) String callsign,
+    public List<Map<String, Object>> queryCards(@RequestParam(value = "callsign", required = false) String callsign,
         @RequestHeader(value = "X-User-Id", required = false) String userId,
         ServerWebExchange exchange) {
         var limit = ((Number) dataService.getSystemConfig().getOrDefault("queryLimitPerMin", 5)).intValue();
