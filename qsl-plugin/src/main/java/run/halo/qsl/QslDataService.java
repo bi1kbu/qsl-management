@@ -324,9 +324,9 @@ public class QslDataService {
     }
 
     public List<Map<String, Object>> queryCardsByCallsign(String callsign) {
+        var keyword = Objects.toString(callsign, "").trim().toLowerCase();
         return list("card").stream()
-            .filter(c -> callsign == null || callsign.isBlank()
-                || Objects.toString(c.getOrDefault("peerCallsign", "")).contains(callsign))
+            .filter(c -> keyword.isBlank() || containsCallsign(c, keyword))
             .map(c -> {
                 var item = new LinkedHashMap<String, Object>();
                 item.put("id", c.get("id"));
@@ -340,6 +340,16 @@ public class QslDataService {
                 item.put("cardTime", c.get("cardTime"));
                 return item;
             }).collect(Collectors.toList());
+    }
+
+    private boolean containsCallsign(Map<String, Object> card, String keyword) {
+        for (String key : List.of("peerCallsign", "bindCallsign", "callsign")) {
+            var value = Objects.toString(card.getOrDefault(key, ""), "").trim().toLowerCase();
+            if (value.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<Map<String, Object>> queryMyCards(String callsign) {

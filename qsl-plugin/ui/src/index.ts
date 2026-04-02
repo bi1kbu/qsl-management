@@ -16,6 +16,7 @@ import ReportView from './views/ReportView.vue'
 import ExchangeRequestView from './views/ExchangeRequestView.vue'
 import CallsignBindingView from './views/CallsignBindingView.vue'
 import ImportExportView from './views/ImportExportView.vue'
+import { createQslEditorExtensions } from './extensions/qsl-editor-cards'
 
 const menuMeta = {
   group: 'QSL管理',
@@ -249,5 +250,7 @@ export default definePlugin({
       },
     },
   ],
-  extensionPoints: {},
+  extensionPoints: {
+    'default:editor:extension:create': () => createQslEditorExtensions(),
+  },
 })
