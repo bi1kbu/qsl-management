@@ -301,6 +301,10 @@ public class WidgetController {
                 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
                 .item{border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;background:#fafafa;display:flex;justify-content:space-between;align-items:stretch;min-height:72px;}
                 .item.total{grid-row:1 / span 2;}
+                .item.progress{
+                  background:
+                    linear-gradient(90deg, rgba(137,99,235,.14) var(--pct,0%), #fafafa var(--pct,0%));
+                }
                 .k{font-size:12px;color:#64748b;}
                 .v{font-size:42px;font-weight:700;line-height:1;color:#0f172a;display:flex;align-items:center;justify-content:flex-end;}
               </style>
@@ -322,9 +326,15 @@ public class WidgetController {
                     ['pendingSend', '待发卡', data.pendingSendCount || 0],
                   ];
                   const grid = document.getElementById('grid');
+                  const total = Number(data.total || 0);
                   fields.forEach(([id, k, v]) => {
+                    const num = Number(v || 0);
+                    const pct = total > 0 ? Math.max(0, Math.min(100, (num / total) * 100)) : 0;
                     const el = document.createElement('div');
-                    el.className = id === 'total' ? 'item total' : 'item';
+                    el.className = id === 'total' ? 'item total' : 'item progress';
+                    if (id !== 'total') {
+                      el.style.setProperty('--pct', pct.toFixed(2) + '%');
+                    }
                     el.innerHTML = `<div class="k">${k}</div><div class="v">${v}</div>`;
                     grid.appendChild(el);
                   });
