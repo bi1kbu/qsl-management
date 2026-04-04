@@ -6,6 +6,8 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,7 +17,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/apis/qsl.admin/v1")
@@ -264,6 +268,23 @@ public class AdminController {
             return dataService.backupImport(operator);
         }
         return dataService.importBackupData(payload, operator);
+    }
+
+    @PostMapping(value = "/backup/import-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<Map<String, Object>> backupImportFile(@RequestPart("file") FilePart file,
+        @RequestPart(value = "dataset", required = false) String dataset,
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
+        return DataBufferUtils.join(file.content())
+            .flatMap(dataBuffer -> {
+                var bytes = new byte[dataBuffer.readableByteCount()];
+                dataBuffer.read(bytes);
+                DataBufferUtils.release(dataBuffer);
+                try {
+                    return Mono.just(dataService.importBackupFile(file.filename(), bytes, dataset, operator));
+                } catch (Exception ex) {
+                    return Mono.error(ex);
+                }
+            });
     }
 
     @GetMapping("/import-export-tasks")

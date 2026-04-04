@@ -15,7 +15,8 @@ const filters = ref({
   cardType: '',
   productionStatus: '',
   sentStatus: '',
-  receivedStatus: '',
+  confirmStatus: '',
+  returnCardStatus: '',
 })
 let loadDebounceTimer: ReturnType<typeof setTimeout> | undefined
 const totalCount = computed(() => rows.value.length)
@@ -45,7 +46,8 @@ function resetFilters() {
     cardType: '',
     productionStatus: '',
     sentStatus: '',
-    receivedStatus: '',
+    confirmStatus: '',
+    returnCardStatus: '',
   }
   load()
 }
@@ -94,7 +96,13 @@ function nextPage() {
 onMounted(load)
 
 watch(
-  () => [filters.value.callsign, filters.value.cardType, filters.value.sentStatus, filters.value.receivedStatus],
+  () => [
+    filters.value.callsign,
+    filters.value.cardType,
+    filters.value.sentStatus,
+    filters.value.confirmStatus,
+    filters.value.returnCardStatus,
+  ],
   () => {
     page.value = 1
     if (loadDebounceTimer) clearTimeout(loadDebounceTimer)
@@ -129,8 +137,12 @@ onBeforeUnmount(() => {
           <div class="metric-value">{{ summary.sentCount || 0 }}</div>
         </div>
         <div class="metric-item">
-          <div class="metric-label">已收</div>
-          <div class="metric-value">{{ summary.receivedCount || 0 }}</div>
+          <div class="metric-label">已确认收卡</div>
+          <div class="metric-value">{{ summary.confirmedCount || summary.receivedCount || 0 }}</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">已收回卡</div>
+          <div class="metric-value">{{ summary.returnedCount || 0 }}</div>
         </div>
         <div class="metric-item">
           <div class="metric-label">待打印</div>
@@ -170,11 +182,20 @@ onBeforeUnmount(() => {
           </label>
 
           <label class="filter-chip">
-            <span class="filter-label">收卡：</span>
-            <select v-model="filters.receivedStatus" class="filter-select">
+            <span class="filter-label">确认：</span>
+            <select v-model="filters.confirmStatus" class="filter-select">
               <option value="">全部</option>
-              <option value="NOT_RECEIVED">NOT_RECEIVED</option>
-              <option value="RECEIVED">RECEIVED</option>
+              <option value="UNCONFIRMED">待确认收卡</option>
+              <option value="CONFIRMED">已确认收卡</option>
+            </select>
+          </label>
+
+          <label class="filter-chip">
+            <span class="filter-label">回卡：</span>
+            <select v-model="filters.returnCardStatus" class="filter-select">
+              <option value="">全部</option>
+              <option value="NOT_RECEIVED">待收回卡</option>
+              <option value="RECEIVED">已收回卡</option>
             </select>
           </label>
 
@@ -197,7 +218,8 @@ onBeforeUnmount(() => {
                 <th>类型</th>
                 <th>制作</th>
                 <th>寄出</th>
-                <th>收卡</th>
+                <th>确认</th>
+                <th>回卡</th>
                 <th>补卡次数</th>
               </tr>
             </thead>
@@ -216,7 +238,8 @@ onBeforeUnmount(() => {
                 <td>{{ row.cardType }}</td>
                 <td>{{ row.productionStatus }}</td>
                 <td>{{ row.sentStatus }}</td>
-                <td>{{ row.receivedStatus }}</td>
+                <td>{{ row.confirmStatus }}</td>
+                <td>{{ row.returnCardStatus }}</td>
                 <td>{{ row.reissueCount }}</td>
               </tr>
             </tbody>
@@ -246,7 +269,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 

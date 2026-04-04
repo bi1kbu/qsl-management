@@ -70,7 +70,7 @@ onMounted(load)
         <VEmpty v-else-if="rows.length === 0" title="暂无记录" />
         <div v-else class="table-wrap">
           <table class="qsl-table">
-            <thead><tr><th>ID</th><th>呼号</th><th>类型</th><th>QSO ID</th><th>寄出</th><th>收卡</th><th>补卡次数</th></tr></thead>
+            <thead><tr><th>ID</th><th>呼号</th><th>类型</th><th>QSO ID</th><th>寄出</th><th>确认</th><th>回卡</th><th>补卡次数</th></tr></thead>
             <tbody>
               <tr v-for="row in rows" :key="String(row.id)">
                 <td>{{ row.id }}</td>
@@ -78,7 +78,8 @@ onMounted(load)
                 <td>{{ row.cardType }}</td>
                 <td>{{ row.qsoRecordId }}</td>
                 <td>{{ row.sentStatus }}</td>
-                <td>{{ row.receivedStatus }}</td>
+                <td>{{ row.confirmStatus }}</td>
+                <td>{{ row.returnCardStatus }}</td>
                 <td>{{ row.reissueCount }}</td>
               </tr>
             </tbody>

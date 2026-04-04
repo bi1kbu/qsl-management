@@ -1,5 +1,8 @@
 package run.halo.qsl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
@@ -18,7 +21,11 @@ import org.springframework.stereotype.Service;
 @Service
 public class QslDataService {
 
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
+
     private final AtomicLong idGenerator = new AtomicLong(1000);
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final Map<Long, Map<String, Object>> bureaus = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> equipments = new ConcurrentHashMap<>();
@@ -67,13 +74,26 @@ public class QslDataService {
         return getStore(type).values().stream()
             .filter(item -> !isDeleted(item))
             .sorted(Comparator.comparing(item -> ((Number) item.get("id")).longValue()))
-            .map(LinkedHashMap::new)
+            .map(item -> {
+                var copy = new LinkedHashMap<>(item);
+                if ("card".equals(type)) {
+                    ensureCardStatusDefaults(copy);
+                }
+                return copy;
+            })
             .collect(Collectors.toList());
     }
 
     public Map<String, Object> get(String type, Long id) {
         var item = getStore(type).get(id);
-        return item == null ? null : new LinkedHashMap<>(item);
+        if (item == null) {
+            return null;
+        }
+        var copy = new LinkedHashMap<>(item);
+        if ("card".equals(type)) {
+            ensureCardStatusDefaults(copy);
+        }
+        return copy;
     }
 
     public Map<String, Object> create(String type, Map<String, Object> payload, String operator) {
@@ -91,7 +111,18 @@ public class QslDataService {
         if ("card".equals(type)) {
             item.putIfAbsent("productionStatus", "DRAFT");
             item.putIfAbsent("sentStatus", "NOT_SENT");
+            if (!item.containsKey("confirmStatus")) {
+                var legacyReceived = Objects.toString(item.getOrDefault("receivedStatus", "NOT_RECEIVED"));
+                item.put("confirmStatus", "RECEIVED".equalsIgnoreCase(legacyReceived) ? "CONFIRMED" : "UNCONFIRMED");
+            }
+            if (!item.containsKey("returnCardStatus")) {
+                var legacyReceived = Objects.toString(item.getOrDefault("receivedStatus", "NOT_RECEIVED"));
+                item.put("returnCardStatus", "RECEIVED".equalsIgnoreCase(legacyReceived) ? "RECEIVED" : "NOT_RECEIVED");
+            }
+            // Backward compatibility for old front-end fields.
             item.putIfAbsent("receivedStatus", "NOT_RECEIVED");
+            var returnStatus = Objects.toString(item.getOrDefault("returnCardStatus", "NOT_RECEIVED"));
+            item.put("receivedStatus", "RECEIVED".equalsIgnoreCase(returnStatus) ? "RECEIVED" : "NOT_RECEIVED");
             item.putIfAbsent("reissueCount", 0);
         }
 
@@ -122,6 +153,17 @@ public class QslDataService {
 
         var before = new LinkedHashMap<>(existing);
         existing.putAll(payload);
+        if ("card".equals(type)) {
+            if (!payload.containsKey("confirmStatus") && payload.containsKey("receivedStatus")) {
+                var legacyReceived = Objects.toString(payload.getOrDefault("receivedStatus", "NOT_RECEIVED"));
+                existing.put("confirmStatus", "RECEIVED".equalsIgnoreCase(legacyReceived) ? "CONFIRMED" : "UNCONFIRMED");
+            }
+            if (!payload.containsKey("returnCardStatus") && payload.containsKey("receivedStatus")) {
+                var legacyReceived = Objects.toString(payload.getOrDefault("receivedStatus", "NOT_RECEIVED"));
+                existing.put("returnCardStatus", "RECEIVED".equalsIgnoreCase(legacyReceived) ? "RECEIVED" : "NOT_RECEIVED");
+            }
+            ensureCardStatusDefaults(existing);
+        }
         existing.put("updatedAt", OffsetDateTime.now().toString());
         existing.put("updatedBy", operator);
         writeAudit(type, String.valueOf(id), "update", operator, "success", before, existing);
@@ -186,6 +228,10 @@ public class QslDataService {
                 continue;
             }
             var before = new LinkedHashMap<>(card);
+            ensureCardStatusDefaults(card);
+            card.put("returnCardStatus", "RECEIVED");
+            card.put("returnedAt", now);
+            card.put("returnedBy", operator);
             card.put("receivedStatus", "RECEIVED");
             card.put("receivedAt", now);
             card.put("receivedBy", operator);
@@ -195,6 +241,34 @@ public class QslDataService {
             card.put("updatedAt", now);
             card.put("updatedBy", operator);
             writeAudit("card", String.valueOf(id), "receive_confirm", operator, "success", before, card);
+            updated.add(new LinkedHashMap<>(card));
+        }
+        var result = new LinkedHashMap<String, Object>();
+        result.put("count", updated.size());
+        result.put("items", updated);
+        return result;
+    }
+
+    public Map<String, Object> confirmByPeer(Map<String, Object> payload, String operator) {
+        var ids = castIds(payload.get("cardIds"));
+        var updated = new ArrayList<Map<String, Object>>();
+        var now = OffsetDateTime.now().toString();
+        for (Long id : ids) {
+            var card = cardRecords.get(id);
+            if (card == null || isDeleted(card)) {
+                continue;
+            }
+            var before = new LinkedHashMap<>(card);
+            ensureCardStatusDefaults(card);
+            card.put("confirmStatus", "CONFIRMED");
+            card.put("confirmedAt", now);
+            card.put("confirmedBy", operator);
+            if (payload.containsKey("confirmRemark")) {
+                card.put("confirmRemark", payload.get("confirmRemark"));
+            }
+            card.put("updatedAt", now);
+            card.put("updatedBy", operator);
+            writeAudit("card", String.valueOf(id), "peer_receive_confirm", operator, "success", before, card);
             updated.add(new LinkedHashMap<>(card));
         }
         var result = new LinkedHashMap<String, Object>();
@@ -226,14 +300,16 @@ public class QslDataService {
     public byte[] exportCardsCsv(List<Long> cardIds) {
         var rows = cardIds == null || cardIds.isEmpty()
             ? list("card") : cardIds.stream().map(cardRecords::get).filter(Objects::nonNull).toList();
-        var header = "呼号,卡片类型,寄出状态,寄出时间,收到状态,收到时间,补卡次数\n";
+        var header = "呼号,卡片类型,寄出状态,寄出时间,确认收卡状态,回卡状态,回卡时间,补卡次数\n";
         var builder = new StringBuilder(header);
         for (var r : rows) {
+            ensureCardStatusDefaults(r);
             builder.append(csv(r.get("peerCallsign"))).append(',')
                 .append(csv(r.get("cardType"))).append(',')
                 .append(csv(r.get("sentStatus"))).append(',')
                 .append(csv(r.get("sentAt"))).append(',')
-                .append(csv(r.get("receivedStatus"))).append(',')
+                .append(csv(r.get("confirmStatus"))).append(',')
+                .append(csv(r.get("returnCardStatus"))).append(',')
                 .append(csv(r.get("receivedAt"))).append(',')
                 .append(csv(r.get("reissueCount"))).append('\n');
         }
@@ -263,6 +339,23 @@ public class QslDataService {
     public Map<String, Object> backupImport(String operator) {
         var task = create("task", Map.of("taskType", "IMPORT", "status", "COMPLETED", "fileName", "backup.json"), operator);
         return Map.of("task", task, "summary", "backup import simulated");
+    }
+
+    public Map<String, Object> importBackupFile(String fileName, byte[] bytes, String dataset, String operator) throws Exception {
+        var name = Objects.toString(fileName, "").trim();
+        if (name.isBlank()) {
+            throw new IllegalArgumentException("file is required");
+        }
+        var payload = parseImportPayload(name, bytes, dataset);
+        var result = importBackupData(payload, operator);
+        var task = castMap(result.get("task"));
+        if (task != null) {
+            update("task", asLong(task.get("id")),
+                Map.of("fileName", name, "summary", "file import: " + name), operator);
+            result = new LinkedHashMap<>(result);
+            result.put("task", get("task", asLong(task.get("id"))));
+        }
+        return result;
     }
 
     public Map<String, Object> approveRequest(Long id, String operator) {
@@ -328,14 +421,21 @@ public class QslDataService {
         return list("card").stream()
             .filter(c -> keyword.isBlank() || containsCallsign(c, keyword))
             .map(c -> {
+                ensureCardStatusDefaults(c);
                 var item = new LinkedHashMap<String, Object>();
                 item.put("id", c.get("id"));
                 item.put("peerCallsign", c.get("peerCallsign"));
                 item.put("cardType", c.get("cardType"));
+                item.put("productionStatus", c.get("productionStatus"));
                 item.put("sentStatus", c.get("sentStatus"));
                 item.put("sentAt", c.get("sentAt"));
+                item.put("confirmStatus", c.get("confirmStatus"));
+                item.put("confirmedAt", c.get("confirmedAt"));
+                item.put("returnCardStatus", c.get("returnCardStatus"));
+                item.put("returnedAt", c.get("returnedAt"));
                 item.put("receivedStatus", c.get("receivedStatus"));
                 item.put("receivedAt", c.get("receivedAt"));
+                item.put("reissueCount", c.get("reissueCount"));
                 item.put("cardDate", c.get("cardDate"));
                 item.put("cardTime", c.get("cardTime"));
                 return item;
@@ -398,17 +498,23 @@ public class QslDataService {
     public Map<String, Object> reportSummary() {
         var cards = list("card");
         var sent = cards.stream().filter(c -> "SENT".equals(c.get("sentStatus"))).count();
-        var received = cards.stream().filter(c -> "RECEIVED".equals(c.get("receivedStatus"))).count();
+        var confirmed = cards.stream().filter(c -> "CONFIRMED".equals(c.get("confirmStatus"))).count();
         var pendingPrint = cards.stream().filter(c -> "PENDING_PRINT".equals(c.get("productionStatus"))).count();
         var notSent = cards.stream().filter(c -> "NOT_SENT".equals(c.get("sentStatus"))).count();
-        var notReceived = cards.stream().filter(c -> "NOT_RECEIVED".equals(c.get("receivedStatus"))).count();
+        var notConfirmed = cards.stream().filter(c -> "UNCONFIRMED".equals(c.get("confirmStatus"))).count();
+        var returned = cards.stream().filter(c -> "RECEIVED".equals(c.get("returnCardStatus"))).count();
+        var notReturned = cards.stream().filter(c -> "NOT_RECEIVED".equals(c.get("returnCardStatus"))).count();
 
         var data = new LinkedHashMap<String, Object>();
         data.put("sentCount", sent);
-        data.put("receivedCount", received);
+        data.put("confirmedCount", confirmed);
+        data.put("returnedCount", returned);
+        // Backward compatibility key, kept for existing front-end references.
+        data.put("receivedCount", confirmed);
         data.put("pendingPrintCount", pendingPrint);
         data.put("pendingSendCount", notSent);
-        data.put("pendingReceiveCount", notReceived);
+        data.put("pendingConfirmCount", notConfirmed);
+        data.put("pendingReceiveCount", notReturned);
         data.put("total", cards.size());
         return data;
     }
@@ -463,29 +569,40 @@ public class QslDataService {
         var cardType = Objects.toString(filters.getOrDefault("cardType", "")).trim();
         var productionStatus = Objects.toString(filters.getOrDefault("productionStatus", "")).trim();
         var sentStatus = Objects.toString(filters.getOrDefault("sentStatus", "")).trim();
+        var confirmStatus = Objects.toString(filters.getOrDefault("confirmStatus", "")).trim();
+        var returnCardStatus = Objects.toString(filters.getOrDefault("returnCardStatus", "")).trim();
+        // Compatible old filter key maps to return-card dimension.
         var receivedStatus = Objects.toString(filters.getOrDefault("receivedStatus", "")).trim();
         return list("card").stream()
+            .peek(this::ensureCardStatusDefaults)
             .filter(c -> callsign.isBlank() || Objects.toString(c.getOrDefault("peerCallsign", "")).contains(callsign))
             .filter(c -> cardType.isBlank() || cardType.equalsIgnoreCase(Objects.toString(c.getOrDefault("cardType", ""))))
             .filter(c -> productionStatus.isBlank()
                 || productionStatus.equalsIgnoreCase(Objects.toString(c.getOrDefault("productionStatus", ""))))
             .filter(c -> sentStatus.isBlank() || sentStatus.equalsIgnoreCase(Objects.toString(c.getOrDefault("sentStatus", ""))))
+            .filter(c -> confirmStatus.isBlank()
+                || confirmStatus.equalsIgnoreCase(Objects.toString(c.getOrDefault("confirmStatus", ""))))
+            .filter(c -> returnCardStatus.isBlank()
+                || returnCardStatus.equalsIgnoreCase(Objects.toString(c.getOrDefault("returnCardStatus", ""))))
             .filter(c -> receivedStatus.isBlank()
-                || receivedStatus.equalsIgnoreCase(Objects.toString(c.getOrDefault("receivedStatus", ""))))
+                || receivedStatus.equalsIgnoreCase(Objects.toString(c.getOrDefault("returnCardStatus", ""))))
             .collect(Collectors.toList());
     }
 
     public byte[] exportDashboardCsv(Map<String, String> filters) {
         var rows = dashboardOverview(filters);
-        var builder = new StringBuilder("呼号,卡片类型,制作状态,寄出状态,收卡状态,发信时间,收信时间,补卡次数\n");
+        var builder = new StringBuilder("呼号,卡片类型,制作状态,寄出状态,确认收卡状态,回卡状态,发信时间,确认时间,回卡时间,补卡次数\n");
         for (var r : rows) {
+            ensureCardStatusDefaults(r);
             builder.append(csv(r.get("peerCallsign"))).append(',')
                 .append(csv(r.get("cardType"))).append(',')
                 .append(csv(r.get("productionStatus"))).append(',')
                 .append(csv(r.get("sentStatus"))).append(',')
-                .append(csv(r.get("receivedStatus"))).append(',')
+                .append(csv(r.get("confirmStatus"))).append(',')
+                .append(csv(r.get("returnCardStatus"))).append(',')
                 .append(csv(r.get("sentAt"))).append(',')
-                .append(csv(r.get("receivedAt"))).append(',')
+                .append(csv(r.get("confirmedAt"))).append(',')
+                .append(csv(r.get("returnedAt"))).append(',')
                 .append(csv(r.get("reissueCount"))).append('\n');
         }
         return withBom(builder.toString());
@@ -654,6 +771,21 @@ public class QslDataService {
         return Boolean.TRUE.equals(item.get("deleted"));
     }
 
+    private void ensureCardStatusDefaults(Map<String, Object> card) {
+        if (card == null) {
+            return;
+        }
+        var legacyReceived = Objects.toString(card.getOrDefault("receivedStatus", "NOT_RECEIVED"));
+        if (!card.containsKey("confirmStatus")) {
+            card.put("confirmStatus", "RECEIVED".equalsIgnoreCase(legacyReceived) ? "CONFIRMED" : "UNCONFIRMED");
+        }
+        if (!card.containsKey("returnCardStatus")) {
+            card.put("returnCardStatus", "RECEIVED".equalsIgnoreCase(legacyReceived) ? "RECEIVED" : "NOT_RECEIVED");
+        }
+        var returnStatus = Objects.toString(card.getOrDefault("returnCardStatus", "NOT_RECEIVED"));
+        card.put("receivedStatus", "RECEIVED".equalsIgnoreCase(returnStatus) ? "RECEIVED" : "NOT_RECEIVED");
+    }
+
     private void writeAudit(String objectType, String objectId, String operation, String operator,
         String result, Map<String, Object> before, Map<String, Object> after) {
         var id = idGenerator.incrementAndGet();
@@ -698,6 +830,246 @@ public class QslDataService {
             return c.stream().map(v -> Long.parseLong(String.valueOf(v))).collect(Collectors.toList());
         }
         return List.of(Long.parseLong(String.valueOf(obj)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> castMap(Object obj) {
+        if (obj instanceof Map<?, ?> m) {
+            return (Map<String, Object>) m;
+        }
+        return null;
+    }
+
+    private Map<String, Object> parseImportPayload(String fileName, byte[] bytes, String dataset) throws Exception {
+        var lower = fileName.toLowerCase();
+        if (lower.endsWith(".json")) {
+            return parseJsonPayload(new String(bytes, StandardCharsets.UTF_8), dataset);
+        }
+        if (lower.endsWith(".csv")) {
+            return parseCsvPayload(new String(bytes, StandardCharsets.UTF_8), fileName, dataset);
+        }
+        throw new IllegalArgumentException("unsupported file type, only .json/.csv");
+    }
+
+    private Map<String, Object> parseJsonPayload(String text, String dataset) throws Exception {
+        var root = objectMapper.readTree(text);
+        if (root.isArray()) {
+            var normalized = normalizeDataset(dataset);
+            if (normalized == null) {
+                throw new IllegalArgumentException("dataset is required when JSON root is array");
+            }
+            var list = objectMapper.convertValue(root, LIST_MAP_TYPE);
+            return payloadForSingleDataset(normalized, list);
+        }
+        if (!root.isObject()) {
+            throw new IllegalArgumentException("json must be object or array");
+        }
+        var payload = objectMapper.convertValue(root, MAP_TYPE);
+        if (payload.containsKey("qsoRecords") || payload.containsKey("qslCardRecords") || payload.containsKey("addressBooks")) {
+            return payload;
+        }
+        var normalized = normalizeDataset(dataset);
+        if (normalized == null) {
+            throw new IllegalArgumentException("dataset is required for simple object json");
+        }
+        return payloadForSingleDataset(normalized, List.of(payload));
+    }
+
+    private Map<String, Object> parseCsvPayload(String text, String fileName, String dataset) {
+        var rows = parseCsvRows(text);
+        var normalized = normalizeDataset(dataset);
+        if (normalized == null) {
+            normalized = inferDatasetByName(fileName);
+        }
+        if (normalized == null) {
+            throw new IllegalArgumentException("dataset is required for csv import");
+        }
+        if ("address".equals(normalized)) {
+            var converted = rows.stream().map(this::mapAddressRow).toList();
+            return payloadForSingleDataset("address", converted);
+        }
+        if ("qso".equals(normalized)) {
+            var converted = rows.stream().map(this::mapQsoRow).toList();
+            return payloadForSingleDataset("qso", converted);
+        }
+        var qsoRows = new ArrayList<Map<String, Object>>();
+        var cardRows = new ArrayList<Map<String, Object>>();
+        var addressRows = new ArrayList<Map<String, Object>>();
+        for (var row : rows) {
+            qsoRows.add(mapQsoRow(row));
+            cardRows.add(mapCardRow(row, true));
+            addressRows.add(mapAddressRow(row));
+        }
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("qsoRecords", qsoRows);
+        payload.put("qslCardRecords", cardRows);
+        payload.put("addressBooks", addressRows);
+        return payload;
+    }
+
+    private Map<String, Object> payloadForSingleDataset(String dataset, List<Map<String, Object>> list) {
+        var payload = new LinkedHashMap<String, Object>();
+        switch (dataset) {
+            case "qso" -> payload.put("qsoRecords", list);
+            case "card" -> payload.put("qslCardRecords", list);
+            case "address" -> payload.put("addressBooks", list);
+            default -> throw new IllegalArgumentException("invalid dataset: " + dataset);
+        }
+        return payload;
+    }
+
+    private String inferDatasetByName(String fileName) {
+        var lower = Objects.toString(fileName, "").toLowerCase();
+        if (lower.contains("qso")) {
+            return "qso";
+        }
+        if (lower.contains("card")) {
+            return "card";
+        }
+        if (lower.contains("address")) {
+            return "all";
+        }
+        return null;
+    }
+
+    private String normalizeDataset(String dataset) {
+        var value = Objects.toString(dataset, "").trim().toLowerCase();
+        if (value.isBlank()) {
+            return null;
+        }
+        return switch (value) {
+            case "qso", "card", "address", "all" -> value;
+            default -> null;
+        };
+    }
+
+    private List<Map<String, Object>> parseCsvRows(String csvText) {
+        var text = csvText;
+        if (text.startsWith("\uFEFF")) {
+            text = text.substring(1);
+        }
+        var records = parseCsvRecords(text);
+        if (records.isEmpty()) {
+            return List.of();
+        }
+        var headers = records.get(0).stream().map(h -> h == null ? "" : h.trim()).toList();
+        var rows = new ArrayList<Map<String, Object>>();
+        for (int i = 1; i < records.size(); i++) {
+            var cols = records.get(i);
+            if (cols.stream().allMatch(v -> Objects.toString(v, "").isBlank())) {
+                continue;
+            }
+            var row = new LinkedHashMap<String, Object>();
+            for (int c = 0; c < headers.size(); c++) {
+                var key = headers.get(c);
+                if (key.isBlank()) {
+                    continue;
+                }
+                row.put(key, c < cols.size() ? cols.get(c) : "");
+            }
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private List<List<String>> parseCsvRecords(String text) {
+        var rows = new ArrayList<List<String>>();
+        var row = new ArrayList<String>();
+        var cell = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '"') {
+                if (inQuotes && i + 1 < text.length() && text.charAt(i + 1) == '"') {
+                    cell.append('"');
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (ch == ',' && !inQuotes) {
+                row.add(cell.toString());
+                cell.setLength(0);
+            } else if ((ch == '\n' || ch == '\r') && !inQuotes) {
+                if (ch == '\r' && i + 1 < text.length() && text.charAt(i + 1) == '\n') {
+                    i++;
+                }
+                row.add(cell.toString());
+                cell.setLength(0);
+                rows.add(row);
+                row = new ArrayList<>();
+            } else {
+                cell.append(ch);
+            }
+        }
+        if (cell.length() > 0 || !row.isEmpty()) {
+            row.add(cell.toString());
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private Map<String, Object> mapAddressRow(Map<String, Object> row) {
+        var mapped = new LinkedHashMap<String, Object>();
+        mapped.put("callsign", pick(row, "callsign", "peerCallsign", "对方呼号"));
+        mapped.put("address", pick(row, "address", "收件地址", "邮寄地址"));
+        mapped.put("name", pick(row, "name", "姓名"));
+        mapped.put("phone", pick(row, "phone", "电话"));
+        mapped.put("postcode", pick(row, "zipcode", "postcode", "邮编"));
+        return mapped;
+    }
+
+    private Map<String, Object> mapQsoRow(Map<String, Object> row) {
+        var mapped = new LinkedHashMap<String, Object>();
+        mapped.put("peerCallsign", pick(row, "peerCallsign", "callsign", "to_radio", "对方呼号"));
+        mapped.put("qsoDate", pick(row, "qsoDate", "qso_date", "通联日期"));
+        mapped.put("qsoTime", pick(row, "qsoTime", "qso_time", "通联时间"));
+        mapped.put("frequency", pick(row, "frequency", "qso_freq_mhz", "频率"));
+        mapped.put("mode", pick(row, "mode", "qso_mode", "模式"));
+        return mapped;
+    }
+
+    private Map<String, Object> mapCardRow(Map<String, Object> row) {
+        return mapCardRow(row, false);
+    }
+
+    private Map<String, Object> mapCardRow(Map<String, Object> row, boolean forceEyeball) {
+        var mapped = new LinkedHashMap<String, Object>();
+        var eyeball = "1".equals(normalize(pick(row, "qso_eyeball")));
+        var swl = "1".equals(normalize(pick(row, "qso_swl")));
+        mapped.put("peerCallsign", pick(row, "peerCallsign", "callsign", "to_radio", "对方呼号"));
+        mapped.put("cardType", forceEyeball ? "EYEBALL" : (eyeball ? "EYEBALL" : (swl ? "LISTEN" : "QSO")));
+        mapped.put("cardDate", pick(row, "cardDate", "card_date", "qso_date", "qsoDate"));
+        mapped.put("cardTime", pick(row, "cardTime", "card_time", "qso_time", "qsoTime"));
+        mapped.put("productionStatus", "1".equals(normalize(pick(row, "printed_card"))) ? "PRINTED" : "PENDING_PRINT");
+        mapped.put("sentStatus", "1".equals(normalize(pick(row, "sent_card"))) ? "SENT" : "NOT_SENT");
+        boolean received = "1".equals(normalize(pick(row, "received_card")));
+        mapped.put("confirmStatus", received ? "CONFIRMED" : "UNCONFIRMED");
+        mapped.put("returnCardStatus", received ? "RECEIVED" : "NOT_RECEIVED");
+        mapped.put("reissueCount", toInt(pick(row, "reissueCount", "补卡次数"), 0));
+        return mapped;
+    }
+
+    private String pick(Map<String, Object> row, String... keys) {
+        for (var key : keys) {
+            if (row.containsKey(key) && row.get(key) != null) {
+                var value = Objects.toString(row.get(key), "").trim();
+                if (!value.isBlank()) {
+                    return value;
+                }
+            }
+        }
+        return "";
+    }
+
+    private int toInt(String value, int defaultValue) {
+        try {
+            if (value == null || value.isBlank()) {
+                return defaultValue;
+            }
+            return Integer.parseInt(value.trim());
+        } catch (Exception ignored) {
+            return defaultValue;
+        }
     }
 
     private String csv(Object value) {

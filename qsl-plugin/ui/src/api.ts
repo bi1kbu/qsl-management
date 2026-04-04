@@ -168,6 +168,23 @@ export const adminApi = {
       body: JSON.stringify(payload || {}),
     })
   },
+  backupImportFile(file: File, dataset: string) {
+    const form = new FormData()
+    form.append('file', file)
+    if (dataset) {
+      form.append('dataset', dataset)
+    }
+    return fetch('/apis/qsl.admin/v1/backup/import-file', {
+      method: 'POST',
+      body: form,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `HTTP ${res.status}`)
+      }
+      return res.json()
+    })
+  },
   getReportMonthly() {
     return request<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/reports/trend/monthly')
   },

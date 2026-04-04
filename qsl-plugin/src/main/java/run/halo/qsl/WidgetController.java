@@ -38,14 +38,31 @@ public class WidgetController {
               <meta name="viewport" content="width=device-width, initial-scale=1.0" />
               <title>QSL 查询卡片</title>
               <style>
-                body{margin:0;padding:12px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;background:#f8fafc;}
-                .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;}
+                html,body{height:100%;overflow:hidden;}
+                body{margin:0;padding:12px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;background:#f8fafc;box-sizing:border-box;}
+                .card{height:calc(100% - 24px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;}
                 .title{font-size:14px;font-weight:600;margin:0 0 10px;}
                 .row{display:flex;gap:8px;}
                 input{flex:1;height:34px;border:1px solid #d1d5db;border-radius:6px;padding:0 10px;}
                 button{height:34px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;padding:0 12px;cursor:pointer;}
-                .list{margin-top:10px;display:grid;gap:8px;}
-                .item{border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fafafa;font-size:12px;line-height:1.5;}
+                .table-wrap{margin-top:10px;border:1px solid #e5e7eb;border-radius:8px;overflow-y:auto;overflow-x:hidden;background:#fff;flex:1;min-height:0;}
+                table{width:100%;border-collapse:collapse;font-size:12px;line-height:1.5;table-layout:fixed;}
+                th,td{padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:left;white-space:nowrap;}
+                th{background:#f8fafc;font-weight:600;color:#334155;position:sticky;top:0;z-index:1;}
+                tbody tr:last-child td{border-bottom:none;}
+                td.status-cell{white-space:normal;min-width:260px;}
+                .status-pills{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;}
+                .status-pill{
+                  display:inline-flex;align-items:center;gap:4px;
+                  border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;
+                  border:1px solid transparent;
+                }
+                .status-pill.is-yes{background:#ecfdf3;color:#027a48;border-color:#abefc6;}
+                .status-pill.is-no{background:#fef3f2;color:#b42318;border-color:#fecdca;}
+                @media (max-width: 768px){
+                  td.status-cell{min-width:0;}
+                  .status-pills{flex-direction:column;}
+                }
                 .msg{margin-top:8px;font-size:12px;color:#334155;}
                 .msg.error{color:#b91c1c;}
               </style>
@@ -58,12 +75,66 @@ public class WidgetController {
                   <button id="btn">查询</button>
                 </div>
                 <div id="msg" class="msg"></div>
-                <div id="list" class="list"></div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>呼号</th>
+                        <th>卡片类型</th>
+                        <th>状态</th>
+                        <th>通联时间</th>
+                      </tr>
+                    </thead>
+                    <tbody id="list"></tbody>
+                  </table>
+                </div>
               </div>
               <script>
                 const list = document.getElementById('list');
                 const msg = document.getElementById('msg');
                 const btn = document.getElementById('btn');
+                const cardTypeDict = {
+                  EYEBALL: '眼球卡',
+                  QSO: '通联卡',
+                  LISTEN: '收听卡',
+                };
+                const sentStatusDict = {
+                  SENT: '本台已发卡',
+                  NOT_SENT: '待发卡',
+                };
+                const confirmStatusDict = {
+                  CONFIRMED: '已确认收卡',
+                  UNCONFIRMED: '待确认收卡',
+                };
+                const returnStatusDict = {
+                  RECEIVED: '已收回卡',
+                  NOT_RECEIVED: '待收回卡',
+                };
+
+                function formatStatus(item) {
+                  const sentCode = item.sentStatus || '';
+                  const confirmCode = item.confirmStatus || '';
+                  const returnCode = item.returnCardStatus || '';
+                  const prodCode = item.productionStatus || '';
+                  const reissueCount = Number(item.reissueCount || 0);
+
+                  let sentText = sentStatusDict[sentCode] || sentCode || '未知';
+                  if (sentCode === 'NOT_SENT' && prodCode === 'PENDING_PRINT') {
+                    sentText = '待重发';
+                  }
+                  if (sentCode === 'SENT' && reissueCount > 0) {
+                    sentText = '本台已发卡(补卡)';
+                  }
+
+                  const confirmText = confirmStatusDict[confirmCode] || '待确认收卡';
+                  const returnText = returnStatusDict[returnCode] || '待收回卡';
+                  return [
+                    { text: sentText, yes: sentCode === 'SENT' },
+                    { text: confirmText, yes: confirmCode === 'CONFIRMED' },
+                    { text: returnText, yes: returnCode === 'RECEIVED' },
+                  ];
+                }
+
                 async function search() {
                   try {
                     const callsign = document.getElementById('callsign').value.trim();
@@ -83,10 +154,20 @@ public class WidgetController {
                     }
                     msg.textContent = '共 ' + data.length + ' 条记录';
                     data.forEach(item => {
-                      const el = document.createElement('div');
-                      el.className = 'item';
-                      el.textContent = `${item.peerCallsign || ''} | ${item.cardType || ''} | 发:${item.sentStatus || ''} 收:${item.receivedStatus || ''} | ${item.cardDate || ''} ${item.cardTime || ''}`;
-                      list.appendChild(el);
+                      const tr = document.createElement('tr');
+                      const cardType = cardTypeDict[item.cardType] || item.cardType || '未知类型';
+                      const statusParts = formatStatus(item);
+                      const statusHtml = statusParts.map(part =>
+                        `<span class="status-pill ${part.yes ? 'is-yes' : 'is-no'}">${part.text}</span>`
+                      ).join('');
+                      const dt = `${item.cardDate || ''} ${item.cardTime || ''}`.trim();
+                      tr.innerHTML = `
+                        <td>${item.peerCallsign || ''}</td>
+                        <td>${cardType}</td>
+                        <td class="status-cell"><div class="status-pills">${statusHtml}</div></td>
+                        <td>${dt}</td>
+                      `;
+                      list.appendChild(tr);
                     });
                   } catch (_) {
                     msg.className = 'msg error';
@@ -218,9 +299,10 @@ public class WidgetController {
                 .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;}
                 .title{font-size:14px;font-weight:600;margin:0 0 10px;}
                 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
-                .item{border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fafafa;}
+                .item{border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;background:#fafafa;display:flex;justify-content:space-between;align-items:stretch;min-height:72px;}
+                .item.total{grid-row:1 / span 2;}
                 .k{font-size:12px;color:#64748b;}
-                .v{font-size:16px;font-weight:700;margin-top:4px;color:#0f172a;}
+                .v{font-size:42px;font-weight:700;line-height:1;color:#0f172a;display:flex;align-items:center;justify-content:flex-end;}
               </style>
             </head>
             <body>
@@ -233,17 +315,16 @@ public class WidgetController {
                   const res = await fetch('/plugins/qsl-management/widgets/public-api/reports/public-summary');
                   const data = await res.json();
                   const fields = [
-                    ['总数', data.total || 0],
-                    ['已发', data.sentCount || 0],
-                    ['已收', data.receivedCount || 0],
-                    ['待打印', data.pendingPrintCount || 0],
-                    ['待发', data.pendingSendCount || 0],
-                    ['待收', data.pendingReceiveCount || 0],
+                    ['total', '总数', data.total || 0],
+                    ['sent', '已发卡', data.sentCount || 0],
+                    ['confirmed', '已确认', data.confirmedCount || data.receivedCount || 0],
+                    ['received', '已收卡', data.returnedCount || 0],
+                    ['pendingSend', '待发卡', data.pendingSendCount || 0],
                   ];
                   const grid = document.getElementById('grid');
-                  fields.forEach(([k, v]) => {
+                  fields.forEach(([id, k, v]) => {
                     const el = document.createElement('div');
-                    el.className = 'item';
+                    el.className = id === 'total' ? 'item total' : 'item';
                     el.innerHTML = `<div class="k">${k}</div><div class="v">${v}</div>`;
                     grid.appendChild(el);
                   });
@@ -323,8 +404,8 @@ public class WidgetController {
         if (!callsign.isBlank() && !peer.equalsIgnoreCase(callsign)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "callsign does not match card");
         }
-        return dataService.receiveConfirm(
-            Map.of("cardIds", List.of(cardId), "receiveRemark", Objects.toString(payload.getOrDefault("remark", ""))),
+        return dataService.confirmByPeer(
+            Map.of("cardIds", List.of(cardId), "confirmRemark", Objects.toString(payload.getOrDefault("remark", ""))),
             "public-widget"
         );
     }

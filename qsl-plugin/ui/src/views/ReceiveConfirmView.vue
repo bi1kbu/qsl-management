@@ -54,11 +54,11 @@ onMounted(load)
         <VEmpty v-else-if="rows.length === 0" title="暂无记录" />
         <div v-else class="table-wrap">
           <table class="qsl-table">
-            <thead><tr><th></th><th>ID</th><th>呼号</th><th>类型</th><th>收卡状态</th><th>收卡时间</th></tr></thead>
+            <thead><tr><th></th><th>ID</th><th>呼号</th><th>类型</th><th>回卡状态</th><th>回卡时间</th></tr></thead>
             <tbody>
               <tr v-for="row in rows" :key="String(row.id)">
                 <td><input type="checkbox" :checked="selected.includes(Number(row.id))" @change="toggle(Number(row.id))" /></td>
-                <td>{{ row.id }}</td><td>{{ row.peerCallsign }}</td><td>{{ row.cardType }}</td><td>{{ row.receivedStatus }}</td><td>{{ row.receivedAt }}</td>
+                <td>{{ row.id }}</td><td>{{ row.peerCallsign }}</td><td>{{ row.cardType }}</td><td>{{ row.returnCardStatus }}</td><td>{{ row.returnedAt }}</td>
               </tr>
             </tbody>
           </table>

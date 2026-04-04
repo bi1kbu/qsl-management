@@ -5,8 +5,12 @@ import { adminApi } from '../api'
 import QslPageLayout from '../components/QslPageLayout.vue'
 
 const loading = ref(false)
+const importing = ref(false)
 const tasks = ref<Array<Record<string, unknown>>>([])
 const selectedIds = ref('')
+const selectedDataset = ref('all')
+const selectedFile = ref<File | null>(null)
+const importMessage = ref('')
 
 async function load() {
   loading.value = true
@@ -25,6 +29,29 @@ async function backupExport() {
 async function backupImport() {
   await adminApi.backupImport()
   await load()
+}
+
+function onFileChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  selectedFile.value = target.files && target.files.length > 0 ? target.files[0] : null
+}
+
+async function importByFile() {
+  if (!selectedFile.value) {
+    importMessage.value = '请先选择导入文件'
+    return
+  }
+  importing.value = true
+  importMessage.value = ''
+  try {
+    const result = await adminApi.backupImportFile(selectedFile.value, selectedDataset.value)
+    importMessage.value = `导入完成：${JSON.stringify(result)}`
+    await load()
+  } catch (error) {
+    importMessage.value = `导入失败：${(error as Error).message || '未知错误'}`
+  } finally {
+    importing.value = false
+  }
 }
 
 function parseIds() {
@@ -89,6 +116,27 @@ onMounted(load)
     <VCard>
       <div class="qsl-list-header">
         <div class="qsl-list-toolbar">
+          <span class="qsl-list-title">文件导入（JSON/CSV）</span>
+        </div>
+      </div>
+      <div class="qsl-list-body">
+        <div class="toolbar">
+          <select v-model="selectedDataset" class="qsl-input toolbar-select">
+            <option value="all">自动/混合（推荐）</option>
+            <option value="qso">仅通联记录</option>
+            <option value="card">仅卡片记录</option>
+            <option value="address">仅地址簿</option>
+          </select>
+          <input class="qsl-input toolbar-file" type="file" accept=".json,.csv" @change="onFileChange" />
+          <VButton :loading="importing" @click="importByFile">上传并导入</VButton>
+        </div>
+        <p v-if="importMessage" class="import-message">{{ importMessage }}</p>
+      </div>
+    </VCard>
+
+    <VCard>
+      <div class="qsl-list-header">
+        <div class="qsl-list-toolbar">
           <span class="qsl-list-title">任务列表</span>
         </div>
       </div>
@@ -118,5 +166,8 @@ onMounted(load)
 <style scoped>
 .toolbar { display: flex; gap: 8px; align-items: center; min-height: 56px; padding: 0 16px; }
 .toolbar-input { width: 360px; }
+.toolbar-select { width: 200px; }
+.toolbar-file { width: 320px; }
+.import-message { margin: 0 16px 12px; font-size: 13px; color: #334155; word-break: break-all; }
 .table-wrap { overflow: auto; }
 </style>

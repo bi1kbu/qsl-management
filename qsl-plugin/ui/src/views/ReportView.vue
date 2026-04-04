@@ -35,7 +35,8 @@ onMounted(load)
       <div class="cards">
         <div class="metric">总数 {{ summary.total || 0 }}</div>
         <div class="metric">已发 {{ summary.sentCount || 0 }}</div>
-        <div class="metric">已收 {{ summary.receivedCount || 0 }}</div>
+        <div class="metric">已确认收卡 {{ summary.confirmedCount || summary.receivedCount || 0 }}</div>
+        <div class="metric">已收回卡 {{ summary.returnedCount || 0 }}</div>
         <div class="metric">待打印 {{ summary.pendingPrintCount || 0 }}</div>
       </div>
     </VCard>
@@ -80,7 +81,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .metric { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #fff; font-weight: 600; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 </style>

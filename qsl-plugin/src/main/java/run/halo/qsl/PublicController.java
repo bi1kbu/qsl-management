@@ -93,8 +93,8 @@ public class PublicController {
         if (!callsign.isBlank() && !peer.equalsIgnoreCase(callsign)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "callsign does not match card");
         }
-        return dataService.receiveConfirm(
-            Map.of("cardIds", List.of(cardId), "receiveRemark", Objects.toString(payload.getOrDefault("remark", ""))),
+        return dataService.confirmByPeer(
+            Map.of("cardIds", List.of(cardId), "confirmRemark", Objects.toString(payload.getOrDefault("remark", ""))),
             "public-widget"
         );
     }
