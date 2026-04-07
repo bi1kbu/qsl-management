@@ -299,7 +299,7 @@ public class WidgetController {
                 .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;}
                 .title{font-size:14px;font-weight:600;margin:0 0 10px;}
                 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
-                .item{border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;background:#fafafa;display:flex;justify-content:space-between;align-items:stretch;min-height:72px;}
+                .item{border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;background:#fafafa;display:flex;justify-content:space-between;align-items:stretch;min-height:54px;}
                 .item.total{grid-row:1 / span 2;}
                 .item.progress{
                   background:

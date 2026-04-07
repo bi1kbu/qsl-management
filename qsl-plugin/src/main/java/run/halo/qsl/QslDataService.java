@@ -300,18 +300,72 @@ public class QslDataService {
     public byte[] exportCardsCsv(List<Long> cardIds) {
         var rows = cardIds == null || cardIds.isEmpty()
             ? list("card") : cardIds.stream().map(cardRecords::get).filter(Objects::nonNull).toList();
-        var header = "呼号,卡片类型,寄出状态,寄出时间,确认收卡状态,回卡状态,回卡时间,补卡次数\n";
+        var header = "呼号,日期,时间,时区UTC,时区UTC+8,卡片类型QSO,卡片类型SWL,卡片类型EYEBALL,频率,本台设备,模式FM,模式CW,模式SSB,模式自定义,模式,本台功率,本台给对方的信号报告,本台天线,发出卡片,回复卡片,备注\n";
         var builder = new StringBuilder(header);
         for (var r : rows) {
             ensureCardStatusDefaults(r);
+            var qso = getRelatedQso(r);
+            var qsoDate = firstNonBlank(
+                Objects.toString(r.getOrDefault("cardDate", ""), ""),
+                Objects.toString(qso.getOrDefault("qsoDate", ""), "")
+            );
+            var qsoTime = firstNonBlank(
+                Objects.toString(r.getOrDefault("cardTime", ""), ""),
+                Objects.toString(qso.getOrDefault("qsoTime", ""), "")
+            );
+            var timezone = firstNonBlank(
+                Objects.toString(r.getOrDefault("timezone", ""), ""),
+                Objects.toString(qso.getOrDefault("timezone", ""), "")
+            );
+            var equipmentName = firstNonBlank(
+                Objects.toString(r.getOrDefault("equipmentName", ""), ""),
+                getNameById(equipments, asLong(qso.get("equipmentId")))
+            );
+            var antennaName = firstNonBlank(
+                Objects.toString(r.getOrDefault("antennaName", ""), ""),
+                getNameById(antennas, asLong(qso.get("antennaId")))
+            );
+            var powerName = firstNonBlank(
+                Objects.toString(r.getOrDefault("powerText", ""), ""),
+                getNameById(powers, asLong(qso.get("powerPresetId")))
+            );
+            var remark = firstNonBlank(
+                Objects.toString(r.getOrDefault("remark", ""), ""),
+                Objects.toString(qso.getOrDefault("remark", ""), "")
+            );
+            var mode = firstNonBlank(
+                Objects.toString(r.getOrDefault("mode", ""), ""),
+                Objects.toString(qso.getOrDefault("mode", ""), "")
+            ).trim().toUpperCase();
+            var timezoneUpper = timezone.trim().toUpperCase();
+            var cardType = normalizeCardType(r.get("cardType"));
+            var received = "CONFIRMED".equalsIgnoreCase(Objects.toString(r.getOrDefault("confirmStatus", "")))
+                || "RECEIVED".equalsIgnoreCase(Objects.toString(r.getOrDefault("returnCardStatus", "")));
+            var sent = "SENT".equalsIgnoreCase(Objects.toString(r.getOrDefault("sentStatus", "")));
+
             builder.append(csv(r.get("peerCallsign"))).append(',')
-                .append(csv(r.get("cardType"))).append(',')
-                .append(csv(r.get("sentStatus"))).append(',')
-                .append(csv(r.get("sentAt"))).append(',')
-                .append(csv(r.get("confirmStatus"))).append(',')
-                .append(csv(r.get("returnCardStatus"))).append(',')
-                .append(csv(r.get("receivedAt"))).append(',')
-                .append(csv(r.get("reissueCount"))).append('\n');
+                .append(csv(qsoDate)).append(',')
+                .append(csv(qsoTime)).append(',')
+                .append(csv("UTC".equals(timezoneUpper) ? "1" : "0")).append(',')
+                .append(csv("UTC+8".equals(timezoneUpper) ? "1" : "0")).append(',')
+                .append(csv("QSO".equals(cardType) ? "1" : "0")).append(',')
+                .append(csv("LISTEN".equals(cardType) ? "1" : "0")).append(',')
+                .append(csv("EYEBALL".equals(cardType) ? "1" : "0")).append(',')
+                .append(csv(qso.get("frequency"))).append(',')
+                .append(csv(equipmentName)).append(',')
+                .append(csv("FM".equals(mode) ? "1" : "0")).append(',')
+                .append(csv("CW".equals(mode) ? "1" : "0")).append(',')
+                .append(csv("SSB".equals(mode) ? "1" : "0")).append(',')
+                .append(csv((!"FM".equals(mode) && !"CW".equals(mode) && !"SSB".equals(mode) && !mode.isBlank()) ? "1" : "0")).append(',')
+                .append(csv(mode)).append(',')
+                .append(csv(powerName)).append(',')
+                .append(csv(firstNonBlank(
+                    Objects.toString(r.getOrDefault("rstSent", ""), ""),
+                    Objects.toString(qso.getOrDefault("rstSent", ""), "")))).append(',')
+                .append(csv(antennaName)).append(',')
+                .append(csv(sent ? "1" : "0")).append(',')
+                .append(csv(received ? "1" : "0")).append(',')
+                .append(csv(remark)).append('\n');
         }
         return withBom(builder.toString());
     }
@@ -1075,6 +1129,38 @@ public class QslDataService {
     private String csv(Object value) {
         var raw = Objects.toString(value, "");
         return "\"" + raw.replace("\"", "\"\"") + "\"";
+    }
+
+    private Map<String, Object> getRelatedQso(Map<String, Object> card) {
+        var qsoId = asLong(card.get("qsoRecordId"));
+        if (qsoId == null) {
+            return Map.of();
+        }
+        var qso = qsoRecords.get(qsoId);
+        if (qso == null || isDeleted(qso)) {
+            return Map.of();
+        }
+        return qso;
+    }
+
+    private String getNameById(Map<Long, Map<String, Object>> store, Long id) {
+        if (id == null) {
+            return "";
+        }
+        var item = store.get(id);
+        if (item == null || isDeleted(item)) {
+            return "";
+        }
+        return Objects.toString(item.getOrDefault("name", ""), "");
+    }
+
+    private String firstNonBlank(String... values) {
+        for (var value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private byte[] withBom(String content) {
