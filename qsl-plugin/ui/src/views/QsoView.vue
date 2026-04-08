@@ -251,12 +251,12 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="row-second">
-          <input v-model="form.frequency" class="qsl-input" list="qsl-frequency-options" placeholder="频率（下拉可选/可输入）" />
+          <input v-model="form.frequency" class="qsl-input" list="qsl-frequency-options" placeholder="频率" />
           <datalist id="qsl-frequency-options">
             <option v-for="item in frequencyOptions" :key="item" :value="item" />
           </datalist>
 
-          <input v-model="form.mode" class="qsl-input" list="qsl-mode-options" placeholder="模式（下拉可选/可输入）" />
+          <input v-model="form.mode" class="qsl-input" list="qsl-mode-options" placeholder="模式" />
           <datalist id="qsl-mode-options">
             <option v-for="item in modeOptions" :key="item" :value="item" />
           </datalist>
@@ -265,7 +265,7 @@ onBeforeUnmount(() => {
             v-model="form.equipmentName"
             class="qsl-input"
             list="qsl-equipment-options"
-            placeholder="设备（下拉可选/可输入新增）"
+            placeholder="设备"
           />
           <datalist id="qsl-equipment-options">
             <option v-for="e in equipments" :key="String(e.id)" :value="String(e.name || '')" />
@@ -275,7 +275,7 @@ onBeforeUnmount(() => {
             v-model="form.antennaName"
             class="qsl-input"
             list="qsl-antenna-options"
-            placeholder="天线（下拉可选/可输入新增）"
+            placeholder="天线"
           />
           <datalist id="qsl-antenna-options">
             <option v-for="a in antennas" :key="String(a.id)" :value="String(a.name || '')" />
@@ -285,7 +285,7 @@ onBeforeUnmount(() => {
             v-model="form.powerName"
             class="qsl-input"
             list="qsl-power-options"
-            placeholder="功率（下拉可选/可输入新增）"
+            placeholder="功率"
           />
           <datalist id="qsl-power-options">
             <option v-for="p in powers" :key="String(p.id)" :value="String(p.name || '')" />
