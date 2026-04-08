@@ -15,6 +15,14 @@ type CardDef = {
 
 const cardDefs: CardDef[] = [
   {
+    name: 'qslExchangeCard',
+    title: 'QSL 换卡申请卡片',
+    description: '插入前台换卡申请组件',
+    icon: markRaw(IconExchange),
+    url: '/plugins/qsl-management/widgets/exchange',
+    keywords: ['qsl', 'exchange', '换卡', '申请'],
+  },
+  {
     name: 'qslQueryCard',
     title: 'QSL 查询卡片',
     description: '插入前台 QSL 查询组件',

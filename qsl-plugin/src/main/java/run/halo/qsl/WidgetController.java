@@ -1,8 +1,10 @@
 package run.halo.qsl;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.time.OffsetDateTime;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -181,6 +183,85 @@ public class WidgetController {
             """);
     }
 
+    @GetMapping(value = "/exchange", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> exchangeWidget() {
+        return html("""
+            <!doctype html>
+            <html lang="zh-CN">
+            <head>
+              <meta charset="UTF-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+              <title>QSL 换卡申请卡片</title>
+              <style>
+                html,body{margin:0;padding:0;overflow:hidden;background:#f8fafc;}
+                body{padding:12px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;}
+                .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;}
+                .title{font-size:14px;font-weight:600;margin:0 0 10px;}
+                .grid{display:grid;gap:8px;}
+                input,textarea{width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:6px;padding:8px;font-size:12px;}
+                textarea{min-height:72px;}
+                button{height:34px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;padding:0 12px;cursor:pointer;}
+                .msg{margin-top:8px;font-size:12px;color:#0f172a;}
+                .msg.error{color:#b91c1c;}
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <p class="title">QSL 换卡申请</p>
+                <div class="grid">
+                  <input id="callsign" placeholder="呼号（必填）" />
+                  <input id="name" placeholder="姓名（选填）" />
+                  <input id="postcode" placeholder="邮编（必填）" />
+                  <textarea id="address" placeholder="地址（必填）"></textarea>
+                  <input id="phone" placeholder="电话（选填）" />
+                  <button id="btn">提交换卡申请</button>
+                </div>
+                <div class="msg" id="msg"></div>
+              </div>
+              <script>
+                const msg = document.getElementById('msg');
+                function fitIframeHeight() {
+                  try {
+                    const iframe = window.frameElement;
+                    if (!iframe) return;
+                    const h = Math.ceil(document.documentElement.scrollHeight);
+                    iframe.style.height = h + 'px';
+                    iframe.setAttribute('height', String(h));
+                  } catch (_) {}
+                }
+                window.addEventListener('load', fitIframeHeight);
+                window.addEventListener('resize', fitIframeHeight);
+                if ('ResizeObserver' in window) {
+                  new ResizeObserver(() => fitIframeHeight()).observe(document.body);
+                }
+                document.getElementById('btn').addEventListener('click', async () => {
+                  const payload = {
+                    callsign: document.getElementById('callsign').value.trim(),
+                    name: document.getElementById('name').value.trim(),
+                    postcode: document.getElementById('postcode').value.trim(),
+                    address: document.getElementById('address').value.trim(),
+                    phone: document.getElementById('phone').value.trim(),
+                  };
+                  msg.className = 'msg';
+                  msg.textContent = '提交中...';
+                  const qs = new URLSearchParams(payload);
+                  const res = await fetch('/plugins/qsl-management/widgets/public-api/actions/exchange-request?' + qs.toString());
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    msg.className = 'msg error';
+                    msg.textContent = data.detail || data.message || '提交失败';
+                    requestAnimationFrame(fitIframeHeight);
+                    return;
+                  }
+                  msg.textContent = `提交成功，已加入待发清单，卡片ID: ${data.id}`;
+                  requestAnimationFrame(fitIframeHeight);
+                });
+              </script>
+            </body>
+            </html>
+            """);
+    }
+
     @GetMapping(value = "/reissue", produces = MediaType.TEXT_HTML_VALUE)
     public ResponseEntity<String> reissueWidget() {
         return html("""
@@ -258,7 +339,7 @@ public class WidgetController {
                 <p class="title">QSL 收信确认</p>
                 <div class="grid">
                   <input id="cardId" placeholder="卡片ID（必填）" />
-                  <input id="callsign" placeholder="呼号（选填，用于校验）" />
+                  <input id="callsign" placeholder="呼号（必填）" />
                   <textarea id="remark" placeholder="备注（选填）"></textarea>
                   <button id="btn">提交收信确认</button>
                 </div>
@@ -266,10 +347,32 @@ public class WidgetController {
               </div>
               <script>
                 const msg = document.getElementById('msg');
+                const cardIdEl = document.getElementById('cardId');
+                const callsignEl = document.getElementById('callsign');
+                const remarkEl = document.getElementById('remark');
+
+                (function initFromUrl() {
+                  const params = new URLSearchParams(window.location.search || '');
+                  const cardId = params.get('cardId') || '';
+                  const callsign = params.get('callsign') || '';
+                  const remark = params.get('remark') || '';
+                  if (cardId) cardIdEl.value = cardId;
+                  if (callsign) callsignEl.value = callsign;
+                  if (remark) remarkEl.value = remark;
+                })();
+
                 document.getElementById('btn').addEventListener('click', async () => {
-                  const cardId = Number(document.getElementById('cardId').value);
-                  const callsign = document.getElementById('callsign').value.trim();
-                  const remark = document.getElementById('remark').value.trim();
+                  const cardId = Number(cardIdEl.value);
+                  const callsign = callsignEl.value.trim();
+                  const remark = remarkEl.value.trim();
+                  if (!cardId) {
+                    msg.textContent = '请填写卡片ID';
+                    return;
+                  }
+                  if (!callsign) {
+                    msg.textContent = '请填写呼号';
+                    return;
+                  }
                   const qs = new URLSearchParams({
                     cardId: String(cardId || ''),
                     callsign,
@@ -365,6 +468,68 @@ public class WidgetController {
         return dataService.reportSummary();
     }
 
+    @PostMapping(value = "/public-api/actions/exchange-request", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> createExchangeRequest(@RequestBody Map<String, Object> payload) {
+        var callsign = Objects.toString(payload.getOrDefault("callsign", "")).trim().toUpperCase();
+        var name = Objects.toString(payload.getOrDefault("name", "")).trim();
+        var postcode = Objects.toString(payload.getOrDefault("postcode", "")).trim();
+        var address = Objects.toString(payload.getOrDefault("address", "")).trim();
+        var phone = Objects.toString(payload.getOrDefault("phone", "")).trim();
+
+        if (callsign.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "callsign is required");
+        }
+        if (postcode.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "postcode is required");
+        }
+        if (address.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "address is required");
+        }
+
+        var existedEyeball = dataService.list("card").stream()
+            .filter(c -> "EYEBALL".equalsIgnoreCase(Objects.toString(c.getOrDefault("cardType", ""))))
+            .filter(c -> callsign.equalsIgnoreCase(Objects.toString(c.getOrDefault("peerCallsign", "")).trim()))
+            .findFirst()
+            .orElse(null);
+        if (existedEyeball != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "已交换过卡片，如需二次交换请联系人工处理");
+        }
+
+        var now = OffsetDateTime.now();
+        var createPayload = new LinkedHashMap<String, Object>();
+        createPayload.put("cardType", "EYEBALL");
+        createPayload.put("peerCallsign", callsign);
+        createPayload.put("name", name);
+        createPayload.put("postcode", postcode);
+        createPayload.put("address", address);
+        createPayload.put("phone", phone);
+        createPayload.put("productionStatus", "PENDING_PRINT");
+        createPayload.put("sentStatus", "NOT_SENT");
+        createPayload.put("confirmStatus", "UNCONFIRMED");
+        createPayload.put("returnCardStatus", "NOT_RECEIVED");
+        createPayload.put("cardDate", now.toLocalDate().toString());
+        createPayload.put("cardTime", now.toLocalTime().withNano(0).toString());
+        createPayload.put("timezone", "UTC+8");
+        createPayload.put("remark", "public-exchange-request");
+        return dataService.create("card", createPayload, "public-widget");
+    }
+
+    @GetMapping(value = "/public-api/actions/exchange-request", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> createExchangeRequestByGet(
+        @RequestParam(value = "callsign") String callsign,
+        @RequestParam(value = "name", required = false) String name,
+        @RequestParam(value = "postcode") String postcode,
+        @RequestParam(value = "address") String address,
+        @RequestParam(value = "phone", required = false) String phone) {
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("callsign", Objects.toString(callsign, ""));
+        payload.put("name", Objects.toString(name, ""));
+        payload.put("postcode", Objects.toString(postcode, ""));
+        payload.put("address", Objects.toString(address, ""));
+        payload.put("phone", Objects.toString(phone, ""));
+        return createExchangeRequest(payload);
+    }
+
     @PostMapping(value = "/public-api/actions/reissue-request", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> createReissueRequest(@RequestBody Map<String, Object> payload) {
         var cardIdObj = payload.get("qslCardRecordId");
@@ -406,12 +571,15 @@ public class WidgetController {
         }
         var cardId = Long.parseLong(String.valueOf(cardIdObj));
         var callsign = Objects.toString(payload.getOrDefault("callsign", "")).trim();
+        if (callsign.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "callsign is required");
+        }
         var card = dataService.get("card", cardId);
         if (card == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "card not found");
         }
         var peer = Objects.toString(card.getOrDefault("peerCallsign", "")).trim();
-        if (!callsign.isBlank() && !peer.equalsIgnoreCase(callsign)) {
+        if (!peer.equalsIgnoreCase(callsign)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "callsign does not match card");
         }
         return dataService.confirmByPeer(
@@ -423,7 +591,7 @@ public class WidgetController {
     @GetMapping(value = "/public-api/actions/receive-confirm", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> receiveConfirmByGet(
         @RequestParam(value = "cardId") Long cardId,
-        @RequestParam(value = "callsign", required = false) String callsign,
+        @RequestParam(value = "callsign") String callsign,
         @RequestParam(value = "remark", required = false) String remark) {
         return receiveConfirm(Map.of(
             "cardId", cardId,
