@@ -200,10 +200,18 @@ public class QslDataService {
     }
 
     public Map<String, Object> sendConfirm(Map<String, Object> payload, String operator) {
+        return sendConfirm(payload, operator, Map.of());
+    }
+
+    public Map<String, Object> sendConfirm(Map<String, Object> payload, String operator,
+        Map<String, String> authHeaders) {
         var ids = castIds(payload.get("cardIds"));
         var updated = new ArrayList<Map<String, Object>>();
         var batchNo = Objects.toString(payload.getOrDefault("batchNo", "BATCH-" + System.currentTimeMillis()));
         var now = OffsetDateTime.now().toString();
+        int mailSent = 0;
+        int mailSkipped = 0;
+        var mailErrors = new ArrayList<String>();
         for (Long id : ids) {
             var card = cardRecords.get(id);
             if (card == null || isDeleted(card)) {
@@ -224,22 +232,43 @@ public class QslDataService {
                 card.put("reissueCount", count + 1);
             }
             writeAudit("card", String.valueOf(id), "send_confirm", operator, "success", before, card);
-            updated.add(new LinkedHashMap<>(card));
+            var updatedCard = new LinkedHashMap<>(card);
+            var mailResult = sendCardSendConfirmMail(updatedCard, authHeaders);
+            if (Boolean.TRUE.equals(mailResult.get("mailSent"))) {
+                mailSent++;
+            } else if (Boolean.TRUE.equals(mailResult.get("mailSkipped"))) {
+                mailSkipped++;
+            } else if (mailResult.get("mailError") != null) {
+                mailErrors.add("card#" + id + ": " + Objects.toString(mailResult.get("mailError"), ""));
+            }
+            updated.add(updatedCard);
         }
         var result = new LinkedHashMap<String, Object>();
         result.put("count", updated.size());
         result.put("items", updated);
+        result.put("mailSentCount", mailSent);
+        result.put("mailSkippedCount", mailSkipped);
+        result.put("mailErrorCount", mailErrors.size());
+        result.put("mailErrors", mailErrors);
         return result;
     }
 
     public Map<String, Object> receiveConfirm(Map<String, Object> payload, String operator) {
+        return receiveConfirm(payload, operator, Map.of());
+    }
+
+    public Map<String, Object> receiveConfirm(Map<String, Object> payload, String operator,
+        Map<String, String> authHeaders) {
         var callsign = Objects.toString(payload.getOrDefault("callsign", "")).trim();
         if (!callsign.isBlank()) {
-            return receiveConfirmByCallsign(payload, operator);
+            return receiveConfirmByCallsign(payload, operator, authHeaders);
         }
         var ids = castIds(payload.get("cardIds"));
         var updated = new ArrayList<Map<String, Object>>();
         var now = OffsetDateTime.now().toString();
+        int mailSent = 0;
+        int mailSkipped = 0;
+        var mailErrors = new ArrayList<String>();
         for (Long id : ids) {
             var card = cardRecords.get(id);
             if (card == null || isDeleted(card)) {
@@ -259,15 +288,29 @@ public class QslDataService {
             card.put("updatedAt", now);
             card.put("updatedBy", operator);
             writeAudit("card", String.valueOf(id), "receive_confirm", operator, "success", before, card);
-            updated.add(new LinkedHashMap<>(card));
+            var updatedCard = new LinkedHashMap<>(card);
+            var mailResult = sendCardReceiveConfirmMail(updatedCard, authHeaders);
+            if (Boolean.TRUE.equals(mailResult.get("mailSent"))) {
+                mailSent++;
+            } else if (Boolean.TRUE.equals(mailResult.get("mailSkipped"))) {
+                mailSkipped++;
+            } else if (mailResult.get("mailError") != null) {
+                mailErrors.add("card#" + id + ": " + Objects.toString(mailResult.get("mailError"), ""));
+            }
+            updated.add(updatedCard);
         }
         var result = new LinkedHashMap<String, Object>();
         result.put("count", updated.size());
         result.put("items", updated);
+        result.put("mailSentCount", mailSent);
+        result.put("mailSkippedCount", mailSkipped);
+        result.put("mailErrorCount", mailErrors.size());
+        result.put("mailErrors", mailErrors);
         return result;
     }
 
-    private Map<String, Object> receiveConfirmByCallsign(Map<String, Object> payload, String operator) {
+    private Map<String, Object> receiveConfirmByCallsign(Map<String, Object> payload, String operator,
+        Map<String, String> authHeaders) {
         var callsign = Objects.toString(payload.getOrDefault("callsign", "")).trim();
         if (callsign.isBlank()) {
             throw new IllegalArgumentException("callsign is required");
@@ -317,7 +360,7 @@ public class QslDataService {
         return receiveConfirm(Map.of(
             "cardIds", List.of(id),
             "receiveRemark", Objects.toString(payload.getOrDefault("receiveRemark", ""))
-        ), operator);
+        ), operator, authHeaders);
     }
 
     private void checkRequired(Map<String, Object> payload, String key, String label, List<String> missing) {
@@ -639,6 +682,32 @@ public class QslDataService {
             approved,
             reason,
             reviewedAt,
+            authHeaders == null ? Map.of() : authHeaders
+        );
+    }
+
+    private Map<String, Object> sendCardSendConfirmMail(Map<String, Object> card, Map<String, String> authHeaders) {
+        if (emailNotifyService == null) {
+            return Map.of("mailSent", false, "mailError", "mail service not initialized");
+        }
+        return emailNotifyService.notifyCardSendConfirmed(
+            Objects.toString(card.getOrDefault("email", "")),
+            Objects.toString(card.getOrDefault("peerCallsign", "")),
+            Objects.toString(card.getOrDefault("id", "")),
+            Objects.toString(card.getOrDefault("sentAt", "")),
+            authHeaders == null ? Map.of() : authHeaders
+        );
+    }
+
+    private Map<String, Object> sendCardReceiveConfirmMail(Map<String, Object> card, Map<String, String> authHeaders) {
+        if (emailNotifyService == null) {
+            return Map.of("mailSent", false, "mailError", "mail service not initialized");
+        }
+        return emailNotifyService.notifyCardReceiveConfirmed(
+            Objects.toString(card.getOrDefault("email", "")),
+            Objects.toString(card.getOrDefault("peerCallsign", "")),
+            Objects.toString(card.getOrDefault("id", "")),
+            Objects.toString(card.getOrDefault("receivedAt", card.getOrDefault("returnedAt", ""))),
             authHeaders == null ? Map.of() : authHeaders
         );
     }

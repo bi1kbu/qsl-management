@@ -57,6 +57,26 @@ public class QslMailTemplateService {
         return Map.of("subject", subject, "body", body);
     }
 
+    public Map<String, String> renderSendConfirmTemplate(String callsign, String cardId, String sentAt) {
+        var vars = new LinkedHashMap<String, String>();
+        vars.put("callsign", Objects.toString(callsign, ""));
+        vars.put("cardId", Objects.toString(cardId, ""));
+        vars.put("sentAt", Objects.toString(sentAt, ""));
+        var subject = apply(readTemplate("templates/mail/card-send-confirmed-subject.txt"), vars);
+        var body = apply(readTemplate("templates/mail/card-send-confirmed-body.txt"), vars);
+        return Map.of("subject", subject, "body", body);
+    }
+
+    public Map<String, String> renderReceiveConfirmTemplate(String callsign, String cardId, String receivedAt) {
+        var vars = new LinkedHashMap<String, String>();
+        vars.put("callsign", Objects.toString(callsign, ""));
+        vars.put("cardId", Objects.toString(cardId, ""));
+        vars.put("receivedAt", Objects.toString(receivedAt, ""));
+        var subject = apply(readTemplate("templates/mail/card-receive-confirmed-subject.txt"), vars);
+        var body = apply(readTemplate("templates/mail/card-receive-confirmed-body.txt"), vars);
+        return Map.of("subject", subject, "body", body);
+    }
+
     private String apply(String content, Map<String, String> vars) {
         var result = content;
         for (var entry : vars.entrySet()) {

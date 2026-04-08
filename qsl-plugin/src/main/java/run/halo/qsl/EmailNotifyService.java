@@ -34,11 +34,35 @@ public class EmailNotifyService {
 
     public Map<String, Object> notifyExchangeRequestReviewed(String toEmail, String callsign, boolean approved,
         String reason, String reviewedAt, Map<String, String> authHeaders) {
+        var tpl = templateService.renderReviewTemplate(approved, callsign, reviewedAt, reason);
+        return notifyWithTemplate(toEmail, tpl, authHeaders, false);
+    }
+
+    public Map<String, Object> notifyCardSendConfirmed(String toEmail, String callsign, String cardId, String sentAt,
+        Map<String, String> authHeaders) {
+        var tpl = templateService.renderSendConfirmTemplate(callsign, cardId, sentAt);
+        return notifyWithTemplate(toEmail, tpl, authHeaders, true);
+    }
+
+    public Map<String, Object> notifyCardReceiveConfirmed(String toEmail, String callsign, String cardId,
+        String receivedAt, Map<String, String> authHeaders) {
+        var tpl = templateService.renderReceiveConfirmTemplate(callsign, cardId, receivedAt);
+        return notifyWithTemplate(toEmail, tpl, authHeaders, true);
+    }
+
+    private Map<String, Object> notifyWithTemplate(String toEmail, Map<String, String> tpl,
+        Map<String, String> authHeaders, boolean skipWhenEmailBlank) {
         var result = new LinkedHashMap<String, Object>();
         var to = Objects.toString(toEmail, "").trim();
         if (to.isBlank()) {
-            result.put("mailSent", false);
-            result.put("mailError", "email is blank");
+            if (skipWhenEmailBlank) {
+                result.put("mailSent", false);
+                result.put("mailSkipped", true);
+                result.put("mailReason", "email is blank");
+            } else {
+                result.put("mailSent", false);
+                result.put("mailError", "email is blank");
+            }
             return result;
         }
         if (authHeaders == null || authHeaders.isEmpty()) {
@@ -55,7 +79,6 @@ public class EmailNotifyService {
                 return result;
             }
 
-            var tpl = templateService.renderReviewTemplate(approved, callsign, reviewedAt, reason);
             var context = new NotificationContext();
             var msg = new NotificationContext.Message();
             msg.setRecipient(to);
@@ -71,7 +94,7 @@ public class EmailNotifyService {
             smtpNotifier.notify(context).block();
             result.put("mailSent", true);
         } catch (Exception ex) {
-            log.warn("Failed to send exchange review email to {}", to, ex);
+            log.warn("Failed to send qsl email to {}", to, ex);
             result.put("mailSent", false);
             result.put("mailError", ex.getMessage());
         }
@@ -99,4 +122,3 @@ public class EmailNotifyService {
         }
     }
 }
-
