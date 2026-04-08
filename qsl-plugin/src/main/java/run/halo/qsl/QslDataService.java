@@ -111,6 +111,7 @@ public class QslDataService {
         if ("card".equals(type)) {
             item.putIfAbsent("productionStatus", "DRAFT");
             item.putIfAbsent("sentStatus", "NOT_SENT");
+            item.putIfAbsent("envelopePrinted", false);
             if (!item.containsKey("confirmStatus")) {
                 var legacyReceived = Objects.toString(item.getOrDefault("receivedStatus", "NOT_RECEIVED"));
                 item.put("confirmStatus", "RECEIVED".equalsIgnoreCase(legacyReceived) ? "CONFIRMED" : "UNCONFIRMED");
@@ -219,6 +220,10 @@ public class QslDataService {
     }
 
     public Map<String, Object> receiveConfirm(Map<String, Object> payload, String operator) {
+        var callsign = Objects.toString(payload.getOrDefault("callsign", "")).trim();
+        if (!callsign.isBlank()) {
+            return receiveConfirmByCallsign(payload, operator);
+        }
         var ids = castIds(payload.get("cardIds"));
         var updated = new ArrayList<Map<String, Object>>();
         var now = OffsetDateTime.now().toString();
@@ -247,6 +252,66 @@ public class QslDataService {
         result.put("count", updated.size());
         result.put("items", updated);
         return result;
+    }
+
+    private Map<String, Object> receiveConfirmByCallsign(Map<String, Object> payload, String operator) {
+        var callsign = Objects.toString(payload.getOrDefault("callsign", "")).trim();
+        if (callsign.isBlank()) {
+            throw new IllegalArgumentException("callsign is required");
+        }
+        var matchedEyeball = list("card").stream()
+            .filter(c -> "EYEBALL".equalsIgnoreCase(Objects.toString(c.getOrDefault("cardType", ""))))
+            .filter(c -> callsign.equalsIgnoreCase(Objects.toString(c.getOrDefault("peerCallsign", "")).trim()))
+            .max(Comparator.comparingLong(c -> ((Number) c.get("id")).longValue()))
+            .orElse(null);
+
+        if (matchedEyeball == null) {
+            var missing = new ArrayList<String>();
+            checkRequired(payload, "name", "姓名", missing);
+            checkRequired(payload, "address", "地址", missing);
+            checkRequired(payload, "postcode", "邮编", missing);
+            checkRequired(payload, "phone", "电话", missing);
+            checkRequired(payload, "email", "电子邮箱", missing);
+            if (!missing.isEmpty()) {
+                throw new IllegalArgumentException("missing recipient fields: " + String.join("、", missing));
+            }
+
+            var now = OffsetDateTime.now();
+            var createPayload = new LinkedHashMap<String, Object>();
+            createPayload.put("cardType", "EYEBALL");
+            createPayload.put("peerCallsign", callsign);
+            createPayload.put("name", Objects.toString(payload.get("name"), "").trim());
+            createPayload.put("address", Objects.toString(payload.get("address"), "").trim());
+            createPayload.put("postcode", Objects.toString(payload.get("postcode"), "").trim());
+            createPayload.put("phone", Objects.toString(payload.get("phone"), "").trim());
+            createPayload.put("email", Objects.toString(payload.get("email"), "").trim());
+            createPayload.put("cardDate", now.toLocalDate().toString());
+            createPayload.put("cardTime", now.toLocalTime().withNano(0).toString());
+            createPayload.put("timezone", "UTC+8");
+            createPayload.put("productionStatus", "DRAFT");
+            createPayload.put("sentStatus", "NOT_SENT");
+            createPayload.put("confirmStatus", "UNCONFIRMED");
+            createPayload.put("returnCardStatus", "RECEIVED");
+            createPayload.put("receivedStatus", "RECEIVED");
+            createPayload.put("returnedAt", now.toString());
+            createPayload.put("returnedBy", operator);
+            createPayload.put("receiveRemark", Objects.toString(payload.getOrDefault("receiveRemark", ""), ""));
+            var created = create("card", createPayload, operator);
+            return Map.of("count", 1, "created", true, "items", List.of(created));
+        }
+
+        var id = Long.parseLong(String.valueOf(matchedEyeball.get("id")));
+        return receiveConfirm(Map.of(
+            "cardIds", List.of(id),
+            "receiveRemark", Objects.toString(payload.getOrDefault("receiveRemark", ""))
+        ), operator);
+    }
+
+    private void checkRequired(Map<String, Object> payload, String key, String label, List<String> missing) {
+        var value = Objects.toString(payload.getOrDefault(key, ""), "").trim();
+        if (value.isBlank()) {
+            missing.add(label);
+        }
     }
 
     public Map<String, Object> confirmByPeer(Map<String, Object> payload, String operator) {
@@ -375,14 +440,53 @@ public class QslDataService {
             ? list("card") : cardIds.stream().map(cardRecords::get).filter(Objects::nonNull).toList();
         var header = "呼号,姓名,电话,邮编,收件地址\n";
         var builder = new StringBuilder(header);
+        var grouped = new LinkedHashMap<String, Map<String, Object>>();
         for (var r : rows) {
-            builder.append(csv(r.get("peerCallsign"))).append(',')
-                .append(csv(r.get("name"))).append(',')
-                .append(csv(r.get("phone"))).append(',')
-                .append(csv(r.get("postcode"))).append(',')
-                .append(csv(r.get("address"))).append('\n');
+            var addressRaw = Objects.toString(r.getOrDefault("address", ""), "").trim();
+            if (addressRaw.isBlank()) {
+                continue;
+            }
+            var key = normalize(addressRaw);
+            var envelope = grouped.computeIfAbsent(key, k -> {
+                var item = new LinkedHashMap<String, Object>();
+                item.put("address", addressRaw);
+                item.put("phone", "");
+                item.put("postcode", "");
+                item.put("callsigns", new ArrayList<String>());
+                return item;
+            });
+            var callsigns = castStringList(envelope.get("callsigns"));
+            var callsign = Objects.toString(r.getOrDefault("peerCallsign", ""), "").trim();
+            if (!callsign.isBlank() && !callsigns.contains(callsign)) {
+                callsigns.add(callsign);
+            }
+            if (Objects.toString(envelope.getOrDefault("phone", ""), "").isBlank()) {
+                envelope.put("phone", Objects.toString(r.getOrDefault("phone", ""), "").trim());
+            }
+            if (Objects.toString(envelope.getOrDefault("postcode", ""), "").isBlank()) {
+                envelope.put("postcode", Objects.toString(r.getOrDefault("postcode", ""), "").trim());
+            }
+        }
+
+        for (var envelope : grouped.values()) {
+            var callsigns = castStringList(envelope.get("callsigns"));
+            callsigns.sort(String::compareToIgnoreCase);
+            var receiver = String.join("、", callsigns);
+            builder.append(csv(receiver)).append(',')
+                .append(csv(receiver)).append(',')
+                .append(csv(envelope.get("phone"))).append(',')
+                .append(csv(envelope.get("postcode"))).append(',')
+                .append(csv(envelope.get("address"))).append('\n');
         }
         return withBom(builder.toString());
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> castStringList(Object obj) {
+        if (obj instanceof List<?> list) {
+            return (List<String>) list;
+        }
+        return new ArrayList<>();
     }
 
     public Map<String, Object> backupExport(String operator) {
@@ -483,6 +587,8 @@ public class QslDataService {
                 item.put("productionStatus", c.get("productionStatus"));
                 item.put("sentStatus", c.get("sentStatus"));
                 item.put("sentAt", c.get("sentAt"));
+                item.put("envelopePrinted", c.getOrDefault("envelopePrinted", false));
+                item.put("envelopePrintedAt", c.get("envelopePrintedAt"));
                 item.put("confirmStatus", c.get("confirmStatus"));
                 item.put("confirmedAt", c.get("confirmedAt"));
                 item.put("returnCardStatus", c.get("returnCardStatus"));
@@ -829,6 +935,7 @@ public class QslDataService {
         if (card == null) {
             return;
         }
+        card.putIfAbsent("envelopePrinted", false);
         var legacyReceived = Objects.toString(card.getOrDefault("receivedStatus", "NOT_RECEIVED"));
         if (!card.containsKey("confirmStatus")) {
             card.put("confirmStatus", "RECEIVED".equalsIgnoreCase(legacyReceived) ? "CONFIRMED" : "UNCONFIRMED");

@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -233,7 +235,11 @@ public class AdminController {
     @PostMapping("/qsl-card-records/receive-confirm")
     public Map<String, Object> receiveConfirm(@RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
-        return dataService.receiveConfirm(payload, operator);
+        try {
+            return dataService.receiveConfirm(payload, operator);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
     }
 
     @PostMapping("/qsl-card-records/reissue-prepare")

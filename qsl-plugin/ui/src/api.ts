@@ -123,6 +123,20 @@ export const adminApi = {
       body: JSON.stringify({ cardIds, receiveRemark }),
     })
   },
+  receiveConfirmByCallsign(payload: {
+    callsign: string
+    name?: string
+    address?: string
+    postcode?: string
+    phone?: string
+    email?: string
+    receiveRemark?: string
+  }) {
+    return request<Record<string, unknown>>('/apis/qsl.admin/v1/qsl-card-records/receive-confirm', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
   getAuditLogs(filters: Query) {
     return request<Array<Record<string, unknown>>>(`/apis/qsl.admin/v1/audit-logs${queryString(filters)}`)
   },

@@ -102,10 +102,10 @@ public class WidgetController {
                 };
                 const sentStatusDict = {
                   SENT: '本台已发卡',
-                  NOT_SENT: '待发卡',
+                  NOT_SENT: '待打印卡片',
                 };
                 const confirmStatusDict = {
-                  CONFIRMED: '已确认收卡',
+                  CONFIRMED: '已签收',
                   UNCONFIRMED: '待确认收卡',
                 };
                 const returnStatusDict = {
@@ -119,10 +119,24 @@ public class WidgetController {
                   const returnCode = item.returnCardStatus || '';
                   const prodCode = item.productionStatus || '';
                   const reissueCount = Number(item.reissueCount || 0);
+                  const envelopePrinted = Boolean(item.envelopePrinted);
 
                   let sentText = sentStatusDict[sentCode] || sentCode || '未知';
-                  if (sentCode === 'NOT_SENT' && prodCode === 'PENDING_PRINT') {
-                    sentText = '待重发';
+                  let sentYes = sentCode === 'SENT';
+                  if (sentCode !== 'SENT') {
+                    if (prodCode === 'PRINTED' && envelopePrinted) {
+                      sentText = '信封已打印';
+                      sentYes = true;
+                    } else if (prodCode === 'PRINTED') {
+                      sentText = '卡片已打印';
+                      sentYes = true;
+                    } else {
+                      sentText = '待打印卡片';
+                      sentYes = false;
+                    }
+                    if (prodCode === 'PENDING_PRINT' && reissueCount > 0) {
+                      sentText = '待重发';
+                    }
                   }
                   if (sentCode === 'SENT' && reissueCount > 0) {
                     sentText = '本台已发卡(补卡)';
@@ -131,7 +145,7 @@ public class WidgetController {
                   const confirmText = confirmStatusDict[confirmCode] || '待确认收卡';
                   const returnText = returnStatusDict[returnCode] || '待收回卡';
                   return [
-                    { text: sentText, yes: sentCode === 'SENT' },
+                    { text: sentText, yes: sentYes },
                     { text: confirmText, yes: confirmCode === 'CONFIRMED' },
                     { text: returnText, yes: returnCode === 'RECEIVED' },
                   ];
