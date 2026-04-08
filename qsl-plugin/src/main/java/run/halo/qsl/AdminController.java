@@ -310,14 +310,32 @@ public class AdminController {
 
     @PostMapping("/exchange-requests/{id}/approve")
     public Map<String, Object> approveRequest(@PathVariable("id") Long id,
-        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
-        return dataService.approveRequest(id, operator);
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator,
+        @RequestHeader(value = "Cookie", required = false) String cookie,
+        @RequestHeader(value = "Authorization", required = false) String authorization,
+        @RequestHeader(value = "X-XSRF-TOKEN", required = false) String xsrfToken,
+        @RequestHeader(value = "X-CSRF-TOKEN", required = false) String csrfToken) {
+        var headers = new java.util.LinkedHashMap<String, String>();
+        if (cookie != null) headers.put("Cookie", cookie);
+        if (authorization != null) headers.put("Authorization", authorization);
+        if (xsrfToken != null) headers.put("X-XSRF-TOKEN", xsrfToken);
+        if (csrfToken != null) headers.put("X-CSRF-TOKEN", csrfToken);
+        return dataService.approveRequest(id, operator, headers);
     }
 
     @PostMapping("/exchange-requests/{id}/reject")
     public Map<String, Object> rejectRequest(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
-        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
-        return dataService.rejectRequest(id, String.valueOf(payload.getOrDefault("reason", "")), operator);
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator,
+        @RequestHeader(value = "Cookie", required = false) String cookie,
+        @RequestHeader(value = "Authorization", required = false) String authorization,
+        @RequestHeader(value = "X-XSRF-TOKEN", required = false) String xsrfToken,
+        @RequestHeader(value = "X-CSRF-TOKEN", required = false) String csrfToken) {
+        var headers = new java.util.LinkedHashMap<String, String>();
+        if (cookie != null) headers.put("Cookie", cookie);
+        if (authorization != null) headers.put("Authorization", authorization);
+        if (xsrfToken != null) headers.put("X-XSRF-TOKEN", xsrfToken);
+        if (csrfToken != null) headers.put("X-CSRF-TOKEN", csrfToken);
+        return dataService.rejectRequest(id, String.valueOf(payload.getOrDefault("reason", "")), operator, headers);
     }
 
     @GetMapping("/callsign-bindings")

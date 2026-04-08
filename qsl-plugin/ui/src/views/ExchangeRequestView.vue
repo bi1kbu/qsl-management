@@ -44,10 +44,16 @@ onMounted(load)
         <VEmpty v-else-if="rows.length === 0" title="暂无申请" />
         <div v-else class="table-wrap">
           <table class="qsl-table">
-            <thead><tr><th>ID</th><th>类型</th><th>呼号</th><th>状态</th><th>目标卡片ID</th><th>操作</th></tr></thead>
+            <thead><tr><th>ID</th><th>类型</th><th>呼号</th><th>邮箱</th><th>状态</th><th>目标卡片ID</th><th>邮件状态</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="row in rows" :key="String(row.id)">
-                <td>{{ row.id }}</td><td>{{ row.requestType }}</td><td>{{ row.bindCallsign }}</td><td>{{ row.status }}</td><td>{{ row.qslCardRecordId }}</td>
+                <td>{{ row.id }}</td>
+                <td>{{ row.requestType }}</td>
+                <td>{{ row.bindCallsign }}</td>
+                <td>{{ row.email }}</td>
+                <td>{{ row.status }}</td>
+                <td>{{ row.qslCardRecordId || row.generatedCardId }}</td>
+                <td>{{ row.mailSentAt ? '已发送' : (row.mailError || '-') }}</td>
                 <td>
                   <VButton size="sm" type="secondary" @click="approve(Number(row.id))">通过</VButton>
                   <VButton size="sm" @click="reject(Number(row.id))">拒绝</VButton>

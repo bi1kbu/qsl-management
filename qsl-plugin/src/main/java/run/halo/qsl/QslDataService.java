@@ -16,6 +16,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -26,6 +27,7 @@ public class QslDataService {
 
     private final AtomicLong idGenerator = new AtomicLong(1000);
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final EmailNotifyService emailNotifyService;
 
     private final Map<Long, Map<String, Object>> bureaus = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> equipments = new ConcurrentHashMap<>();
@@ -43,6 +45,17 @@ public class QslDataService {
     private final Map<String, Object> systemConfig = new ConcurrentHashMap<>();
 
     public QslDataService() {
+        this.emailNotifyService = null;
+        systemConfig.put("queryLimitPerMin", 5);
+        systemConfig.put("reissueEnabled", true);
+        systemConfig.put("reissueIntervalDays", 7);
+        systemConfig.put("requestNeedReview", true);
+        stationProfile.put("stationCallsign", "");
+    }
+
+    @Autowired
+    public QslDataService(EmailNotifyService emailNotifyService) {
+        this.emailNotifyService = emailNotifyService;
         systemConfig.put("queryLimitPerMin", 5);
         systemConfig.put("reissueEnabled", true);
         systemConfig.put("reissueIntervalDays", 7);
@@ -517,6 +530,10 @@ public class QslDataService {
     }
 
     public Map<String, Object> approveRequest(Long id, String operator) {
+        return approveRequest(id, operator, Map.of());
+    }
+
+    public Map<String, Object> approveRequest(Long id, String operator, Map<String, String> authHeaders) {
         var request = exchangeRequests.get(id);
         if (request == null || isDeleted(request)) {
             return null;
@@ -524,12 +541,23 @@ public class QslDataService {
         var now = OffsetDateTime.now().toString();
         var requestType = Objects.toString(request.getOrDefault("requestType", "NORMAL"));
         if ("NORMAL".equalsIgnoreCase(requestType)) {
-            var generated = create("card", Map.of(
-                "cardType", "EYEBALL",
-                "peerCallsign", request.getOrDefault("bindCallsign", ""),
-                "cardDate", OffsetDateTime.now().toLocalDate().toString(),
-                "cardTime", OffsetDateTime.now().toLocalTime().withNano(0).toString()
-            ), operator);
+            var createPayload = new LinkedHashMap<String, Object>();
+            createPayload.put("cardType", "EYEBALL");
+            createPayload.put("peerCallsign", request.getOrDefault("bindCallsign", ""));
+            createPayload.put("name", request.getOrDefault("name", ""));
+            createPayload.put("postcode", request.getOrDefault("postcode", ""));
+            createPayload.put("address", request.getOrDefault("address", ""));
+            createPayload.put("phone", request.getOrDefault("phone", ""));
+            createPayload.put("email", request.getOrDefault("email", ""));
+            createPayload.put("productionStatus", "PENDING_PRINT");
+            createPayload.put("sentStatus", "NOT_SENT");
+            createPayload.put("confirmStatus", "UNCONFIRMED");
+            createPayload.put("returnCardStatus", "NOT_RECEIVED");
+            createPayload.put("cardDate", OffsetDateTime.now().toLocalDate().toString());
+            createPayload.put("cardTime", OffsetDateTime.now().toLocalTime().withNano(0).toString());
+            createPayload.put("timezone", "UTC+8");
+            createPayload.put("remark", "request-approved");
+            var generated = create("card", createPayload, operator);
             request.put("generatedCardId", generated.get("id"));
         } else if ("REISSUE".equalsIgnoreCase(requestType)) {
             var cardIdObj = request.get("qslCardRecordId");
@@ -551,20 +579,68 @@ public class QslDataService {
                 }
             }
         }
-        return update("request", id, Map.of("status", "APPROVED", "reviewedBy", operator, "reviewedAt", now), operator);
+        var updated = update("request", id, Map.of("status", "APPROVED", "reviewedBy", operator, "reviewedAt", now), operator);
+        if (updated == null) {
+            return null;
+        }
+        var mailResult = sendReviewMail(updated, true, "", now, authHeaders);
+        if (Boolean.TRUE.equals(mailResult.get("mailSent"))) {
+            updated = update("request", id, Map.of("mailSentAt", OffsetDateTime.now().toString()), operator);
+        } else {
+            updated = update("request", id,
+                Map.of("mailError", Objects.toString(mailResult.getOrDefault("mailError", "unknown"), "")), operator);
+        }
+        var result = new LinkedHashMap<String, Object>();
+        result.putAll(updated == null ? Map.of() : updated);
+        result.putAll(mailResult);
+        return result;
     }
 
     public Map<String, Object> rejectRequest(Long id, String reason, String operator) {
-        return update("request", id,
+        return rejectRequest(id, reason, operator, Map.of());
+    }
+
+    public Map<String, Object> rejectRequest(Long id, String reason, String operator, Map<String, String> authHeaders) {
+        var updated = update("request", id,
             Map.of("status", "REJECTED", "reviewReason", reason, "reviewedBy", operator,
                 "reviewedAt", OffsetDateTime.now().toString()),
             operator);
+        if (updated == null) {
+            return null;
+        }
+        var mailResult = sendReviewMail(updated, false, reason, Objects.toString(updated.get("reviewedAt"), ""), authHeaders);
+        if (Boolean.TRUE.equals(mailResult.get("mailSent"))) {
+            updated = update("request", id, Map.of("mailSentAt", OffsetDateTime.now().toString()), operator);
+        } else {
+            updated = update("request", id,
+                Map.of("mailError", Objects.toString(mailResult.getOrDefault("mailError", "unknown"), "")), operator);
+        }
+        var result = new LinkedHashMap<String, Object>();
+        result.putAll(updated == null ? Map.of() : updated);
+        result.putAll(mailResult);
+        return result;
     }
 
     public Map<String, Object> approveBinding(Long id, String operator) {
         return update("binding", id,
             Map.of("status", "APPROVED", "reviewedBy", operator, "reviewedAt", OffsetDateTime.now().toString()),
             operator);
+    }
+
+    private Map<String, Object> sendReviewMail(Map<String, Object> request, boolean approved, String reason,
+        String reviewedAt,
+        Map<String, String> authHeaders) {
+        if (emailNotifyService == null) {
+            return Map.of("mailSent", false, "mailError", "mail service not initialized");
+        }
+        return emailNotifyService.notifyExchangeRequestReviewed(
+            Objects.toString(request.getOrDefault("email", "")),
+            Objects.toString(request.getOrDefault("bindCallsign", "")),
+            approved,
+            reason,
+            reviewedAt,
+            authHeaders == null ? Map.of() : authHeaders
+        );
     }
 
     public Map<String, Object> rejectBinding(Long id, String reason, String operator) {

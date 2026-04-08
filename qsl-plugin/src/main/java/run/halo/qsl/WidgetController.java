@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.time.OffsetDateTime;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -228,6 +227,7 @@ public class WidgetController {
                   <input id="postcode" placeholder="邮编（必填）" />
                   <textarea id="address" placeholder="地址（必填）"></textarea>
                   <input id="phone" placeholder="电话（选填）" />
+                  <input id="email" placeholder="电子邮箱（必填，用于审核通知）" />
                   <button id="btn">提交换卡申请</button>
                 </div>
                 <div class="msg" id="msg"></div>
@@ -255,6 +255,7 @@ public class WidgetController {
                     postcode: document.getElementById('postcode').value.trim(),
                     address: document.getElementById('address').value.trim(),
                     phone: document.getElementById('phone').value.trim(),
+                    email: document.getElementById('email').value.trim(),
                   };
                   msg.className = 'msg';
                   msg.textContent = '提交中...';
@@ -267,7 +268,7 @@ public class WidgetController {
                     requestAnimationFrame(fitIframeHeight);
                     return;
                   }
-                  msg.textContent = `提交成功，已加入待发清单，卡片ID: ${data.id}`;
+                  msg.textContent = `提交成功，申请ID: ${data.id}，请等待后台审核`;
                   requestAnimationFrame(fitIframeHeight);
                 });
               </script>
@@ -489,6 +490,7 @@ public class WidgetController {
         var postcode = Objects.toString(payload.getOrDefault("postcode", "")).trim();
         var address = Objects.toString(payload.getOrDefault("address", "")).trim();
         var phone = Objects.toString(payload.getOrDefault("phone", "")).trim();
+        var email = Objects.toString(payload.getOrDefault("email", "")).trim();
 
         if (callsign.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "callsign is required");
@@ -498,6 +500,9 @@ public class WidgetController {
         }
         if (address.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "address is required");
+        }
+        if (email.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email is required");
         }
 
         var existedEyeball = dataService.list("card").stream()
@@ -509,23 +514,18 @@ public class WidgetController {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "已交换过卡片，如需二次交换请联系人工处理");
         }
 
-        var now = OffsetDateTime.now();
-        var createPayload = new LinkedHashMap<String, Object>();
-        createPayload.put("cardType", "EYEBALL");
-        createPayload.put("peerCallsign", callsign);
-        createPayload.put("name", name);
-        createPayload.put("postcode", postcode);
-        createPayload.put("address", address);
-        createPayload.put("phone", phone);
-        createPayload.put("productionStatus", "PENDING_PRINT");
-        createPayload.put("sentStatus", "NOT_SENT");
-        createPayload.put("confirmStatus", "UNCONFIRMED");
-        createPayload.put("returnCardStatus", "NOT_RECEIVED");
-        createPayload.put("cardDate", now.toLocalDate().toString());
-        createPayload.put("cardTime", now.toLocalTime().withNano(0).toString());
-        createPayload.put("timezone", "UTC+8");
-        createPayload.put("remark", "public-exchange-request");
-        return dataService.create("card", createPayload, "public-widget");
+        var requestPayload = new LinkedHashMap<String, Object>();
+        requestPayload.put("requestType", "NORMAL");
+        requestPayload.put("targetCardType", "EYEBALL");
+        requestPayload.put("status", "PENDING");
+        requestPayload.put("bindCallsign", callsign);
+        requestPayload.put("name", name);
+        requestPayload.put("postcode", postcode);
+        requestPayload.put("address", address);
+        requestPayload.put("phone", phone);
+        requestPayload.put("email", email);
+        requestPayload.put("note", "public-exchange-request");
+        return dataService.create("request", requestPayload, "public-widget");
     }
 
     @GetMapping(value = "/public-api/actions/exchange-request", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -534,13 +534,15 @@ public class WidgetController {
         @RequestParam(value = "name", required = false) String name,
         @RequestParam(value = "postcode") String postcode,
         @RequestParam(value = "address") String address,
-        @RequestParam(value = "phone", required = false) String phone) {
+        @RequestParam(value = "phone", required = false) String phone,
+        @RequestParam(value = "email") String email) {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("callsign", Objects.toString(callsign, ""));
         payload.put("name", Objects.toString(name, ""));
         payload.put("postcode", Objects.toString(postcode, ""));
         payload.put("address", Objects.toString(address, ""));
         payload.put("phone", Objects.toString(phone, ""));
+        payload.put("email", Objects.toString(email, ""));
         return createExchangeRequest(payload);
     }
 
