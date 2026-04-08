@@ -626,7 +626,7 @@ public class QslDataService {
         if (updated == null) {
             return null;
         }
-        var mailResult = sendReviewMail(updated, true, "", now, authHeaders);
+        var mailResult = sendReviewMail(updated, true, stationProfileRemarkForApprovedReview(), now, authHeaders);
         if (Boolean.TRUE.equals(mailResult.get("mailSent"))) {
             updated = update("request", id, Map.of("mailSentAt", nowString()), operator);
         } else {
@@ -718,6 +718,34 @@ public class QslDataService {
     private String stationCallsignForMail() {
         var value = Objects.toString(stationProfile.getOrDefault("stationCallsign", ""), "").trim();
         return value.isBlank() ? "QSL" : value;
+    }
+
+    private String stationProfileRemarkForApprovedReview() {
+        var postcode = Objects.toString(stationProfile.getOrDefault("postcode", ""), "").trim();
+        var address = Objects.toString(stationProfile.getOrDefault("address", ""), "").trim();
+        var phone = Objects.toString(stationProfile.getOrDefault("phone", ""), "").trim();
+        var name = Objects.toString(stationProfile.getOrDefault("name", ""), "").trim();
+        var stationCallsign = stationCallsignForMail();
+        var remark = Objects.toString(stationProfile.getOrDefault("remark", ""), "").trim();
+
+        var receiver = (name + "（" + stationCallsign + "）收").trim();
+        var parts = new ArrayList<String>();
+        if (!postcode.isBlank()) {
+            parts.add(postcode);
+        }
+        if (!address.isBlank()) {
+            parts.add(address);
+        }
+        if (!phone.isBlank()) {
+            parts.add(phone);
+        }
+        if (!receiver.isBlank()) {
+            parts.add(receiver);
+        }
+        if (!remark.isBlank()) {
+            parts.add(remark);
+        }
+        return String.join("，", parts);
     }
 
     public Map<String, Object> rejectBinding(Long id, String reason, String operator) {
