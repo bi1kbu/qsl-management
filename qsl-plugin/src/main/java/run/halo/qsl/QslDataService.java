@@ -110,7 +110,7 @@ public class QslDataService {
     }
 
     public Map<String, Object> create(String type, Map<String, Object> payload, String operator) {
-        var now = OffsetDateTime.now().toString();
+        var now = nowString();
         var id = idGenerator.incrementAndGet();
         var item = new LinkedHashMap<String, Object>();
         item.putAll(payload);
@@ -178,7 +178,7 @@ public class QslDataService {
             }
             ensureCardStatusDefaults(existing);
         }
-        existing.put("updatedAt", OffsetDateTime.now().toString());
+        existing.put("updatedAt", nowString());
         existing.put("updatedBy", operator);
         writeAudit(type, String.valueOf(id), "update", operator, "success", before, existing);
         return new LinkedHashMap<>(existing);
@@ -192,9 +192,9 @@ public class QslDataService {
         }
         var before = new LinkedHashMap<>(existing);
         existing.put("deleted", true);
-        existing.put("deletedAt", OffsetDateTime.now().toString());
+        existing.put("deletedAt", nowString());
         existing.put("deletedBy", operator);
-        existing.put("updatedAt", OffsetDateTime.now().toString());
+        existing.put("updatedAt", nowString());
         writeAudit(type, String.valueOf(id), "delete", operator, "success", before, existing);
         return true;
     }
@@ -208,7 +208,7 @@ public class QslDataService {
         var ids = castIds(payload.get("cardIds"));
         var updated = new ArrayList<Map<String, Object>>();
         var batchNo = Objects.toString(payload.getOrDefault("batchNo", "BATCH-" + System.currentTimeMillis()));
-        var now = OffsetDateTime.now().toString();
+        var now = nowString();
         int mailSent = 0;
         int mailSkipped = 0;
         var mailErrors = new ArrayList<String>();
@@ -265,7 +265,7 @@ public class QslDataService {
         }
         var ids = castIds(payload.get("cardIds"));
         var updated = new ArrayList<Map<String, Object>>();
-        var now = OffsetDateTime.now().toString();
+        var now = nowString();
         int mailSent = 0;
         int mailSkipped = 0;
         var mailErrors = new ArrayList<String>();
@@ -332,7 +332,7 @@ public class QslDataService {
                 throw new IllegalArgumentException("missing recipient fields: " + String.join("、", missing));
             }
 
-            var now = OffsetDateTime.now();
+            var now = nowOffsetDateTime();
             var createPayload = new LinkedHashMap<String, Object>();
             createPayload.put("cardType", "EYEBALL");
             createPayload.put("peerCallsign", callsign);
@@ -342,7 +342,7 @@ public class QslDataService {
             createPayload.put("phone", Objects.toString(payload.get("phone"), "").trim());
             createPayload.put("email", Objects.toString(payload.get("email"), "").trim());
             createPayload.put("cardDate", now.toLocalDate().toString());
-            createPayload.put("cardTime", now.toLocalTime().withNano(0).toString());
+            createPayload.put("cardTime", now.toLocalTime().toString());
             createPayload.put("timezone", "UTC+8");
             createPayload.put("productionStatus", "DRAFT");
             createPayload.put("sentStatus", "NOT_SENT");
@@ -373,7 +373,7 @@ public class QslDataService {
     public Map<String, Object> confirmByPeer(Map<String, Object> payload, String operator) {
         var ids = castIds(payload.get("cardIds"));
         var updated = new ArrayList<Map<String, Object>>();
-        var now = OffsetDateTime.now().toString();
+        var now = nowString();
         for (Long id : ids) {
             var card = cardRecords.get(id);
             if (card == null || isDeleted(card)) {
@@ -412,7 +412,7 @@ public class QslDataService {
         card.remove("sentAt");
         card.remove("sentBy");
         card.remove("sentBatchNo");
-        card.put("updatedAt", OffsetDateTime.now().toString());
+        card.put("updatedAt", nowString());
         card.put("updatedBy", operator);
         writeAudit("card", String.valueOf(cardId), "reissue_prepare", operator, "success", before, card);
         return Map.of("prepared", true, "card", new LinkedHashMap<>(card));
@@ -581,7 +581,7 @@ public class QslDataService {
         if (request == null || isDeleted(request)) {
             return null;
         }
-        var now = OffsetDateTime.now().toString();
+        var now = nowString();
         var requestType = Objects.toString(request.getOrDefault("requestType", "NORMAL"));
         if ("NORMAL".equalsIgnoreCase(requestType)) {
             var createPayload = new LinkedHashMap<String, Object>();
@@ -596,8 +596,8 @@ public class QslDataService {
             createPayload.put("sentStatus", "NOT_SENT");
             createPayload.put("confirmStatus", "UNCONFIRMED");
             createPayload.put("returnCardStatus", "NOT_RECEIVED");
-            createPayload.put("cardDate", OffsetDateTime.now().toLocalDate().toString());
-            createPayload.put("cardTime", OffsetDateTime.now().toLocalTime().withNano(0).toString());
+            createPayload.put("cardDate", nowDateString());
+            createPayload.put("cardTime", nowTimeString());
             createPayload.put("timezone", "UTC+8");
             createPayload.put("remark", "request-approved");
             var generated = create("card", createPayload, operator);
@@ -628,7 +628,7 @@ public class QslDataService {
         }
         var mailResult = sendReviewMail(updated, true, "", now, authHeaders);
         if (Boolean.TRUE.equals(mailResult.get("mailSent"))) {
-            updated = update("request", id, Map.of("mailSentAt", OffsetDateTime.now().toString()), operator);
+            updated = update("request", id, Map.of("mailSentAt", nowString()), operator);
         } else {
             updated = update("request", id,
                 Map.of("mailError", Objects.toString(mailResult.getOrDefault("mailError", "unknown"), "")), operator);
@@ -646,14 +646,14 @@ public class QslDataService {
     public Map<String, Object> rejectRequest(Long id, String reason, String operator, Map<String, String> authHeaders) {
         var updated = update("request", id,
             Map.of("status", "REJECTED", "reviewReason", reason, "reviewedBy", operator,
-                "reviewedAt", OffsetDateTime.now().toString()),
+                "reviewedAt", nowString()),
             operator);
         if (updated == null) {
             return null;
         }
         var mailResult = sendReviewMail(updated, false, reason, Objects.toString(updated.get("reviewedAt"), ""), authHeaders);
         if (Boolean.TRUE.equals(mailResult.get("mailSent"))) {
-            updated = update("request", id, Map.of("mailSentAt", OffsetDateTime.now().toString()), operator);
+            updated = update("request", id, Map.of("mailSentAt", nowString()), operator);
         } else {
             updated = update("request", id,
                 Map.of("mailError", Objects.toString(mailResult.getOrDefault("mailError", "unknown"), "")), operator);
@@ -666,7 +666,7 @@ public class QslDataService {
 
     public Map<String, Object> approveBinding(Long id, String operator) {
         return update("binding", id,
-            Map.of("status", "APPROVED", "reviewedBy", operator, "reviewedAt", OffsetDateTime.now().toString()),
+            Map.of("status", "APPROVED", "reviewedBy", operator, "reviewedAt", nowString()),
             operator);
     }
 
@@ -678,6 +678,7 @@ public class QslDataService {
         }
         return emailNotifyService.notifyExchangeRequestReviewed(
             Objects.toString(request.getOrDefault("email", "")),
+            stationCallsignForMail(),
             Objects.toString(request.getOrDefault("bindCallsign", "")),
             approved,
             reason,
@@ -692,6 +693,7 @@ public class QslDataService {
         }
         return emailNotifyService.notifyCardSendConfirmed(
             Objects.toString(card.getOrDefault("email", "")),
+            stationCallsignForMail(),
             Objects.toString(card.getOrDefault("peerCallsign", "")),
             Objects.toString(card.getOrDefault("id", "")),
             Objects.toString(card.getOrDefault("sentAt", "")),
@@ -705,6 +707,7 @@ public class QslDataService {
         }
         return emailNotifyService.notifyCardReceiveConfirmed(
             Objects.toString(card.getOrDefault("email", "")),
+            stationCallsignForMail(),
             Objects.toString(card.getOrDefault("peerCallsign", "")),
             Objects.toString(card.getOrDefault("id", "")),
             Objects.toString(card.getOrDefault("receivedAt", card.getOrDefault("returnedAt", ""))),
@@ -712,10 +715,15 @@ public class QslDataService {
         );
     }
 
+    private String stationCallsignForMail() {
+        var value = Objects.toString(stationProfile.getOrDefault("stationCallsign", ""), "").trim();
+        return value.isBlank() ? "QSL" : value;
+    }
+
     public Map<String, Object> rejectBinding(Long id, String reason, String operator) {
         return update("binding", id,
             Map.of("status", "REJECTED", "reviewReason", reason, "reviewedBy", operator,
-                "reviewedAt", OffsetDateTime.now().toString()),
+                "reviewedAt", nowString()),
             operator);
     }
 
@@ -828,7 +836,7 @@ public class QslDataService {
         return list("card").stream()
             .collect(Collectors.groupingBy(
                 c -> {
-                    var d = Objects.toString(c.getOrDefault("cardDate", OffsetDateTime.now().toLocalDate().toString()));
+                    var d = Objects.toString(c.getOrDefault("cardDate", nowDateString()));
                     return YearMonth.parse(d.substring(0, 7));
                 }, Collectors.counting()))
             .entrySet().stream()
@@ -1092,6 +1100,22 @@ public class QslDataService {
         card.put("receivedStatus", "RECEIVED".equalsIgnoreCase(returnStatus) ? "RECEIVED" : "NOT_RECEIVED");
     }
 
+    private OffsetDateTime nowOffsetDateTime() {
+        return OffsetDateTime.now().withNano(0);
+    }
+
+    private String nowString() {
+        return nowOffsetDateTime().toString();
+    }
+
+    private String nowDateString() {
+        return nowOffsetDateTime().toLocalDate().toString();
+    }
+
+    private String nowTimeString() {
+        return nowOffsetDateTime().toLocalTime().toString();
+    }
+
     private void writeAudit(String objectType, String objectId, String operation, String operator,
         String result, Map<String, Object> before, Map<String, Object> after) {
         var id = idGenerator.incrementAndGet();
@@ -1106,7 +1130,7 @@ public class QslDataService {
         log.put("result", result);
         log.put("operatorId", operator);
         log.put("operatorIp", "127.0.0.1");
-        log.put("createdAt", OffsetDateTime.now().toString());
+        log.put("createdAt", nowString());
         auditLogs.put(id, log);
     }
 

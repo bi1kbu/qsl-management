@@ -40,9 +40,10 @@ public class EmailNotifyService {
         this.notificationReasonEmitter = notificationReasonEmitter;
     }
 
-    public Map<String, Object> notifyExchangeRequestReviewed(String toEmail, String callsign, boolean approved,
-        String reason, String reviewedAt, Map<String, String> authHeaders) {
+    public Map<String, Object> notifyExchangeRequestReviewed(String toEmail, String stationCallsign, String callsign,
+        boolean approved, String reason, String reviewedAt, Map<String, String> authHeaders) {
         var attrs = new LinkedHashMap<String, Object>();
+        attrs.put("stationCallsign", Objects.toString(stationCallsign, ""));
         attrs.put("callsign", Objects.toString(callsign, ""));
         attrs.put("reviewedAt", Objects.toString(reviewedAt, ""));
         attrs.put("result", approved ? "已通过" : "未通过");
@@ -52,9 +53,10 @@ public class EmailNotifyService {
         return notifyNative(toEmail, definition, subject, attrs, false);
     }
 
-    public Map<String, Object> notifyCardSendConfirmed(String toEmail, String callsign, String cardId, String sentAt,
-        Map<String, String> authHeaders) {
+    public Map<String, Object> notifyCardSendConfirmed(String toEmail, String stationCallsign, String callsign,
+        String cardId, String sentAt, Map<String, String> authHeaders) {
         var attrs = new LinkedHashMap<String, Object>();
+        attrs.put("stationCallsign", Objects.toString(stationCallsign, ""));
         attrs.put("callsign", Objects.toString(callsign, ""));
         attrs.put("cardId", Objects.toString(cardId, ""));
         attrs.put("sentAt", Objects.toString(sentAt, ""));
@@ -63,9 +65,10 @@ public class EmailNotifyService {
         return notifyNative(toEmail, definition, subject, attrs, true);
     }
 
-    public Map<String, Object> notifyCardReceiveConfirmed(String toEmail, String callsign, String cardId,
-        String receivedAt, Map<String, String> authHeaders) {
+    public Map<String, Object> notifyCardReceiveConfirmed(String toEmail, String stationCallsign, String callsign,
+        String cardId, String receivedAt, Map<String, String> authHeaders) {
         var attrs = new LinkedHashMap<String, Object>();
+        attrs.put("stationCallsign", Objects.toString(stationCallsign, ""));
         attrs.put("callsign", Objects.toString(callsign, ""));
         attrs.put("cardId", Objects.toString(cardId, ""));
         attrs.put("receivedAt", Objects.toString(receivedAt, ""));
@@ -192,24 +195,24 @@ public class EmailNotifyService {
             "QSL 换卡申请审核结果",
             "用于通知用户其换卡申请审核通过或拒绝。",
             List.of(
+                property("stationCallsign", "string", "本台呼号"),
                 property("callsign", "string", "呼号"),
                 property("reviewedAt", "string", "审核时间"),
                 property("result", "string", "审核结果"),
                 property("reason", "string", "拒绝原因")
             ),
-            "【QSL】换卡申请审核结果：[(${result})]（[(${callsign})]）",
-            "您好，[(${subscriber.displayName})]：\n\n"
+            "【[(${stationCallsign})]】换卡申请审核结果：[(${result})]（[(${callsign})]）",
+            "您好，[(${callsign})]: \n\n"
                 + "您的 QSL 换卡申请审核结果为：[(${result})]。\n"
                 + "呼号：[(${callsign})]\n"
                 + "审核时间：[(${reviewedAt})]\n"
-                + "拒绝原因：[(${reason})]\n\n"
+                + "备注：[(${reason})]\n\n"
                 + "此邮件由系统自动发送，请勿直接回复。",
-            "<div class=\"notification-content\">"
-                + "<p th:text=\"|您好，${subscriber.displayName}：|\"></p>"
-                + "<p th:text=\"|您的 QSL 换卡申请审核结果为：${result}|\"></p>"
-                + "<p th:text=\"|呼号：${callsign}|\"></p>"
-                + "<p th:text=\"|审核时间：${reviewedAt}|\"></p>"
-                + "<p th:text=\"|拒绝原因：${reason}|\"></p>"
+            "<div class=\"notification-content\">\n"
+                + "<p th:text=\"|您好，${callsign}: |\"></p>\n"
+                + "<p th:text=\"|您的 QSL 换卡申请审核结果为：${result}|\"></p>\n"
+                + "<p th:text=\"|审核时间：${reviewedAt}|\"></p>\n"
+                + "<p th:text=\"|备注：${reason}|\"></p>\n"
                 + "<p>此邮件由系统自动发送，请勿直接回复。</p>"
                 + "</div>"
         );
@@ -222,23 +225,24 @@ public class EmailNotifyService {
             "QSL 卡片发信状态更新",
             "用于通知用户卡片已发出。",
             List.of(
+                property("stationCallsign", "string", "本台呼号"),
                 property("callsign", "string", "呼号"),
                 property("cardId", "string", "卡片ID"),
                 property("sentAt", "string", "发信时间")
             ),
-            "【QSL】卡片寄送状态更新（[(${callsign})]）",
-            "您好，[(${subscriber.displayName})]：\n\n"
+            "【[(${stationCallsign})]】卡片寄送状态更新（[(${callsign})]）",
+            "您好，[(${callsign})]: \n\n"
                 + "您的 QSL 卡片已完成发信确认，当前状态为“本台已发卡”。\n"
                 + "呼号：[(${callsign})]\n"
                 + "卡片ID：[(${cardId})]\n"
                 + "发信时间：[(${sentAt})]\n\n"
                 + "此邮件由系统自动发送，请勿直接回复。",
-            "<div class=\"notification-content\">"
-                + "<p th:text=\"|您好，${subscriber.displayName}：|\"></p>"
-                + "<p>您的 QSL 卡片已完成发信确认，当前状态为“本台已发卡”。</p>"
-                + "<p th:text=\"|呼号：${callsign}|\"></p>"
-                + "<p th:text=\"|卡片ID：${cardId}|\"></p>"
-                + "<p th:text=\"|发信时间：${sentAt}|\"></p>"
+            "<div class=\"notification-content\">\n"
+                + "<p th:text=\"|您好，${callsign}: |\"></p>\n"
+                + "<p>您的 QSL 卡片已完成发信确认，当前状态为“本台已发卡”。</p>\n"
+                + "<p th:text=\"|呼号：${callsign}|\"></p>\n"
+                + "<p th:text=\"|卡片ID：${cardId}|\"></p>\n"
+                + "<p th:text=\"|发信时间：${sentAt}|\"></p>\n"
                 + "<p>此邮件由系统自动发送，请勿直接回复。</p>"
                 + "</div>"
         );
@@ -251,23 +255,24 @@ public class EmailNotifyService {
             "QSL 卡片收信状态更新",
             "用于通知用户卡片已收回。",
             List.of(
+                property("stationCallsign", "string", "本台呼号"),
                 property("callsign", "string", "呼号"),
                 property("cardId", "string", "卡片ID"),
                 property("receivedAt", "string", "确认时间")
             ),
-            "【QSL】收信确认状态更新（[(${callsign})]）",
-            "您好，[(${subscriber.displayName})]：\n\n"
+            "【[(${stationCallsign})]】收信确认状态更新（[(${callsign})]）",
+            "您好，[(${callsign})]: \n\n"
                 + "您的 QSL 卡片已完成收信确认，当前状态为“已收回卡”。\n"
                 + "呼号：[(${callsign})]\n"
                 + "卡片ID：[(${cardId})]\n"
                 + "确认时间：[(${receivedAt})]\n\n"
                 + "此邮件由系统自动发送，请勿直接回复。",
-            "<div class=\"notification-content\">"
-                + "<p th:text=\"|您好，${subscriber.displayName}：|\"></p>"
-                + "<p>您的 QSL 卡片已完成收信确认，当前状态为“已收回卡”。</p>"
-                + "<p th:text=\"|呼号：${callsign}|\"></p>"
-                + "<p th:text=\"|卡片ID：${cardId}|\"></p>"
-                + "<p th:text=\"|确认时间：${receivedAt}|\"></p>"
+            "<div class=\"notification-content\">\n"
+                + "<p th:text=\"|您好，${callsign}: |\"></p>\n"
+                + "<p>您的 QSL 卡片已完成收信确认，当前状态为“已收回卡”。</p>\n"
+                + "<p th:text=\"|呼号：${callsign}|\"></p>\n"
+                + "<p th:text=\"|卡片ID：${cardId}|\"></p>\n"
+                + "<p th:text=\"|确认时间：${receivedAt}|\"></p>\n"
                 + "<p>此邮件由系统自动发送，请勿直接回复。</p>"
                 + "</div>"
         );
