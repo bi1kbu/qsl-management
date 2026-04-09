@@ -158,6 +158,9 @@ public class QslDataService {
         if ("address".equals(type)) {
             validateAddressBookUnique(null, normalizedPayload);
         }
+        if ("binding".equals(type)) {
+            validateBindingPayloadForCreate(normalizedPayload);
+        }
         if ("card".equals(type)) {
             validateCardPayloadForCreate(normalizedPayload);
             overrideCardDateTimeByQso(normalizedPayload, null);
@@ -186,6 +189,9 @@ public class QslDataService {
         normalizeAddressAssociation(type, normalizedPayload, existing, operator);
         if ("address".equals(type)) {
             validateAddressBookUnique(id, normalizedPayload, existing);
+        }
+        if ("binding".equals(type)) {
+            validateBindingPayloadForUpdate(id, normalizedPayload, existing);
         }
         if ("card".equals(type)) {
             validateCardPayloadForUpdate(id, normalizedPayload, existing);
@@ -712,6 +718,23 @@ public class QslDataService {
             operator);
     }
 
+    public Map<String, Object> unbindBinding(Long id, String operator) {
+        var existing = get("binding", id);
+        if (existing == null) {
+            return null;
+        }
+        var status = Objects.toString(existing.getOrDefault("status", ""), "").trim().toUpperCase();
+        if ("UNBOUND".equals(status)) {
+            return existing;
+        }
+        if (!"APPROVED".equals(status)) {
+            throw new IllegalArgumentException("only approved binding can be unbound");
+        }
+        return update("binding", id,
+            Map.of("status", "UNBOUND", "unboundBy", operator, "unboundAt", nowString()),
+            operator);
+    }
+
     private Map<String, Object> sendReviewMail(Map<String, Object> request, boolean approved, String reason,
         String reviewedAt,
         Map<String, String> authHeaders) {
@@ -848,6 +871,168 @@ public class QslDataService {
             Map.of("status", "REJECTED", "reviewReason", reason, "reviewedBy", operator,
                 "reviewedAt", nowString()),
             operator);
+    }
+
+    public List<Map<String, Object>> listBindingsByUser(String userId) {
+        var key = Objects.toString(userId, "").trim();
+        if (key.isBlank()) {
+            return List.of();
+        }
+        return list("binding").stream()
+            .filter(b -> key.equals(Objects.toString(b.getOrDefault("userId", ""), "").trim()))
+            .sorted(Comparator.comparing(item -> ((Number) item.get("id")).longValue()))
+            .toList();
+    }
+
+    public Map<String, Object> submitBinding(String userId, Map<String, Object> payload, String operator) {
+        var userKey = Objects.toString(userId, "").trim();
+        if (userKey.isBlank()) {
+            throw new IllegalArgumentException("userId is required");
+        }
+        var normalized = new LinkedHashMap<String, Object>(payload == null ? Map.of() : payload);
+        var callsign = Objects.toString(normalized.getOrDefault("callsign", ""), "").trim().toUpperCase();
+        if (callsign.isBlank()) {
+            throw new IllegalArgumentException("callsign is required");
+        }
+        validateBindingProof(normalized, null);
+        var duplicated = listBindingsByUser(userKey).stream()
+            .filter(b -> callsign.equalsIgnoreCase(Objects.toString(b.getOrDefault("callsign", ""), "")))
+            .filter(b -> {
+                var status = Objects.toString(b.getOrDefault("status", "PENDING"), "").trim().toUpperCase();
+                return !"REJECTED".equals(status) && !"UNBOUND".equals(status);
+            })
+            .findFirst();
+        if (duplicated.isPresent()) {
+            throw new IllegalArgumentException("该呼号已有未完成或已通过的绑定申请");
+        }
+        normalized.put("callsign", callsign);
+        normalized.put("userId", userKey);
+        normalized.put("status", "PENDING");
+        normalized.put("reviewReason", "");
+        normalized.put("reviewedBy", "");
+        normalized.put("reviewedAt", "");
+        normalized.put("verifyMethod", resolveVerifyMethod(normalized, null));
+        return create("binding", normalized, operator);
+    }
+
+    public Map<String, Object> searchCallsignRecordStats(String callsign) {
+        var keyword = Objects.toString(callsign, "").trim();
+        if (keyword.isBlank()) {
+            return Map.of("callsign", "", "qsoCount", 0, "cardCount", 0, "hasRecords", false);
+        }
+        var qsoCount = list("qso").stream()
+            .filter(q -> keyword.equalsIgnoreCase(Objects.toString(q.getOrDefault("peerCallsign", ""), "").trim()))
+            .count();
+        var cardCount = list("card").stream()
+            .filter(c -> keyword.equalsIgnoreCase(Objects.toString(c.getOrDefault("peerCallsign", ""), "").trim()))
+            .count();
+        return Map.of(
+            "callsign", keyword.toUpperCase(),
+            "qsoCount", qsoCount,
+            "cardCount", cardCount,
+            "hasRecords", (qsoCount + cardCount) > 0
+        );
+    }
+
+    public List<Map<String, Object>> listAddressesByBoundUser(String userId, String callsign) {
+        var approved = approvedCallsignsOfUser(userId);
+        if (approved.isEmpty()) {
+            return List.of();
+        }
+        var target = Objects.toString(callsign, "").trim().toUpperCase();
+        return list("address").stream()
+            .filter(a -> {
+                var c = Objects.toString(a.getOrDefault("callsign", ""), "").trim().toUpperCase();
+                return approved.contains(c) && (target.isBlank() || target.equals(c));
+            })
+            .toList();
+    }
+
+    public Map<String, Object> createAddressByBoundUser(String userId, Map<String, Object> payload, String operator) {
+        var callsign = Objects.toString(payload.getOrDefault("callsign", ""), "").trim().toUpperCase();
+        assertBoundCallsign(userId, callsign);
+        var normalized = new LinkedHashMap<String, Object>(payload);
+        normalized.put("callsign", callsign);
+        return create("address", normalized, operator);
+    }
+
+    public Map<String, Object> updateAddressByBoundUser(String userId, Long id, Map<String, Object> payload,
+        String operator) {
+        var existing = get("address", id);
+        if (existing == null) {
+            return null;
+        }
+        var existingCallsign = Objects.toString(existing.getOrDefault("callsign", ""), "").trim().toUpperCase();
+        assertBoundCallsign(userId, existingCallsign);
+        var normalized = new LinkedHashMap<String, Object>(payload);
+        var nextCallsign = payload.containsKey("callsign")
+            ? Objects.toString(payload.getOrDefault("callsign", ""), "").trim().toUpperCase()
+            : existingCallsign;
+        assertBoundCallsign(userId, nextCallsign);
+        normalized.put("callsign", nextCallsign);
+        return update("address", id, normalized, operator);
+    }
+
+    public boolean deleteAddressByBoundUser(String userId, Long id, String operator) {
+        var existing = get("address", id);
+        if (existing == null) {
+            return false;
+        }
+        var existingCallsign = Objects.toString(existing.getOrDefault("callsign", ""), "").trim().toUpperCase();
+        assertBoundCallsign(userId, existingCallsign);
+        return softDelete("address", id, operator);
+    }
+
+    public List<Map<String, Object>> queryMyQsoByBoundUser(String userId, String callsign) {
+        var approved = approvedCallsignsOfUser(userId);
+        if (approved.isEmpty()) {
+            return List.of();
+        }
+        var target = Objects.toString(callsign, "").trim().toUpperCase();
+        return list("qso").stream()
+            .filter(q -> {
+                var c = Objects.toString(q.getOrDefault("peerCallsign", ""), "").trim().toUpperCase();
+                return approved.contains(c) && (target.isBlank() || target.equals(c));
+            })
+            .toList();
+    }
+
+    public List<Map<String, Object>> queryMyCardsByBoundUser(String userId, String callsign) {
+        var approved = approvedCallsignsOfUser(userId);
+        if (approved.isEmpty()) {
+            return List.of();
+        }
+        var target = Objects.toString(callsign, "").trim().toUpperCase();
+        return list("card").stream()
+            .filter(c -> {
+                var v = Objects.toString(c.getOrDefault("peerCallsign", ""), "").trim().toUpperCase();
+                return approved.contains(v) && (target.isBlank() || target.equals(v));
+            })
+            .toList();
+    }
+
+    private void assertBoundCallsign(String userId, String callsign) {
+        var userKey = Objects.toString(userId, "").trim();
+        var target = Objects.toString(callsign, "").trim().toUpperCase();
+        if (userKey.isBlank() || target.isBlank()) {
+            throw new IllegalArgumentException("callsign is required");
+        }
+        if (!approvedCallsignsOfUser(userKey).contains(target)) {
+            throw new IllegalArgumentException("当前用户未绑定或未通过审核该呼号");
+        }
+    }
+
+    private java.util.Set<String> approvedCallsignsOfUser(String userId) {
+        var key = Objects.toString(userId, "").trim();
+        if (key.isBlank()) {
+            return java.util.Set.of();
+        }
+        return list("binding").stream()
+            .filter(b -> key.equals(Objects.toString(b.getOrDefault("userId", ""), "").trim()))
+            .filter(b -> "APPROVED".equalsIgnoreCase(Objects.toString(b.getOrDefault("status", ""), "").trim()))
+            .map(b -> Objects.toString(b.getOrDefault("callsign", ""), "").trim().toUpperCase())
+            .filter(v -> !v.isBlank())
+            .collect(Collectors.toSet());
     }
 
     public List<Map<String, Object>> queryCardsByCallsign(String callsign) {
@@ -1133,6 +1318,88 @@ public class QslDataService {
 
     private void validateAddressBookUnique(Long currentId, Map<String, Object> payload) {
         validateAddressBookUnique(currentId, payload, null);
+    }
+
+    private void validateBindingPayloadForCreate(Map<String, Object> payload) {
+        var callsign = Objects.toString(payload.getOrDefault("callsign", ""), "").trim();
+        if (callsign.isBlank()) {
+            throw new IllegalArgumentException("callsign is required");
+        }
+        validateBindingProof(payload, null);
+    }
+
+    private void validateBindingPayloadForUpdate(Long currentId, Map<String, Object> payload, Map<String, Object> existing) {
+        var callsign = payload.containsKey("callsign")
+            ? Objects.toString(payload.getOrDefault("callsign", ""), "").trim()
+            : Objects.toString(existing.getOrDefault("callsign", ""), "").trim();
+        if (callsign.isBlank()) {
+            throw new IllegalArgumentException("callsign is required");
+        }
+        if (payload.containsKey("verifyMethod")
+            || payload.containsKey("radioLicenseImage")
+            || payload.containsKey("hamcqProofImage")
+            || payload.containsKey("legacyCardId")
+            || payload.containsKey("legacyPhone")) {
+            validateBindingProof(payload, existing);
+            payload.put("verifyMethod", resolveVerifyMethod(payload, existing));
+        }
+        for (var entry : callsignBindings.entrySet()) {
+            if (currentId != null && currentId.equals(entry.getKey())) {
+                continue;
+            }
+            var item = entry.getValue();
+            if (isDeleted(item)) {
+                continue;
+            }
+            var c = Objects.toString(item.getOrDefault("callsign", ""), "").trim();
+            var u = Objects.toString(item.getOrDefault("userId", ""), "").trim();
+            if (u.equalsIgnoreCase(Objects.toString(existing.getOrDefault("userId", ""), "").trim())
+                && c.equalsIgnoreCase(callsign)
+                && !"REJECTED".equalsIgnoreCase(Objects.toString(item.getOrDefault("status", ""), "").trim())
+                && !"UNBOUND".equalsIgnoreCase(Objects.toString(item.getOrDefault("status", ""), "").trim())) {
+                throw new IllegalArgumentException("该呼号已有未完成或已通过的绑定申请");
+            }
+        }
+    }
+
+    private void validateBindingProof(Map<String, Object> payload, Map<String, Object> existing) {
+        var license = mergeString(payload, existing, "radioLicenseImage");
+        var hamcq = mergeString(payload, existing, "hamcqProofImage");
+        var legacyCardId = mergeString(payload, existing, "legacyCardId");
+        var legacyPhone = mergeString(payload, existing, "legacyPhone");
+        var hasLicense = !license.isBlank();
+        var hasHamcq = !hamcq.isBlank();
+        var hasLegacy = !legacyCardId.isBlank() && !legacyPhone.isBlank();
+        if (!hasLicense && !hasHamcq && !hasLegacy) {
+            throw new IllegalArgumentException("证明材料三选一，至少填写一种");
+        }
+    }
+
+    private String resolveVerifyMethod(Map<String, Object> payload, Map<String, Object> existing) {
+        var license = mergeString(payload, existing, "radioLicenseImage");
+        var hamcq = mergeString(payload, existing, "hamcqProofImage");
+        var legacyCardId = mergeString(payload, existing, "legacyCardId");
+        var legacyPhone = mergeString(payload, existing, "legacyPhone");
+        if (!license.isBlank()) {
+            return "LICENSE_IMAGE";
+        }
+        if (!hamcq.isBlank()) {
+            return "HAMCQ_IMAGE";
+        }
+        if (!legacyCardId.isBlank() && !legacyPhone.isBlank()) {
+            return "LEGACY_CARD_PHONE";
+        }
+        return "";
+    }
+
+    private String mergeString(Map<String, Object> payload, Map<String, Object> existing, String key) {
+        if (payload != null && payload.containsKey(key)) {
+            return Objects.toString(payload.getOrDefault(key, ""), "").trim();
+        }
+        if (existing != null) {
+            return Objects.toString(existing.getOrDefault(key, ""), "").trim();
+        }
+        return "";
     }
 
     private void validateAddressBookUnique(Long currentId, Map<String, Object> payload, Map<String, Object> existing) {

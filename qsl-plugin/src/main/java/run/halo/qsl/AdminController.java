@@ -384,6 +384,86 @@ public class AdminController {
         return dataService.list("binding");
     }
 
+    @GetMapping("/my/callsign-bindings")
+    public List<Map<String, Object>> listMyBindings(
+        @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        return dataService.listBindingsByUser(resolveUserId(userId));
+    }
+
+    @PostMapping("/my/callsign-bindings")
+    public Map<String, Object> submitMyBinding(@RequestBody Map<String, Object> payload,
+        @RequestHeader(value = "X-User-Id", required = false) String userId,
+        @RequestHeader(value = "X-Operator", defaultValue = "console-user") String operator) {
+        try {
+            return dataService.submitBinding(resolveUserId(userId), payload, operator);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
+    @GetMapping("/my/callsign-records/search")
+    public Map<String, Object> searchMyCallsignRecords(
+        @RequestParam("callsign") String callsign,
+        @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        // userId kept for audit/extendability.
+        resolveUserId(userId);
+        return dataService.searchCallsignRecordStats(callsign);
+    }
+
+    @GetMapping("/my/address-books")
+    public List<Map<String, Object>> listMyAddresses(
+        @RequestParam(value = "callsign", required = false) String callsign,
+        @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        return dataService.listAddressesByBoundUser(resolveUserId(userId), callsign);
+    }
+
+    @PostMapping("/my/address-books")
+    public Map<String, Object> createMyAddress(@RequestBody Map<String, Object> payload,
+        @RequestHeader(value = "X-User-Id", required = false) String userId,
+        @RequestHeader(value = "X-Operator", defaultValue = "console-user") String operator) {
+        try {
+            return dataService.createAddressByBoundUser(resolveUserId(userId), payload, operator);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
+    @PutMapping("/my/address-books/{id}")
+    public Map<String, Object> updateMyAddress(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
+        @RequestHeader(value = "X-User-Id", required = false) String userId,
+        @RequestHeader(value = "X-Operator", defaultValue = "console-user") String operator) {
+        try {
+            return dataService.updateAddressByBoundUser(resolveUserId(userId), id, payload, operator);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
+    @DeleteMapping("/my/address-books/{id}")
+    public Map<String, Object> deleteMyAddress(@PathVariable("id") Long id,
+        @RequestHeader(value = "X-User-Id", required = false) String userId,
+        @RequestHeader(value = "X-Operator", defaultValue = "console-user") String operator) {
+        try {
+            return Map.of("deleted", dataService.deleteAddressByBoundUser(resolveUserId(userId), id, operator));
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
+    @GetMapping("/my/qso-records")
+    public List<Map<String, Object>> listMyQso(
+        @RequestParam(value = "callsign", required = false) String callsign,
+        @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        return dataService.queryMyQsoByBoundUser(resolveUserId(userId), callsign);
+    }
+
+    @GetMapping("/my/qsl-card-records")
+    public List<Map<String, Object>> listMyCards(
+        @RequestParam(value = "callsign", required = false) String callsign,
+        @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        return dataService.queryMyCardsByBoundUser(resolveUserId(userId), callsign);
+    }
+
     @PostMapping("/callsign-bindings/{id}/approve")
     public Map<String, Object> approveBinding(@PathVariable("id") Long id,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
@@ -394,6 +474,16 @@ public class AdminController {
     public Map<String, Object> rejectBinding(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
         return dataService.rejectBinding(id, String.valueOf(payload.getOrDefault("reason", "")), operator);
+    }
+
+    @PostMapping("/callsign-bindings/{id}/unbind")
+    public Map<String, Object> unbindBinding(@PathVariable("id") Long id,
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
+        try {
+            return dataService.unbindBinding(id, operator);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
     }
 
     @GetMapping("/audit-logs")
@@ -443,5 +533,13 @@ public class AdminController {
             return values.stream().map(v -> Long.parseLong(String.valueOf(v))).toList();
         }
         return List.of(Long.parseLong(String.valueOf(value)));
+    }
+
+    private String resolveUserId(String userId) {
+        var resolved = userId == null ? "" : userId.trim();
+        if (resolved.isBlank()) {
+            return "console-user";
+        }
+        return resolved;
     }
 }

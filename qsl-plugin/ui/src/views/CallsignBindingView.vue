@@ -27,6 +27,20 @@ async function reject(id: number) {
   await load()
 }
 
+async function unbind(id: number) {
+  if (!window.confirm(`确认解绑呼号绑定 #${id} ?`)) return
+  await adminApi.unbindCallsignBinding(id)
+  await load()
+}
+
+function statusText(status: unknown) {
+  const v = String(status || '').toUpperCase()
+  if (v === 'APPROVED') return '已通过'
+  if (v === 'REJECTED') return '已拒绝'
+  if (v === 'UNBOUND') return '已解绑'
+  return '待审核'
+}
+
 onMounted(load)
 </script>
 
@@ -47,10 +61,16 @@ onMounted(load)
             <thead><tr><th>ID</th><th>用户ID</th><th>呼号</th><th>验证方式</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="row in rows" :key="String(row.id)">
-                <td>{{ row.id }}</td><td>{{ row.userId }}</td><td>{{ row.callsign }}</td><td>{{ row.verifyMethod }}</td><td>{{ row.status }}</td>
+                <td>{{ row.id }}</td><td>{{ row.userId }}</td><td>{{ row.callsign }}</td><td>{{ row.verifyMethod }}</td><td>{{ statusText(row.status) }}</td>
                 <td>
-                  <VButton size="sm" type="secondary" @click="approve(Number(row.id))">通过</VButton>
-                  <VButton size="sm" @click="reject(Number(row.id))">拒绝</VButton>
+                  <template v-if="String(row.status || '').toUpperCase() === 'PENDING'">
+                    <VButton size="sm" type="secondary" @click="approve(Number(row.id))">通过</VButton>
+                    <VButton size="sm" @click="reject(Number(row.id))">拒绝</VButton>
+                  </template>
+                  <template v-else-if="String(row.status || '').toUpperCase() === 'APPROVED'">
+                    <VButton size="sm" type="danger" @click="unbind(Number(row.id))">解绑</VButton>
+                  </template>
+                  <span v-else>{{ statusText(row.status) }}</span>
                 </td>
               </tr>
             </tbody>

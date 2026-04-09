@@ -17,6 +17,10 @@ import ExchangeRequestView from './views/ExchangeRequestView.vue'
 import CallsignBindingView from './views/CallsignBindingView.vue'
 import ImportExportView from './views/ImportExportView.vue'
 import AddressManageView from './views/AddressManageView.vue'
+import CallsignManageBindView from './views/CallsignManageBindView.vue'
+import CallsignManageAddressView from './views/CallsignManageAddressView.vue'
+import CallsignManageQsoView from './views/CallsignManageQsoView.vue'
+import CallsignManageCardView from './views/CallsignManageCardView.vue'
 import { createQslEditorExtensions } from './extensions/qsl-editor-cards'
 
 const menuMeta = {
@@ -154,6 +158,59 @@ export default definePlugin({
             path: 'workflow/receive-confirm',
             redirect: '/qsl/business/receive-confirm',
             meta: { title: '收信确认(兼容路由)', searchable: false },
+          },
+          {
+            path: 'callsign',
+            name: 'QslCallsignManage',
+            component: RouteLayoutView,
+            redirect: '/qsl/callsign/bind',
+            meta: {
+              title: '呼号管理',
+              searchable: false,
+              menu: { ...menuMeta, name: '呼号管理', priority: 30 },
+            },
+            children: [
+              {
+                path: 'bind',
+                name: 'QslCallsignBind',
+                component: CallsignManageBindView,
+                meta: {
+                  title: '呼号绑定',
+                  searchable: true,
+                  menu: { ...menuMeta, name: '呼号绑定', priority: 31 },
+                },
+              },
+              {
+                path: 'addresses',
+                name: 'QslCallsignAddress',
+                component: CallsignManageAddressView,
+                meta: {
+                  title: '地址维护',
+                  searchable: true,
+                  menu: { ...menuMeta, name: '地址维护', priority: 32 },
+                },
+              },
+              {
+                path: 'qso-query',
+                name: 'QslCallsignQsoQuery',
+                component: CallsignManageQsoView,
+                meta: {
+                  title: '通信记录查询',
+                  searchable: true,
+                  menu: { ...menuMeta, name: '通信记录查询', priority: 33 },
+                },
+              },
+              {
+                path: 'card-query',
+                name: 'QslCallsignCardQuery',
+                component: CallsignManageCardView,
+                meta: {
+                  title: '卡片记录查询',
+                  searchable: true,
+                  menu: { ...menuMeta, name: '卡片记录查询', priority: 34 },
+                },
+              },
+            ],
           },
           {
             path: 'audit',

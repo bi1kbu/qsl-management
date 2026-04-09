@@ -12,12 +12,13 @@ function queryString(query?: Query): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const mergedHeaders = {
+    'Content-Type': 'application/json',
+    ...((init?.headers || {}) as Record<string, string>),
+  }
   const res = await fetch(path, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-    ...init,
+    ...(init || {}),
+    headers: mergedHeaders,
   })
   if (!res.ok) {
     const text = await res.text()
@@ -28,6 +29,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return (null as T)
   }
   return res.json() as Promise<T>
+}
+
+let currentUserIdCache: string | null = null
+
+async function getCurrentUserId(): Promise<string> {
+  if (currentUserIdCache) return currentUserIdCache
+  try {
+    const me = await request<Record<string, unknown>>('/apis/api.console.halo.run/v1alpha1/users/-')
+    const metadata = (me.metadata || {}) as Record<string, unknown>
+    const spec = (me.spec || {}) as Record<string, unknown>
+    const name = String(metadata.name || spec.displayName || '').trim()
+    currentUserIdCache = name || 'console-user'
+  } catch {
+    currentUserIdCache = 'console-user'
+  }
+  return currentUserIdCache
+}
+
+async function myRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const userId = await getCurrentUserId()
+  const headers = {
+    ...(init?.headers || {}),
+    'X-User-Id': userId,
+    'X-Operator': userId,
+  }
+  return request<T>(path, { ...init, headers })
 }
 
 export const adminApi = {
@@ -177,6 +204,11 @@ export const adminApi = {
       body: JSON.stringify({ reason }),
     })
   },
+  unbindCallsignBinding(id: number) {
+    return request<Record<string, unknown>>(`/apis/qsl.admin/v1/callsign-bindings/${id}/unbind`, {
+      method: 'POST',
+    })
+  },
   listImportExportTasks() {
     return request<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/import-export-tasks')
   },
@@ -233,5 +265,54 @@ export const adminApi = {
   },
   getReportTypeDistribution() {
     return request<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/reports/card-type-distribution')
+  },
+}
+
+export const myApi = {
+  listBindings() {
+    return myRequest<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/my/callsign-bindings')
+  },
+  createBinding(payload: Record<string, unknown>) {
+    return myRequest<Record<string, unknown>>('/apis/qsl.admin/v1/my/callsign-bindings', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  searchCallsignRecords(callsign: string) {
+    return myRequest<Record<string, unknown>>(
+      `/apis/qsl.admin/v1/my/callsign-records/search${queryString({ callsign })}`,
+    )
+  },
+  listAddresses(callsign?: string) {
+    return myRequest<Array<Record<string, unknown>>>(
+      `/apis/qsl.admin/v1/my/address-books${queryString({ callsign })}`,
+    )
+  },
+  createAddress(payload: Record<string, unknown>) {
+    return myRequest<Record<string, unknown>>('/apis/qsl.admin/v1/my/address-books', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  updateAddress(id: number, payload: Record<string, unknown>) {
+    return myRequest<Record<string, unknown>>(`/apis/qsl.admin/v1/my/address-books/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+  deleteAddress(id: number) {
+    return myRequest<{ deleted: boolean }>(`/apis/qsl.admin/v1/my/address-books/${id}`, {
+      method: 'DELETE',
+    })
+  },
+  listQso(callsign?: string) {
+    return myRequest<Array<Record<string, unknown>>>(
+      `/apis/qsl.admin/v1/my/qso-records${queryString({ callsign })}`,
+    )
+  },
+  listCards(callsign?: string) {
+    return myRequest<Array<Record<string, unknown>>>(
+      `/apis/qsl.admin/v1/my/qsl-card-records${queryString({ callsign })}`,
+    )
   },
 }
