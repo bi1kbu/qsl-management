@@ -33,6 +33,7 @@ public class QslDataService {
     private final Map<Long, Map<String, Object>> equipments = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> antennas = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> powers = new ConcurrentHashMap<>();
+    private final Map<Long, Map<String, Object>> modes = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> qsoRecords = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> cardRecords = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> exchangeRequests = new ConcurrentHashMap<>();
@@ -962,6 +963,7 @@ public class QslDataService {
             case "equipment" -> equipments;
             case "antenna" -> antennas;
             case "power" -> powers;
+            case "mode" -> modes;
             case "qso" -> qsoRecords;
             case "card" -> cardRecords;
             case "request" -> exchangeRequests;

@@ -85,6 +85,15 @@ export const adminApi = {
       body: JSON.stringify(payload),
     })
   },
+  listModes() {
+    return request<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/modes')
+  },
+  createMode(payload: Record<string, unknown>) {
+    return request<Record<string, unknown>>('/apis/qsl.admin/v1/modes', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
   getSummary() {
     return request<Record<string, number>>('/apis/qsl.admin/v1/reports/summary')
   },

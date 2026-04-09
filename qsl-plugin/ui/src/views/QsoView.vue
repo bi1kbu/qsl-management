@@ -11,6 +11,7 @@ const rows = ref<Array<Record<string, unknown>>>([])
 const equipments = ref<Array<Record<string, unknown>>>([])
 const antennas = ref<Array<Record<string, unknown>>>([])
 const powers = ref<Array<Record<string, unknown>>>([])
+const modes = ref<Array<Record<string, unknown>>>([])
 const frequencyOptions = ref<string[]>([])
 const modeOptions = ref<string[]>(['FM', 'CW', 'SSB'])
 const realtimeUtc = ref(false)
@@ -131,16 +132,18 @@ async function ensureNamedDictionaryId(
 async function load() {
   loading.value = true
   try {
-    const [qso, eq, ant, pw] = await Promise.all([
+    const [qso, eq, ant, pw, md] = await Promise.all([
       adminApi.listQso(),
       adminApi.listEquipments(),
       adminApi.listAntennas(),
       adminApi.listPowers(),
+      adminApi.listModes(),
     ])
     rows.value = qso
     equipments.value = eq
     antennas.value = ant
     powers.value = pw
+    modes.value = md
     frequencyOptions.value = sortUnique(
       qso
         .map((row) => String(row.frequency || '').trim())
@@ -149,6 +152,7 @@ async function load() {
     )
     modeOptions.value = sortUnique(
       ['FM', 'CW', 'SSB']
+        .concat(md.map((row) => String(row.name || '').trim()))
         .concat(qso.map((row) => String(row.mode || '').trim()))
         .concat(form.value.mode),
     )

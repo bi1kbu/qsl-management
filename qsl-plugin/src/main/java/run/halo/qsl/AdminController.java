@@ -147,6 +147,29 @@ public class AdminController {
         return Map.of("deleted", dataService.softDelete("power", id, operator));
     }
 
+    @GetMapping("/modes")
+    public List<Map<String, Object>> listModes() {
+        return dataService.list("mode");
+    }
+
+    @PostMapping("/modes")
+    public Map<String, Object> createMode(@RequestBody Map<String, Object> payload,
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
+        return dataService.create("mode", payload, operator);
+    }
+
+    @PutMapping("/modes/{id}")
+    public Map<String, Object> updateMode(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
+        return dataService.update("mode", id, payload, operator);
+    }
+
+    @DeleteMapping("/modes/{id}")
+    public Map<String, Object> deleteMode(@PathVariable("id") Long id,
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
+        return Map.of("deleted", dataService.softDelete("mode", id, operator));
+    }
+
     @GetMapping("/address-books")
     public List<Map<String, Object>> listAddresses() {
         return dataService.list("address");
