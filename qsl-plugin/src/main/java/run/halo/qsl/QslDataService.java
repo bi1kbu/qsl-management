@@ -34,7 +34,8 @@ public class QslDataService {
     private static final List<String> ADDRESS_RELATED_KEYS =
         List.of("name", "postcode", "address", "phone", "email");
 
-    private final AtomicLong idGenerator = new AtomicLong(1000);
+    private final Map<String, AtomicLong> entityIdGenerators = new ConcurrentHashMap<>();
+    private final AtomicLong auditIdGenerator = new AtomicLong(1000);
     private final ThreadLocal<Boolean> suppressMailNotification = ThreadLocal.withInitial(() -> false);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newHttpClient();
@@ -131,7 +132,7 @@ public class QslDataService {
 
     public Map<String, Object> create(String type, Map<String, Object> payload, String operator) {
         var now = nowString();
-        var id = idGenerator.incrementAndGet();
+        var id = nextEntityId(type);
         var normalizedPayload = new LinkedHashMap<String, Object>(payload);
         normalizeAddressAssociation(type, normalizedPayload, null, operator);
         var item = new LinkedHashMap<String, Object>();
@@ -2020,7 +2021,7 @@ public class QslDataService {
 
     private void writeAudit(String objectType, String objectId, String operation, String operator,
         String result, Map<String, Object> before, Map<String, Object> after) {
-        var id = idGenerator.incrementAndGet();
+        var id = auditIdGenerator.incrementAndGet();
         var log = new LinkedHashMap<String, Object>();
         log.put("id", id);
         log.put("objectType", objectType);
@@ -2034,6 +2035,34 @@ public class QslDataService {
         log.put("operatorIp", "127.0.0.1");
         log.put("createdAt", nowString());
         auditLogs.put(id, log);
+    }
+
+    private long nextEntityId(String type) {
+        var key = Objects.toString(type, "").trim().toLowerCase();
+        if (key.isBlank()) {
+            key = "default";
+        }
+        var generator = entityIdGenerators.computeIfAbsent(key, this::buildEntityGenerator);
+        return generator.incrementAndGet();
+    }
+
+    private AtomicLong buildEntityGenerator(String type) {
+        var store = getStore(type);
+        var max = store.values().stream()
+            .mapToLong(item -> {
+                var raw = item.get("id");
+                if (raw == null) {
+                    return 1000L;
+                }
+                try {
+                    return Long.parseLong(String.valueOf(raw));
+                } catch (Exception ignored) {
+                    return 1000L;
+                }
+            })
+            .max()
+            .orElse(1000L);
+        return new AtomicLong(Math.max(1000L, max));
     }
 
     private String extractCallsign(Map<String, Object> after, Map<String, Object> before) {
