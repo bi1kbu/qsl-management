@@ -16,6 +16,7 @@ const frequencyOptions = ref<string[]>([])
 const modeOptions = ref<string[]>(['FM', 'CW', 'SSB'])
 const realtimeUtc = ref(false)
 const rstManuallyEdited = ref(false)
+const rstReceivedManuallyEdited = ref(false)
 let utcTimer: number | null = null
 
 const form = ref({
@@ -28,7 +29,12 @@ const form = ref({
   equipmentName: '',
   antennaName: '',
   powerName: '',
+  peerEquipmentName: '',
+  peerAntennaName: '',
+  peerPowerName: '',
+  peerQth: '',
   rstSent: '59',
+  rstReceived: '59',
   remark: '',
 })
 
@@ -111,6 +117,9 @@ function updateRstDefaultByMode(mode: string) {
   if (!rstManuallyEdited.value) {
     form.value.rstSent = next
   }
+  if (!rstReceivedManuallyEdited.value) {
+    form.value.rstReceived = next
+  }
 }
 
 async function ensureNamedDictionaryId(
@@ -176,7 +185,12 @@ async function submit() {
     equipmentId,
     antennaId,
     powerPresetId,
+    peerEquipmentName: form.value.peerEquipmentName.trim(),
+    peerAntennaName: form.value.peerAntennaName.trim(),
+    peerPowerName: form.value.peerPowerName.trim(),
+    peerQth: form.value.peerQth.trim(),
     rstSent: form.value.rstSent.trim(),
+    rstReceived: form.value.rstReceived.trim(),
     remark: form.value.remark.trim(),
   }
 
@@ -187,12 +201,17 @@ async function submit() {
 
   // 仅清空本次应清空字段；第二行保持不变。
   form.value.peerCallsign = ''
+  form.value.peerEquipmentName = ''
+  form.value.peerAntennaName = ''
+  form.value.peerPowerName = ''
+  form.value.peerQth = ''
   form.value.remark = ''
   if (!realtimeUtc.value) {
     form.value.qsoDate = ''
     form.value.qsoTime = ''
   }
   rstManuallyEdited.value = false
+  rstReceivedManuallyEdited.value = false
   updateRstDefaultByMode(form.value.mode)
   saveSession()
   await load()
@@ -237,10 +256,8 @@ onBeforeUnmount(() => {
 
 <template>
   <QslPageLayout title="通联记录">
-    <VCard title="新增通联记录">
-      <div class="form-grid">
-        <input v-model="form.peerCallsign" class="qsl-input" placeholder="对方呼号" />
-
+    <VCard title="本台当前配置">
+      <div class="section-grid">
         <div class="row-first">
           <input v-model="form.qsoDate" class="qsl-input" placeholder="日期 YYYY-MM-DD" />
           <input v-model="form.qsoTime" class="qsl-input" placeholder="时间 HH:mm:ss" />
@@ -295,17 +312,56 @@ onBeforeUnmount(() => {
             <option v-for="p in powers" :key="String(p.id)" :value="String(p.name || '')" />
           </datalist>
         </div>
+      </div>
+    </VCard>
 
-        <div class="row-third">
+    <VCard title="对方电台配置">
+      <div class="section-grid row-peer">
+        <input v-model="form.peerCallsign" class="qsl-input" placeholder="对方呼号" />
+        <input
+          v-model="form.peerEquipmentName"
+          class="qsl-input"
+          list="qsl-equipment-options"
+          placeholder="对方设备"
+        />
+        <input
+          v-model="form.peerAntennaName"
+          class="qsl-input"
+          list="qsl-antenna-options"
+          placeholder="对方天线"
+        />
+        <input
+          v-model="form.peerPowerName"
+          class="qsl-input"
+          list="qsl-power-options"
+          placeholder="对方功率"
+        />
+        <input v-model="form.peerQth" class="qsl-input" placeholder="QTH（电台地址）" />
+      </div>
+    </VCard>
+
+    <VCard title="信号报告">
+      <div class="section-grid row-third">
+        <div class="rst-field">
+          <span class="rst-field__label">我方给对方</span>
           <input
             v-model="form.rstSent"
             class="qsl-input"
-            placeholder="信号报告（默认59，CW默认599）"
+            placeholder="默认59，CW默认599"
             @input="rstManuallyEdited = true"
           />
-          <input v-model="form.remark" class="qsl-input" placeholder="备注（提交后清空）" />
-          <VButton type="secondary" @click="submit">新增</VButton>
         </div>
+        <div class="rst-field">
+          <span class="rst-field__label">对方给我方</span>
+          <input
+            v-model="form.rstReceived"
+            class="qsl-input"
+            placeholder="默认59，CW默认599"
+            @input="rstReceivedManuallyEdited = true"
+          />
+        </div>
+        <input v-model="form.remark" class="qsl-input" placeholder="备注（提交后清空）" />
+        <VButton type="secondary" @click="submit">新增</VButton>
       </div>
     </VCard>
 
@@ -355,7 +411,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.form-grid {
+.section-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
@@ -371,11 +427,26 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
+.row-peer {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
 .row-third {
   display: grid;
-  grid-template-columns: 1fr 3fr 1fr;
+  grid-template-columns: 1fr 1fr 2fr auto;
   gap: 8px;
-  align-items: center;
+  align-items: end;
+}
+.rst-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rst-field__label {
+  font-size: 12px;
+  color: #475467;
+  line-height: 1.2;
 }
 .realtime-box {
   display: inline-flex;
@@ -386,4 +457,17 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 .table-wrap { overflow: auto; }
+
+@media (max-width: 1100px) {
+  .row-first {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .row-second,
+  .row-peer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .row-third {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 </style>

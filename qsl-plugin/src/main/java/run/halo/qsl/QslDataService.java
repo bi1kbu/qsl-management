@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class QslDataService {
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
 
     private final AtomicLong idGenerator = new AtomicLong(1000);
+    private final ThreadLocal<Boolean> suppressMailNotification = ThreadLocal.withInitial(() -> false);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final EmailNotifyService emailNotifyService;
 
@@ -150,7 +152,7 @@ public class QslDataService {
 
         getStore(type).put(id, item);
         writeAudit(type, String.valueOf(id), "create", operator, "success", null, item);
-        if ("card".equals(type)) {
+        if ("card".equals(type) && !isMailNotificationSuppressed()) {
             sendCardRecordedMail(item, Map.of());
             if (isCardPrepared(item)) {
                 sendCardPreparedMail(item, Map.of());
@@ -189,7 +191,7 @@ public class QslDataService {
         existing.put("updatedAt", nowString());
         existing.put("updatedBy", operator);
         writeAudit(type, String.valueOf(id), "update", operator, "success", before, existing);
-        if ("card".equals(type)) {
+        if ("card".equals(type) && !isMailNotificationSuppressed()) {
             var afterPrepared = isCardPrepared(existing);
             if (!beforePrepared && afterPrepared) {
                 sendCardPreparedMail(existing, Map.of());
@@ -877,20 +879,23 @@ public class QslDataService {
     }
 
     public Map<String, Object> importBackupData(Map<String, Object> payload, String operator) {
-        // Import policy: new value overrides old value; null does not override non-null.
-        var qsoImported = importByDedupe("qso", castMapList(payload.get("qsoRecords")),
-            List.of("peerCallsign", "qsoDate", "qsoTime", "frequency", "mode"), operator);
-        var cardImported = importByDedupe("card", castMapList(payload.get("qslCardRecords")),
-            List.of("cardType", "peerCallsign", "cardDate", "cardTime", "qsoRecordId"), operator);
-        var addressImported = importByDedupe("address", castMapList(payload.get("addressBooks")),
-            List.of("callsign", "address"), operator);
+        return executeWithoutMailNotification(() -> {
+            // Import policy: new value overrides old value; null does not override non-null.
+            var qsoImported = importByDedupe("qso", castMapList(payload.get("qsoRecords")),
+                List.of("peerCallsign", "qsoDate", "qsoTime", "frequency", "mode"), operator);
+            var cardImported = importByDedupe("card", castMapList(payload.get("qslCardRecords")),
+                List.of("cardType", "peerCallsign", "cardDate", "cardTime", "qsoRecordId"), operator);
+            var addressImported = importByDedupe("address", castMapList(payload.get("addressBooks")),
+                List.of("callsign", "address"), operator);
 
-        var task = create("task", Map.of(
-            "taskType", "IMPORT",
-            "status", "COMPLETED",
-            "fileName", "payload-import",
-            "summary", "qso=" + qsoImported + ", card=" + cardImported + ", address=" + addressImported), operator);
-        return Map.of("task", task, "qsoImported", qsoImported, "cardImported", cardImported, "addressImported", addressImported);
+            var task = create("task", Map.of(
+                "taskType", "IMPORT",
+                "status", "COMPLETED",
+                "fileName", "payload-import",
+                "summary", "qso=" + qsoImported + ", card=" + cardImported + ", address=" + addressImported), operator);
+            return Map.of("task", task, "qsoImported", qsoImported, "cardImported", cardImported,
+                "addressImported", addressImported);
+        });
     }
 
     public Map<String, Object> reportSummary() {
@@ -1523,6 +1528,20 @@ public class QslDataService {
             }
         }
         return "";
+    }
+
+    private boolean isMailNotificationSuppressed() {
+        return Boolean.TRUE.equals(suppressMailNotification.get());
+    }
+
+    private <T> T executeWithoutMailNotification(Supplier<T> supplier) {
+        var previous = suppressMailNotification.get();
+        suppressMailNotification.set(true);
+        try {
+            return supplier.get();
+        } finally {
+            suppressMailNotification.set(previous);
+        }
     }
 
     private byte[] withBom(String content) {
