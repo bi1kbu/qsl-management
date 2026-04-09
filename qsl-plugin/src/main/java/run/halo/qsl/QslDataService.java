@@ -25,6 +25,8 @@ public class QslDataService {
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
+    private static final List<String> ADDRESS_RELATED_KEYS =
+        List.of("name", "postcode", "address", "phone", "email");
 
     private final AtomicLong idGenerator = new AtomicLong(1000);
     private final ThreadLocal<Boolean> suppressMailNotification = ThreadLocal.withInitial(() -> false);
@@ -94,6 +96,10 @@ public class QslDataService {
                 var copy = new LinkedHashMap<>(item);
                 if ("card".equals(type)) {
                     ensureCardStatusDefaults(copy);
+                    hydrateAddressFields(copy);
+                }
+                if ("request".equals(type)) {
+                    hydrateAddressFields(copy);
                 }
                 return copy;
             })
@@ -108,6 +114,10 @@ public class QslDataService {
         var copy = new LinkedHashMap<>(item);
         if ("card".equals(type)) {
             ensureCardStatusDefaults(copy);
+            hydrateAddressFields(copy);
+        }
+        if ("request".equals(type)) {
+            hydrateAddressFields(copy);
         }
         return copy;
     }
@@ -115,8 +125,10 @@ public class QslDataService {
     public Map<String, Object> create(String type, Map<String, Object> payload, String operator) {
         var now = nowString();
         var id = idGenerator.incrementAndGet();
+        var normalizedPayload = new LinkedHashMap<String, Object>(payload);
+        normalizeAddressAssociation(type, normalizedPayload, null, operator);
         var item = new LinkedHashMap<String, Object>();
-        item.putAll(payload);
+        item.putAll(normalizedPayload);
         item.put("id", id);
         item.putIfAbsent("createdAt", now);
         item.put("updatedAt", now);
@@ -144,10 +156,10 @@ public class QslDataService {
         }
 
         if ("address".equals(type)) {
-            validateAddressBookUnique(null, payload);
+            validateAddressBookUnique(null, normalizedPayload);
         }
         if ("card".equals(type)) {
-            validateCardPayloadForCreate(payload);
+            validateCardPayloadForCreate(normalizedPayload);
         }
 
         getStore(type).put(id, item);
@@ -167,23 +179,25 @@ public class QslDataService {
         if (existing == null || isDeleted(existing)) {
             return null;
         }
+        var normalizedPayload = new LinkedHashMap<String, Object>(payload);
+        normalizeAddressAssociation(type, normalizedPayload, existing, operator);
         if ("address".equals(type)) {
-            validateAddressBookUnique(id, payload, existing);
+            validateAddressBookUnique(id, normalizedPayload, existing);
         }
         if ("card".equals(type)) {
-            validateCardPayloadForUpdate(id, payload, existing);
+            validateCardPayloadForUpdate(id, normalizedPayload, existing);
         }
 
         var before = new LinkedHashMap<>(existing);
         var beforePrepared = "card".equals(type) && isCardPrepared(before);
-        existing.putAll(payload);
+        existing.putAll(normalizedPayload);
         if ("card".equals(type)) {
-            if (!payload.containsKey("confirmStatus") && payload.containsKey("receivedStatus")) {
-                var legacyReceived = Objects.toString(payload.getOrDefault("receivedStatus", "NOT_RECEIVED"));
+            if (!normalizedPayload.containsKey("confirmStatus") && normalizedPayload.containsKey("receivedStatus")) {
+                var legacyReceived = Objects.toString(normalizedPayload.getOrDefault("receivedStatus", "NOT_RECEIVED"));
                 existing.put("confirmStatus", "RECEIVED".equalsIgnoreCase(legacyReceived) ? "CONFIRMED" : "UNCONFIRMED");
             }
-            if (!payload.containsKey("returnCardStatus") && payload.containsKey("receivedStatus")) {
-                var legacyReceived = Objects.toString(payload.getOrDefault("receivedStatus", "NOT_RECEIVED"));
+            if (!normalizedPayload.containsKey("returnCardStatus") && normalizedPayload.containsKey("receivedStatus")) {
+                var legacyReceived = Objects.toString(normalizedPayload.getOrDefault("receivedStatus", "NOT_RECEIVED"));
                 existing.put("returnCardStatus", "RECEIVED".equalsIgnoreCase(legacyReceived) ? "RECEIVED" : "NOT_RECEIVED");
             }
             ensureCardStatusDefaults(existing);
@@ -514,6 +528,7 @@ public class QslDataService {
         var builder = new StringBuilder(header);
         var grouped = new LinkedHashMap<String, Map<String, Object>>();
         for (var r : rows) {
+            hydrateAddressFields(r);
             var addressRaw = Objects.toString(r.getOrDefault("address", ""), "").trim();
             if (addressRaw.isBlank()) {
                 continue;
@@ -603,11 +618,17 @@ public class QslDataService {
             var createPayload = new LinkedHashMap<String, Object>();
             createPayload.put("cardType", "EYEBALL");
             createPayload.put("peerCallsign", request.getOrDefault("bindCallsign", ""));
-            createPayload.put("name", request.getOrDefault("name", ""));
-            createPayload.put("postcode", request.getOrDefault("postcode", ""));
-            createPayload.put("address", request.getOrDefault("address", ""));
-            createPayload.put("phone", request.getOrDefault("phone", ""));
-            createPayload.put("email", request.getOrDefault("email", ""));
+            var requestAddressId = asLong(request.get("addressId"));
+            if (requestAddressId != null) {
+                createPayload.put("addressId", requestAddressId);
+            } else {
+                // Compatibility for legacy records that still store address inline.
+                createPayload.put("name", request.getOrDefault("name", ""));
+                createPayload.put("postcode", request.getOrDefault("postcode", ""));
+                createPayload.put("address", request.getOrDefault("address", ""));
+                createPayload.put("phone", request.getOrDefault("phone", ""));
+                createPayload.put("email", request.getOrDefault("email", ""));
+            }
             createPayload.put("productionStatus", "PENDING_PRINT");
             createPayload.put("sentStatus", "NOT_SENT");
             createPayload.put("confirmStatus", "UNCONFIRMED");
@@ -692,10 +713,12 @@ public class QslDataService {
         if (emailNotifyService == null) {
             return Map.of("mailSent", false, "mailError", "mail service not initialized");
         }
+        var merged = new LinkedHashMap<>(request);
+        hydrateAddressFields(merged);
         return emailNotifyService.notifyExchangeRequestReviewed(
-            Objects.toString(request.getOrDefault("email", "")),
+            Objects.toString(merged.getOrDefault("email", "")),
             stationCallsignForMail(),
-            Objects.toString(request.getOrDefault("bindCallsign", "")),
+            Objects.toString(merged.getOrDefault("bindCallsign", "")),
             approved,
             reason,
             reviewedAt,
@@ -707,12 +730,14 @@ public class QslDataService {
         if (emailNotifyService == null) {
             return Map.of("mailSent", false, "mailError", "mail service not initialized");
         }
+        var merged = new LinkedHashMap<>(card);
+        hydrateAddressFields(merged);
         return emailNotifyService.notifyCardSendConfirmed(
-            Objects.toString(card.getOrDefault("email", "")),
+            Objects.toString(merged.getOrDefault("email", "")),
             stationCallsignForMail(),
-            Objects.toString(card.getOrDefault("peerCallsign", "")),
-            Objects.toString(card.getOrDefault("id", "")),
-            Objects.toString(card.getOrDefault("sentAt", "")),
+            Objects.toString(merged.getOrDefault("peerCallsign", "")),
+            Objects.toString(merged.getOrDefault("id", "")),
+            Objects.toString(merged.getOrDefault("sentAt", "")),
             authHeaders == null ? Map.of() : authHeaders
         );
     }
@@ -721,12 +746,14 @@ public class QslDataService {
         if (emailNotifyService == null) {
             return Map.of("mailSent", false, "mailError", "mail service not initialized");
         }
+        var merged = new LinkedHashMap<>(card);
+        hydrateAddressFields(merged);
         return emailNotifyService.notifyCardReceiveConfirmed(
-            Objects.toString(card.getOrDefault("email", "")),
+            Objects.toString(merged.getOrDefault("email", "")),
             stationCallsignForMail(),
-            Objects.toString(card.getOrDefault("peerCallsign", "")),
-            Objects.toString(card.getOrDefault("id", "")),
-            Objects.toString(card.getOrDefault("receivedAt", card.getOrDefault("returnedAt", ""))),
+            Objects.toString(merged.getOrDefault("peerCallsign", "")),
+            Objects.toString(merged.getOrDefault("id", "")),
+            Objects.toString(merged.getOrDefault("receivedAt", merged.getOrDefault("returnedAt", ""))),
             authHeaders == null ? Map.of() : authHeaders
         );
     }
@@ -735,13 +762,15 @@ public class QslDataService {
         if (emailNotifyService == null) {
             return Map.of("mailSent", false, "mailError", "mail service not initialized");
         }
+        var merged = new LinkedHashMap<>(card);
+        hydrateAddressFields(merged);
         return emailNotifyService.notifyCardRecorded(
-            Objects.toString(card.getOrDefault("email", "")),
+            Objects.toString(merged.getOrDefault("email", "")),
             stationCallsignForMail(),
-            Objects.toString(card.getOrDefault("peerCallsign", "")),
-            Objects.toString(card.getOrDefault("id", "")),
-            Objects.toString(card.getOrDefault("cardType", "")),
-            Objects.toString(card.getOrDefault("createdAt", nowString())),
+            Objects.toString(merged.getOrDefault("peerCallsign", "")),
+            Objects.toString(merged.getOrDefault("id", "")),
+            Objects.toString(merged.getOrDefault("cardType", "")),
+            Objects.toString(merged.getOrDefault("createdAt", nowString())),
             authHeaders == null ? Map.of() : authHeaders
         );
     }
@@ -750,16 +779,18 @@ public class QslDataService {
         if (emailNotifyService == null) {
             return Map.of("mailSent", false, "mailError", "mail service not initialized");
         }
+        var merged = new LinkedHashMap<>(card);
+        hydrateAddressFields(merged);
         var preparedAt = firstNonBlank(
-            Objects.toString(card.getOrDefault("envelopePrintedAt", ""), ""),
-            Objects.toString(card.getOrDefault("printedAt", ""), ""),
-            Objects.toString(card.getOrDefault("updatedAt", ""), "")
+            Objects.toString(merged.getOrDefault("envelopePrintedAt", ""), ""),
+            Objects.toString(merged.getOrDefault("printedAt", ""), ""),
+            Objects.toString(merged.getOrDefault("updatedAt", ""), "")
         );
         return emailNotifyService.notifyCardPrepared(
-            Objects.toString(card.getOrDefault("email", "")),
+            Objects.toString(merged.getOrDefault("email", "")),
             stationCallsignForMail(),
-            Objects.toString(card.getOrDefault("peerCallsign", "")),
-            Objects.toString(card.getOrDefault("id", "")),
+            Objects.toString(merged.getOrDefault("peerCallsign", "")),
+            Objects.toString(merged.getOrDefault("id", "")),
             preparedAt,
             authHeaders == null ? Map.of() : authHeaders
         );
@@ -1116,6 +1147,139 @@ public class QslDataService {
             var a = Objects.toString(item.getOrDefault("address", "")).trim();
             if (c.equalsIgnoreCase(callsign) && a.equalsIgnoreCase(address)) {
                 throw new IllegalArgumentException("Address book duplicate: callsign + address");
+            }
+        }
+    }
+
+    private void normalizeAddressAssociation(String type, Map<String, Object> payload,
+        Map<String, Object> existing, String operator) {
+        if (!"card".equals(type) && !"request".equals(type)) {
+            return;
+        }
+        var addressId = asLong(payload.get("addressId"));
+        if (addressId != null) {
+            payload.put("addressId", addressId);
+            removeInlineAddressFields(payload);
+            return;
+        }
+        if (!containsInlineAddressFields(payload)) {
+            return;
+        }
+        var callsign = resolveAddressCallsign(type, payload, existing);
+        var resolvedAddressId = upsertAddressAndGetId(callsign, payload, existing, operator);
+        if (resolvedAddressId != null) {
+            payload.put("addressId", resolvedAddressId);
+        }
+        removeInlineAddressFields(payload);
+    }
+
+    private String resolveAddressCallsign(String type, Map<String, Object> payload, Map<String, Object> existing) {
+        var current = "request".equals(type)
+            ? Objects.toString(payload.getOrDefault("bindCallsign", ""), "").trim()
+            : Objects.toString(payload.getOrDefault("peerCallsign", ""), "").trim();
+        if (!current.isBlank()) {
+            return current;
+        }
+        if (existing == null) {
+            return "";
+        }
+        return "request".equals(type)
+            ? Objects.toString(existing.getOrDefault("bindCallsign", ""), "").trim()
+            : Objects.toString(existing.getOrDefault("peerCallsign", ""), "").trim();
+    }
+
+    private boolean containsInlineAddressFields(Map<String, Object> payload) {
+        for (var key : ADDRESS_RELATED_KEYS) {
+            if (payload.containsKey(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void removeInlineAddressFields(Map<String, Object> payload) {
+        for (var key : ADDRESS_RELATED_KEYS) {
+            payload.remove(key);
+        }
+    }
+
+    private Long upsertAddressAndGetId(String callsign, Map<String, Object> payload, Map<String, Object> existing,
+        String operator) {
+        var existingAddressId = existing == null ? null : asLong(existing.get("addressId"));
+        var existingAddress = existingAddressId == null ? null : addressBooks.get(existingAddressId);
+
+        var resolvedAddress = firstNonBlank(
+            Objects.toString(payload.getOrDefault("address", ""), "").trim(),
+            existingAddress == null ? "" : Objects.toString(existingAddress.getOrDefault("address", ""), "").trim(),
+            existing == null ? "" : Objects.toString(existing.getOrDefault("address", ""), "").trim()
+        );
+        if (callsign.isBlank() || resolvedAddress.isBlank()) {
+            return existingAddressId;
+        }
+
+        var target = findAddressByCallsignAndAddress(callsign, resolvedAddress);
+        Long targetId;
+        if (target != null) {
+            targetId = asLong(target.get("id"));
+        } else {
+            var created = create("address", Map.of(
+                "callsign", callsign,
+                "address", resolvedAddress
+            ), operator);
+            targetId = asLong(created.get("id"));
+        }
+
+        if (targetId == null) {
+            return null;
+        }
+
+        var updateData = new LinkedHashMap<String, Object>();
+        updateData.put("callsign", callsign);
+        updateData.put("address", resolvedAddress);
+        for (var key : List.of("name", "phone", "postcode", "email")) {
+            var value = Objects.toString(payload.getOrDefault(key, ""), "").trim();
+            if (!value.isBlank()) {
+                updateData.put(key, value);
+            }
+        }
+        update("address", targetId, updateData, operator);
+        return targetId;
+    }
+
+    private Map<String, Object> findAddressByCallsignAndAddress(String callsign, String address) {
+        for (var item : addressBooks.values()) {
+            if (item == null || isDeleted(item)) {
+                continue;
+            }
+            var c = Objects.toString(item.getOrDefault("callsign", ""), "").trim();
+            var a = Objects.toString(item.getOrDefault("address", ""), "").trim();
+            if (c.equalsIgnoreCase(callsign) && a.equalsIgnoreCase(address)) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    private void hydrateAddressFields(Map<String, Object> target) {
+        if (target == null) {
+            return;
+        }
+        var addressId = asLong(target.get("addressId"));
+        if (addressId == null) {
+            return;
+        }
+        var address = addressBooks.get(addressId);
+        if (address == null || isDeleted(address)) {
+            return;
+        }
+        for (var key : ADDRESS_RELATED_KEYS) {
+            var current = Objects.toString(target.getOrDefault(key, ""), "").trim();
+            if (!current.isBlank()) {
+                continue;
+            }
+            var value = Objects.toString(address.getOrDefault(key, ""), "").trim();
+            if (!value.isBlank()) {
+                target.put(key, value);
             }
         }
     }
