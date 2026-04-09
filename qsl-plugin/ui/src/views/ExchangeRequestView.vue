@@ -28,6 +28,13 @@ async function reject(id: number) {
 }
 
 onMounted(load)
+
+function actionResultText(status: unknown) {
+  const value = String(status || '').toUpperCase()
+  if (value === 'APPROVED') return '已通过'
+  if (value === 'REJECTED') return '已拒绝'
+  return '-'
+}
 </script>
 
 <template>
@@ -55,8 +62,13 @@ onMounted(load)
                 <td>{{ row.qslCardRecordId || row.generatedCardId }}</td>
                 <td>{{ row.mailSentAt ? '已发送' : (row.mailError || '-') }}</td>
                 <td>
-                  <VButton size="sm" type="secondary" @click="approve(Number(row.id))">通过</VButton>
-                  <VButton size="sm" @click="reject(Number(row.id))">拒绝</VButton>
+                  <template v-if="String(row.status || '').toUpperCase() === 'PENDING'">
+                    <VButton size="sm" type="secondary" @click="approve(Number(row.id))">通过</VButton>
+                    <VButton size="sm" @click="reject(Number(row.id))">拒绝</VButton>
+                  </template>
+                  <template v-else>
+                    <span>{{ actionResultText(row.status) }}</span>
+                  </template>
                 </td>
               </tr>
             </tbody>

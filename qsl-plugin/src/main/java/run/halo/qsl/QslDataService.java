@@ -637,7 +637,8 @@ public class QslDataService {
             createPayload.put("cardTime", nowTimeString());
             createPayload.put("timezone", "UTC+8");
             createPayload.put("remark", "request-approved");
-            var generated = create("card", createPayload, operator);
+            // 场景拆分：换卡审核通过自动建卡不触发“卡片记录已登记”邮件，仅发送审核结果邮件。
+            var generated = executeWithoutMailNotification(() -> create("card", createPayload, operator));
             request.put("generatedCardId", generated.get("id"));
         } else if ("REISSUE".equalsIgnoreCase(requestType)) {
             var cardIdObj = request.get("qslCardRecordId");
