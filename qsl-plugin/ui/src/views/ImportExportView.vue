@@ -26,11 +26,6 @@ async function backupExport() {
   await load()
 }
 
-async function backupImport() {
-  await adminApi.backupImport()
-  await load()
-}
-
 function onFileChange(event: Event) {
   const target = event.target as HTMLInputElement
   selectedFile.value = target.files && target.files.length > 0 ? target.files[0] : null
@@ -93,8 +88,7 @@ onMounted(load)
   <QslPageLayout title="导入导出任务">
     <template #actions>
       <VSpace>
-        <VButton @click="backupExport">备份导出</VButton>
-        <VButton @click="backupImport">备份导入</VButton>
+        <VButton type="secondary" @click="backupExport">备份导出</VButton>
       </VSpace>
     </template>
 
@@ -107,7 +101,7 @@ onMounted(load)
       <div class="qsl-list-body">
         <div class="toolbar">
           <input v-model="selectedIds" class="qsl-input toolbar-input" placeholder="卡片ID列表，逗号分隔（可空=全部）" />
-          <VButton type="secondary" @click="exportCards">导出卡片 CSV</VButton>
+          <VButton @click="exportCards">导出卡片 CSV</VButton>
           <VButton @click="exportEnvelopes">导出信封 CSV</VButton>
         </div>
       </div>

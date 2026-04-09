@@ -11,6 +11,7 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -595,6 +596,43 @@ public class QslDataService {
     public Map<String, Object> backupExport(String operator) {
         var task = create("task", Map.of("taskType", "EXPORT", "status", "COMPLETED", "fileName", "backup.json"), operator);
         return Map.of("task", task, "summary", "backup export simulated");
+    }
+
+    public byte[] exportFullBackupJson(String operator) {
+        var timestamp = System.currentTimeMillis();
+        var fileName = "qsl-full-backup-" + timestamp + ".json";
+        var task = create("task",
+            Map.of("taskType", "EXPORT", "status", "COMPLETED", "fileName", fileName,
+                "summary", "full backup export"),
+            operator);
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("meta", Map.of(
+            "format", "qsl-full-backup",
+            "version", 1,
+            "exportedAt", nowString(),
+            "operator", Objects.toString(operator, ""),
+            "taskId", task.get("id"),
+            "taskFileName", fileName
+        ));
+        payload.put("stationProfile", new LinkedHashMap<>(stationProfile));
+        payload.put("systemConfig", new LinkedHashMap<>(systemConfig));
+        payload.put("bureauConfigs", snapshotStoreAllFields(bureaus));
+        payload.put("equipments", snapshotStoreAllFields(equipments));
+        payload.put("antennas", snapshotStoreAllFields(antennas));
+        payload.put("powerPresets", snapshotStoreAllFields(powers));
+        payload.put("modes", snapshotStoreAllFields(modes));
+        payload.put("qsoRecords", snapshotStoreAllFields(qsoRecords));
+        payload.put("qslCardRecords", snapshotStoreAllFields(cardRecords));
+        payload.put("exchangeRequests", snapshotStoreAllFields(exchangeRequests));
+        payload.put("callsignBindings", snapshotStoreAllFields(callsignBindings));
+        payload.put("addressBooks", snapshotStoreAllFields(addressBooks));
+        payload.put("importExportTasks", snapshotStoreAllFields(importExportTasks));
+        payload.put("auditLogs", snapshotStoreAllFields(auditLogs));
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(payload);
+        } catch (Exception ex) {
+            throw new IllegalStateException("failed to export full backup", ex);
+        }
     }
 
     public Map<String, Object> backupImport(String operator) {
@@ -1278,9 +1316,14 @@ public class QslDataService {
     public Map<String, Object> importBackupData(Map<String, Object> payload, String operator) {
         return executeWithoutMailNotification(() -> {
             // Import policy: new value overrides old value; null does not override non-null.
-            var qsoImported = importByDedupe("qso", castMapList(payload.get("qsoRecords")),
+            var qsoRows = filterQsoRowsByCardType(
+                castMapList(payload.get("qsoRecords")),
+                castMapList(payload.get("qslCardRecords")));
+            var qsoImported = importByDedupe("qso", qsoRows,
                 List.of("peerCallsign", "qsoDate", "qsoTime", "frequency", "mode"), operator);
-            var cardImported = importByDedupe("card", castMapList(payload.get("qslCardRecords")),
+            var cardsToImport = castMapList(payload.get("qslCardRecords"));
+            resolveImportedCardQsoLinks(cardsToImport);
+            var cardImported = importByDedupe("card", cardsToImport,
                 List.of("cardType", "peerCallsign", "cardDate", "cardTime", "qsoRecordId"), operator);
             var addressImported = importByDedupe("address", castMapList(payload.get("addressBooks")),
                 List.of("callsign", "address"), operator);
@@ -1293,6 +1336,91 @@ public class QslDataService {
             return Map.of("task", task, "qsoImported", qsoImported, "cardImported", cardImported,
                 "addressImported", addressImported);
         });
+    }
+
+    private List<Map<String, Object>> filterQsoRowsByCardType(List<Map<String, Object>> qsoRows,
+        List<Map<String, Object>> cardRows) {
+        if (qsoRows == null || qsoRows.isEmpty()) {
+            return qsoRows == null ? List.of() : qsoRows;
+        }
+        if (cardRows == null || cardRows.isEmpty()) {
+            return qsoRows;
+        }
+
+        var requiredKeys = new HashSet<String>();
+        for (var card : cardRows) {
+            var cardType = normalize(Objects.toString(card.getOrDefault("cardType", "QSO"), ""));
+            if (!"qso".equals(cardType) && !"listen".equals(cardType)) {
+                continue;
+            }
+            var callsign = normalize(Objects.toString(card.getOrDefault("peerCallsign", ""), ""));
+            var date = normalize(Objects.toString(card.getOrDefault("cardDate", ""), ""));
+            var time = normalize(Objects.toString(card.getOrDefault("cardTime", ""), ""));
+            if (callsign.isBlank() || date.isBlank() || time.isBlank()) {
+                continue;
+            }
+            requiredKeys.add(callsign + "|" + date + "|" + time);
+        }
+
+        if (requiredKeys.isEmpty()) {
+            return List.of();
+        }
+
+        return qsoRows.stream()
+            .filter(Objects::nonNull)
+            .filter(qso -> {
+                var callsign = normalize(Objects.toString(qso.getOrDefault("peerCallsign", ""), ""));
+                var date = normalize(Objects.toString(qso.getOrDefault("qsoDate", ""), ""));
+                var time = normalize(Objects.toString(qso.getOrDefault("qsoTime", ""), ""));
+                return requiredKeys.contains(callsign + "|" + date + "|" + time);
+            })
+            .toList();
+    }
+
+    private void resolveImportedCardQsoLinks(List<Map<String, Object>> cards) {
+        if (cards == null || cards.isEmpty()) {
+            return;
+        }
+        var qsoList = list("qso");
+        if (qsoList.isEmpty()) {
+            return;
+        }
+
+        var exact = new LinkedHashMap<String, Long>();
+        var byCallsign = new LinkedHashMap<String, List<Long>>();
+        for (var qso : qsoList) {
+            var id = asLong(qso.get("id"));
+            if (id == null) {
+                continue;
+            }
+            var callsign = normalize(Objects.toString(qso.getOrDefault("peerCallsign", ""), ""));
+            var date = normalize(Objects.toString(qso.getOrDefault("qsoDate", ""), ""));
+            var time = normalize(Objects.toString(qso.getOrDefault("qsoTime", ""), ""));
+            exact.putIfAbsent(callsign + "|" + date + "|" + time, id);
+            byCallsign.computeIfAbsent(callsign, k -> new ArrayList<>()).add(id);
+        }
+
+        for (var card : cards) {
+            var type = normalize(Objects.toString(card.getOrDefault("cardType", "QSO"), ""));
+            if (!"qso".equals(type) && !"listen".equals(type)) {
+                continue;
+            }
+            if (asLong(card.get("qsoRecordId")) != null) {
+                continue;
+            }
+            var callsign = normalize(Objects.toString(card.getOrDefault("peerCallsign", ""), ""));
+            var date = normalize(Objects.toString(card.getOrDefault("cardDate", ""), ""));
+            var time = normalize(Objects.toString(card.getOrDefault("cardTime", ""), ""));
+            var exactId = exact.get(callsign + "|" + date + "|" + time);
+            if (exactId != null) {
+                card.put("qsoRecordId", exactId);
+                continue;
+            }
+            var matches = byCallsign.getOrDefault(callsign, List.of());
+            if (matches.size() == 1) {
+                card.put("qsoRecordId", matches.get(0));
+            }
+        }
     }
 
     public Map<String, Object> reportSummary() {
@@ -1914,7 +2042,8 @@ public class QslDataService {
     }
 
     private Map<String, Object> parseJsonPayload(String text, String dataset) throws Exception {
-        var root = objectMapper.readTree(text);
+        var sanitized = stripBom(text);
+        var root = objectMapper.readTree(sanitized);
         if (root.isArray()) {
             var normalized = normalizeDataset(dataset);
             if (normalized == null) {
@@ -1928,6 +2057,15 @@ public class QslDataService {
         }
         var payload = objectMapper.convertValue(root, MAP_TYPE);
         if (payload.containsKey("qsoRecords") || payload.containsKey("qslCardRecords") || payload.containsKey("addressBooks")) {
+            var normalized = normalizeDataset(dataset);
+            if (normalized != null && !"all".equals(normalized)) {
+                return payloadForSingleDataset(normalized, switch (normalized) {
+                    case "qso" -> castMapList(payload.get("qsoRecords"));
+                    case "card" -> castMapList(payload.get("qslCardRecords"));
+                    case "address" -> castMapList(payload.get("addressBooks"));
+                    default -> List.of();
+                });
+            }
             return payload;
         }
         var normalized = normalizeDataset(dataset);
@@ -2006,10 +2144,7 @@ public class QslDataService {
     }
 
     private List<Map<String, Object>> parseCsvRows(String csvText) {
-        var text = csvText;
-        if (text.startsWith("\uFEFF")) {
-            text = text.substring(1);
-        }
+        var text = stripBom(csvText);
         var records = parseCsvRecords(text);
         if (records.isEmpty()) {
             return List.of();
@@ -2068,6 +2203,16 @@ public class QslDataService {
             rows.add(row);
         }
         return rows;
+    }
+
+    private String stripBom(String text) {
+        if (text == null) {
+            return "";
+        }
+        if (text.startsWith("\uFEFF")) {
+            return text.substring(1);
+        }
+        return text;
     }
 
     private Map<String, Object> mapAddressRow(Map<String, Object> row) {
@@ -2138,6 +2283,13 @@ public class QslDataService {
     private String csv(Object value) {
         var raw = Objects.toString(value, "");
         return "\"" + raw.replace("\"", "\"\"") + "\"";
+    }
+
+    private List<Map<String, Object>> snapshotStoreAllFields(Map<Long, Map<String, Object>> store) {
+        return store.values().stream()
+            .sorted(Comparator.comparing(item -> ((Number) item.get("id")).longValue()))
+            .map(LinkedHashMap::new)
+            .collect(Collectors.toList());
     }
 
     private Map<String, Object> getRelatedQso(Map<String, Object> card) {

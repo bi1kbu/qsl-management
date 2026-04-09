@@ -234,8 +234,24 @@ export const adminApi = {
     })
   },
   backupExport() {
-    return request<Record<string, unknown>>('/apis/qsl.admin/v1/backup/export', {
+    return fetch('/apis/qsl.admin/v1/backup/export', {
       method: 'POST',
+    }).then(async (res) => {
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const cd = res.headers.get('content-disposition') || ''
+      const matched = cd.match(/filename=\"?([^\";]+)\"?/)
+      const fileName = matched?.[1] || 'qsl-full-backup.json'
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      a.click()
+      window.URL.revokeObjectURL(url)
+      return { downloaded: true, fileName }
     })
   },
   backupImport(payload?: Record<string, unknown>) {

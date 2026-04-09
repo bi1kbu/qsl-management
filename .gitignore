@@ -11,3 +11,5 @@ build/
 .gradle/
 gradle/
 *.db
+*.csv
+addresses*.json

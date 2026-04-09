@@ -304,8 +304,15 @@ public class AdminController {
     }
 
     @PostMapping("/backup/export")
-    public Map<String, Object> backupExport(@RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
-        return dataService.backupExport(operator);
+    public ResponseEntity<byte[]> backupExport(
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
+        var body = dataService.exportFullBackupJson(operator);
+        var fileName = "qsl-full-backup-" + System.currentTimeMillis() + ".json";
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION,
+                ContentDisposition.attachment().filename(fileName).build().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(body);
     }
 
     @PostMapping("/backup/import")
@@ -328,6 +335,8 @@ public class AdminController {
                 DataBufferUtils.release(dataBuffer);
                 try {
                     return Mono.just(dataService.importBackupFile(file.filename(), bytes, dataset, operator));
+                } catch (IllegalArgumentException ex) {
+                    return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage()));
                 } catch (Exception ex) {
                     return Mono.error(ex);
                 }
