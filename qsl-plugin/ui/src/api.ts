@@ -180,6 +180,26 @@ export const adminApi = {
   listImportExportTasks() {
     return request<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/import-export-tasks')
   },
+  listAddresses() {
+    return request<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/address-books')
+  },
+  createAddress(payload: Record<string, unknown>) {
+    return request<Record<string, unknown>>('/apis/qsl.admin/v1/address-books', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  updateAddress(id: number, payload: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/apis/qsl.admin/v1/address-books/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+  deleteAddress(id: number) {
+    return request<{ deleted: boolean }>(`/apis/qsl.admin/v1/address-books/${id}`, {
+      method: 'DELETE',
+    })
+  },
   backupExport() {
     return request<Record<string, unknown>>('/apis/qsl.admin/v1/backup/export', {
       method: 'POST',

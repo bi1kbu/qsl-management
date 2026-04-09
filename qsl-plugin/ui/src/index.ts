@@ -16,6 +16,7 @@ import ReportView from './views/ReportView.vue'
 import ExchangeRequestView from './views/ExchangeRequestView.vue'
 import CallsignBindingView from './views/CallsignBindingView.vue'
 import ImportExportView from './views/ImportExportView.vue'
+import AddressManageView from './views/AddressManageView.vue'
 import { createQslEditorExtensions } from './extensions/qsl-editor-cards'
 
 const menuMeta = {
@@ -239,6 +240,16 @@ export default definePlugin({
                   title: '导入导出',
                   searchable: true,
                   menu: { ...menuMeta, name: '导入导出', priority: 61 },
+                },
+              },
+              {
+                path: 'addresses',
+                name: 'QslAddressManage',
+                component: AddressManageView,
+                meta: {
+                  title: '地址管理',
+                  searchable: true,
+                  menu: { ...menuMeta, name: '地址管理', priority: 62 },
                 },
               },
             ],

@@ -1435,6 +1435,7 @@ public class QslDataService {
         mapped.put("address", pick(row, "address", "收件地址", "邮寄地址"));
         mapped.put("name", pick(row, "name", "姓名"));
         mapped.put("phone", pick(row, "phone", "电话"));
+        mapped.put("email", pick(row, "email", "邮箱", "电子邮箱"));
         mapped.put("postcode", pick(row, "zipcode", "postcode", "邮编"));
         return mapped;
     }

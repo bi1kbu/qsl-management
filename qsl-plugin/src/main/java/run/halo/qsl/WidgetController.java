@@ -227,7 +227,7 @@ public class WidgetController {
                   <input id="postcode" placeholder="邮编（必填）" />
                   <textarea id="address" placeholder="地址（必填）"></textarea>
                   <input id="phone" placeholder="电话（选填）" />
-                  <input id="email" placeholder="电子邮箱（必填，用于审核通知）" />
+                  <input id="email" placeholder="电子邮箱（必填，用于发送通知）" />
                   <button id="btn">提交换卡申请</button>
                 </div>
                 <div class="msg" id="msg"></div>
