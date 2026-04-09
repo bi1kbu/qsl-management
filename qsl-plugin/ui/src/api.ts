@@ -37,8 +37,9 @@ async function getCurrentUserId(): Promise<string> {
   if (currentUserIdCache) return currentUserIdCache
   try {
     const me = await request<Record<string, unknown>>('/apis/api.console.halo.run/v1alpha1/users/-')
-    const metadata = (me.metadata || {}) as Record<string, unknown>
-    const spec = (me.spec || {}) as Record<string, unknown>
+    const user = ((me.user || me) as Record<string, unknown>) || {}
+    const metadata = (user.metadata || {}) as Record<string, unknown>
+    const spec = (user.spec || {}) as Record<string, unknown>
     const name = String(metadata.name || spec.displayName || '').trim()
     currentUserIdCache = name || 'console-user'
   } catch {

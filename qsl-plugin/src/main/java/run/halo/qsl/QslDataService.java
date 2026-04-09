@@ -3,6 +3,8 @@ package run.halo.qsl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
@@ -17,6 +19,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +36,7 @@ public class QslDataService {
     private final AtomicLong idGenerator = new AtomicLong(1000);
     private final ThreadLocal<Boolean> suppressMailNotification = ThreadLocal.withInitial(() -> false);
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final HttpClient httpClient = HttpClient.newHttpClient();
     private final EmailNotifyService emailNotifyService;
 
     private final Map<Long, Map<String, Object>> bureaus = new ConcurrentHashMap<>();
@@ -713,16 +719,34 @@ public class QslDataService {
     }
 
     public Map<String, Object> approveBinding(Long id, String operator) {
+        return approveBinding(id, operator, Map.of());
+    }
+
+    public Map<String, Object> approveBinding(Long id, String operator, Map<String, String> authHeaders) {
+        var binding = get("binding", id);
+        if (binding == null) {
+            return null;
+        }
+        var userName = Objects.toString(binding.getOrDefault("userId", ""), "").trim();
+        if (userName.isBlank()) {
+            throw new IllegalArgumentException("binding userId is required for role sync");
+        }
+        syncGrantHamRole(userName, authHeaders);
         return update("binding", id,
-            Map.of("status", "APPROVED", "reviewedBy", operator, "reviewedAt", nowString()),
+            Map.of("status", "APPROVED", "reviewedBy", operator, "reviewedAt", nowString(), "roleSynced", true),
             operator);
     }
 
     public Map<String, Object> unbindBinding(Long id, String operator) {
+        return unbindBinding(id, operator, Map.of());
+    }
+
+    public Map<String, Object> unbindBinding(Long id, String operator, Map<String, String> authHeaders) {
         var existing = get("binding", id);
         if (existing == null) {
             return null;
         }
+        var userName = Objects.toString(existing.getOrDefault("userId", ""), "").trim();
         var status = Objects.toString(existing.getOrDefault("status", ""), "").trim().toUpperCase();
         if ("UNBOUND".equals(status)) {
             return existing;
@@ -730,9 +754,13 @@ public class QslDataService {
         if (!"APPROVED".equals(status)) {
             throw new IllegalArgumentException("only approved binding can be unbound");
         }
-        return update("binding", id,
+        var updated = update("binding", id,
             Map.of("status", "UNBOUND", "unboundBy", operator, "unboundAt", nowString()),
             operator);
+        if (updated != null && !hasApprovedBindingForUser(userName)) {
+            syncRevokeHamRole(userName, authHeaders);
+        }
+        return updated;
     }
 
     private Map<String, Object> sendReviewMail(Map<String, Object> request, boolean approved, String reason,
@@ -1033,6 +1061,154 @@ public class QslDataService {
             .map(b -> Objects.toString(b.getOrDefault("callsign", ""), "").trim().toUpperCase())
             .filter(v -> !v.isBlank())
             .collect(Collectors.toSet());
+    }
+
+    private boolean hasApprovedBindingForUser(String userName) {
+        var key = Objects.toString(userName, "").trim();
+        if (key.isBlank()) {
+            return false;
+        }
+        return list("binding").stream()
+            .filter(b -> key.equals(Objects.toString(b.getOrDefault("userId", ""), "").trim()))
+            .anyMatch(b -> "APPROVED".equalsIgnoreCase(Objects.toString(b.getOrDefault("status", ""), "").trim()));
+    }
+
+    private void syncGrantHamRole(String userName, Map<String, String> authHeaders) {
+        var roleName = hamRoleName();
+        ensureRoleExists(roleName, authHeaders);
+        var currentBindingName = findRoleBindingName(roleName, userName, authHeaders);
+        if (currentBindingName != null) {
+            return;
+        }
+        var bindingName = generateHamRoleBindingName(userName);
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("apiVersion", "v1alpha1");
+        payload.put("kind", "RoleBinding");
+        payload.put("metadata", Map.of("name", bindingName));
+        payload.put("roleRef", Map.of("apiGroup", "", "kind", "Role", "name", roleName));
+        payload.put("subjects", List.of(Map.of("apiGroup", "", "kind", "User", "name", userName)));
+        try {
+            requestHaloApi("POST", "/api/v1alpha1/rolebindings", objectMapper.writeValueAsString(payload), authHeaders);
+        } catch (IllegalStateException ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("already exists")) {
+                return;
+            }
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalStateException("grant ham role failed: " + ex.getMessage(), ex);
+        }
+    }
+
+    private void syncRevokeHamRole(String userName, Map<String, String> authHeaders) {
+        var roleName = hamRoleName();
+        var bindingName = findRoleBindingName(roleName, userName, authHeaders);
+        if (bindingName == null) {
+            return;
+        }
+        requestHaloApi("DELETE", "/api/v1alpha1/rolebindings/" + urlEncode(bindingName), null, authHeaders);
+    }
+
+    private String findRoleBindingName(String roleName, String userName, Map<String, String> authHeaders) {
+        var page = 1;
+        while (true) {
+            var path = "/api/v1alpha1/rolebindings?page=" + page + "&size=500";
+            var root = requestHaloApi("GET", path, null, authHeaders);
+            var items = root.path("items");
+            if (items.isArray()) {
+                for (var item : items) {
+                    var ref = item.path("roleRef");
+                    var refName = ref.path("name").asText("");
+                    if (!roleName.equalsIgnoreCase(refName)) {
+                        continue;
+                    }
+                    var subjects = item.path("subjects");
+                    if (!subjects.isArray()) {
+                        continue;
+                    }
+                    for (var subject : subjects) {
+                        var kind = subject.path("kind").asText("");
+                        var name = subject.path("name").asText("");
+                        if ("User".equalsIgnoreCase(kind) && userName.equalsIgnoreCase(name)) {
+                            return item.path("metadata").path("name").asText("");
+                        }
+                    }
+                }
+            }
+            if (root.path("hasNext").asBoolean(false)) {
+                page++;
+                continue;
+            }
+            return null;
+        }
+    }
+
+    private void ensureRoleExists(String roleName, Map<String, String> authHeaders) {
+        try {
+            requestHaloApi("GET", "/api/v1alpha1/roles/" + urlEncode(roleName), null, authHeaders);
+        } catch (IllegalStateException ex) {
+            throw new IllegalStateException("ham role not found: " + roleName, ex);
+        }
+    }
+
+    private String hamRoleName() {
+        var value = Objects.toString(systemConfig.getOrDefault("hamRoleName", "HAM"), "").trim();
+        return value.isBlank() ? "HAM" : value;
+    }
+
+    private String generateHamRoleBindingName(String userName) {
+        var normalized = Objects.toString(userName, "").trim().toLowerCase()
+            .replaceAll("[^a-z0-9-]", "-")
+            .replaceAll("-{2,}", "-");
+        if (normalized.isBlank()) {
+            normalized = "user";
+        }
+        return "qsl-ham-" + normalized;
+    }
+
+    private String urlEncode(String value) {
+        return URLEncoder.encode(Objects.toString(value, ""), StandardCharsets.UTF_8);
+    }
+
+    private JsonNode requestHaloApi(String method, String path, String body, Map<String, String> authHeaders) {
+        try {
+            var target = URI.create("http://127.0.0.1:8090" + path);
+            var builder = HttpRequest.newBuilder(target);
+            if ("POST".equalsIgnoreCase(method)) {
+                builder.POST(HttpRequest.BodyPublishers.ofString(body == null ? "" : body));
+                builder.header("Content-Type", "application/json");
+            } else if ("DELETE".equalsIgnoreCase(method)) {
+                builder.DELETE();
+            } else {
+                builder.GET();
+            }
+            if (authHeaders != null) {
+                for (var entry : authHeaders.entrySet()) {
+                    var key = entry.getKey();
+                    var value = entry.getValue();
+                    if (key == null || key.isBlank() || value == null || value.isBlank()) {
+                        continue;
+                    }
+                    builder.header(key, value);
+                }
+            }
+            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            var status = response.statusCode();
+            if (status < 200 || status >= 300) {
+                throw new IllegalStateException("halo api " + method + " " + path + " failed: "
+                    + status + " " + response.body());
+            }
+            var text = Objects.toString(response.body(), "").trim();
+            if (text.isBlank()) {
+                return objectMapper.createObjectNode();
+            }
+            return objectMapper.readTree(text);
+        } catch (Exception ex) {
+            if (ex instanceof IllegalStateException state) {
+                throw state;
+            }
+            throw new IllegalStateException("halo api request failed: " + method + " " + path + ", " + ex.getMessage(),
+                ex);
+        }
     }
 
     public List<Map<String, Object>> queryCardsByCallsign(String callsign) {

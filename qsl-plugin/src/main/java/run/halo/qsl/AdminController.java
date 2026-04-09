@@ -466,8 +466,17 @@ public class AdminController {
 
     @PostMapping("/callsign-bindings/{id}/approve")
     public Map<String, Object> approveBinding(@PathVariable("id") Long id,
-        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
-        return dataService.approveBinding(id, operator);
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator,
+        @RequestHeader(value = "Cookie", required = false) String cookie,
+        @RequestHeader(value = "Authorization", required = false) String authorization,
+        @RequestHeader(value = "X-XSRF-TOKEN", required = false) String xsrfToken,
+        @RequestHeader(value = "X-CSRF-TOKEN", required = false) String csrfToken) {
+        var headers = new java.util.LinkedHashMap<String, String>();
+        if (cookie != null) headers.put("Cookie", cookie);
+        if (authorization != null) headers.put("Authorization", authorization);
+        if (xsrfToken != null) headers.put("X-XSRF-TOKEN", xsrfToken);
+        if (csrfToken != null) headers.put("X-CSRF-TOKEN", csrfToken);
+        return dataService.approveBinding(id, operator, headers);
     }
 
     @PostMapping("/callsign-bindings/{id}/reject")
@@ -478,9 +487,18 @@ public class AdminController {
 
     @PostMapping("/callsign-bindings/{id}/unbind")
     public Map<String, Object> unbindBinding(@PathVariable("id") Long id,
-        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator,
+        @RequestHeader(value = "Cookie", required = false) String cookie,
+        @RequestHeader(value = "Authorization", required = false) String authorization,
+        @RequestHeader(value = "X-XSRF-TOKEN", required = false) String xsrfToken,
+        @RequestHeader(value = "X-CSRF-TOKEN", required = false) String csrfToken) {
+        var headers = new java.util.LinkedHashMap<String, String>();
+        if (cookie != null) headers.put("Cookie", cookie);
+        if (authorization != null) headers.put("Authorization", authorization);
+        if (xsrfToken != null) headers.put("X-XSRF-TOKEN", xsrfToken);
+        if (csrfToken != null) headers.put("X-CSRF-TOKEN", csrfToken);
         try {
-            return dataService.unbindBinding(id, operator);
+            return dataService.unbindBinding(id, operator, headers);
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
         }

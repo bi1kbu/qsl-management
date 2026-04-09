@@ -28,6 +28,23 @@ const menuMeta = {
   icon: markRaw(IconPlug),
 }
 
+const permissions = {
+  dashboardView: 'plugin:qsl-management:dashboard:view',
+  configStation: 'plugin:qsl-management:config:station',
+  configBureau: 'plugin:qsl-management:config:bureau',
+  configDict: 'plugin:qsl-management:config:dict',
+  businessQso: 'plugin:qsl-management:business:qso',
+  businessCard: 'plugin:qsl-management:business:card',
+  businessSendConfirm: 'plugin:qsl-management:business:send-confirm',
+  businessReceiveConfirm: 'plugin:qsl-management:business:receive-confirm',
+  callsignManage: 'plugin:qsl-management:callsign:manage',
+  auditLog: 'plugin:qsl-management:audit:log',
+  reviewExchange: 'plugin:qsl-management:review:exchange',
+  reviewBinding: 'plugin:qsl-management:review:binding',
+  dataImportExport: 'plugin:qsl-management:data:import-export',
+  dataAddress: 'plugin:qsl-management:data:address-manage',
+}
+
 export default definePlugin({
   components: {},
   routes: [
@@ -50,6 +67,7 @@ export default definePlugin({
             meta: {
               title: '总览',
               searchable: true,
+              permissions: [permissions.dashboardView],
               menu: { ...menuMeta, name: '总览', priority: 1 },
             },
           },
@@ -71,6 +89,7 @@ export default definePlugin({
                 meta: {
                   title: '本站配置',
                   searchable: true,
+                  permissions: [permissions.configStation],
                   menu: { ...menuMeta, name: '本站配置', priority: 11 },
                 },
               },
@@ -81,6 +100,7 @@ export default definePlugin({
                 meta: {
                   title: '卡片局配置',
                   searchable: true,
+                  permissions: [permissions.configBureau],
                   menu: { ...menuMeta, name: '卡片局配置', priority: 12 },
                 },
               },
@@ -91,6 +111,7 @@ export default definePlugin({
                 meta: {
                   title: '字典配置',
                   searchable: true,
+                  permissions: [permissions.configDict],
                   menu: { ...menuMeta, name: '字典配置', priority: 13 },
                 },
               },
@@ -114,6 +135,7 @@ export default definePlugin({
                 meta: {
                   title: '通联记录',
                   searchable: true,
+                  permissions: [permissions.businessQso],
                   menu: { ...menuMeta, name: '通联记录', priority: 21 },
                 },
               },
@@ -124,6 +146,7 @@ export default definePlugin({
                 meta: {
                   title: '卡片记录',
                   searchable: true,
+                  permissions: [permissions.businessCard],
                   menu: { ...menuMeta, name: '卡片记录', priority: 22 },
                 },
               },
@@ -134,6 +157,7 @@ export default definePlugin({
                 meta: {
                   title: '发信确认',
                   searchable: true,
+                  permissions: [permissions.businessSendConfirm],
                   menu: { ...menuMeta, name: '发信确认', priority: 23 },
                 },
               },
@@ -144,6 +168,7 @@ export default definePlugin({
                 meta: {
                   title: '收信确认',
                   searchable: true,
+                  permissions: [permissions.businessReceiveConfirm],
                   menu: { ...menuMeta, name: '收信确认', priority: 24 },
                 },
               },
@@ -187,6 +212,7 @@ export default definePlugin({
                 meta: {
                   title: '地址维护',
                   searchable: true,
+                  permissions: [permissions.callsignManage],
                   menu: { ...menuMeta, name: '地址维护', priority: 32 },
                 },
               },
@@ -197,6 +223,7 @@ export default definePlugin({
                 meta: {
                   title: '通信记录查询',
                   searchable: true,
+                  permissions: [permissions.callsignManage],
                   menu: { ...menuMeta, name: '通信记录查询', priority: 33 },
                 },
               },
@@ -207,6 +234,7 @@ export default definePlugin({
                 meta: {
                   title: '卡片记录查询',
                   searchable: true,
+                  permissions: [permissions.callsignManage],
                   menu: { ...menuMeta, name: '卡片记录查询', priority: 34 },
                 },
               },
@@ -230,6 +258,7 @@ export default definePlugin({
                 meta: {
                   title: '审计日志',
                   searchable: true,
+                  permissions: [permissions.auditLog],
                   menu: { ...menuMeta, name: '审计日志', priority: 41 },
                 },
               },
@@ -263,6 +292,7 @@ export default definePlugin({
                 meta: {
                   title: '换卡申请',
                   searchable: true,
+                  permissions: [permissions.reviewExchange],
                   menu: { ...menuMeta, name: '换卡申请', priority: 51 },
                 },
               },
@@ -273,6 +303,7 @@ export default definePlugin({
                 meta: {
                   title: '呼号绑定审核',
                   searchable: true,
+                  permissions: [permissions.reviewBinding],
                   menu: { ...menuMeta, name: '呼号绑定审核', priority: 52 },
                 },
               },
@@ -296,6 +327,7 @@ export default definePlugin({
                 meta: {
                   title: '导入导出',
                   searchable: true,
+                  permissions: [permissions.dataImportExport],
                   menu: { ...menuMeta, name: '导入导出', priority: 61 },
                 },
               },
@@ -306,10 +338,82 @@ export default definePlugin({
                 meta: {
                   title: '地址管理',
                   searchable: true,
+                  permissions: [permissions.dataAddress],
                   menu: { ...menuMeta, name: '地址管理', priority: 62 },
                 },
               },
             ],
+          },
+        ],
+      },
+    },
+  ],
+  ucRoutes: [
+    {
+      parentName: 'Root',
+      route: {
+        path: '/qsl-uc',
+        name: 'QslUcRoot',
+        component: RouteLayoutView,
+        redirect: '/qsl-uc/callsign/bind',
+        meta: {
+          title: 'QSL 管理',
+          searchable: false,
+          menu: { ...menuMeta, name: 'QSL 管理', group: 'content', priority: 35 },
+        },
+        children: [
+          {
+            path: 'callsign/bind',
+            name: 'QslUcCallsignBind',
+            component: CallsignManageBindView,
+            meta: {
+              title: '呼号绑定',
+              searchable: false,
+              menu: { ...menuMeta, name: '呼号绑定', group: 'content', priority: 36 },
+            },
+          },
+          {
+            path: 'callsign/addresses',
+            name: 'QslUcCallsignAddress',
+            component: CallsignManageAddressView,
+            meta: {
+              title: '地址维护',
+              searchable: false,
+              permissions: [permissions.callsignManage],
+              menu: { ...menuMeta, name: '地址维护', group: 'content', priority: 37 },
+            },
+          },
+          {
+            path: 'callsign/qso-query',
+            name: 'QslUcCallsignQsoQuery',
+            component: CallsignManageQsoView,
+            meta: {
+              title: '通信记录查询',
+              searchable: false,
+              permissions: [permissions.callsignManage],
+              menu: { ...menuMeta, name: '通信记录查询', group: 'content', priority: 38 },
+            },
+          },
+          {
+            path: 'callsign/card-query',
+            name: 'QslUcCallsignCardQuery',
+            component: CallsignManageCardView,
+            meta: {
+              title: '卡片记录查询',
+              searchable: false,
+              permissions: [permissions.callsignManage],
+              menu: { ...menuMeta, name: '卡片记录查询', group: 'content', priority: 39 },
+            },
+          },
+          {
+            path: 'report',
+            name: 'QslUcReport',
+            component: ReportView,
+            meta: {
+              title: '统计报表',
+              searchable: false,
+              menu: { ...menuMeta, name: '统计报表', group: 'content', priority: 40 },
+            },
           },
         ],
       },
