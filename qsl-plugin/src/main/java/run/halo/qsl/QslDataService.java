@@ -231,6 +231,14 @@ public class QslDataService {
         return new LinkedHashMap<>(existing);
     }
 
+    public Map<String, Object> updateQsoAsAdmin(Long id, Map<String, Object> payload, String operator,
+        Map<String, String> authHeaders) {
+        if (!isAdminUser(operator, authHeaders)) {
+            throw new IllegalArgumentException("only admin can edit qso records");
+        }
+        return update("qso", id, payload, operator);
+    }
+
     public boolean softDelete(String type, Long id, String operator) {
         var store = getStore(type);
         var existing = store.get(id);
@@ -1249,6 +1257,40 @@ public class QslDataService {
         }
     }
 
+    private boolean isAdminUser(String operator, Map<String, String> authHeaders) {
+        try {
+            var root = requestHaloApi("GET", "/apis/api.console.halo.run/v1alpha1/users/-", null, authHeaders);
+            var roles = root.path("roles");
+            if (roles.isArray()) {
+                for (var role : roles) {
+                    var roleName = role.path("metadata").path("name").asText("");
+                    if ("super-role".equalsIgnoreCase(roleName)) {
+                        return true;
+                    }
+                    var raw = role.path("metadata").path("annotations")
+                        .path("rbac.authorization.halo.run/ui-permissions").asText("");
+                    if (!raw.isBlank()) {
+                        try {
+                            var values = objectMapper.readTree(raw);
+                            if (values.isArray()) {
+                                for (var node : values) {
+                                    if ("*".equals(node.asText(""))) {
+                                        return true;
+                                    }
+                                }
+                            }
+                        } catch (Exception ignored) {
+                            // ignore invalid role annotation payload
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // fallback to operator name check below
+        }
+        return "admin".equalsIgnoreCase(Objects.toString(operator, "").trim());
+    }
+
     public List<Map<String, Object>> queryCardsByCallsign(String callsign) {
         var keyword = Objects.toString(callsign, "").trim().toLowerCase();
         return list("card").stream()
@@ -2097,7 +2139,7 @@ public class QslDataService {
         var addressRows = new ArrayList<Map<String, Object>>();
         for (var row : rows) {
             qsoRows.add(mapQsoRow(row));
-            cardRows.add(mapCardRow(row, true));
+            cardRows.add(mapCardRow(row));
             addressRows.add(mapAddressRow(row));
         }
         var payload = new LinkedHashMap<String, Object>();

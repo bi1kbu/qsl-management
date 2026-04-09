@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { VButton, VCard, VEmpty, VLoading } from '@halo-dev/components'
+import { computed, onMounted, ref } from 'vue'
+import { IconRefreshLine, VButton, VCard, VEmpty, VLoading } from '@halo-dev/components'
 import { adminApi } from '../api'
 import QslPageLayout from '../components/QslPageLayout.vue'
 
@@ -8,7 +8,7 @@ const loading = ref(false)
 const rows = ref<Array<Record<string, unknown>>>([])
 const searchRows = ref<Array<Record<string, unknown>>>([])
 const selected = ref<number[]>([])
-const searched = ref(false)
+const searched = ref(true)
 const showCreateForm = ref(false)
 const receiveRemark = ref('')
 const callsign = ref('')
@@ -19,11 +19,24 @@ const formPhone = ref('')
 const formEmail = ref('')
 const message = ref('')
 const error = ref('')
+const page = ref(1)
+const pageSize = ref(20)
+
+const totalCount = computed(() => searchRows.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
+const pagedSearchRows = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return searchRows.value.slice(start, start + pageSize.value)
+})
 
 async function load() {
   loading.value = true
   try {
     rows.value = await adminApi.listCards()
+    if (!callsign.value.trim()) {
+      searchRows.value = rows.value.filter((row) => String(row.returnCardStatus || '') === 'NOT_RECEIVED')
+      searched.value = true
+    }
   } finally {
     loading.value = false
   }
@@ -51,6 +64,7 @@ async function searchByCallsign() {
   searched.value = true
   selected.value = []
   searchRows.value = rows.value.filter((row) => normalizeCallsign(row.peerCallsign) === normalized)
+  page.value = 1
   if (searchRows.value.length > 0) {
     showCreateForm.value = false
     message.value = `已找到 ${searchRows.value.length} 条记录，请勾选后确认收信`
@@ -62,6 +76,48 @@ async function searchByCallsign() {
   error.value = ''
 }
 
+function toggleAll(checked: boolean) {
+  if (checked) {
+    const pageIds = pagedSearchRows.value.map((row) => Number(row.id))
+    selected.value = Array.from(new Set([...selected.value, ...pageIds]))
+    return
+  }
+  const pageIdSet = new Set(pagedSearchRows.value.map((row) => Number(row.id)))
+  selected.value = selected.value.filter((id) => !pageIdSet.has(id))
+}
+
+function isAllChecked() {
+  return (
+    pagedSearchRows.value.length > 0 &&
+    pagedSearchRows.value.every((row) => selected.value.includes(Number(row.id)))
+  )
+}
+
+function resetSearch() {
+  callsign.value = ''
+  receiveRemark.value = ''
+  selected.value = []
+  searched.value = true
+  searchRows.value = rows.value.filter((row) => String(row.returnCardStatus || '') === 'NOT_RECEIVED')
+  showCreateForm.value = false
+  formName.value = ''
+  formAddress.value = ''
+  formPostcode.value = ''
+  formPhone.value = ''
+  formEmail.value = ''
+  message.value = ''
+  error.value = ''
+  page.value = 1
+}
+
+function prevPage() {
+  if (page.value > 1) page.value -= 1
+}
+
+function nextPage() {
+  if (page.value < totalPages.value) page.value += 1
+}
+
 async function confirmReceive() {
   if (!selected.value.length) return
   await adminApi.receiveConfirm(selected.value, receiveRemark.value || undefined)
@@ -70,7 +126,12 @@ async function confirmReceive() {
   message.value = '已按选中记录完成收信确认'
   error.value = ''
   await load()
-  await searchByCallsign()
+  if (callsign.value.trim()) {
+    await searchByCallsign()
+  } else {
+    searchRows.value = rows.value.filter((row) => String(row.returnCardStatus || '') === 'NOT_RECEIVED')
+    searched.value = true
+  }
 }
 
 async function confirmCreateByCallsign() {
@@ -113,6 +174,21 @@ async function confirmCreateByCallsign() {
 }
 
 onMounted(load)
+
+function cardTypeText(value: unknown) {
+  const v = String(value || '')
+  if (v === 'QSO') return '通联卡'
+  if (v === 'LISTEN') return '收听卡'
+  if (v === 'EYEBALL') return '眼球卡'
+  return v
+}
+
+function returnStatusText(value: unknown) {
+  const v = String(value || '')
+  if (v === 'NOT_RECEIVED') return '待收回卡'
+  if (v === 'RECEIVED') return '已收回卡'
+  return v
+}
 </script>
 
 <template>
@@ -125,8 +201,17 @@ onMounted(load)
     <VCard>
       <div class="qsl-list-header">
         <div class="qsl-list-toolbar grid-form">
+          <input
+            type="checkbox"
+            class="toolbar-checkbox"
+            :checked="isAllChecked()"
+            @change="toggleAll(($event.target as HTMLInputElement).checked)"
+          />
           <input v-model="callsign" class="qsl-input toolbar-input" placeholder="呼号（必填）" />
           <input v-model="receiveRemark" class="qsl-input toolbar-input" placeholder="收信备注（可选）" />
+          <button class="icon-reset-btn" title="重置筛选" @click="resetSearch">
+            <IconRefreshLine class="icon-reset-btn__icon" />
+          </button>
         </div>
         <div v-if="showCreateForm" class="qsl-list-toolbar grid-form mt8">
           <input v-model="formName" class="qsl-input toolbar-input" placeholder="姓名（补建时必填）" />
@@ -141,15 +226,14 @@ onMounted(load)
 
       <div class="qsl-list-body">
         <VLoading v-if="loading" />
-        <VEmpty v-else-if="!searched" title="请输入呼号并搜索记录" />
-        <VEmpty v-else-if="searchRows.length === 0" title="未找到匹配记录" />
+        <VEmpty v-else-if="searchRows.length === 0" :title="callsign ? '未找到匹配记录' : '暂无待收回卡记录'" />
         <div v-else class="table-wrap">
           <table class="qsl-table">
             <thead><tr><th></th><th>ID</th><th>呼号</th><th>类型</th><th>回卡状态</th><th>回卡时间</th></tr></thead>
             <tbody>
-              <tr v-for="row in searchRows" :key="String(row.id)">
+              <tr v-for="row in pagedSearchRows" :key="String(row.id)">
                 <td><input type="checkbox" :checked="selected.includes(Number(row.id))" @change="toggle(Number(row.id))" /></td>
-                <td>{{ row.id }}</td><td>{{ row.peerCallsign }}</td><td>{{ row.cardType }}</td><td>{{ row.returnCardStatus }}</td><td>{{ row.returnedAt }}</td>
+                <td>{{ row.id }}</td><td>{{ row.peerCallsign }}</td><td>{{ cardTypeText(row.cardType) }}</td><td>{{ returnStatusText(row.returnCardStatus) }}</td><td>{{ row.returnedAt }}</td>
               </tr>
             </tbody>
           </table>
@@ -157,7 +241,19 @@ onMounted(load)
       </div>
 
       <div class="qsl-list-footer">
-        <div class="qsl-list-footer__total">共 {{ searched ? searchRows.length : 0 }} 项匹配数据</div>
+        <div class="qsl-list-footer__total">共 {{ searched ? totalCount : 0 }} 项匹配数据</div>
+        <div v-if="searched && totalCount > 0" class="footer-controls">
+          <button class="pager-btn" :disabled="page <= 1" @click="prevPage">‹</button>
+          <button class="pager-btn" :disabled="page >= totalPages" @click="nextPage">›</button>
+          <span class="footer-text">{{ page }} / {{ totalPages }}</span>
+          <span class="footer-text">页</span>
+          <select v-model.number="pageSize" class="footer-select">
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+          <span class="footer-text">条 / 页</span>
+        </div>
       </div>
     </VCard>
   </QslPageLayout>

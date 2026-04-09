@@ -32,6 +32,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 let currentUserIdCache: string | null = null
+let currentUserAccessCache:
+  | {
+      userName: string
+      roleNames: string[]
+      uiPermissions: string[]
+      isAdmin: boolean
+    }
+  | null = null
 
 async function getCurrentUserId(): Promise<string> {
   if (currentUserIdCache) return currentUserIdCache
@@ -46,6 +54,63 @@ async function getCurrentUserId(): Promise<string> {
     currentUserIdCache = 'console-user'
   }
   return currentUserIdCache
+}
+
+function parseUiPermissions(roles: Array<Record<string, unknown>>): string[] {
+  const values: string[] = []
+  roles.forEach((role) => {
+    const metadata = (role.metadata || {}) as Record<string, unknown>
+    const annotations = (metadata.annotations || {}) as Record<string, unknown>
+    const raw = String(annotations['rbac.authorization.halo.run/ui-permissions'] || '').trim()
+    if (!raw) return
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        parsed.forEach((item) => {
+          const v = String(item || '').trim()
+          if (v) values.push(v)
+        })
+      }
+    } catch {
+      // ignore invalid annotation payload
+    }
+  })
+  return Array.from(new Set(values))
+}
+
+async function getCurrentUserAccess(): Promise<{
+  userName: string
+  roleNames: string[]
+  uiPermissions: string[]
+  isAdmin: boolean
+}> {
+  if (currentUserAccessCache) return currentUserAccessCache
+  try {
+    const data = await request<Record<string, unknown>>('/apis/api.console.halo.run/v1alpha1/users/-')
+    const user = (data.user || {}) as Record<string, unknown>
+    const roles = ((data.roles || []) as Array<Record<string, unknown>>) || []
+    const userMeta = (user.metadata || {}) as Record<string, unknown>
+    const userName = String(userMeta.name || '').trim() || 'console-user'
+    const roleNames = roles
+      .map((role) => String(((role.metadata || {}) as Record<string, unknown>).name || '').trim())
+      .filter(Boolean)
+    const uiPermissions = parseUiPermissions(roles)
+    const isAdmin =
+      roleNames.includes('super-role') ||
+      uiPermissions.includes('*')
+    currentUserAccessCache = { userName, roleNames, uiPermissions, isAdmin }
+    if (!currentUserIdCache) {
+      currentUserIdCache = userName
+    }
+  } catch {
+    currentUserAccessCache = {
+      userName: currentUserIdCache || 'console-user',
+      roleNames: [],
+      uiPermissions: [],
+      isAdmin: false,
+    }
+  }
+  return currentUserAccessCache
 }
 
 async function myRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -139,12 +204,24 @@ export const adminApi = {
       body: JSON.stringify(payload),
     })
   },
+  updateQso(id: number, payload: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/apis/qsl.admin/v1/qso-records/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
   listCards() {
     return request<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/qsl-card-records')
   },
   createCard(payload: Record<string, unknown>) {
     return request<Record<string, unknown>>('/apis/qsl.admin/v1/qsl-card-records', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  updateCard(id: number, payload: Record<string, unknown>) {
+    return request<Record<string, unknown>>(`/apis/qsl.admin/v1/qsl-card-records/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(payload),
     })
   },
@@ -283,6 +360,7 @@ export const adminApi = {
   getReportTypeDistribution() {
     return request<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/reports/card-type-distribution')
   },
+  getCurrentUserAccess,
 }
 
 export const myApi = {

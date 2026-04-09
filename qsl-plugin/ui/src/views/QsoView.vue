@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { VButton, VCard, VEmpty, VLoading } from '@halo-dev/components'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { IconRefreshLine, VButton, VCard, VEmpty, VLoading } from '@halo-dev/components'
 import { adminApi } from '../api'
 import QslPageLayout from '../components/QslPageLayout.vue'
 
@@ -8,6 +8,14 @@ const SESSION_KEY = 'qsl-qso-form-v1'
 
 const loading = ref(false)
 const rows = ref<Array<Record<string, unknown>>>([])
+const selectedIds = ref<number[]>([])
+const canEdit = ref(false)
+const editingId = ref<number | null>(null)
+const filters = ref({
+  callsign: '',
+})
+const page = ref(1)
+const pageSize = ref(20)
 const equipments = ref<Array<Record<string, unknown>>>([])
 const antennas = ref<Array<Record<string, unknown>>>([])
 const powers = ref<Array<Record<string, unknown>>>([])
@@ -36,6 +44,19 @@ const form = ref({
   rstSent: '59',
   rstReceived: '59',
   remark: '',
+})
+
+const filteredRows = computed(() => {
+  const callsign = filters.value.callsign.trim().toUpperCase()
+  if (!callsign) return rows.value
+  return rows.value.filter((row) => String(row.peerCallsign || '').toUpperCase().includes(callsign))
+})
+
+const totalCount = computed(() => filteredRows.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
+const pagedRows = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filteredRows.value.slice(start, start + pageSize.value)
 })
 
 function sortUnique(values: string[]): string[] {
@@ -165,9 +186,19 @@ async function load() {
         .concat(qso.map((row) => String(row.mode || '').trim()))
         .concat(form.value.mode),
     )
+    if (page.value > totalPages.value) page.value = 1
+    selectedIds.value = selectedIds.value.filter((id) =>
+      filteredRows.value.some((row) => Number(row.id) === id),
+    )
   } finally {
     loading.value = false
   }
+}
+
+function dictNameById(items: Array<Record<string, unknown>>, id: unknown): string {
+  if (id === undefined || id === null || String(id).trim() === '') return ''
+  const hit = items.find((item) => Number(item.id) === Number(id))
+  return hit ? String(hit.name || '').trim() : ''
 }
 
 async function submit() {
@@ -197,7 +228,11 @@ async function submit() {
   frequencyOptions.value = sortUnique(frequencyOptions.value.concat(form.value.frequency))
   modeOptions.value = sortUnique(modeOptions.value.concat(form.value.mode))
 
-  await adminApi.createQso(payload)
+  if (editingId.value !== null) {
+    await adminApi.updateQso(editingId.value, payload)
+  } else {
+    await adminApi.createQso(payload)
+  }
 
   // 仅清空本次应清空字段；第二行保持不变。
   form.value.peerCallsign = ''
@@ -206,6 +241,7 @@ async function submit() {
   form.value.peerPowerName = ''
   form.value.peerQth = ''
   form.value.remark = ''
+  editingId.value = null
   if (!realtimeUtc.value) {
     form.value.qsoDate = ''
     form.value.qsoTime = ''
@@ -215,6 +251,44 @@ async function submit() {
   updateRstDefaultByMode(form.value.mode)
   saveSession()
   await load()
+}
+
+function startEdit(row: Record<string, unknown>) {
+  if (!canEdit.value) return
+  editingId.value = Number(row.id)
+  form.value.peerCallsign = String(row.peerCallsign || '')
+  form.value.qsoDate = String(row.qsoDate || '')
+  form.value.qsoTime = String(row.qsoTime || '')
+  form.value.timezone = String(row.timezone || 'UTC+8')
+  form.value.frequency = String(row.frequency || '')
+  form.value.mode = String(row.mode || 'FM')
+  form.value.equipmentName = dictNameById(equipments.value, row.equipmentId)
+  form.value.antennaName = dictNameById(antennas.value, row.antennaId)
+  form.value.powerName = dictNameById(powers.value, row.powerPresetId)
+  form.value.peerEquipmentName = String(row.peerEquipmentName || '')
+  form.value.peerAntennaName = String(row.peerAntennaName || '')
+  form.value.peerPowerName = String(row.peerPowerName || '')
+  form.value.peerQth = String(row.peerQth || '')
+  form.value.rstSent = String(row.rstSent || defaultRstByMode(form.value.mode))
+  form.value.rstReceived = String(row.rstReceived || defaultRstByMode(form.value.mode))
+  form.value.remark = String(row.remark || '')
+  rstManuallyEdited.value = true
+  rstReceivedManuallyEdited.value = true
+}
+
+function cancelEdit() {
+  editingId.value = null
+  form.value.peerCallsign = ''
+  form.value.qsoDate = ''
+  form.value.qsoTime = ''
+  form.value.remark = ''
+  form.value.peerEquipmentName = ''
+  form.value.peerAntennaName = ''
+  form.value.peerPowerName = ''
+  form.value.peerQth = ''
+  rstManuallyEdited.value = false
+  rstReceivedManuallyEdited.value = false
+  updateRstDefaultByMode(form.value.mode)
 }
 
 watch(realtimeUtc, (enabled) => {
@@ -243,6 +317,14 @@ watch(
 
 onMounted(load)
 onMounted(() => {
+  adminApi
+    .getCurrentUserAccess()
+    .then((access) => {
+      canEdit.value = access.isAdmin
+    })
+    .catch(() => {
+      canEdit.value = false
+    })
   restoreSession()
   if (realtimeUtc.value) {
     startUtcTicker()
@@ -252,6 +334,51 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stopUtcTicker()
 })
+
+function toggleAll(checked: boolean) {
+  if (checked) {
+    const pageIds = pagedRows.value.map((row) => Number(row.id))
+    selectedIds.value = Array.from(new Set([...selectedIds.value, ...pageIds]))
+    return
+  }
+  const pageIdSet = new Set(pagedRows.value.map((row) => Number(row.id)))
+  selectedIds.value = selectedIds.value.filter((id) => !pageIdSet.has(id))
+}
+
+function toggleOne(id: number) {
+  if (selectedIds.value.includes(id)) {
+    selectedIds.value = selectedIds.value.filter((v) => v !== id)
+    return
+  }
+  selectedIds.value.push(id)
+}
+
+function isAllChecked() {
+  return (
+    pagedRows.value.length > 0 &&
+    pagedRows.value.every((row) => selectedIds.value.includes(Number(row.id)))
+  )
+}
+
+function resetFilters() {
+  filters.value.callsign = ''
+  page.value = 1
+}
+
+function prevPage() {
+  if (page.value > 1) page.value -= 1
+}
+
+function nextPage() {
+  if (page.value < totalPages.value) page.value += 1
+}
+
+watch(
+  () => filters.value.callsign,
+  () => {
+    page.value = 1
+  },
+)
 </script>
 
 <template>
@@ -361,30 +488,49 @@ onBeforeUnmount(() => {
           />
         </div>
         <input v-model="form.remark" class="qsl-input" placeholder="备注（提交后清空）" />
-        <VButton type="secondary" @click="submit">新增</VButton>
+        <VButton type="secondary" @click="submit">{{ editingId !== null ? '保存修改' : '新增' }}</VButton>
+        <VButton v-if="editingId !== null" @click="cancelEdit">取消编辑</VButton>
       </div>
     </VCard>
 
     <VCard>
       <div class="qsl-list-header">
         <div class="qsl-list-toolbar">
-          <span class="qsl-list-title">通联列表</span>
+          <input
+            type="checkbox"
+            class="toolbar-checkbox"
+            :checked="isAllChecked()"
+            @change="toggleAll(($event.target as HTMLInputElement).checked)"
+          />
+          <input v-model="filters.callsign" class="qsl-input qsl-search" placeholder="按呼号搜索" />
+          <button class="icon-reset-btn" title="重置筛选" @click="resetFilters">
+            <IconRefreshLine class="icon-reset-btn__icon" />
+          </button>
         </div>
       </div>
 
       <div class="qsl-list-body">
         <VLoading v-if="loading" />
-        <VEmpty v-else-if="rows.length === 0" title="暂无记录" />
+        <VEmpty v-else-if="filteredRows.length === 0" title="暂无记录" />
         <div v-else class="table-wrap">
           <table class="qsl-table">
             <thead>
               <tr>
+                <th></th>
                 <th>ID</th><th>呼号</th><th>日期</th><th>时间</th><th>时区</th>
-                <th>频率</th><th>模式</th><th>设备ID</th><th>天线ID</th><th>功率ID</th><th>信号报告</th><th>备注</th>
+                <th>频率</th><th>模式</th><th>设备ID</th><th>天线ID</th><th>功率ID</th><th>信号报告</th><th>备注</th><th v-if="canEdit">操作</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in rows" :key="String(row.id)">
+              <tr v-for="row in pagedRows" :key="String(row.id)">
+                <td>
+                  <input
+                    type="checkbox"
+                    class="toolbar-checkbox"
+                    :checked="selectedIds.includes(Number(row.id))"
+                    @change="toggleOne(Number(row.id))"
+                  />
+                </td>
                 <td>{{ row.id }}</td>
                 <td>{{ row.peerCallsign }}</td>
                 <td>{{ row.qsoDate }}</td>
@@ -397,6 +543,9 @@ onBeforeUnmount(() => {
                 <td>{{ row.powerPresetId }}</td>
                 <td>{{ row.rstSent }}</td>
                 <td>{{ row.remark }}</td>
+                <td v-if="canEdit">
+                  <button class="link-btn" @click="startEdit(row)">编辑</button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -404,7 +553,19 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="qsl-list-footer">
-        <div class="qsl-list-footer__total">共 {{ rows.length }} 项数据</div>
+        <div class="qsl-list-footer__total">共 {{ totalCount }} 项数据</div>
+        <div class="footer-controls">
+          <button class="pager-btn" :disabled="page <= 1" @click="prevPage">‹</button>
+          <button class="pager-btn" :disabled="page >= totalPages" @click="nextPage">›</button>
+          <span class="footer-text">{{ page }} / {{ totalPages }}</span>
+          <span class="footer-text">页</span>
+          <select v-model.number="pageSize" class="footer-select">
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+          <span class="footer-text">条 / 页</span>
+        </div>
       </div>
     </VCard>
   </QslPageLayout>
@@ -457,6 +618,14 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 .table-wrap { overflow: auto; }
+.link-btn {
+  border: none;
+  background: transparent;
+  color: #155eef;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+}
 
 @media (max-width: 1100px) {
   .row-first {

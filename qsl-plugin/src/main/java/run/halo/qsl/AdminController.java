@@ -211,8 +211,21 @@ public class AdminController {
 
     @PutMapping("/qso-records/{id}")
     public Map<String, Object> updateQso(@PathVariable("id") Long id, @RequestBody Map<String, Object> payload,
-        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator) {
-        return dataService.update("qso", id, payload, operator);
+        @RequestHeader(value = "X-Operator", defaultValue = "admin") String operator,
+        @RequestHeader(value = "Cookie", required = false) String cookie,
+        @RequestHeader(value = "Authorization", required = false) String authorization,
+        @RequestHeader(value = "X-XSRF-TOKEN", required = false) String xsrfToken,
+        @RequestHeader(value = "X-CSRF-TOKEN", required = false) String csrfToken) {
+        var headers = new java.util.LinkedHashMap<String, String>();
+        if (cookie != null) headers.put("Cookie", cookie);
+        if (authorization != null) headers.put("Authorization", authorization);
+        if (xsrfToken != null) headers.put("X-XSRF-TOKEN", xsrfToken);
+        if (csrfToken != null) headers.put("X-CSRF-TOKEN", csrfToken);
+        try {
+            return dataService.updateQsoAsAdmin(id, payload, operator, headers);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, ex.getMessage());
+        }
     }
 
     @DeleteMapping("/qso-records/{id}")
