@@ -160,7 +160,10 @@ public class QslDataService {
         }
         if ("card".equals(type)) {
             validateCardPayloadForCreate(normalizedPayload);
+            overrideCardDateTimeByQso(normalizedPayload, null);
         }
+        // Re-apply normalized payload after rule-based mutations (e.g. QSO datetime override).
+        item.putAll(normalizedPayload);
 
         getStore(type).put(id, item);
         writeAudit(type, String.valueOf(id), "create", operator, "success", null, item);
@@ -186,6 +189,7 @@ public class QslDataService {
         }
         if ("card".equals(type)) {
             validateCardPayloadForUpdate(id, normalizedPayload, existing);
+            overrideCardDateTimeByQso(normalizedPayload, existing);
         }
 
         var before = new LinkedHashMap<>(existing);
@@ -1326,6 +1330,35 @@ public class QslDataService {
             if (qsoRecordId.equals(asLong(card.get("qsoRecordId")))) {
                 throw new IllegalArgumentException("qsoRecordId already bound to another card");
             }
+        }
+    }
+
+    private void overrideCardDateTimeByQso(Map<String, Object> payload, Map<String, Object> existing) {
+        var qsoIdObj = payload.containsKey("qsoRecordId")
+            ? payload.get("qsoRecordId")
+            : (existing == null ? null : existing.get("qsoRecordId"));
+        if (qsoIdObj == null) {
+            return;
+        }
+        var qsoId = asLong(qsoIdObj);
+        if (qsoId == null) {
+            return;
+        }
+        var qso = qsoRecords.get(qsoId);
+        if (qso == null || isDeleted(qso)) {
+            return;
+        }
+        var qsoDate = Objects.toString(qso.getOrDefault("qsoDate", ""), "").trim();
+        var qsoTime = Objects.toString(qso.getOrDefault("qsoTime", ""), "").trim();
+        var timezone = Objects.toString(qso.getOrDefault("timezone", ""), "").trim();
+        if (!qsoDate.isBlank()) {
+            payload.put("cardDate", qsoDate);
+        }
+        if (!qsoTime.isBlank()) {
+            payload.put("cardTime", qsoTime);
+        }
+        if (!timezone.isBlank()) {
+            payload.put("timezone", timezone);
         }
     }
 
