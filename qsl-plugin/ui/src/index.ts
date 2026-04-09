@@ -122,19 +122,6 @@ export default definePlugin({
                   menu: { ...menuMeta, name: '卡片记录', priority: 22 },
                 },
               },
-            ],
-          },
-          {
-            path: 'workflow',
-            name: 'QslWorkflow',
-            component: RouteLayoutView,
-            redirect: '/qsl/workflow/send-confirm',
-            meta: {
-              title: '流程',
-              searchable: false,
-              menu: { ...menuMeta, name: '流程', priority: 30 },
-            },
-            children: [
               {
                 path: 'send-confirm',
                 name: 'QslSendConfirm',
@@ -142,7 +129,7 @@ export default definePlugin({
                 meta: {
                   title: '发信确认',
                   searchable: true,
-                  menu: { ...menuMeta, name: '发信确认', priority: 31 },
+                  menu: { ...menuMeta, name: '发信确认', priority: 23 },
                 },
               },
               {
@@ -152,10 +139,20 @@ export default definePlugin({
                 meta: {
                   title: '收信确认',
                   searchable: true,
-                  menu: { ...menuMeta, name: '收信确认', priority: 32 },
+                  menu: { ...menuMeta, name: '收信确认', priority: 24 },
                 },
               },
             ],
+          },
+          {
+            path: 'workflow/send-confirm',
+            redirect: '/qsl/business/send-confirm',
+            meta: { title: '发信确认(兼容路由)', searchable: false },
+          },
+          {
+            path: 'workflow/receive-confirm',
+            redirect: '/qsl/business/receive-confirm',
+            meta: { title: '收信确认(兼容路由)', searchable: false },
           },
           {
             path: 'audit',
