@@ -135,6 +135,7 @@ public class QslDataService {
         var id = nextEntityId(type);
         var normalizedPayload = new LinkedHashMap<String, Object>(payload);
         normalizeAddressAssociation(type, normalizedPayload, null, operator);
+        normalizeCardPrintCompat(type, normalizedPayload);
         var item = new LinkedHashMap<String, Object>();
         item.putAll(normalizedPayload);
         item.put("id", id);
@@ -195,6 +196,7 @@ public class QslDataService {
         }
         var normalizedPayload = new LinkedHashMap<String, Object>(payload);
         normalizeAddressAssociation(type, normalizedPayload, existing, operator);
+        normalizeCardPrintCompat(type, normalizedPayload);
         if ("address".equals(type)) {
             validateAddressBookUnique(id, normalizedPayload, existing);
         }
@@ -1973,6 +1975,29 @@ public class QslDataService {
         }
         if (!timezone.isBlank()) {
             payload.put("timezone", timezone);
+        }
+    }
+
+    private void normalizeCardPrintCompat(String type, Map<String, Object> payload) {
+        if (!"card".equals(type) || payload == null) {
+            return;
+        }
+        if (payload.containsKey("cardPrinted")) {
+            var cardPrinted = Boolean.parseBoolean(Objects.toString(payload.get("cardPrinted"), "false"));
+            if (cardPrinted) {
+                payload.put("productionStatus", "PRINTED");
+                if (!payload.containsKey("printedAt")) {
+                    var legacyPrintedAt = Objects.toString(payload.getOrDefault("cardPrintedAt", ""), "").trim();
+                    payload.put("printedAt", legacyPrintedAt.isBlank() ? nowString() : legacyPrintedAt);
+                }
+            }
+            payload.remove("cardPrinted");
+        }
+        if (payload.containsKey("cardPrintedAt")) {
+            if (!payload.containsKey("printedAt")) {
+                payload.put("printedAt", payload.get("cardPrintedAt"));
+            }
+            payload.remove("cardPrintedAt");
         }
     }
 
