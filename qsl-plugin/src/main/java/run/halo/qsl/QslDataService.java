@@ -150,6 +150,12 @@ public class QslDataService {
 
         getStore(type).put(id, item);
         writeAudit(type, String.valueOf(id), "create", operator, "success", null, item);
+        if ("card".equals(type)) {
+            sendCardRecordedMail(item, Map.of());
+            if (isCardPrepared(item)) {
+                sendCardPreparedMail(item, Map.of());
+            }
+        }
         return new LinkedHashMap<>(item);
     }
 
@@ -167,6 +173,7 @@ public class QslDataService {
         }
 
         var before = new LinkedHashMap<>(existing);
+        var beforePrepared = "card".equals(type) && isCardPrepared(before);
         existing.putAll(payload);
         if ("card".equals(type)) {
             if (!payload.containsKey("confirmStatus") && payload.containsKey("receivedStatus")) {
@@ -182,6 +189,12 @@ public class QslDataService {
         existing.put("updatedAt", nowString());
         existing.put("updatedBy", operator);
         writeAudit(type, String.valueOf(id), "update", operator, "success", before, existing);
+        if ("card".equals(type)) {
+            var afterPrepared = isCardPrepared(existing);
+            if (!beforePrepared && afterPrepared) {
+                sendCardPreparedMail(existing, Map.of());
+            }
+        }
         return new LinkedHashMap<>(existing);
     }
 
@@ -714,6 +727,49 @@ public class QslDataService {
             Objects.toString(card.getOrDefault("receivedAt", card.getOrDefault("returnedAt", ""))),
             authHeaders == null ? Map.of() : authHeaders
         );
+    }
+
+    private Map<String, Object> sendCardRecordedMail(Map<String, Object> card, Map<String, String> authHeaders) {
+        if (emailNotifyService == null) {
+            return Map.of("mailSent", false, "mailError", "mail service not initialized");
+        }
+        return emailNotifyService.notifyCardRecorded(
+            Objects.toString(card.getOrDefault("email", "")),
+            stationCallsignForMail(),
+            Objects.toString(card.getOrDefault("peerCallsign", "")),
+            Objects.toString(card.getOrDefault("id", "")),
+            Objects.toString(card.getOrDefault("cardType", "")),
+            Objects.toString(card.getOrDefault("createdAt", nowString())),
+            authHeaders == null ? Map.of() : authHeaders
+        );
+    }
+
+    private Map<String, Object> sendCardPreparedMail(Map<String, Object> card, Map<String, String> authHeaders) {
+        if (emailNotifyService == null) {
+            return Map.of("mailSent", false, "mailError", "mail service not initialized");
+        }
+        var preparedAt = firstNonBlank(
+            Objects.toString(card.getOrDefault("envelopePrintedAt", ""), ""),
+            Objects.toString(card.getOrDefault("printedAt", ""), ""),
+            Objects.toString(card.getOrDefault("updatedAt", ""), "")
+        );
+        return emailNotifyService.notifyCardPrepared(
+            Objects.toString(card.getOrDefault("email", "")),
+            stationCallsignForMail(),
+            Objects.toString(card.getOrDefault("peerCallsign", "")),
+            Objects.toString(card.getOrDefault("id", "")),
+            preparedAt,
+            authHeaders == null ? Map.of() : authHeaders
+        );
+    }
+
+    private boolean isCardPrepared(Map<String, Object> card) {
+        if (card == null) {
+            return false;
+        }
+        var production = Objects.toString(card.getOrDefault("productionStatus", ""), "").trim().toUpperCase();
+        var envelopePrinted = Boolean.TRUE.equals(card.get("envelopePrinted"));
+        return "PRINTED".equals(production) && envelopePrinted;
     }
 
     private String stationCallsignForMail() {

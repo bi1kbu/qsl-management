@@ -28,6 +28,8 @@ public class EmailNotifyService {
     private static final String REASON_EXCHANGE_REVIEWED = "qsl-exchange-reviewed";
     private static final String REASON_CARD_SENT = "qsl-card-send-confirmed";
     private static final String REASON_CARD_RECEIVED = "qsl-card-receive-confirmed";
+    private static final String REASON_CARD_RECORDED = "qsl-card-recorded";
+    private static final String REASON_CARD_PREPARED = "qsl-card-prepared";
 
     private final ReactiveExtensionClient client;
     private final NotificationCenter notificationCenter;
@@ -74,6 +76,31 @@ public class EmailNotifyService {
         attrs.put("receivedAt", Objects.toString(receivedAt, ""));
         var subject = "QSL 卡片收信状态更新";
         var definition = buildCardReceivedDefinition();
+        return notifyNative(toEmail, definition, subject, attrs, true);
+    }
+
+    public Map<String, Object> notifyCardRecorded(String toEmail, String stationCallsign, String callsign,
+        String cardId, String cardType, String createdAt, Map<String, String> authHeaders) {
+        var attrs = new LinkedHashMap<String, Object>();
+        attrs.put("stationCallsign", Objects.toString(stationCallsign, ""));
+        attrs.put("callsign", Objects.toString(callsign, ""));
+        attrs.put("cardId", Objects.toString(cardId, ""));
+        attrs.put("cardType", Objects.toString(cardType, ""));
+        attrs.put("createdAt", Objects.toString(createdAt, ""));
+        var subject = "QSL 卡片记录已登记";
+        var definition = buildCardRecordedDefinition();
+        return notifyNative(toEmail, definition, subject, attrs, true);
+    }
+
+    public Map<String, Object> notifyCardPrepared(String toEmail, String stationCallsign, String callsign,
+        String cardId, String preparedAt, Map<String, String> authHeaders) {
+        var attrs = new LinkedHashMap<String, Object>();
+        attrs.put("stationCallsign", Objects.toString(stationCallsign, ""));
+        attrs.put("callsign", Objects.toString(callsign, ""));
+        attrs.put("cardId", Objects.toString(cardId, ""));
+        attrs.put("preparedAt", Objects.toString(preparedAt, ""));
+        var subject = "QSL 卡片已制卡";
+        var definition = buildCardPreparedDefinition();
         return notifyNative(toEmail, definition, subject, attrs, true);
     }
 
@@ -203,14 +230,14 @@ public class EmailNotifyService {
             ),
             "【[(${stationCallsign})]】换卡申请审核结果：[(${result})]（[(${callsign})]）",
             "您好，[(${callsign})]: \n\n"
-                + "您的 QSL 换卡申请审核结果为：[(${result})]。\n"
+                + "您的 QSL 换卡申请[(${result})]。\n"
                 + "呼号：[(${callsign})]\n"
                 + "审核时间：[(${reviewedAt})]\n"
                 + "备注：[(${reason})]\n\n"
                 + "此邮件由系统自动发送，请勿直接回复。",
             "<div class=\"notification-content\">\n"
                 + "<p th:text=\"|您好，${callsign}: |\"></p>\n"
-                + "<p th:text=\"|您的 QSL 换卡申请审核结果为：${result}|\"></p>\n"
+                + "<p th:text=\"|您的 QSL 换卡申请${result}|\"></p>\n"
                 + "<p th:text=\"|审核时间：${reviewedAt}|\"></p>\n"
                 + "<p th:text=\"|备注：${reason}|\"></p>\n"
                 + "<p>此邮件由系统自动发送，请勿直接回复。</p>"
@@ -261,18 +288,75 @@ public class EmailNotifyService {
                 property("receivedAt", "string", "确认时间")
             ),
             "【[(${stationCallsign})]】收信确认状态更新（[(${callsign})]）",
+            "您好，[(${callsign})]:\n"
+                + "已顺利收到您寄来的QSL卡片，该通联凭证已妥善保管，特此回复致谢。\n"
+                + "期待后续有机会空中相见，祝您通联顺利、万事顺意。\n"
+                + "确认时间：[(${receivedAt})]\n"
+                + "此邮件由系统自动发送，请勿直接回复。",
+            "<div class=\"notification-content\">\n"
+                + "<p th:text=\"|您好，${callsign}:|\"></p>\n"
+                + "<p>已顺利收到您寄来的QSL卡片，该通联凭证已妥善保管，特此回复致谢。</p>\n"
+                + "<p>期待后续有机会空中相见，祝您通联顺利、万事顺意。</p>\n"
+                + "<p th:text=\"|确认时间：${receivedAt}|\"></p>\n"
+                + "<p>此邮件由系统自动发送，请勿直接回复。</p>"
+                + "</div>"
+        );
+    }
+
+    private NotificationDefinition buildCardRecordedDefinition() {
+        return new NotificationDefinition(
+            REASON_CARD_RECORDED,
+            "qsl-template-" + REASON_CARD_RECORDED,
+            "QSL 卡片记录已登记",
+            "用于通知用户卡片记录已在后台登记。",
+            List.of(
+                property("stationCallsign", "string", "本台呼号"),
+                property("callsign", "string", "呼号"),
+                property("cardId", "string", "卡片ID"),
+                property("cardType", "string", "卡片类型"),
+                property("createdAt", "string", "登记时间")
+            ),
+            "【[(${stationCallsign})]】卡片记录已登记（[(${callsign})]）",
             "您好，[(${callsign})]: \n\n"
-                + "您的 QSL 卡片已完成收信确认，当前状态为“已收回卡”。\n"
-                + "呼号：[(${callsign})]\n"
+                + "您的 QSL 卡片记录已登记。\n"
                 + "卡片ID：[(${cardId})]\n"
-                + "确认时间：[(${receivedAt})]\n\n"
+                + "卡片类型：[(${cardType})]\n"
+                + "登记时间：[(${createdAt})]\n\n"
                 + "此邮件由系统自动发送，请勿直接回复。",
             "<div class=\"notification-content\">\n"
                 + "<p th:text=\"|您好，${callsign}: |\"></p>\n"
-                + "<p>您的 QSL 卡片已完成收信确认，当前状态为“已收回卡”。</p>\n"
-                + "<p th:text=\"|呼号：${callsign}|\"></p>\n"
+                + "<p>您的 QSL 卡片记录已登记。</p>\n"
                 + "<p th:text=\"|卡片ID：${cardId}|\"></p>\n"
-                + "<p th:text=\"|确认时间：${receivedAt}|\"></p>\n"
+                + "<p th:text=\"|卡片类型：${cardType}|\"></p>\n"
+                + "<p th:text=\"|登记时间：${createdAt}|\"></p>\n"
+                + "<p>此邮件由系统自动发送，请勿直接回复。</p>"
+                + "</div>"
+        );
+    }
+
+    private NotificationDefinition buildCardPreparedDefinition() {
+        return new NotificationDefinition(
+            REASON_CARD_PREPARED,
+            "qsl-template-" + REASON_CARD_PREPARED,
+            "QSL 卡片已制卡",
+            "用于通知用户卡片和信封均已打印完成。",
+            List.of(
+                property("stationCallsign", "string", "本台呼号"),
+                property("callsign", "string", "呼号"),
+                property("cardId", "string", "卡片ID"),
+                property("preparedAt", "string", "制卡完成时间")
+            ),
+            "【[(${stationCallsign})]】卡片已制卡（[(${callsign})]）",
+            "您好，[(${callsign})]: \n\n"
+                + "您的 QSL 卡片与信封已打印完成，当前状态为“已制卡”。\n"
+                + "卡片ID：[(${cardId})]\n"
+                + "完成时间：[(${preparedAt})]\n\n"
+                + "此邮件由系统自动发送，请勿直接回复。",
+            "<div class=\"notification-content\">\n"
+                + "<p th:text=\"|您好，${callsign}: |\"></p>\n"
+                + "<p>您的 QSL 卡片与信封已打印完成，当前状态为“已制卡”。</p>\n"
+                + "<p th:text=\"|卡片ID：${cardId}|\"></p>\n"
+                + "<p th:text=\"|完成时间：${preparedAt}|\"></p>\n"
                 + "<p>此邮件由系统自动发送，请勿直接回复。</p>"
                 + "</div>"
         );
