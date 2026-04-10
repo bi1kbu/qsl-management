@@ -6,14 +6,14 @@ spec:
   enabled: true
   requires: ">=2.23.0"
   author:
-    name: QSL Management Team
-    website: https://github.com/halo-dev
+    name: bi1kbu
+    website: https://bi1kbu.com
   logo: logo.png
-  homepage: https://github.com/halo-dev/plugin-starter
-  repo: https://github.com/halo-dev/plugin-starter
-  issues: https://github.com/halo-dev/plugin-starter/issues
+  homepage: https://github.com/bi1kbu/qsl-management
+  repo: https://github.com/bi1kbu/qsl-management
+  issues: https://github.com/bi1kbu/qsl-management/issues
   displayName: "QSL 卡片管理系统"
   description: "业余无线电 QSL 卡片收发记录、查询与申请管理插件"
   license:
     - name: "GPL-3.0"
-      url: "https://github.com/halo-dev/plugin-starter/blob/main/LICENSE"
+      url: "https://github.com/bi1kbu/qsl-management/blob/main/LICENSE"
