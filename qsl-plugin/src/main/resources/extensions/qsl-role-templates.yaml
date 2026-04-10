@@ -52,14 +52,14 @@ rules:
 apiVersion: v1alpha1
 kind: Role
 metadata:
-  name: qsl-management-role-config-dict
+  name: qsl-management-role-config-device-library
   labels:
     halo.run/role-template: "true"
   annotations:
-    rbac.authorization.halo.run/display-name: "QSL-配置-字典"
-    rbac.authorization.halo.run/description: "允许维护模式/设备/天线/功率字典。"
+    rbac.authorization.halo.run/display-name: "QSL-配置-设备库"
+    rbac.authorization.halo.run/description: "允许维护设备库（模式/设备/天线/功率）。"
     rbac.authorization.halo.run/ui-permissions: |
-      ["plugin:qsl-management:config:dict"]
+      ["plugin:qsl-management:config:device-library"]
 rules:
   - nonResourceURLs:
       - "/apis/qsl.admin/v1/equipments"

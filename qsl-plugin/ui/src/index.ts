@@ -32,7 +32,7 @@ const permissions = {
   dashboardView: 'plugin:qsl-management:dashboard:view',
   configStation: 'plugin:qsl-management:config:station',
   configBureau: 'plugin:qsl-management:config:bureau',
-  configDict: 'plugin:qsl-management:config:dict',
+  configDeviceLibrary: 'plugin:qsl-management:config:device-library',
   businessQso: 'plugin:qsl-management:business:qso',
   businessCard: 'plugin:qsl-management:business:card',
   businessSendConfirm: 'plugin:qsl-management:business:send-confirm',
@@ -116,7 +116,7 @@ export default definePlugin({
                 meta: {
                   title: '设备库',
                   searchable: true,
-                  permissions: [permissions.configDict],
+                  permissions: [permissions.configDeviceLibrary],
                   menu: { ...menuMeta, name: '设备库', priority: 14 },
                 },
               },
