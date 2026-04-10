@@ -23,6 +23,9 @@ const powers = ref<Array<Record<string, unknown>>>([])
 const modes = ref<Array<Record<string, unknown>>>([])
 const frequencyOptions = ref<string[]>([])
 const modeOptions = ref<string[]>(['FM', 'CW', 'SSB'])
+const peerEquipmentOptions = ref<string[]>([])
+const peerAntennaOptions = ref<string[]>([])
+const peerPowerOptions = ref<string[]>([])
 const realtimeUtc = ref(false)
 const rstManuallyEdited = ref(false)
 const rstReceivedManuallyEdited = ref(false)
@@ -168,12 +171,13 @@ async function ensureNamedDictionaryId(
 async function load() {
   loading.value = true
   try {
-    const [qso, eq, ant, pw, md] = await Promise.all([
+    const [qso, eq, ant, pw, md, config] = await Promise.all([
       adminApi.listQso(),
       adminApi.listEquipments(),
       adminApi.listAntennas(),
       adminApi.listPowers(),
       adminApi.listModes(),
+      adminApi.getSystemConfig(),
     ])
     rows.value = qso
     equipments.value = eq
@@ -191,6 +195,24 @@ async function load() {
         .concat(md.map((row) => String(row.name || '').trim()))
         .concat(qso.map((row) => String(row.mode || '').trim()))
         .concat(form.value.mode),
+    )
+    peerEquipmentOptions.value = sortUnique(
+      ((Array.isArray(config.peerEquipmentLibrary) ? config.peerEquipmentLibrary : []) as Array<unknown>)
+        .map((item) => String(item || '').trim())
+        .concat(qso.map((row) => String(row.peerEquipmentName || '').trim()))
+        .concat(form.value.peerEquipmentName),
+    )
+    peerAntennaOptions.value = sortUnique(
+      ((Array.isArray(config.peerAntennaLibrary) ? config.peerAntennaLibrary : []) as Array<unknown>)
+        .map((item) => String(item || '').trim())
+        .concat(qso.map((row) => String(row.peerAntennaName || '').trim()))
+        .concat(form.value.peerAntennaName),
+    )
+    peerPowerOptions.value = sortUnique(
+      ((Array.isArray(config.peerPowerLibrary) ? config.peerPowerLibrary : []) as Array<unknown>)
+        .map((item) => String(item || '').trim())
+        .concat(qso.map((row) => String(row.peerPowerName || '').trim()))
+        .concat(form.value.peerPowerName),
     )
     if (page.value > totalPages.value) page.value = 1
     selectedIds.value = selectedIds.value.filter((id) =>
@@ -233,6 +255,9 @@ async function submit() {
 
   frequencyOptions.value = sortUnique(frequencyOptions.value.concat(form.value.frequency))
   modeOptions.value = sortUnique(modeOptions.value.concat(form.value.mode))
+  peerEquipmentOptions.value = sortUnique(peerEquipmentOptions.value.concat(form.value.peerEquipmentName))
+  peerAntennaOptions.value = sortUnique(peerAntennaOptions.value.concat(form.value.peerAntennaName))
+  peerPowerOptions.value = sortUnique(peerPowerOptions.value.concat(form.value.peerPowerName))
 
   if (editingId.value !== null) {
     await adminApi.updateQso(editingId.value, payload)
@@ -454,21 +479,30 @@ watch(
         <input
           v-model="form.peerEquipmentName"
           class="qsl-input"
-          list="qsl-equipment-options"
+          list="qsl-peer-equipment-options"
           placeholder="对方设备"
         />
+        <datalist id="qsl-peer-equipment-options">
+          <option v-for="item in peerEquipmentOptions" :key="item" :value="item" />
+        </datalist>
         <input
           v-model="form.peerAntennaName"
           class="qsl-input"
-          list="qsl-antenna-options"
+          list="qsl-peer-antenna-options"
           placeholder="对方天线"
         />
+        <datalist id="qsl-peer-antenna-options">
+          <option v-for="item in peerAntennaOptions" :key="item" :value="item" />
+        </datalist>
         <input
           v-model="form.peerPowerName"
           class="qsl-input"
-          list="qsl-power-options"
+          list="qsl-peer-power-options"
           placeholder="对方功率"
         />
+        <datalist id="qsl-peer-power-options">
+          <option v-for="item in peerPowerOptions" :key="item" :value="item" />
+        </datalist>
         <input v-model="form.peerQth" class="qsl-input" placeholder="QTH（电台地址）" />
       </div>
     </VCard>

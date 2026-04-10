@@ -6,7 +6,7 @@ import RouteLayoutView from './views/RouteLayoutView.vue'
 import DashboardView from './views/DashboardView.vue'
 import StationView from './views/StationView.vue'
 import BureauView from './views/BureauView.vue'
-import DictView from './views/DictView.vue'
+import DeviceLibraryView from './views/DeviceLibraryView.vue'
 import QsoView from './views/QsoView.vue'
 import CardView from './views/CardView.vue'
 import SendConfirmView from './views/SendConfirmView.vue'
@@ -106,13 +106,18 @@ export default definePlugin({
               },
               {
                 path: 'dict',
-                name: 'QslDict',
-                component: DictView,
+                redirect: '/qsl/config/station',
+                meta: { title: '本台设备(兼容路由)', searchable: false },
+              },
+              {
+                path: 'device-library',
+                name: 'QslDeviceLibrary',
+                component: DeviceLibraryView,
                 meta: {
-                  title: '字典配置',
+                  title: '设备库',
                   searchable: true,
                   permissions: [permissions.configDict],
-                  menu: { ...menuMeta, name: '字典配置', priority: 13 },
+                  menu: { ...menuMeta, name: '设备库', priority: 14 },
                 },
               },
             ],

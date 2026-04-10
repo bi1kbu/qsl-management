@@ -176,6 +176,7 @@ public class QslDataService {
         }
         // Re-apply normalized payload after rule-based mutations (e.g. QSO datetime override).
         item.putAll(normalizedPayload);
+        syncPeerLibraryFromLocalDictionary(type, item);
 
         getStore(type).put(id, item);
         writeAudit(type, String.valueOf(id), "create", operator, "success", null, item);
@@ -2441,5 +2442,40 @@ public class QslDataService {
         System.arraycopy(bom, 0, result, 0, bom.length);
         System.arraycopy(bytes, 0, result, bom.length, bytes.length);
         return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void syncPeerLibraryFromLocalDictionary(String type, Map<String, Object> item) {
+        if (item == null) {
+            return;
+        }
+        var name = Objects.toString(item.getOrDefault("name", ""), "").trim();
+        if (name.isBlank()) {
+            return;
+        }
+        String systemConfigKey;
+        switch (Objects.toString(type, "").trim().toLowerCase()) {
+            case "equipment" -> systemConfigKey = "peerEquipmentLibrary";
+            case "antenna" -> systemConfigKey = "peerAntennaLibrary";
+            case "power" -> systemConfigKey = "peerPowerLibrary";
+            default -> {
+                return;
+            }
+        }
+        var raw = systemConfig.get(systemConfigKey);
+        List<String> values;
+        if (raw instanceof List<?> list) {
+            values = list.stream()
+                .map(v -> Objects.toString(v, "").trim())
+                .filter(v -> !v.isBlank())
+                .collect(Collectors.toCollection(ArrayList::new));
+        } else {
+            values = new ArrayList<>();
+        }
+        var exists = values.stream().anyMatch(v -> v.equalsIgnoreCase(name));
+        if (!exists) {
+            values.add(name);
+            systemConfig.put(systemConfigKey, values);
+        }
     }
 }

@@ -53,30 +53,59 @@ onMounted(load)
 </script>
 
 <template>
-  <QslPageLayout title="字典配置">
-    <div class="stack">
-      <VCard title="设备">
-        <div class="inline"><input v-model="equipmentName" class="qsl-input" placeholder="设备名" /><VButton size="sm" type="secondary" @click="addEquipment">新增</VButton></div>
+  <QslPageLayout title="本台设备">
+    <VCard title="本台设备">
+      <section class="module-item">
+        <h3 class="module-title">设备</h3>
+        <div class="inline">
+          <input v-model="equipmentName" class="qsl-input" placeholder="设备名" />
+          <VButton size="sm" type="secondary" @click="addEquipment">新增</VButton>
+        </div>
         <ul><li v-for="row in equipments" :key="String(row.id)">{{ row.name }}</li></ul>
-      </VCard>
-      <VCard title="天线">
-        <div class="inline"><input v-model="antennaName" class="qsl-input" placeholder="天线名" /><VButton size="sm" type="secondary" @click="addAntenna">新增</VButton></div>
+      </section>
+
+      <section class="module-item">
+        <h3 class="module-title">天线</h3>
+        <div class="inline">
+          <input v-model="antennaName" class="qsl-input" placeholder="天线名" />
+          <VButton size="sm" type="secondary" @click="addAntenna">新增</VButton>
+        </div>
         <ul><li v-for="row in antennas" :key="String(row.id)">{{ row.name }}</li></ul>
-      </VCard>
-      <VCard title="功率">
-        <div class="inline"><input v-model="powerName" class="qsl-input" placeholder="功率描述" /><VButton size="sm" type="secondary" @click="addPower">新增</VButton></div>
+      </section>
+
+      <section class="module-item">
+        <h3 class="module-title">功率</h3>
+        <div class="inline">
+          <input v-model="powerName" class="qsl-input" placeholder="功率描述" />
+          <VButton size="sm" type="secondary" @click="addPower">新增</VButton>
+        </div>
         <ul><li v-for="row in powers" :key="String(row.id)">{{ row.name }}</li></ul>
-      </VCard>
-      <VCard title="模式">
-        <div class="inline"><input v-model="modeName" class="qsl-input" placeholder="模式名" /><VButton size="sm" type="secondary" @click="addMode">新增</VButton></div>
+      </section>
+
+      <section class="module-item">
+        <h3 class="module-title">模式</h3>
+        <div class="inline">
+          <input v-model="modeName" class="qsl-input" placeholder="模式名" />
+          <VButton size="sm" type="secondary" @click="addMode">新增</VButton>
+        </div>
         <ul><li v-for="row in modes" :key="String(row.id)">{{ row.name }}</li></ul>
-      </VCard>
-    </div>
+      </section>
+    </VCard>
   </QslPageLayout>
 </template>
 
 <style scoped>
-.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.module-item + .module-item {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eaecf0;
+}
+.module-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #344054;
+  font-weight: 600;
+}
 .inline { display: flex; gap: 8px; margin-bottom: 8px; }
 ul { margin: 0; padding-left: 20px; }
 </style>
