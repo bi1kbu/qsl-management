@@ -1,15 +1,46 @@
-target/
+# =========================
+# Common build/cache files
+# =========================
 .idea/
 .vscode/
 *.iml
 *.log
+.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Node / frontend cache
+node_modules/
+dist/
+coverage/
+
+# Gradle build cache/output
+.gradle/
+**/build/
+**/out/
+bin/
+
+# =========================
+# Local runtime data (sensitive)
+# =========================
+*.db
 data/*.mv.db
 data/*.trace.db
 data/*.json
 uploads/
-build/
-.gradle/
-gradle/
-*.db
-*.csv
+
+# Local import/export test artifacts
+addresses*.csv
 addresses*.json
+tmp-openapi.json
+migration_output/
+tmp-plugin-mail-template/
+api-examples/pending-cards-export/*_test.csv
+
+# =========================
+# Keep plugin source and examples
+# =========================
+!qsl-plugin/gradle/wrapper/gradle-wrapper.jar
+!qsl-plugin/gradle/wrapper/gradle-wrapper.properties
