@@ -14,6 +14,7 @@ const editingId = ref<number | null>(null)
 const filters = ref({
   callsign: '',
 })
+const syncSearch = ref(true)
 const page = ref(1)
 const pageSize = ref(20)
 const equipments = ref<Array<Record<string, unknown>>>([])
@@ -47,9 +48,14 @@ const form = ref({
 })
 
 const filteredRows = computed(() => {
-  const callsign = filters.value.callsign.trim().toUpperCase()
-  if (!callsign) return rows.value
-  return rows.value.filter((row) => String(row.peerCallsign || '').toUpperCase().includes(callsign))
+  const toolbarCallsign = filters.value.callsign.trim().toUpperCase()
+  const formCallsign = syncSearch.value ? form.value.peerCallsign.trim().toUpperCase() : ''
+  return rows.value.filter((row) => {
+    const value = String(row.peerCallsign || '').toUpperCase()
+    if (toolbarCallsign && !value.includes(toolbarCallsign)) return false
+    if (formCallsign && !value.includes(formCallsign)) return false
+    return true
+  })
 })
 
 const totalCount = computed(() => filteredRows.value.length)
@@ -374,7 +380,7 @@ function nextPage() {
 }
 
 watch(
-  () => filters.value.callsign,
+  () => [filters.value.callsign, form.value.peerCallsign, syncSearch.value],
   () => {
     page.value = 1
   },
@@ -503,6 +509,10 @@ watch(
             @change="toggleAll(($event.target as HTMLInputElement).checked)"
           />
           <input v-model="filters.callsign" class="qsl-input qsl-search" placeholder="按呼号搜索" />
+          <label class="sync-search-box">
+            <input v-model="syncSearch" type="checkbox" />
+            <span>同步搜索</span>
+          </label>
           <button class="icon-reset-btn" title="重置筛选" @click="resetFilters">
             <IconRefreshLine class="icon-reset-btn__icon" />
           </button>
@@ -618,6 +628,13 @@ watch(
   font-size: 14px;
 }
 .table-wrap { overflow: auto; }
+.sync-search-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #344054;
+  font-size: 13px;
+}
 .link-btn {
   border: none;
   background: transparent;

@@ -4,10 +4,23 @@ import { IconRefreshLine, VButton, VCard, VEmpty, VLoading } from '@halo-dev/com
 import { adminApi } from '../api'
 import QslPageLayout from '../components/QslPageLayout.vue'
 
+const SEND_CONFIRM_PERMISSION = 'plugin:qsl-management:business:send-confirm'
+
 const loading = ref(false)
 const rows = ref<Array<Record<string, unknown>>>([])
 const selected = ref<number[]>([])
 const batchNo = ref('')
+const canEdit = ref(false)
+const editingId = ref<number | null>(null)
+const editError = ref('')
+const editForm = ref({
+  peerCallsign: '',
+  productionStatus: 'PENDING_PRINT',
+  envelopePrinted: false,
+  sentStatus: 'NOT_SENT',
+  sentAt: '',
+  sentBatchNo: '',
+})
 const page = ref(1)
 const pageSize = ref(20)
 const filters = ref({
@@ -102,7 +115,76 @@ async function confirmSend() {
   await load()
 }
 
+function startEdit(row: Record<string, unknown>) {
+  if (!canEdit.value) return
+  editingId.value = Number(row.id)
+  editError.value = ''
+  editForm.value = {
+    peerCallsign: String(row.peerCallsign || ''),
+    productionStatus: String(row.productionStatus || 'PENDING_PRINT'),
+    envelopePrinted: Boolean(row.envelopePrinted),
+    sentStatus: String(row.sentStatus || 'NOT_SENT'),
+    sentAt: String(row.sentAt || ''),
+    sentBatchNo: String(row.sentBatchNo || ''),
+  }
+}
+
+function cancelEdit() {
+  editingId.value = null
+  editError.value = ''
+  editForm.value = {
+    peerCallsign: '',
+    productionStatus: 'PENDING_PRINT',
+    envelopePrinted: false,
+    sentStatus: 'NOT_SENT',
+    sentAt: '',
+    sentBatchNo: '',
+  }
+}
+
+async function saveEdit() {
+  if (!canEdit.value || editingId.value === null) return
+  editError.value = ''
+  try {
+    const payload: Record<string, unknown> = {
+      peerCallsign: editForm.value.peerCallsign.trim(),
+      productionStatus: editForm.value.productionStatus,
+      envelopePrinted: editForm.value.envelopePrinted,
+      sentStatus: editForm.value.sentStatus,
+      sentAt: editForm.value.sentAt.trim(),
+      sentBatchNo: editForm.value.sentBatchNo.trim(),
+    }
+    if (!payload.sentAt) delete payload.sentAt
+    if (!payload.sentBatchNo) delete payload.sentBatchNo
+    await adminApi.updateCard(editingId.value, payload)
+    await load()
+    cancelEdit()
+  } catch (e) {
+    editError.value = String(e)
+  }
+}
+
 onMounted(load)
+onMounted(() => {
+  adminApi
+    .getCurrentUserAccess()
+    .then((access) => {
+      const roleNames = access.roleNames.map((name) => String(name || '').toLowerCase())
+      const isOperatorRole = roleNames.some((name) => {
+        return (
+          name.includes('operator') ||
+          name.includes('admin') ||
+          name.includes('操作员') ||
+          name.includes('管理员')
+        )
+      })
+      const hasSendConfirmPermission = access.uiPermissions.includes(SEND_CONFIRM_PERMISSION)
+      canEdit.value = access.isAdmin || isOperatorRole || hasSendConfirmPermission
+    })
+    .catch(() => {
+      canEdit.value = false
+    })
+})
 
 watch(
   () => [filters.value.callsign, filters.value.cardType, filters.value.sentStatus],
@@ -145,6 +227,30 @@ function envelopeStatusText(value: unknown) {
       <VButton type="secondary" @click="confirmSend">确认发信</VButton>
     </template>
     <VCard>
+      <div v-if="editingId !== null" class="edit-box">
+        <div class="edit-grid">
+          <input v-model="editForm.peerCallsign" class="qsl-input" placeholder="对方呼号" />
+          <select v-model="editForm.productionStatus" class="qsl-input">
+            <option value="PENDING_PRINT">待打印</option>
+            <option value="PRINTED">已打印</option>
+            <option value="DRAFT">草稿</option>
+          </select>
+          <select v-model="editForm.sentStatus" class="qsl-input">
+            <option value="NOT_SENT">待发卡</option>
+            <option value="SENT">本台已发卡</option>
+          </select>
+          <label class="edit-check">
+            <input v-model="editForm.envelopePrinted" type="checkbox" />
+            <span>封面已打印</span>
+          </label>
+          <input v-model="editForm.sentAt" class="qsl-input" placeholder="发信时间 YYYY-MM-DD HH:mm:ss" />
+          <input v-model="editForm.sentBatchNo" class="qsl-input" placeholder="寄出批次号" />
+          <VButton type="secondary" @click="saveEdit">保存修改</VButton>
+          <VButton @click="cancelEdit">取消编辑</VButton>
+        </div>
+        <p v-if="editError" class="error-text">{{ editError }}</p>
+      </div>
+
       <div class="qsl-list-header">
         <div class="qsl-list-toolbar">
           <input
@@ -186,11 +292,12 @@ function envelopeStatusText(value: unknown) {
         <VEmpty v-else-if="filteredRows.length === 0" title="暂无记录" />
         <div v-else class="table-wrap">
           <table class="qsl-table">
-            <thead><tr><th></th><th>ID</th><th>呼号</th><th>类型</th><th>卡片打印</th><th>封面打印</th><th>寄出状态</th><th>发信时间</th></tr></thead>
+            <thead><tr><th></th><th>ID</th><th>呼号</th><th>类型</th><th>卡片打印</th><th>封面打印</th><th>寄出状态</th><th>发信时间</th><th v-if="canEdit">操作</th></tr></thead>
             <tbody>
               <tr v-for="row in pagedRows" :key="String(row.id)">
                 <td><input type="checkbox" :checked="selected.includes(Number(row.id))" @change="toggle(Number(row.id))" /></td>
                 <td>{{ row.id }}</td><td>{{ row.peerCallsign }}</td><td>{{ cardTypeText(row.cardType) }}</td><td>{{ productionStatusText(row.productionStatus) }}</td><td>{{ envelopeStatusText(row.envelopePrinted) }}</td><td>{{ sentStatusText(row.sentStatus) }}</td><td>{{ row.sentAt }}</td>
+                <td v-if="canEdit"><button class="link-btn" @click="startEdit(row)">编辑</button></td>
               </tr>
             </tbody>
           </table>
@@ -219,4 +326,35 @@ function envelopeStatusText(value: unknown) {
 <style scoped>
 .toolbar-input { width: 320px; }
 .table-wrap { overflow: auto; }
+.edit-box {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 12px 16px;
+  background: #f9fafb;
+}
+.edit-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+.edit-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #344054;
+  font-size: 13px;
+}
+.error-text {
+  margin-top: 8px;
+  color: #b42318;
+  font-size: 13px;
+}
+.link-btn {
+  border: none;
+  background: transparent;
+  color: #155eef;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+}
 </style>
