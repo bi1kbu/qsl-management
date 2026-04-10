@@ -23,7 +23,7 @@ dependencies {
     // TODO Change to a released version once available
     implementation platform('run.halo.tools.platform:plugin:2.23.0-SNAPSHOT')
     compileOnly 'run.halo.app:api'
-
+    implementation 'org.springframework:spring-aop'
     testImplementation 'run.halo.app:api'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

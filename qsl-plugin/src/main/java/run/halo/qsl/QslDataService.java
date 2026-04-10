@@ -23,16 +23,22 @@ import java.util.stream.Collectors;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import run.halo.app.extension.Metadata;
+import run.halo.app.extension.ReactiveExtensionClient;
 
 @Service
 public class QslDataService {
 
+    private static final Logger log = LoggerFactory.getLogger(QslDataService.class);
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
     private static final List<String> ADDRESS_RELATED_KEYS =
         List.of("name", "postcode", "address", "phone", "email");
+    private static final String PERSISTENT_STATE_NAME = "default";
 
     private final Map<String, AtomicLong> entityIdGenerators = new ConcurrentHashMap<>();
     private final AtomicLong auditIdGenerator = new AtomicLong(1000);
@@ -40,6 +46,9 @@ public class QslDataService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final EmailNotifyService emailNotifyService;
+    private final ReactiveExtensionClient extensionClient;
+    private boolean sessionDirty;
+    private volatile boolean persistentStateLoaded;
 
     private final Map<Long, Map<String, Object>> bureaus = new ConcurrentHashMap<>();
     private final Map<Long, Map<String, Object>> equipments = new ConcurrentHashMap<>();
@@ -57,8 +66,16 @@ public class QslDataService {
     private final Map<String, Object> stationProfile = new ConcurrentHashMap<>();
     private final Map<String, Object> systemConfig = new ConcurrentHashMap<>();
 
-    public QslDataService() {
-        this.emailNotifyService = null;
+    @Autowired
+    public QslDataService(EmailNotifyService emailNotifyService, ReactiveExtensionClient extensionClient) {
+        this.emailNotifyService = emailNotifyService;
+        this.extensionClient = extensionClient;
+        initDefaults();
+    }
+
+    private void initDefaults() {
+        stationProfile.clear();
+        systemConfig.clear();
         systemConfig.put("queryLimitPerMin", 5);
         systemConfig.put("reissueEnabled", true);
         systemConfig.put("reissueIntervalDays", 7);
@@ -66,31 +83,37 @@ public class QslDataService {
         stationProfile.put("stationCallsign", "");
     }
 
-    @Autowired
-    public QslDataService(EmailNotifyService emailNotifyService) {
-        this.emailNotifyService = emailNotifyService;
-        systemConfig.put("queryLimitPerMin", 5);
-        systemConfig.put("reissueEnabled", true);
-        systemConfig.put("reissueIntervalDays", 7);
-        systemConfig.put("requestNeedReview", true);
-        stationProfile.put("stationCallsign", "");
+    public void beginPersistenceSession() {
+        ensurePersistentStateLoaded();
+        sessionDirty = false;
+    }
+
+    public void endPersistenceSession() {
+        if (sessionDirty) {
+            persistToPersistentState();
+            sessionDirty = false;
+        }
     }
 
     public Map<String, Object> getStationProfile() {
+        ensurePersistentStateLoaded();
         return new LinkedHashMap<>(stationProfile);
     }
 
     public Map<String, Object> updateStationProfile(Map<String, Object> payload, String operator) {
+        ensurePersistentStateLoaded();
         stationProfile.putAll(payload);
         writeAudit("station_profile", "station", "update", operator, "success", null, stationProfile);
         return getStationProfile();
     }
 
     public Map<String, Object> getSystemConfig() {
+        ensurePersistentStateLoaded();
         return new LinkedHashMap<>(systemConfig);
     }
 
     public Map<String, Object> updateSystemConfig(Map<String, Object> payload, String operator) {
+        ensurePersistentStateLoaded();
         systemConfig.putAll(payload);
         writeAudit("system_config", "config", "update", operator, "success", null, systemConfig);
         return getSystemConfig();
@@ -264,6 +287,7 @@ public class QslDataService {
 
     public Map<String, Object> sendConfirm(Map<String, Object> payload, String operator,
         Map<String, String> authHeaders) {
+        ensurePersistentStateLoaded();
         var ids = castIds(payload.get("cardIds"));
         var updated = new ArrayList<Map<String, Object>>();
         var batchNo = Objects.toString(payload.getOrDefault("batchNo", "BATCH-" + System.currentTimeMillis()));
@@ -318,6 +342,7 @@ public class QslDataService {
 
     public Map<String, Object> receiveConfirm(Map<String, Object> payload, String operator,
         Map<String, String> authHeaders) {
+        ensurePersistentStateLoaded();
         var callsign = Objects.toString(payload.getOrDefault("callsign", "")).trim();
         if (!callsign.isBlank()) {
             return receiveConfirmByCallsign(payload, operator, authHeaders);
@@ -430,6 +455,7 @@ public class QslDataService {
     }
 
     public Map<String, Object> confirmByPeer(Map<String, Object> payload, String operator) {
+        ensurePersistentStateLoaded();
         var ids = castIds(payload.get("cardIds"));
         var updated = new ArrayList<Map<String, Object>>();
         var now = nowString();
@@ -458,6 +484,7 @@ public class QslDataService {
     }
 
     public Map<String, Object> reissuePrepare(Map<String, Object> payload, String operator) {
+        ensurePersistentStateLoaded();
         var cardId = Long.parseLong(String.valueOf(payload.get("cardId")));
         var card = cardRecords.get(cardId);
         if (card == null || isDeleted(card)) {
@@ -478,6 +505,7 @@ public class QslDataService {
     }
 
     public byte[] exportCardsCsv(List<Long> cardIds) {
+        ensurePersistentStateLoaded();
         var rows = cardIds == null || cardIds.isEmpty()
             ? list("card") : cardIds.stream().map(cardRecords::get).filter(Objects::nonNull).toList();
         var header = "呼号,日期,时间,时区UTC,时区UTC+8,卡片类型QSO,卡片类型SWL,卡片类型EYEBALL,频率,本台设备,模式FM,模式CW,模式SSB,模式自定义,模式,本台功率,本台给对方的信号报告,本台天线,发出卡片,回复卡片,备注\n";
@@ -551,6 +579,7 @@ public class QslDataService {
     }
 
     public byte[] exportEnvelopesCsv(List<Long> cardIds) {
+        ensurePersistentStateLoaded();
         var rows = cardIds == null || cardIds.isEmpty()
             ? list("card") : cardIds.stream().map(cardRecords::get).filter(Objects::nonNull).toList();
         var header = "呼号,姓名,电话,邮编,收件地址\n";
@@ -606,11 +635,13 @@ public class QslDataService {
     }
 
     public Map<String, Object> backupExport(String operator) {
+        ensurePersistentStateLoaded();
         var task = create("task", Map.of("taskType", "EXPORT", "status", "COMPLETED", "fileName", "backup.json"), operator);
         return Map.of("task", task, "summary", "backup export simulated");
     }
 
     public byte[] exportFullBackupJson(String operator) {
+        ensurePersistentStateLoaded();
         var timestamp = System.currentTimeMillis();
         var fileName = "qsl-full-backup-" + timestamp + ".json";
         var task = create("task",
@@ -648,11 +679,13 @@ public class QslDataService {
     }
 
     public Map<String, Object> backupImport(String operator) {
+        ensurePersistentStateLoaded();
         var task = create("task", Map.of("taskType", "IMPORT", "status", "COMPLETED", "fileName", "backup.json"), operator);
         return Map.of("task", task, "summary", "backup import simulated");
     }
 
     public Map<String, Object> importBackupFile(String fileName, byte[] bytes, String dataset, String operator) throws Exception {
+        ensurePersistentStateLoaded();
         var name = Objects.toString(fileName, "").trim();
         if (name.isBlank()) {
             throw new IllegalArgumentException("file is required");
@@ -674,6 +707,7 @@ public class QslDataService {
     }
 
     public Map<String, Object> approveRequest(Long id, String operator, Map<String, String> authHeaders) {
+        ensurePersistentStateLoaded();
         var request = exchangeRequests.get(id);
         if (request == null || isDeleted(request)) {
             return null;
@@ -748,6 +782,7 @@ public class QslDataService {
     }
 
     public Map<String, Object> rejectRequest(Long id, String reason, String operator, Map<String, String> authHeaders) {
+        ensurePersistentStateLoaded();
         var updated = update("request", id,
             Map.of("status", "REJECTED", "reviewReason", reason, "reviewedBy", operator,
                 "reviewedAt", nowString()),
@@ -773,6 +808,7 @@ public class QslDataService {
     }
 
     public Map<String, Object> approveBinding(Long id, String operator, Map<String, String> authHeaders) {
+        ensurePersistentStateLoaded();
         var binding = get("binding", id);
         if (binding == null) {
             return null;
@@ -792,6 +828,7 @@ public class QslDataService {
     }
 
     public Map<String, Object> unbindBinding(Long id, String operator, Map<String, String> authHeaders) {
+        ensurePersistentStateLoaded();
         var existing = get("binding", id);
         if (existing == null) {
             return null;
@@ -945,6 +982,7 @@ public class QslDataService {
     }
 
     public Map<String, Object> rejectBinding(Long id, String reason, String operator) {
+        ensurePersistentStateLoaded();
         return update("binding", id,
             Map.of("status", "REJECTED", "reviewReason", reason, "reviewedBy", operator,
                 "reviewedAt", nowString()),
@@ -952,6 +990,7 @@ public class QslDataService {
     }
 
     public List<Map<String, Object>> listBindingsByUser(String userId) {
+        ensurePersistentStateLoaded();
         var key = Objects.toString(userId, "").trim();
         if (key.isBlank()) {
             return List.of();
@@ -963,6 +1002,7 @@ public class QslDataService {
     }
 
     public Map<String, Object> submitBinding(String userId, Map<String, Object> payload, String operator) {
+        ensurePersistentStateLoaded();
         var userKey = Objects.toString(userId, "").trim();
         if (userKey.isBlank()) {
             throw new IllegalArgumentException("userId is required");
@@ -1013,6 +1053,7 @@ public class QslDataService {
     }
 
     public List<Map<String, Object>> listAddressesByBoundUser(String userId, String callsign) {
+        ensurePersistentStateLoaded();
         var approved = approvedCallsignsOfUser(userId);
         if (approved.isEmpty()) {
             return List.of();
@@ -1062,6 +1103,7 @@ public class QslDataService {
     }
 
     public List<Map<String, Object>> queryMyQsoByBoundUser(String userId, String callsign) {
+        ensurePersistentStateLoaded();
         var approved = approvedCallsignsOfUser(userId);
         if (approved.isEmpty()) {
             return List.of();
@@ -1076,6 +1118,7 @@ public class QslDataService {
     }
 
     public List<Map<String, Object>> queryMyCardsByBoundUser(String userId, String callsign) {
+        ensurePersistentStateLoaded();
         var approved = approvedCallsignsOfUser(userId);
         if (approved.isEmpty()) {
             return List.of();
@@ -1296,6 +1339,7 @@ public class QslDataService {
     }
 
     public List<Map<String, Object>> queryCardsByCallsign(String callsign) {
+        ensurePersistentStateLoaded();
         var keyword = Objects.toString(callsign, "").trim().toLowerCase();
         return list("card").stream()
             .filter(c -> keyword.isBlank() || containsCallsign(c, keyword))
@@ -1360,6 +1404,7 @@ public class QslDataService {
     }
 
     public Map<String, Object> importBackupData(Map<String, Object> payload, String operator) {
+        ensurePersistentStateLoaded();
         return executeWithoutMailNotification(() -> {
             // Import policy: new value overrides old value; null does not override non-null.
             var qsoRows = filterQsoRowsByCardType(
@@ -1590,6 +1635,7 @@ public class QslDataService {
     }
 
     private Map<Long, Map<String, Object>> getStore(String type) {
+        ensurePersistentStateLoaded();
         return switch (type) {
             case "bureau" -> bureaus;
             case "equipment" -> equipments;
@@ -1663,6 +1709,24 @@ public class QslDataService {
         return list.stream()
             .filter(i -> i instanceof Map<?, ?>)
             .map(i -> (Map<String, Object>) i)
+            .collect(Collectors.toList());
+    }
+
+    private List<Map<String, Object>> castJsonList(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return List.of();
+        }
+        return objectMapper.convertValue(node, LIST_MAP_TYPE);
+    }
+
+    private List<Map<String, Object>> castJsonObjectValues(JsonNode node) {
+        if (node == null || node.isNull() || !node.isObject()) {
+            return List.of();
+        }
+        var map = objectMapper.convertValue(node, MAP_TYPE);
+        return map.values().stream()
+            .filter(v -> v instanceof Map<?, ?>)
+            .map(v -> objectMapper.convertValue(v, MAP_TYPE))
             .collect(Collectors.toList());
     }
 
@@ -2061,6 +2125,11 @@ public class QslDataService {
         log.put("operatorIp", "127.0.0.1");
         log.put("createdAt", nowString());
         auditLogs.put(id, log);
+        sessionDirty = true;
+        if (extensionClient != null && persistentStateLoaded) {
+            persistToPersistentState();
+            sessionDirty = false;
+        }
     }
 
     private long nextEntityId(String type) {
@@ -2125,6 +2194,10 @@ public class QslDataService {
             return (Map<String, Object>) m;
         }
         return null;
+    }
+
+    private Map<String, Object> deepCopyMap(Map<String, Object> source) {
+        return objectMapper.convertValue(source, MAP_TYPE);
     }
 
     private Map<String, Object> parseImportPayload(String fileName, byte[] bytes, String dataset) throws Exception {
@@ -2389,6 +2462,18 @@ public class QslDataService {
             .collect(Collectors.toList());
     }
 
+    private Map<String, Object> snapshotStoreAsObject(Map<Long, Map<String, Object>> store) {
+        var data = new LinkedHashMap<String, Object>();
+        for (var row : snapshotStoreAllFields(store)) {
+            var id = asLong(row.get("id"));
+            if (id == null) {
+                continue;
+            }
+            data.put(String.valueOf(id), row);
+        }
+        return data;
+    }
+
     private Map<String, Object> getRelatedQso(Map<String, Object> card) {
         var qsoId = asLong(card.get("qsoRecordId"));
         if (qsoId == null) {
@@ -2435,6 +2520,144 @@ public class QslDataService {
         }
     }
 
+    private void clearRuntimeState() {
+        bureaus.clear();
+        equipments.clear();
+        antennas.clear();
+        powers.clear();
+        modes.clear();
+        qsoRecords.clear();
+        cardRecords.clear();
+        exchangeRequests.clear();
+        callsignBindings.clear();
+        addressBooks.clear();
+        importExportTasks.clear();
+        auditLogs.clear();
+        stationProfile.clear();
+        systemConfig.clear();
+        entityIdGenerators.clear();
+    }
+
+    private void ensurePersistentStateLoaded() {
+        if (extensionClient == null || persistentStateLoaded) {
+            return;
+        }
+        synchronized (this) {
+            if (persistentStateLoaded) {
+                return;
+            }
+            loadFromPersistentState();
+            persistentStateLoaded = true;
+        }
+    }
+
+    private void loadFromPersistentState() {
+        initDefaults();
+        try {
+            var state = extensionClient.fetch(QslPersistentState.class, PERSISTENT_STATE_NAME).block();
+            if (state == null || state.getSpec() == null) {
+                return;
+            }
+            applyPersistentPayload(state.getSpec());
+        } catch (Exception ex) {
+            log.warn("Failed to load qsl persistent state, fallback to defaults.", ex);
+            initDefaults();
+        }
+    }
+
+    private void persistToPersistentState() {
+        try {
+            var existing = extensionClient.fetch(QslPersistentState.class, PERSISTENT_STATE_NAME).block();
+            if (existing == null) {
+                var created = new QslPersistentState();
+                var metadata = new Metadata();
+                metadata.setName(PERSISTENT_STATE_NAME);
+                created.setMetadata(metadata);
+                created.setSpec(buildPersistentSpec());
+                extensionClient.create(created).block();
+                return;
+            }
+            existing.setSpec(buildPersistentSpec());
+            extensionClient.update(existing).block();
+        } catch (Exception ex) {
+            log.error("Failed to persist qsl state to Halo database.", ex);
+            throw new IllegalStateException("failed to persist qsl state", ex);
+        }
+    }
+
+    private QslPersistentState.Spec buildPersistentSpec() {
+        var spec = new QslPersistentState.Spec();
+        spec.setStationProfile(objectMapper.valueToTree(new LinkedHashMap<>(stationProfile)));
+        spec.setSystemConfig(objectMapper.valueToTree(new LinkedHashMap<>(systemConfig)));
+        spec.setBureauConfigs(objectMapper.valueToTree(snapshotStoreAsObject(bureaus)));
+        spec.setEquipments(objectMapper.valueToTree(snapshotStoreAsObject(equipments)));
+        spec.setAntennas(objectMapper.valueToTree(snapshotStoreAsObject(antennas)));
+        spec.setPowerPresets(objectMapper.valueToTree(snapshotStoreAsObject(powers)));
+        spec.setModes(objectMapper.valueToTree(snapshotStoreAsObject(modes)));
+        spec.setQsoRecords(objectMapper.valueToTree(snapshotStoreAsObject(qsoRecords)));
+        spec.setQslCardRecords(objectMapper.valueToTree(snapshotStoreAsObject(cardRecords)));
+        spec.setExchangeRequests(objectMapper.valueToTree(snapshotStoreAsObject(exchangeRequests)));
+        spec.setCallsignBindings(objectMapper.valueToTree(snapshotStoreAsObject(callsignBindings)));
+        spec.setAddressBooks(objectMapper.valueToTree(snapshotStoreAsObject(addressBooks)));
+        spec.setImportExportTasks(objectMapper.valueToTree(snapshotStoreAsObject(importExportTasks)));
+        spec.setAuditLogs(objectMapper.valueToTree(snapshotStoreAsObject(auditLogs)));
+        return spec;
+    }
+
+    private void applyPersistentPayload(QslPersistentState.Spec payload) {
+        clearRuntimeState();
+        initDefaults();
+
+        if (payload == null) {
+            return;
+        }
+
+        var station = payload.getStationProfile();
+        if (station != null && !station.isNull()) {
+            stationProfile.putAll(objectMapper.convertValue(station, MAP_TYPE));
+        }
+        var system = payload.getSystemConfig();
+        if (system != null && !system.isNull()) {
+            systemConfig.putAll(objectMapper.convertValue(system, MAP_TYPE));
+        }
+        putStoreRecords(bureaus, castJsonObjectValues(payload.getBureauConfigs()));
+        putStoreRecords(equipments, castJsonObjectValues(payload.getEquipments()));
+        putStoreRecords(antennas, castJsonObjectValues(payload.getAntennas()));
+        putStoreRecords(powers, castJsonObjectValues(payload.getPowerPresets()));
+        putStoreRecords(modes, castJsonObjectValues(payload.getModes()));
+        putStoreRecords(qsoRecords, castJsonObjectValues(payload.getQsoRecords()));
+        putStoreRecords(cardRecords, castJsonObjectValues(payload.getQslCardRecords()));
+        putStoreRecords(exchangeRequests, castJsonObjectValues(payload.getExchangeRequests()));
+        putStoreRecords(callsignBindings, castJsonObjectValues(payload.getCallsignBindings()));
+        putStoreRecords(addressBooks, castJsonObjectValues(payload.getAddressBooks()));
+        putStoreRecords(importExportTasks, castJsonObjectValues(payload.getImportExportTasks()));
+        putStoreRecords(auditLogs, castJsonObjectValues(payload.getAuditLogs()));
+        rebuildAuditIdGenerator();
+    }
+
+    private void putStoreRecords(Map<Long, Map<String, Object>> store, List<Map<String, Object>> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        for (var row : rows) {
+            var id = asLong(row.get("id"));
+            if (id == null) {
+                continue;
+            }
+            store.put(id, deepCopyMap(row));
+        }
+    }
+
+    private void rebuildAuditIdGenerator() {
+        var max = auditLogs.values().stream()
+            .map(m -> asLong(m.get("id")))
+            .filter(Objects::nonNull)
+            .mapToLong(Long::longValue)
+            .max()
+            .orElse(1000L);
+        auditIdGenerator.set(Math.max(1000L, max));
+    }
+
     private byte[] withBom(String content) {
         var bytes = content.getBytes(StandardCharsets.UTF_8);
         var bom = new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
@@ -2479,3 +2702,4 @@ public class QslDataService {
         }
     }
 }
+

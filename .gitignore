@@ -38,6 +38,7 @@ tmp-openapi.json
 migration_output/
 tmp-plugin-mail-template/
 api-examples/pending-cards-export/*_test.csv
+tmp_halo_api_src/
 
 # =========================
 # Keep plugin source and examples

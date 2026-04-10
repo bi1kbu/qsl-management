@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import run.halo.app.extension.SchemeManager;
 import run.halo.app.plugin.PluginContext;
 
 @ExtendWith(MockitoExtension.class)
@@ -18,6 +19,8 @@ class QslManagementPluginTest {
 
     @Mock
     PluginContext context;
+    @Mock
+    SchemeManager schemeManager;
 
     @InjectMocks
     QslManagementPlugin plugin;
@@ -30,7 +33,7 @@ class QslManagementPluginTest {
 
     @Test
     void reissueCountShouldIncreaseOnlyWhenSendConfirmed() {
-        var service = new QslDataService();
+        var service = new QslDataService(null, null);
         var card = service.create("card", Map.of("peerCallsign", "BH1ABC", "cardType", "EYEBALL"), "tester");
         var id = Long.parseLong(String.valueOf(card.get("id")));
 
@@ -46,7 +49,7 @@ class QslManagementPluginTest {
 
     @Test
     void csvExportShouldUseUtf8Bom() {
-        var service = new QslDataService();
+        var service = new QslDataService(null, null);
         service.create("card", Map.of("peerCallsign", "BH1ABC", "cardType", "EYEBALL"), "tester");
         var csv = service.exportCardsCsv(java.util.List.of());
         assertTrue(csv.length > 3);
@@ -57,7 +60,7 @@ class QslManagementPluginTest {
 
     @Test
     void auditFilterShouldSupportOperatorAndType() {
-        var service = new QslDataService();
+        var service = new QslDataService(null, null);
         service.create("qso", Map.of("peerCallsign", "BH1XYZ"), "alice");
         service.create("card", Map.of("peerCallsign", "BH1XYZ", "cardType", "EYEBALL"), "bob");
         var filtered = service.filterAudit(Map.of("operatorId", "alice", "objectType", "qso"));
@@ -68,7 +71,7 @@ class QslManagementPluginTest {
 
     @Test
     void addressBookShouldDedupeByCallsignAndAddress() {
-        var service = new QslDataService();
+        var service = new QslDataService(null, null);
         service.create("address", Map.of("callsign", "BH1ABC", "address", "Beijing"), "tester");
         assertThrows(IllegalArgumentException.class,
             () -> service.create("address", Map.of("callsign", "BH1ABC", "address", "Beijing"), "tester"));
@@ -76,7 +79,7 @@ class QslManagementPluginTest {
 
     @Test
     void approveNormalRequestShouldGenerateEyeballCard() {
-        var service = new QslDataService();
+        var service = new QslDataService(null, null);
         var req = service.create("request", Map.of("requestType", "NORMAL", "bindCallsign", "BH1XYZ"), "ham");
         var approved = service.approveRequest(Long.parseLong(String.valueOf(req.get("id"))), "admin");
         assertEquals("APPROVED", approved.get("status"));
@@ -85,7 +88,7 @@ class QslManagementPluginTest {
 
     @Test
     void approveReissueShouldOnlyPrepareAndNotCreateCard() {
-        var service = new QslDataService();
+        var service = new QslDataService(null, null);
         var card = service.create("card", Map.of("peerCallsign", "BH1ABC", "cardType", "EYEBALL"), "tester");
         var cardId = Long.parseLong(String.valueOf(card.get("id")));
         service.sendConfirm(Map.of("cardIds", java.util.List.of(cardId), "isReissue", false), "tester");
@@ -107,7 +110,7 @@ class QslManagementPluginTest {
 
     @Test
     void qsoCardShouldRequireUniqueQsoRecordBinding() {
-        var service = new QslDataService();
+        var service = new QslDataService(null, null);
         var qso = service.create("qso", Map.of(
             "peerCallsign", "BH1AAA", "qsoDate", "2026-03-31", "qsoTime", "10:00:00",
             "frequency", "14.070", "mode", "FT8"), "tester");
@@ -119,7 +122,7 @@ class QslManagementPluginTest {
 
     @Test
     void dashboardExportShouldContainBom() {
-        var service = new QslDataService();
+        var service = new QslDataService(null, null);
         service.create("card", Map.of("peerCallsign", "BH1DASH", "cardType", "EYEBALL"), "tester");
         var csv = service.exportDashboardCsv(Map.of());
         assertEquals((byte) 0xEF, csv[0]);
