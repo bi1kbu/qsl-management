@@ -1,75 +1,60 @@
-### Maven
-target/
-logs/
-!.mvn/wrapper/maven-wrapper.jar
-
-### Gradle
-.gradle
-/build/
-/out/
-!gradle/wrapper/gradle-wrapper.jar
-bin/
-
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
+# =========================
+# Common build/cache files
+# =========================
+.idea/
+.vscode/
 *.iml
-*.ipr
-log/
-
-### NetBeans ###
-nbproject/private/
-build/
-nbbuild/
-dist/
-nbdist/
-.nb-gradle/
-
-### Mac
+*.log
 .DS_Store
-*/.DS_Store
 
-### VS Code ###
-*.project
-*.factorypath
-
-### Compiled class file
+# Java / Gradle
+.gradle/
+**/build/
+**/out/
+bin/
+target/
 *.class
 
-### Log file
-*.log
+# Python cache
+__pycache__/
+*.pyc
 
-### BlueJ files
-*.ctxt
+# Node / frontend cache
+node_modules/
+dist/
+coverage/
+/ui/node_modules/
 
-### Mobile Tools for Java (J2ME)
-.mtj.tmp/
+# =========================
+# Local runtime data (sensitive)
+# =========================
+*.db
+data/*.mv.db
+data/*.trace.db
+data/*.json
+uploads/
 
-### Package Files
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
-
-### VSCode
-.vscode
-
-### Local file
+# Local file
 application-local.yml
 application-local.yaml
 application-local.properties
 
-/ui/node_modules/
+# Local import/export test artifacts
+addresses*.csv
+addresses*.json
+tmp-openapi.json
+migration_output/
+tmp-plugin-mail-template/
+tmp_halo_api_src/
+api-examples/pending-cards-export/*_test.csv
+AGENTS.md
+
+# Workspace cache
 /workplace/
 /src/main/resources/console/
+
+# =========================
+# Keep plugin source and examples
+# =========================
+!qsl-plugin/gradle/wrapper/gradle-wrapper.jar
+!qsl-plugin/gradle/wrapper/gradle-wrapper.properties
