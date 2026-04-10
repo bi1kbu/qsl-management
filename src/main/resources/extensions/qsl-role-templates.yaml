@@ -1,0 +1,266 @@
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-dashboard
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-总览"
+    rbac.authorization.halo.run/description: "允许访问 QSL 总览页面与总览数据接口。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:dashboard:view"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/dashboard/*"
+      - "/apis/qsl.admin/v1/reports/summary"
+    verbs: ["get"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-config-station
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-配置-本站"
+    rbac.authorization.halo.run/description: "允许访问本站配置与系统参数配置。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:config:station"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/station-profile"
+      - "/apis/qsl.admin/v1/system-config"
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-config-bureau
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-配置-卡片局"
+    rbac.authorization.halo.run/description: "允许维护卡片局配置。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:config:bureau"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/bureau-configs"
+      - "/apis/qsl.admin/v1/bureau-configs/*"
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-config-dict
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-配置-字典"
+    rbac.authorization.halo.run/description: "允许维护模式/设备/天线/功率字典。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:config:dict"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/equipments"
+      - "/apis/qsl.admin/v1/equipments/*"
+      - "/apis/qsl.admin/v1/antennas"
+      - "/apis/qsl.admin/v1/antennas/*"
+      - "/apis/qsl.admin/v1/power-presets"
+      - "/apis/qsl.admin/v1/power-presets/*"
+      - "/apis/qsl.admin/v1/modes"
+      - "/apis/qsl.admin/v1/modes/*"
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-business-qso
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-业务-通联记录"
+    rbac.authorization.halo.run/description: "允许维护通联记录。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:business:qso"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/qso-records"
+      - "/apis/qsl.admin/v1/qso-records/*"
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-business-card
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-业务-卡片记录"
+    rbac.authorization.halo.run/description: "允许维护卡片记录。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:business:card"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/qsl-card-records"
+      - "/apis/qsl.admin/v1/qsl-card-records/*"
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-business-send-confirm
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-业务-发信确认"
+    rbac.authorization.halo.run/description: "允许执行发信确认与补卡准备。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:business:send-confirm"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/qsl-card-records/send-confirm"
+      - "/apis/qsl.admin/v1/qsl-card-records/reissue-prepare"
+      - "/apis/qsl.admin/v1/exports/cards"
+      - "/apis/qsl.admin/v1/exports/envelopes"
+    verbs: ["post"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-business-receive-confirm
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-业务-收信确认"
+    rbac.authorization.halo.run/description: "允许执行收信确认。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:business:receive-confirm"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/qsl-card-records/receive-confirm"
+    verbs: ["post"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-callsign-manage
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-呼号管理"
+    rbac.authorization.halo.run/description: "允许访问呼号下的地址维护、通信/卡片记录查询。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:callsign:manage"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/my/callsign-bindings"
+      - "/apis/qsl.admin/v1/my/callsign-bindings/*"
+      - "/apis/qsl.admin/v1/my/callsign-records/search"
+      - "/apis/qsl.admin/v1/my/address-books"
+      - "/apis/qsl.admin/v1/my/address-books/*"
+      - "/apis/qsl.admin/v1/my/qso-records"
+      - "/apis/qsl.admin/v1/my/qsl-card-records"
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-audit-log
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-审计日志"
+    rbac.authorization.halo.run/description: "允许访问审计日志。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:audit:log"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/audit-logs"
+    verbs: ["get"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-review-exchange
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-审核-换卡申请"
+    rbac.authorization.halo.run/description: "允许审核换卡申请。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:review:exchange"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/exchange-requests"
+      - "/apis/qsl.admin/v1/exchange-requests/*"
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-review-binding
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-审核-呼号绑定"
+    rbac.authorization.halo.run/description: "允许审核/解绑呼号绑定。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:review:binding"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/callsign-bindings"
+      - "/apis/qsl.admin/v1/callsign-bindings/*"
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-data-import-export
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-数据-导入导出"
+    rbac.authorization.halo.run/description: "允许执行导入导出任务。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:data:import-export"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/backup/export"
+      - "/apis/qsl.admin/v1/backup/import"
+      - "/apis/qsl.admin/v1/backup/import-file"
+      - "/apis/qsl.admin/v1/import-export-tasks"
+      - "/apis/qsl.admin/v1/import-export-tasks/*"
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-data-address-manage
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-数据-地址管理"
+    rbac.authorization.halo.run/description: "允许维护全局地址簿。"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:data:address-manage"]
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.admin/v1/address-books"
+      - "/apis/qsl.admin/v1/address-books/*"
+    verbs: ["*"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-role-ham
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "QSL-HAM"
+    rbac.authorization.halo.run/description: "HAM 用户默认角色，包含呼号管理权限。"
+    rbac.authorization.halo.run/dependencies: |
+      ["qsl-management-role-callsign-manage"]
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:qsl-management:callsign:manage"]
+rules: []
