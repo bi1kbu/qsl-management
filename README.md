@@ -41,18 +41,15 @@ halo:
       - "/path/to/qsl-plugin"
 ```
 
-## 前台卡片路由（你关心的）
+## 前台卡片路由
 
 1. 换卡申请页面：`/plugins/qsl-management/widgets/exchange`
 2. 收信确认页面：`/plugins/qsl-management/widgets/receive-confirm`
+3. 查询：`/plugins/qsl-management/widgets/query`
+4. 补卡：`/plugins/qsl-management/widgets/reissue`
+5. 统计：`/plugins/qsl-management/widgets/stats`
 
-同类前台卡片还包括：
-
-1. 查询：`/plugins/qsl-management/widgets/query`
-2. 补卡：`/plugins/qsl-management/widgets/reissue`
-3. 统计：`/plugins/qsl-management/widgets/stats`
-
-## 接口前缀（当前实现）
+## 接口前缀
 
 1. 后台管理接口：`/apis/qsl.admin/v1`
 2. 前台公开接口：`/apis/qsl.public/v1`
@@ -63,10 +60,10 @@ halo:
 1. `/plugins/qsl-management/widgets/public-api/actions/exchange-request`
 2. `/plugins/qsl-management/widgets/public-api/actions/receive-confirm`
 
-## 当前实现状态（与代码一致）
+## 当前实现状态
 
 1. 已实现控制台菜单与 UC 菜单、权限节点、HAM 审核赋权。
 2. 已实现通联记录、卡片记录、发信确认、收信确认、换卡审核、呼号绑定审核。
 3. 已实现前台卡片（查询/换卡/补卡/收信确认/统计）与编辑器插入扩展。
 4. 已实现导入导出、备份导出、审计日志筛选、统计报表、邮件通知。
-5. 数据层当前仍为进程内内存存储（`QslDataService` 的 `ConcurrentHashMap`），重启后不会保留数据。
+5. 数据层已接入 Halo Extension 自定义模型持久化（`QslStateStore`），业务数据会在 Halo 数据库中长期保存。
