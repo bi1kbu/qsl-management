@@ -1,6 +1,6 @@
 # QSL Management Plugin
 
-基于 Halo 2 的 QSL 卡片管理插件，覆盖通联记录、卡片记录、发收确认、前台查询、换卡申请、审计日志和统计报表。
+基于 Halo 2 的 QSL 卡片管理插件，覆盖通联记录、卡片记录、发收确认、前台查询、换卡申请、呼号绑定、审计日志和统计报表。
 
 ## 本地开发环境
 
@@ -16,6 +16,7 @@
 ./gradlew.bat test
 ./gradlew.bat build
 ./gradlew.bat haloServer
+./gradlew.bat reloadPlugin
 ```
 
 ```bash
@@ -23,6 +24,7 @@
 ./gradlew test
 ./gradlew build
 ./gradlew haloServer
+./gradlew reloadPlugin
 ```
 
 ## 开发模式说明
@@ -39,15 +41,32 @@ halo:
       - "/path/to/qsl-plugin"
 ```
 
-## 接口前缀
+## 前台卡片路由（你关心的）
 
-1. 后台接口：`/apis/qsl.admin/v1`
+1. 换卡申请页面：`/plugins/qsl-management/widgets/exchange`
+2. 收信确认页面：`/plugins/qsl-management/widgets/receive-confirm`
+
+同类前台卡片还包括：
+
+1. 查询：`/plugins/qsl-management/widgets/query`
+2. 补卡：`/plugins/qsl-management/widgets/reissue`
+3. 统计：`/plugins/qsl-management/widgets/stats`
+
+## 接口前缀（当前实现）
+
+1. 后台管理接口：`/apis/qsl.admin/v1`
 2. 前台公开接口：`/apis/qsl.public/v1`
-3. HAM 用户接口：`/apis/qsl.user/v1`
+3. 小组件兼容接口：`/plugins/qsl-management/widgets/public-api`
 
-## 当前实现状态
+说明：当前前台换卡/收信卡片默认走兼容接口（GET），对应：
 
-1. 已完成插件骨架、核心路由、接口骨架、审计日志筛选接口和报表接口。
-2. 已完成前端控制台子菜单占位页面。
-3. 已完成本地构建与单元测试链路。
-4. 数据持久化当前为内存服务实现，后续可切换为正式存储层。
+1. `/plugins/qsl-management/widgets/public-api/actions/exchange-request`
+2. `/plugins/qsl-management/widgets/public-api/actions/receive-confirm`
+
+## 当前实现状态（与代码一致）
+
+1. 已实现控制台菜单与 UC 菜单、权限节点、HAM 审核赋权。
+2. 已实现通联记录、卡片记录、发信确认、收信确认、换卡审核、呼号绑定审核。
+3. 已实现前台卡片（查询/换卡/补卡/收信确认/统计）与编辑器插入扩展。
+4. 已实现导入导出、备份导出、审计日志筛选、统计报表、邮件通知。
+5. 数据层当前仍为进程内内存存储（`QslDataService` 的 `ConcurrentHashMap`），重启后不会保留数据。

@@ -40,8 +40,8 @@ public class WidgetController {
               <title>QSL 查询卡片</title>
               <style>
                 html,body{height:100%;overflow:hidden;}
-                body{margin:0;padding:12px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;background:#f8fafc;box-sizing:border-box;}
-                .card{height:calc(100% - 24px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;}
+                body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;background:transparent;box-sizing:border-box;}
+                .card{height:100%;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;display:flex;flex-direction:column;box-sizing:border-box;overflow:hidden;}
                 .title{font-size:14px;font-weight:600;margin:0 0 10px;}
                 .row{display:flex;gap:8px;}
                 input{flex:1;height:34px;border:1px solid #d1d5db;border-radius:6px;padding:0 10px;}
@@ -206,8 +206,8 @@ public class WidgetController {
               <meta name="viewport" content="width=device-width, initial-scale=1.0" />
               <title>QSL 换卡申请卡片</title>
               <style>
-                html,body{margin:0;padding:0;overflow:hidden;background:#f8fafc;}
-                body{padding:12px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;}
+                html,body{margin:0;padding:0;overflow:hidden;background:transparent;}
+                body{padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;}
                 .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;}
                 .title{font-size:14px;font-weight:600;margin:0 0 10px;}
                 .grid{display:grid;gap:8px;}
@@ -287,7 +287,7 @@ public class WidgetController {
               <meta name="viewport" content="width=device-width, initial-scale=1.0" />
               <title>QSL 补卡申请卡片</title>
               <style>
-                body{margin:0;padding:12px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;background:#f8fafc;}
+                body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;background:transparent;}
                 .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;}
                 .title{font-size:14px;font-weight:600;margin:0 0 10px;}
                 .grid{display:grid;gap:8px;}
@@ -339,7 +339,7 @@ public class WidgetController {
               <meta name="viewport" content="width=device-width, initial-scale=1.0" />
               <title>QSL 收信确认卡片</title>
               <style>
-                body{margin:0;padding:12px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;background:#f8fafc;}
+                body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;background:transparent;}
                 .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;}
                 .title{font-size:14px;font-weight:600;margin:0 0 10px;}
                 .grid{display:grid;gap:8px;}
@@ -413,7 +413,7 @@ public class WidgetController {
               <meta name="viewport" content="width=device-width, initial-scale=1.0" />
               <title>QSL 统计卡片</title>
               <style>
-                body{margin:0;padding:12px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;background:#f8fafc;}
+                body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif;background:transparent;}
                 .card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;}
                 .title{font-size:14px;font-weight:600;margin:0 0 10px;}
                 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
