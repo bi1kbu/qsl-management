@@ -259,8 +259,8 @@ public class WidgetController {
                   };
                   msg.className = 'msg';
                   msg.textContent = '提交中...';
-                  const qs = new URLSearchParams(payload);
-                  const res = await fetch('/plugins/qsl-management/widgets/public-api/actions/exchange-request?' + qs.toString());
+                  const qs = new URLSearchParams(payload).toString();
+                  const res = await fetch('/plugins/qsl-management/widgets/public-api/actions/exchange-request?' + qs);
                   const data = await res.json().catch(() => ({}));
                   if (!res.ok) {
                     msg.className = 'msg error';
@@ -481,6 +481,21 @@ public class WidgetController {
     @GetMapping(value = "/public-api/reports/public-summary", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> publicSummary() {
         return dataService.reportSummary();
+    }
+
+    @GetMapping(value = "/public-api/query/record-stats", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> publicRecordStats(
+        @RequestParam("callsign") String callsign,
+        @RequestHeader(value = "X-User-Id", required = false) String userId,
+        ServerWebExchange exchange) {
+        var limit = ((Number) dataService.getSystemConfig().getOrDefault("queryLimitPerMin", 5)).intValue();
+        var remoteIp = exchange.getRequest().getRemoteAddress() == null
+            ? "unknown" : String.valueOf(exchange.getRequest().getRemoteAddress().getAddress().getHostAddress());
+        var rateKey = (userId != null && !userId.isBlank()) ? "USER:" + userId : "IP:" + remoteIp;
+        if (limit > 0 && !rateLimitService.allow(rateKey, limit)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "query rate limit exceeded");
+        }
+        return dataService.searchCallsignRecordStats(callsign);
     }
 
     @PostMapping(value = "/public-api/actions/exchange-request", produces = MediaType.APPLICATION_JSON_VALUE)

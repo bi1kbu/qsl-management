@@ -63,6 +63,7 @@ public class QslDataService {
         systemConfig.put("reissueEnabled", true);
         systemConfig.put("reissueIntervalDays", 7);
         systemConfig.put("requestNeedReview", true);
+        systemConfig.put("hamRoleName", "ham");
         stationProfile.put("stationCallsign", "");
     }
 
@@ -73,6 +74,7 @@ public class QslDataService {
         systemConfig.put("reissueEnabled", true);
         systemConfig.put("reissueIntervalDays", 7);
         systemConfig.put("requestNeedReview", true);
+        systemConfig.put("hamRoleName", "ham");
         stationProfile.put("stationCallsign", "");
     }
 
@@ -787,6 +789,78 @@ public class QslDataService {
             operator);
     }
 
+    public List<Map<String, Object>> listRoleOptions(Map<String, String> authHeaders) {
+        var result = new ArrayList<Map<String, Object>>();
+        var page = 1;
+        while (true) {
+            var path = "/api/v1alpha1/roles?page=" + page + "&size=500";
+            var root = requestHaloApi("GET", path, null, authHeaders);
+            var items = root.path("items");
+            if (items.isArray()) {
+                for (var item : items) {
+                    var metadata = item.path("metadata");
+                    var name = metadata.path("name").asText("").trim();
+                    if (name.isBlank()) {
+                        continue;
+                    }
+                    if (!shouldExposeRoleForHamGrant(item)) {
+                        continue;
+                    }
+                    var annotations = metadata.path("annotations");
+                    var displayName = annotations.path("rbac.authorization.halo.run/display-name").asText("").trim();
+                    if (displayName.isBlank()) {
+                        displayName = item.path("spec").path("displayName").asText("").trim();
+                    }
+                    if (displayName.isBlank()) {
+                        displayName = name;
+                    }
+                    result.add(Map.of("name", name, "displayName", displayName));
+                }
+            }
+            if (root.path("hasNext").asBoolean(false)) {
+                page++;
+                continue;
+            }
+            break;
+        }
+        result.sort((a, b) -> {
+            var an = Objects.toString(a.get("name"), "");
+            var bn = Objects.toString(b.get("name"), "");
+            if ("ham".equalsIgnoreCase(an) && !"ham".equalsIgnoreCase(bn)) {
+                return -1;
+            }
+            if (!"ham".equalsIgnoreCase(an) && "ham".equalsIgnoreCase(bn)) {
+                return 1;
+            }
+            return Objects.toString(a.get("displayName"), "")
+                .compareToIgnoreCase(Objects.toString(b.get("displayName"), ""));
+        });
+        return result;
+    }
+
+    private boolean shouldExposeRoleForHamGrant(JsonNode roleItem) {
+        var metadata = roleItem.path("metadata");
+        var labels = metadata.path("labels");
+        var name = metadata.path("name").asText("").trim();
+        if (name.isBlank()) {
+            return false;
+        }
+        if ("ham".equalsIgnoreCase(name)) {
+            return true;
+        }
+        if (name.startsWith("qsl-management-role-")) {
+            return false;
+        }
+        if ("true".equalsIgnoreCase(labels.path("rbac.authorization.halo.run/system-reserved").asText(""))) {
+            return false;
+        }
+        if ("true".equalsIgnoreCase(labels.path("halo.run/role-template").asText(""))) {
+            return false;
+        }
+        var pluginName = labels.path("plugin.halo.run/plugin-name").asText("").trim();
+        return pluginName.isBlank();
+    }
+
     public Map<String, Object> unbindBinding(Long id, String operator) {
         return unbindBinding(id, operator, Map.of());
     }
@@ -1125,6 +1199,9 @@ public class QslDataService {
 
     private void syncGrantHamRole(String userName, Map<String, String> authHeaders) {
         var roleName = hamRoleName();
+        if (roleName.isBlank()) {
+            throw new IllegalArgumentException("请先在本站配置中设置审核通过后赋权角色");
+        }
         ensureRoleExists(roleName, authHeaders);
         var currentBindingName = findRoleBindingName(roleName, userName, authHeaders);
         if (currentBindingName != null) {
@@ -1151,6 +1228,9 @@ public class QslDataService {
 
     private void syncRevokeHamRole(String userName, Map<String, String> authHeaders) {
         var roleName = hamRoleName();
+        if (roleName.isBlank()) {
+            return;
+        }
         var bindingName = findRoleBindingName(roleName, userName, authHeaders);
         if (bindingName == null) {
             return;
@@ -1193,16 +1273,19 @@ public class QslDataService {
     }
 
     private void ensureRoleExists(String roleName, Map<String, String> authHeaders) {
+        if (Objects.toString(roleName, "").trim().isBlank()) {
+            throw new IllegalArgumentException("审核角色未配置");
+        }
         try {
             requestHaloApi("GET", "/api/v1alpha1/roles/" + urlEncode(roleName), null, authHeaders);
         } catch (IllegalStateException ex) {
-            throw new IllegalStateException("ham role not found: " + roleName, ex);
+            throw new IllegalArgumentException("审核角色不存在: " + roleName);
         }
     }
 
     private String hamRoleName() {
-        var value = Objects.toString(systemConfig.getOrDefault("hamRoleName", "HAM"), "").trim();
-        return value.isBlank() ? "HAM" : value;
+        var roleName = Objects.toString(systemConfig.getOrDefault("hamRoleName", ""), "").trim();
+        return roleName.isBlank() ? "ham" : roleName;
     }
 
     private String generateHamRoleBindingName(String userName) {

@@ -3,6 +3,7 @@ package run.halo.qsl;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.security.Principal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -97,5 +98,36 @@ public class PublicController {
             Map.of("cardIds", List.of(cardId), "confirmRemark", Objects.toString(payload.getOrDefault("remark", ""))),
             "public-widget"
         );
+    }
+
+    @GetMapping("/me/callsign-bindings")
+    public List<Map<String, Object>> myBindings(Principal principal) {
+        return dataService.listBindingsByUser(requireAuthenticatedUser(principal));
+    }
+
+    @PostMapping("/me/callsign-bindings")
+    public Map<String, Object> submitMyBinding(@RequestBody Map<String, Object> payload,
+        Principal principal) {
+        try {
+            var userId = requireAuthenticatedUser(principal);
+            return dataService.submitBinding(userId, payload, userId);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+        }
+    }
+
+    @GetMapping("/me/callsign-records/search")
+    public Map<String, Object> searchMyCallsignRecords(@RequestParam("callsign") String callsign,
+        Principal principal) {
+        requireAuthenticatedUser(principal);
+        return dataService.searchCallsignRecordStats(callsign);
+    }
+
+    private String requireAuthenticatedUser(Principal principal) {
+        var userName = principal == null ? "" : Objects.toString(principal.getName(), "").trim();
+        if (userName.isBlank() || "anonymousUser".equalsIgnoreCase(userName)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "authentication required");
+        }
+        return userName;
     }
 }

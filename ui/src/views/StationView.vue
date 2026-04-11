@@ -12,7 +12,14 @@ const form = ref<Record<string, unknown>>({
   address: '',
   remark: '',
 })
-const systemConfig = ref<Record<string, unknown>>({})
+const systemConfig = ref<Record<string, unknown>>({
+  queryLimitPerMin: 5,
+  reissueIntervalDays: 7,
+  reissueEnabled: true,
+  requestNeedReview: true,
+  hamRoleName: 'ham',
+})
+const roleOptions = ref<Array<Record<string, unknown>>>([])
 const equipments = ref<Array<Record<string, unknown>>>([])
 const antennas = ref<Array<Record<string, unknown>>>([])
 const powers = ref<Array<Record<string, unknown>>>([])
@@ -22,22 +29,38 @@ const antennaName = ref('')
 const powerName = ref('')
 const modeName = ref('')
 const saved = ref(false)
+const loadError = ref('')
 
 async function load() {
-  const [station, config, equipmentRows, antennaRows, powerRows, modeRows] = await Promise.all([
+  loadError.value = ''
+  const tasks = await Promise.allSettled([
     adminApi.getStationProfile(),
     adminApi.getSystemConfig(),
+    adminApi.listRoleOptions(),
     adminApi.listEquipments(),
     adminApi.listAntennas(),
     adminApi.listPowers(),
     adminApi.listModes(),
   ])
-  form.value = station
-  systemConfig.value = config
-  equipments.value = equipmentRows
-  antennas.value = antennaRows
-  powers.value = powerRows
-  modes.value = modeRows
+  const [station, config, roles, equipmentRows, antennaRows, powerRows, modeRows] = tasks
+
+  if (station.status === 'fulfilled' && station.value) {
+    form.value = { ...form.value, ...(station.value as Record<string, unknown>) }
+  }
+  if (config.status === 'fulfilled' && config.value) {
+    systemConfig.value = { ...systemConfig.value, ...(config.value as Record<string, unknown>) }
+    systemConfig.value.hamRoleName = String(systemConfig.value.hamRoleName || '')
+  }
+  if (roles.status === 'fulfilled') roleOptions.value = roles.value as Array<Record<string, unknown>>
+  if (equipmentRows.status === 'fulfilled') equipments.value = equipmentRows.value as Array<Record<string, unknown>>
+  if (antennaRows.status === 'fulfilled') antennas.value = antennaRows.value as Array<Record<string, unknown>>
+  if (powerRows.status === 'fulfilled') powers.value = powerRows.value as Array<Record<string, unknown>>
+  if (modeRows.status === 'fulfilled') modes.value = modeRows.value as Array<Record<string, unknown>>
+
+  const hasReject = tasks.some((item) => item.status === 'rejected')
+  if (hasReject) {
+    loadError.value = '部分配置加载失败，请刷新后重试。'
+  }
 }
 
 async function save() {
@@ -90,6 +113,7 @@ onMounted(load)
       <VButton type="secondary" @click="save">保存</VButton>
     </template>
     <VCard title="系统参数">
+      <p v-if="loadError" class="error-text">{{ loadError }}</p>
       <div class="config-form">
         <label>游客每分钟查询次数</label><input v-model="systemConfig.queryLimitPerMin" class="qsl-input" />
         <label>是否启用补卡</label>
@@ -102,6 +126,13 @@ onMounted(load)
         <select v-model="systemConfig.requestNeedReview" class="qsl-input">
           <option :value="true">是</option>
           <option :value="false">否</option>
+        </select>
+        <label>审核通过赋权角色</label>
+        <select v-model="systemConfig.hamRoleName" class="qsl-input">
+          <option value="">请选择角色</option>
+          <option v-for="role in roleOptions" :key="String(role.name)" :value="String(role.name)">
+            {{ role.displayName }}（{{ role.name }}）
+          </option>
         </select>
       </div>
       <p v-if="saved" class="ok-text">已保存</p>
@@ -157,6 +188,7 @@ onMounted(load)
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .config-form { display: grid; grid-template-columns: 220px 1fr; gap: 8px; margin-top: 2px; }
 .ok-text { margin-top: 10px; color: #067647; font-size: 13px; }
+.error-text { margin-bottom: 8px; color: #b42318; font-size: 13px; }
 .module-item + .module-item {
   margin-top: 16px;
   padding-top: 4px;

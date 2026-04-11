@@ -1,0 +1,16 @@
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: anonymous
+  labels:
+    rbac.authorization.halo.run/system-reserved: "true"
+  annotations:
+    rbac.authorization.halo.run/display-name: "匿名用户"
+    rbac.authorization.halo.run/disallow-access-console: "true"
+    rbac.authorization.halo.run/dependency-rules: "[]"
+    rbac.authorization.halo.run/ui-permissions-aggregated: "[]"
+rules:
+  - nonResourceURLs:
+      - "/apis/qsl.public/v1/actions/exchange-request"
+      - "/apis/qsl.public/v1/actions/receive-confirm"
+    verbs: ["post"]

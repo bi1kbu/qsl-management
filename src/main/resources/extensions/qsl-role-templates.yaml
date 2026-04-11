@@ -253,12 +253,12 @@ rules:
 apiVersion: v1alpha1
 kind: Role
 metadata:
-  name: qsl-management-role-ham
+  name: ham
   labels:
-    halo.run/role-template: "true"
+    rbac.authorization.halo.run/system-reserved: "true"
   annotations:
-    rbac.authorization.halo.run/display-name: "QSL-HAM"
-    rbac.authorization.halo.run/description: "HAM 用户默认角色，包含呼号管理权限。"
+    rbac.authorization.halo.run/display-name: "HAM"
+    rbac.authorization.halo.run/description: "业余无线电用户（HAM），可访问呼号绑定、地址维护、通信/卡片记录查询。"
     rbac.authorization.halo.run/dependencies: |
       ["qsl-management-role-callsign-manage"]
     rbac.authorization.halo.run/ui-permissions: |

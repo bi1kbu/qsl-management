@@ -17,8 +17,12 @@ async function load() {
 }
 
 async function approve(id: number) {
-  await adminApi.approveCallsignBinding(id)
-  await load()
+  try {
+    await adminApi.approveCallsignBinding(id)
+    await load()
+  } catch (error) {
+    window.alert(parseErrorMessage(error))
+  }
 }
 
 async function reject(id: number) {
@@ -39,6 +43,16 @@ function statusText(status: unknown) {
   if (v === 'REJECTED') return '已拒绝'
   if (v === 'UNBOUND') return '已解绑'
   return '待审核'
+}
+
+function parseErrorMessage(error: unknown): string {
+  const fallback = String(error instanceof Error ? error.message : error || '操作失败')
+  try {
+    const payload = JSON.parse(fallback) as Record<string, unknown>
+    return String(payload.detail || payload.message || fallback)
+  } catch {
+    return fallback
+  }
 }
 
 onMounted(load)

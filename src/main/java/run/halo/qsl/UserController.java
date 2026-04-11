@@ -72,21 +72,32 @@ public class UserController {
     }
 
     @GetMapping("/my/callsign-bindings")
-    public List<Map<String, Object>> myBindings() {
-        return dataService.list("binding");
+    public List<Map<String, Object>> myBindings(
+        @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        return dataService.listBindingsByUser(resolveUserId(userId));
     }
 
     @PostMapping("/my/callsign-bindings")
     public Map<String, Object> createBinding(@RequestBody Map<String, Object> payload,
         @RequestHeader(value = "X-Operator", defaultValue = "ham-user") String operator,
-        @RequestHeader(value = "X-User-Id") String userId) {
-        payload.put("userId", userId);
-        var verifyMethod = Objects.toString(payload.getOrDefault("verifyMethod", "EVIDENCE"));
-        if ("PHONE".equalsIgnoreCase(verifyMethod)) {
-            payload.put("status", "APPROVED");
-        } else {
-            payload.putIfAbsent("status", "PENDING");
+        @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        try {
+            return dataService.submitBinding(resolveUserId(userId), payload, operator);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
         }
-        return dataService.create("binding", payload, operator);
+    }
+
+    @GetMapping("/my/callsign-records/search")
+    public Map<String, Object> searchMyCallsignRecords(
+        @RequestParam("callsign") String callsign,
+        @RequestHeader(value = "X-User-Id", required = false) String userId) {
+        resolveUserId(userId);
+        return dataService.searchCallsignRecordStats(callsign);
+    }
+
+    private String resolveUserId(String userId) {
+        var resolved = userId == null ? "" : userId.trim();
+        return resolved.isBlank() ? "console-user" : resolved;
     }
 }

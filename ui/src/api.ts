@@ -12,9 +12,16 @@ function queryString(query?: Query): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const mergedHeaders = {
+  const method = String(init?.method || 'GET').toUpperCase()
+  const mergedHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((init?.headers || {}) as Record<string, string>),
+  }
+  if (method !== 'GET' && method !== 'HEAD') {
+    const xsrfToken = readCookie('XSRF-TOKEN')
+    if (xsrfToken && !mergedHeaders['X-XSRF-TOKEN']) {
+      mergedHeaders['X-XSRF-TOKEN'] = xsrfToken
+    }
   }
   const res = await fetch(path, {
     ...(init || {}),
@@ -29,6 +36,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return (null as T)
   }
   return res.json() as Promise<T>
+}
+
+function readCookie(name: string): string {
+  if (typeof document === 'undefined') return ''
+  const entries = document.cookie.split(';')
+  for (const raw of entries) {
+    const item = raw.trim()
+    if (!item) continue
+    const idx = item.indexOf('=')
+    if (idx <= 0) continue
+    const key = item.slice(0, idx)
+    if (key !== name) continue
+    const value = item.slice(idx + 1)
+    try {
+      return decodeURIComponent(value)
+    } catch {
+      return value
+    }
+  }
+  return ''
 }
 
 let currentUserIdCache: string | null = null
@@ -135,6 +162,9 @@ export const adminApi = {
   },
   getSystemConfig() {
     return request<Record<string, unknown>>('/apis/qsl.admin/v1/system-config')
+  },
+  listRoleOptions() {
+    return request<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/role-options')
   },
   updateSystemConfig(payload: Record<string, unknown>) {
     return request<Record<string, unknown>>('/apis/qsl.admin/v1/system-config', {
@@ -365,7 +395,10 @@ export const adminApi = {
 
 export const myApi = {
   listBindings() {
-    return myRequest<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/my/callsign-bindings')
+    return myRequest<Array<Record<string, unknown>>>('/apis/qsl.admin/v1/my/callsign-bindings?action=list', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
   },
   createBinding(payload: Record<string, unknown>) {
     return myRequest<Record<string, unknown>>('/apis/qsl.admin/v1/my/callsign-bindings', {
@@ -374,8 +407,8 @@ export const myApi = {
     })
   },
   searchCallsignRecords(callsign: string) {
-    return myRequest<Record<string, unknown>>(
-      `/apis/qsl.admin/v1/my/callsign-records/search${queryString({ callsign })}`,
+    return request<Record<string, unknown>>(
+      `/plugins/qsl-management/widgets/public-api/query/record-stats${queryString({ callsign })}`,
     )
   },
   listAddresses(callsign?: string) {

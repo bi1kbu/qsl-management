@@ -36,6 +36,8 @@ async function loadBindings() {
   loading.value = true
   try {
     bindings.value = await myApi.listBindings()
+  } catch {
+    bindings.value = []
   } finally {
     loading.value = false
   }
@@ -92,7 +94,7 @@ async function submit() {
   }
   saving.value = true
   try {
-    await myApi.createBinding({
+    const created = await myApi.createBinding({
       callsign,
       radioLicenseImage: form.value.radioLicenseImage,
       hamcqProofImage: form.value.hamcqProofImage,
@@ -103,7 +105,9 @@ async function submit() {
     form.value.hamcqProofImage = ''
     form.value.legacyCardId = ''
     form.value.legacyPhone = ''
-    await loadBindings()
+    if (created && typeof created === 'object') {
+      bindings.value = [created, ...bindings.value.filter((item) => String(item.id) !== String(created.id))]
+    }
     window.alert('提交成功，等待审核')
   } catch (e) {
     window.alert(String(e))
