@@ -56,17 +56,28 @@ const cardDefs: CardDef[] = [
   },
 ]
 
-function insertWidget(editor: any, url: string, title: string) {
-  const iframeCommand = editor?.chain?.().focus?.().setIframe
+function insertWidget(
+  editor: any,
+  url: string,
+  title: string,
+  options?: {
+    range?: { from: number; to: number }
+  },
+) {
+  const chain = editor?.chain?.().focus?.()
+  if (!chain) return
+
+  if (options?.range && typeof chain.deleteRange === 'function') {
+    chain.deleteRange(options.range)
+  }
+
+  const iframeCommand = chain.setIframe
   if (typeof iframeCommand === 'function') {
-    editor.chain().focus().setIframe({ src: url }).run()
+    chain.setIframe({ src: url }).run()
     return
   }
-  editor
-    .chain()
-    .focus()
-    .insertContent(`<p><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></p>`)
-    .run()
+
+  chain.insertContent(`<p><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></p>`).run()
 }
 
 function createEditorCardExtension(def: CardDef): AnyExtension {
@@ -96,7 +107,8 @@ function createEditorCardExtension(def: CardDef): AnyExtension {
           icon: def.icon as any,
           title: def.title,
           keywords: def.keywords,
-          command: ({ editor }: { editor: any }) => insertWidget(editor, def.url, def.title),
+          command: ({ editor, range }: { editor: any; range?: { from: number; to: number } }) =>
+            insertWidget(editor, def.url, def.title, { range }),
         }),
       }
     },
