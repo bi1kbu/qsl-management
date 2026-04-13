@@ -215,8 +215,43 @@
 - 操作员：执行录入、导出、发信确认、收信确认等日常业务。
 - 管理员：拥有配置、审核、审计、统计和权限分配治理能力。
 
+> 一期实施范围说明：当前仅落地管理员（含超级管理员）相关后台权限能力；HAM 用户与操作员角色暂不启用，作为二期能力预留。
+
 ## 3.2 权限节点
 
+### 3.2.1 设计原则
+
+1. 按当前产品定义的菜单项设计权限节点：你列出的每一行拆分为两个节点（只读 `view`、编辑 `edit`）。
+2. 权限节点命名统一为 `qsl:menu:<slug>:<action>`，其中 `<action>` 仅允许 `view` 或 `edit`。
+3. `edit` 默认依赖同项 `view`，并可附加其他前置依赖。
+4. 跨模块依赖优先依赖对方的 `view` 节点；确需跨模块写操作时才依赖对方 `edit` 节点。
+5. 本期（一期）仅启用管理员相关授权，HAM 用户、操作员等角色不落地实现。
+6. 本节节点在一期先完成预留与定义，二期再按角色模型分配与启用。
+
+### 3.2.2 菜单权限节点（每行拆分只读与编辑，预留）
+
+| 菜单项（按你给出的行） | 只读节点 | 编辑节点 | 只读依赖 | 编辑依赖 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| 总览看板 | `qsl:menu:overview-dashboard:view` | `qsl:menu:overview-dashboard:edit` | `qsl:menu:qso-record:view`,`qsl:menu:card-record:view`,`qsl:menu:mail-send-confirm:view`,`qsl:menu:mail-receive-confirm:view` | `qsl:menu:overview-dashboard:view` | 总览依赖业务数据读取 |
+| 系统参数 | `qsl:menu:system-settings:view` | `qsl:menu:system-settings:edit` | 无 | `qsl:menu:system-settings:view` | 独立配置项 |
+| 通信地址、本台设备、本台卡片 | `qsl:menu:station-profile:view` | `qsl:menu:station-profile:edit` | `qsl:menu:equipment-catalog:view` | `qsl:menu:station-profile:view`,`qsl:menu:equipment-catalog:view` | 本台设备配置依赖设备库维护（只读） |
+| 通联记录 | `qsl:menu:qso-record:view` | `qsl:menu:qso-record:edit` | `qsl:menu:equipment-catalog:view`,`qsl:menu:station-profile:view` | `qsl:menu:qso-record:view` | 录入时使用本台配置与设备候选 |
+| 卡片记录 | `qsl:menu:card-record:view` | `qsl:menu:card-record:edit` | `qsl:menu:qso-record:view`,`qsl:menu:station-profile:view` | `qsl:menu:card-record:view`,`qsl:menu:qso-record:view` | 可关联 QSO，依赖本台卡片版本读取 |
+| 发信确认 | `qsl:menu:mail-send-confirm:view` | `qsl:menu:mail-send-confirm:edit` | `qsl:menu:card-record:view` | `qsl:menu:mail-send-confirm:view`,`qsl:menu:card-record:view` | 发信对象来源于卡片记录 |
+| 收信确认 | `qsl:menu:mail-receive-confirm:view` | `qsl:menu:mail-receive-confirm:edit` | `qsl:menu:card-record:view`,`qsl:menu:qso-record:view` | `qsl:menu:mail-receive-confirm:view`,`qsl:menu:card-record:view`,`qsl:menu:qso-record:view` | 收信匹配依赖卡片/通联读取 |
+| 换卡申请 | `qsl:menu:exchange-request-review:view` | `qsl:menu:exchange-request-review:edit` | `qsl:menu:address-bureau:view`,`qsl:menu:card-record:view` | `qsl:menu:exchange-request-review:view`,`qsl:menu:card-record:edit` | 审批通过涉及创建卡片记录 |
+| 通联记录查询 | `qsl:menu:qso-query:view` | `qsl:menu:qso-query:edit` | `qsl:menu:qso-record:view` | `qsl:menu:qso-query:view` | 查询菜单编辑节点一期预留 |
+| 卡片记录查询 | `qsl:menu:card-query:view` | `qsl:menu:card-query:edit` | `qsl:menu:card-record:view` | `qsl:menu:card-query:view` | 查询菜单编辑节点一期预留 |
+| 统计报表、审计日志 | `qsl:menu:report-auditlog:view` | `qsl:menu:report-auditlog:edit` | `qsl:menu:qso-query:view`,`qsl:menu:card-query:view`,`qsl:menu:exchange-request-review:view`,`qsl:menu:mail-send-confirm:view`,`qsl:menu:mail-receive-confirm:view` | `qsl:menu:report-auditlog:view` | 按要求：本项只读依赖其他菜单只读权限 |
+| 地址管理、卡片局管理 | `qsl:menu:address-bureau:view` | `qsl:menu:address-bureau:edit` | 无 | `qsl:menu:address-bureau:view` | 基础主数据维护 |
+| 设备库维护 | `qsl:menu:equipment-catalog:view` | `qsl:menu:equipment-catalog:edit` | 无 | `qsl:menu:equipment-catalog:view` | 基础主数据维护 |
+| 导入导出 | `qsl:menu:import-export:view` | `qsl:menu:import-export:edit` | `qsl:menu:qso-query:view`,`qsl:menu:card-query:view`,`qsl:menu:exchange-request-review:view`,`qsl:menu:address-bureau:view`,`qsl:menu:equipment-catalog:view` | `qsl:menu:import-export:view`,`qsl:menu:qso-record:edit`,`qsl:menu:card-record:edit`,`qsl:menu:exchange-request-review:edit`,`qsl:menu:address-bureau:edit`,`qsl:menu:equipment-catalog:edit` | 导入导出覆盖多实体，导入涉及写入 |
+
+### 3.2.3 一期与二期启用策略
+
+1. 一期启用：后台仅管理员/超级管理员使用上述节点；普通游客前台访问走匿名接口与限流策略，不走后台 RBAC 分配。
+2. 一期不启用：HAM 用户、操作员角色及其差异化授权暂不实现，仅保留角色定义与权限预留。
+3. 二期计划：基于本节节点给 HAM 用户、操作员做正式授权编排；如需更细粒度，在对应节点下再拆分子权限。
 
 
 ---
