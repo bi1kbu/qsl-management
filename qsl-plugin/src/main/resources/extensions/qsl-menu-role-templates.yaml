@@ -1,0 +1,363 @@
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-overview-dashboard-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "总览看板（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:overview-dashboard:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-qso-record-view","qsl-management-card-record-view","qsl-management-mail-send-confirm-view","qsl-management-mail-receive-confirm-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-overview-dashboard-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "总览看板（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:overview-dashboard:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-overview-dashboard-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-system-settings-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "系统参数（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:system-settings:view"]'
+    rbac.authorization.halo.run/dependencies: '[]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-system-settings-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "系统参数（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:system-settings:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-system-settings-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-station-profile-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "通信地址、本台设备、本台卡片（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:station-profile:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-equipment-catalog-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-station-profile-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "通信地址、本台设备、本台卡片（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:station-profile:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-station-profile-view","qsl-management-equipment-catalog-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-qso-record-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "通联记录（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:qso-record:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-equipment-catalog-view","qsl-management-station-profile-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-qso-record-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "通联记录（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:qso-record:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-qso-record-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-card-record-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "卡片记录（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-record:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-qso-record-view","qsl-management-station-profile-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-card-record-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "卡片记录（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-record:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view","qsl-management-qso-record-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-mail-send-confirm-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "发信确认（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:mail-send-confirm:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-mail-send-confirm-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "发信确认（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:mail-send-confirm:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-mail-send-confirm-view","qsl-management-card-record-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-mail-receive-confirm-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "收信确认（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:mail-receive-confirm:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view","qsl-management-qso-record-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-mail-receive-confirm-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "收信确认（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:mail-receive-confirm:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-mail-receive-confirm-view","qsl-management-card-record-view","qsl-management-qso-record-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-exchange-request-review-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "换卡申请（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:exchange-request-review:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-address-bureau-view","qsl-management-card-record-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-exchange-request-review-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "换卡申请（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:exchange-request-review:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-exchange-request-review-view","qsl-management-card-record-edit"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-qso-query-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "通联记录查询（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:qso-query:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-qso-record-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-qso-query-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "通联记录查询（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:qso-query:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-qso-query-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-card-query-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "卡片记录查询（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-query:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-card-query-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "卡片记录查询（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-query:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-card-query-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-report-auditlog-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "统计报表、审计日志（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:report-auditlog:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-qso-query-view","qsl-management-card-query-view","qsl-management-exchange-request-review-view","qsl-management-mail-send-confirm-view","qsl-management-mail-receive-confirm-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-report-auditlog-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "统计报表、审计日志（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:report-auditlog:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-report-auditlog-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-address-bureau-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "地址管理、卡片局管理（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:address-bureau:view"]'
+    rbac.authorization.halo.run/dependencies: '[]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-address-bureau-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "地址管理、卡片局管理（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:address-bureau:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-address-bureau-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-equipment-catalog-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "设备库维护（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:equipment-catalog:view"]'
+    rbac.authorization.halo.run/dependencies: '[]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-equipment-catalog-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "设备库维护（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:equipment-catalog:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-equipment-catalog-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-import-export-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "导入导出（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:import-export:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-qso-query-view","qsl-management-card-query-view","qsl-management-exchange-request-review-view","qsl-management-address-bureau-view","qsl-management-equipment-catalog-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-import-export-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "导入导出（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:import-export:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-import-export-view","qsl-management-qso-record-edit","qsl-management-card-record-edit","qsl-management-exchange-request-review-edit","qsl-management-address-bureau-edit","qsl-management-equipment-catalog-edit"]'
+rules: []

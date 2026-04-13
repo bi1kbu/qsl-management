@@ -1,0 +1,22 @@
+# 参考文档：https://docs.halo.run/developer-guide/plugin/basics/manifest
+
+apiVersion: plugin.halo.run/v1alpha1
+kind: Plugin
+metadata:
+  # 插件唯一标识名（用于系统内部识别）
+  name: qsl-management
+spec:
+  enabled: true
+  requires: ">=2.23.0"
+  author:
+    name: bi1kbu
+    website: https://github.com/bi1kbu
+  logo: logo.png
+  homepage: https://github.com/bi1kbu/qsl-management#readme
+  repo: https://github.com/bi1kbu/qsl-management
+  issues: https://github.com/bi1kbu/qsl-management/issues
+  displayName: "QSL 管理系统"
+  description: "面向业余无线电场景的 QSO/QSL 全流程管理插件"
+  license:
+    - name: "GPL-3.0"
+      url: "https://github.com/bi1kbu/qsl-management/blob/main/LICENSE"
