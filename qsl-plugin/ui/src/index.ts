@@ -1,5 +1,6 @@
 import { definePlugin } from '@halo-dev/ui-shared'
 import { qslMenuModules } from './constants/menu-modules'
+import './styles/qsl-module-framework.scss'
 
 const qslTopLevelGroups = [
   { key: 'overview', title: '总览', priority: 10 },

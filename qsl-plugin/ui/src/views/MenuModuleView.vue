@@ -1,6 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, type Component } from 'vue'
 import type { QslMenuModule } from '../constants/menu-modules'
+import QslModuleFrame from '../components/qsl/QslModuleFrame.vue'
+import DefaultModulePlaceholder from './modules/DefaultModulePlaceholder.vue'
+import ImportExportModule from './modules/ImportExportModule.vue'
+import StationCardModule from './modules/StationCardModule.vue'
+import StationEquipmentModule from './modules/StationEquipmentModule.vue'
+import StationProfileModule from './modules/StationProfileModule.vue'
+import SystemSettingsModule from './modules/SystemSettingsModule.vue'
+
+interface ModuleRenderer {
+  component: Component
+  props?: Record<string, unknown>
+}
 
 const props = defineProps<{
   qslModule: QslMenuModule
@@ -9,14 +21,52 @@ const props = defineProps<{
 const initialized = ref(false)
 
 const currentModule = computed(() => props.qslModule)
-const isImportExportModule = computed(() => currentModule.value?.key === 'import-export')
 
-const formatDependencyText = (items: string[]): string => {
-  if (!items.length) {
-    return '无'
+const settingsModuleKeySet = new Set(['system-settings', 'station-profile', 'station-equipment', 'station-card'])
+const implementedModuleKeySet = new Set([
+  'system-settings',
+  'station-profile',
+  'station-equipment',
+  'station-card',
+  'import-export',
+])
+
+const categoryLabel = computed(() => {
+  const key = currentModule.value.key
+  if (settingsModuleKeySet.has(key)) {
+    return '配置模块'
   }
-  return items.join('、')
-}
+
+  if (key === 'import-export') {
+    return '数据模块'
+  }
+
+  return `${currentModule.value.group}模块`
+})
+
+const isImplementedModule = computed(() => implementedModuleKeySet.has(currentModule.value.key))
+
+const renderer = computed<ModuleRenderer>(() => {
+  switch (currentModule.value.key) {
+    case 'system-settings':
+      return { component: SystemSettingsModule }
+    case 'station-profile':
+      return { component: StationProfileModule }
+    case 'station-equipment':
+      return { component: StationEquipmentModule }
+    case 'station-card':
+      return { component: StationCardModule }
+    case 'import-export':
+      return { component: ImportExportModule }
+    default:
+      return {
+        component: DefaultModulePlaceholder,
+        props: {
+          module: currentModule.value,
+        },
+      }
+  }
+})
 
 const initializePage = async () => {
   initialized.value = true
@@ -26,95 +76,12 @@ onMounted(initializePage)
 </script>
 
 <template>
-  <section class="menu-module-page">
-    <header class="page-header">
-      <h1>{{ currentModule?.title ?? '未识别菜单' }}</h1>
-      <p>当前为一期骨架页面，用于确认菜单、权限节点与依赖关系已打通。</p>
-    </header>
-
-    <div v-if="currentModule" class="panel-grid">
-      <article class="panel">
-        <h2>前端权限定义</h2>
-        <p><strong>只读权限：</strong>{{ currentModule.viewPermission }}</p>
-        <p><strong>编辑权限：</strong>{{ currentModule.editPermission }}</p>
-        <p><strong>只读依赖：</strong>{{ formatDependencyText(currentModule.viewDependencies) }}</p>
-        <p><strong>编辑依赖：</strong>{{ formatDependencyText(currentModule.editDependencies) }}</p>
-      </article>
-
-      <article class="panel">
-        <h2>页面状态</h2>
-        <p v-if="initialized">菜单骨架页面已就绪。</p>
-        <p v-else>页面正在初始化...</p>
-        <p>后端业务接口将在下一阶段按模块逐步接入。</p>
-      </article>
-    </div>
-
-    <div v-if="isImportExportModule" class="panel-grid import-export-grid">
-      <article class="panel">
-        <h2>导入板块</h2>
-        <p>用于批量导入通联记录、卡片记录、换卡申请、地址管理、卡片局管理、设备库等数据。</p>
-        <p>建议提供文件上传、字段映射、预检、错误回滚等能力。</p>
-      </article>
-
-      <article class="panel">
-        <h2>导出板块</h2>
-        <p>用于按筛选条件导出通联记录、卡片记录、换卡申请、地址管理、卡片局管理、设备库等数据。</p>
-        <p>建议支持导出模板、范围筛选、脱敏规则与导出审计记录。</p>
-      </article>
-    </div>
-  </section>
+  <QslModuleFrame
+    :module="currentModule"
+    :initialized="initialized"
+    :category-label="categoryLabel"
+    :functional="isImplementedModule"
+  >
+    <component :is="renderer.component" v-bind="renderer.props" />
+  </QslModuleFrame>
 </template>
-
-<style scoped lang="scss">
-.menu-module-page {
-  min-height: 100vh;
-  background: linear-gradient(160deg, #f5f7fb 0%, #eef2f8 100%);
-  padding: 24px;
-}
-
-.page-header {
-  margin-bottom: 16px;
-
-  h1 {
-    margin: 0;
-    font-size: 24px;
-    color: #1f2937;
-  }
-
-  p {
-    margin: 8px 0 0;
-    color: #4b5563;
-  }
-}
-
-.panel-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-}
-
-.panel {
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  padding: 16px;
-  box-shadow: 0 8px 24px rgb(15 23 42 / 6%);
-
-  h2 {
-    margin: 0 0 12px;
-    font-size: 16px;
-    color: #111827;
-  }
-
-  p {
-    margin: 8px 0;
-    color: #374151;
-    line-height: 1.6;
-  }
-}
-
-.import-export-grid {
-  margin-top: 16px;
-}
-
-</style>
