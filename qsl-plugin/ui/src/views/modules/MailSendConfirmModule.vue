@@ -1,9 +1,26 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
-import { reactive } from 'vue'
+import { onMounted, ref } from 'vue'
+import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
+import { confirmMailSend } from '../../api/qsl-console-api'
+
+interface CardRecordSpec {
+  callSign: string
+  cardType: string
+  cardVersion: string
+  qsoRecordName: string
+  cardDate: string
+  cardTime: string
+  cardRemarks: string
+  cardSent: boolean
+  cardReceived: boolean
+  receiptConfirmed: boolean
+  sentAt: string
+  receivedAt: string
+}
 
 interface SendConfirmItem {
-  id: string
+  resourceName: string
   callSign: string
   cardType: string
   cardDate: string
@@ -14,35 +31,88 @@ interface SendConfirmItem {
   sentAt: string
 }
 
-const rows = reactive<SendConfirmItem[]>([
-  {
-    id: 'CARD-1001',
-    callSign: 'JA1ABC',
-    cardType: 'QSO',
-    cardDate: '2026-04-10',
-    cardPrintAt: '2026-04-11 09:30',
-    envelopePrintAt: '2026-04-11 10:20',
-    cardRemarks: '优先寄送',
-    sent: false,
-    sentAt: '',
-  },
-  {
-    id: 'CARD-1002',
-    callSign: 'VK3XYZ',
-    cardType: 'SWL',
-    cardDate: '2026-04-09',
-    cardPrintAt: '未制卡',
-    envelopePrintAt: '未打印',
-    cardRemarks: '',
-    sent: false,
-    sentAt: '',
-  },
-])
+const rows = ref<SendConfirmItem[]>([])
+const loading = ref(false)
+const pendingRowName = ref('')
+const feedback = ref('')
 
-const markAsSent = (row: SendConfirmItem) => {
-  row.sent = true
-  row.sentAt = new Date().toLocaleString('zh-CN', { hour12: false })
+const resourcePlural = 'card-records'
+
+const nowText = (): string => {
+  return new Date().toLocaleString('zh-CN', { hour12: false })
 }
+
+const toRow = (extension: QslExtension<CardRecordSpec>): SendConfirmItem => {
+  const spec = extension.spec ?? {
+    callSign: '',
+    cardType: '',
+    cardVersion: '',
+    qsoRecordName: '',
+    cardDate: '',
+    cardTime: '',
+    cardRemarks: '',
+    cardSent: false,
+    cardReceived: false,
+    receiptConfirmed: false,
+    sentAt: '',
+    receivedAt: '',
+  }
+
+  const cardPrintAt = spec.cardDate && spec.cardTime ? `${spec.cardDate} ${spec.cardTime}` : '未制卡'
+  const envelopePrintAt = spec.sentAt ? spec.sentAt : '未打印'
+
+  return {
+    resourceName: extension.metadata.name,
+    callSign: spec.callSign || '未知呼号',
+    cardType: spec.cardType || '未知类型',
+    cardDate: spec.cardDate || '未设置日期',
+    cardPrintAt,
+    envelopePrintAt,
+    cardRemarks: spec.cardRemarks || '',
+    sent: Boolean(spec.cardSent),
+    sentAt: spec.sentAt || '',
+  }
+}
+
+const loadRows = async (options: { silent?: boolean } = {}) => {
+  loading.value = true
+  try {
+    const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
+    rows.value = extensions.map((extension) => toRow(extension))
+    if (!options.silent && extensions.length) {
+      feedback.value = `已加载 ${extensions.length} 条持久化卡片记录（${nowText()}）。`
+    }
+    if (!options.silent && !extensions.length) {
+      feedback.value = '暂无可确认发信的卡片记录。'
+    }
+  } catch (error) {
+    feedback.value = `加载发信确认清单失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    loading.value = false
+  }
+}
+
+const markAsSent = async (row: SendConfirmItem) => {
+  if (row.sent) {
+    return
+  }
+
+  pendingRowName.value = row.resourceName
+  const sentAt = nowText()
+  try {
+    await confirmMailSend(row.resourceName)
+    await loadRows({ silent: true })
+    feedback.value = `已确认发信：${row.callSign}（${sentAt}）`
+  } catch (error) {
+    feedback.value = `确认发信失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    pendingRowName.value = ''
+  }
+}
+
+onMounted(() => {
+  loadRows()
+})
 </script>
 
 <template>
@@ -63,8 +133,8 @@ const markAsSent = (row: SendConfirmItem) => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in rows" :key="row.id">
-              <td>{{ row.id }}</td>
+            <tr v-for="row in rows" :key="row.resourceName">
+              <td>{{ row.resourceName }}</td>
               <td>{{ row.callSign }}</td>
               <td>{{ row.cardType }}</td>
               <td>{{ row.cardDate }}</td>
@@ -72,13 +142,32 @@ const markAsSent = (row: SendConfirmItem) => {
               <td>{{ row.envelopePrintAt }}</td>
               <td>{{ row.cardRemarks || '无' }}</td>
               <td>
-                <VButton v-if="!row.sent" size="xs" type="secondary" @click="markAsSent(row)">确认发信</VButton>
+                <VButton
+                  v-if="!row.sent"
+                  size="xs"
+                  type="secondary"
+                  :disabled="pendingRowName === row.resourceName || loading"
+                  @click="markAsSent(row)"
+                >
+                  确认发信
+                </VButton>
                 <VTag v-else theme="secondary">已发卡（{{ row.sentAt }}）</VTag>
               </td>
+            </tr>
+            <tr v-if="!rows.length">
+              <td colspan="8" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>
       </div>
+      <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
     </VCard>
   </div>
 </template>
+
+<style scoped lang="scss">
+.qsl-table-empty {
+  text-align: center;
+  color: #6b7280;
+}
+</style>

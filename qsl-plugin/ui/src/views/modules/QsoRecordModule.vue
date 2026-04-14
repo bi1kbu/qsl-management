@@ -1,9 +1,36 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import {
+  createExtension,
+  createResourceName,
+  listExtensions,
+  qslApiVersion,
+  type QslExtension,
+} from '../../api/qsl-extension-api'
+import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+
+interface QsoRecordSpec {
+  date: string
+  time: string
+  timezone: 'UTC' | 'UTC+8'
+  freq: string
+  myRig: string
+  myRigMode: string
+  myRigAnt: string
+  myRigPwr: string
+  callSign: string
+  rig: string
+  ant: string
+  pwr: string
+  qth: string
+  rstSent: string
+  rstRcvd: string
+  remarks: string
+}
 
 interface QsoRecordItem {
-  id: string
+  resourceName: string
   callSign: string
   date: string
   time: string
@@ -42,6 +69,11 @@ const form = reactive({
 const records = ref<QsoRecordItem[]>([])
 const feedback = ref('')
 const timerId = ref<number | null>(null)
+const loading = ref(false)
+const saving = ref(false)
+
+const resourcePlural = 'qso-records'
+const resourceKind = 'QsoRecord'
 
 const syncUtcNow = () => {
   const now = new Date()
@@ -85,6 +117,49 @@ watch(
   },
 )
 
+const nowText = (): string => {
+  return new Date().toLocaleString('zh-CN', {
+    hour12: false,
+  })
+}
+
+const toRecordItem = (extension: QslExtension<QsoRecordSpec>): QsoRecordItem => {
+  return {
+    resourceName: extension.metadata.name,
+    callSign: extension.spec?.callSign ?? '',
+    date: extension.spec?.date ?? '',
+    time: extension.spec?.time ?? '',
+    timezone: extension.spec?.timezone ?? 'UTC',
+    freq: extension.spec?.freq ?? '',
+    mode: extension.spec?.myRigMode ?? '',
+    myRig: extension.spec?.myRig ?? '',
+    myRigAnt: extension.spec?.myRigAnt ?? '',
+    myRigPwr: extension.spec?.myRigPwr ?? '',
+    qth: extension.spec?.qth ?? '',
+    rstSent: extension.spec?.rstSent ?? '',
+    rstRcvd: extension.spec?.rstRcvd ?? '',
+    remarks: extension.spec?.remarks ?? '',
+  }
+}
+
+const loadRecords = async (options: { silent?: boolean } = {}) => {
+  loading.value = true
+  try {
+    const extensions = await listExtensions<QsoRecordSpec>(resourcePlural)
+    records.value = extensions.map((extension) => toRecordItem(extension))
+    if (!options.silent && extensions.length) {
+      feedback.value = `已加载 ${extensions.length} 条持久化通联记录（${nowText()}）。`
+    }
+    if (!options.silent && !extensions.length) {
+      feedback.value = '暂无持久化通联记录。'
+    }
+  } catch (error) {
+    feedback.value = `加载通联记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    loading.value = false
+  }
+}
+
 const filteredHistory = computed(() => {
   const callSign = form.callSign.trim().toUpperCase()
   if (!callSign) {
@@ -115,7 +190,7 @@ const resetForm = () => {
   }
 }
 
-const saveRecord = () => {
+const saveRecord = async () => {
   if (!form.callSign.trim()) {
     feedback.value = '对方呼号不能为空。'
     return
@@ -126,32 +201,57 @@ const saveRecord = () => {
     return
   }
 
-  const item: QsoRecordItem = {
-    id: `QSO-${Date.now()}`,
-    callSign: form.callSign.trim().toUpperCase(),
-    date: form.date,
-    time: form.time,
-    timezone: form.timezone,
-    freq: form.freq.trim(),
-    mode: form.mode,
-    myRig: form.myRig.trim(),
-    myRigAnt: form.myRigAnt.trim(),
-    myRigPwr: form.myRigPwr.trim(),
-    qth: form.qth.trim(),
-    rstSent: form.rstSent.trim(),
-    rstRcvd: form.rstRcvd.trim(),
-    remarks: form.remarks.trim(),
+  saving.value = true
+  try {
+    await createExtension<QsoRecordSpec>(resourcePlural, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: createResourceName('qso-record'),
+      },
+      spec: {
+        date: form.date,
+        time: form.time,
+        timezone: form.timezone,
+        freq: form.freq.trim(),
+        myRig: form.myRig.trim(),
+        myRigMode: form.mode,
+        myRigAnt: form.myRigAnt.trim(),
+        myRigPwr: form.myRigPwr.trim(),
+        callSign: form.callSign.trim().toUpperCase(),
+        rig: form.rig.trim(),
+        ant: form.ant.trim(),
+        pwr: form.pwr.trim(),
+        qth: form.qth.trim(),
+        rstSent: form.rstSent.trim(),
+        rstRcvd: form.rstRcvd.trim(),
+        remarks: form.remarks.trim(),
+      },
+    })
+    await appendQslAuditLog({
+      action: '新增通联记录',
+      resourceType: 'qso-record',
+      resourceName: form.callSign.trim().toUpperCase(),
+      detail: `${form.date} ${form.time} ${form.timezone}`,
+    })
+    await loadRecords({ silent: true })
+    feedback.value = `通联记录已持久化保存（${nowText()}）。`
+    resetForm()
+  } catch (error) {
+    feedback.value = `保存通联记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    saving.value = false
   }
-
-  records.value.unshift(item)
-  feedback.value = `已保存通联记录：${item.id}`
-  resetForm()
 }
 
 onBeforeUnmount(() => {
   if (timerId.value) {
     window.clearInterval(timerId.value)
   }
+})
+
+onMounted(() => {
+  loadRecords()
 })
 </script>
 
@@ -289,19 +389,19 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="qsl-actions">
-        <VButton type="secondary" @click="saveRecord">保存通联记录</VButton>
+        <VButton type="secondary" :disabled="loading || saving" @click="saveRecord">保存通联记录</VButton>
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
     </VCard>
 
     <VCard title="历史记录">
       <ul v-if="filteredHistory.length" class="qsl-list">
-        <li v-for="item in filteredHistory" :key="item.id" class="qsl-list__item qsl-list__item--column">
+        <li v-for="item in filteredHistory" :key="item.resourceName" class="qsl-list__item qsl-list__item--column">
           <div class="qsl-inline-meta">
             <VTag>{{ item.callSign }}</VTag>
             <span>{{ item.date }} {{ item.time }} {{ item.timezone }}</span>
             <span>{{ item.freq || '未填频率' }}</span>
-            <span>{{ item.mode }}</span>
+            <span>{{ item.mode || '未填模式' }}</span>
           </div>
           <p class="qsl-muted">设备：{{ item.myRig || '未填' }} / 天线：{{ item.myRigAnt || '未填' }} / 功率：{{ item.myRigPwr || '未填' }}</p>
           <p class="qsl-muted">位置：{{ item.qth || '未填' }}，备注：{{ item.remarks || '无' }}</p>

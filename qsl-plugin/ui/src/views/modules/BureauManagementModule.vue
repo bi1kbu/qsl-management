@@ -1,6 +1,23 @@
 <script setup lang="ts">
 import { VButton, VCard } from '@halo-dev/components'
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
+import {
+  createExtension,
+  createResourceName,
+  deleteExtension,
+  listExtensions,
+  qslApiVersion,
+  type QslExtension,
+} from '../../api/qsl-extension-api'
+import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+
+interface BureauSpec {
+  bureauName: string
+  telephone: string
+  postalCode: string
+  address: string
+  addressRemarks: string
+}
 
 interface BureauItem {
   id: string
@@ -21,8 +38,45 @@ const form = reactive({
 
 const rows = ref<BureauItem[]>([])
 const feedback = ref('')
+const loading = ref(false)
+const submitting = ref(false)
 
-const addBureau = () => {
+const resourcePlural = 'bureau-entries'
+const resourceKind = 'BureauEntry'
+
+const toRow = (extension: QslExtension<BureauSpec>): BureauItem => {
+  return {
+    id: extension.metadata.name,
+    bureauName: extension.spec?.bureauName ?? '',
+    telephone: extension.spec?.telephone ?? '',
+    postalCode: extension.spec?.postalCode ?? '',
+    address: extension.spec?.address ?? '',
+    remarks: extension.spec?.addressRemarks ?? '',
+  }
+}
+
+const loadRows = async () => {
+  loading.value = true
+  try {
+    const extensions = await listExtensions<BureauSpec>(resourcePlural)
+    rows.value = extensions.map((extension) => toRow(extension))
+    feedback.value = `已加载 ${rows.value.length} 条持久化卡片局记录。`
+  } catch (error) {
+    feedback.value = `加载卡片局记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    loading.value = false
+  }
+}
+
+const resetForm = () => {
+  form.bureauName = ''
+  form.telephone = ''
+  form.postalCode = ''
+  form.address = ''
+  form.remarks = ''
+}
+
+const addBureau = async () => {
   if (!form.bureauName.trim()) {
     feedback.value = '卡片局名称不能为空。'
     return
@@ -33,32 +87,60 @@ const addBureau = () => {
     return
   }
 
-  rows.value.unshift({
-    id: `BUREAU-${Date.now()}`,
-    bureauName: form.bureauName.trim().toUpperCase(),
-    telephone: form.telephone.trim(),
-    postalCode: form.postalCode.trim(),
-    address: form.address.trim(),
-    remarks: form.remarks.trim(),
-  })
-
-  feedback.value = `已新增卡片局：${form.bureauName.trim().toUpperCase()}`
-  form.bureauName = ''
-  form.telephone = ''
-  form.postalCode = ''
-  form.address = ''
-  form.remarks = ''
-}
-
-const removeBureau = (id: string) => {
-  const index = rows.value.findIndex((row) => row.id === id)
-  if (index === -1) {
-    return
+  submitting.value = true
+  const bureauName = form.bureauName.trim().toUpperCase()
+  try {
+    const created = await createExtension<BureauSpec>(resourcePlural, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: createResourceName('bureau-entry'),
+      },
+      spec: {
+        bureauName,
+        telephone: form.telephone.trim(),
+        postalCode: form.postalCode.trim(),
+        address: form.address.trim(),
+        addressRemarks: form.remarks.trim(),
+      },
+    })
+    await appendQslAuditLog({
+      action: '新增卡片局记录',
+      resourceType: 'bureau-entry',
+      resourceName: created.metadata.name,
+      detail: `卡片局：${bureauName}`,
+    })
+    await loadRows()
+    feedback.value = `已新增卡片局：${bureauName}`
+    resetForm()
+  } catch (error) {
+    feedback.value = `新增卡片局失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    submitting.value = false
   }
-
-  const [removed] = rows.value.splice(index, 1)
-  feedback.value = `已删除卡片局：${removed.bureauName}`
 }
+
+const removeBureau = async (id: string) => {
+  submitting.value = true
+  try {
+    const target = rows.value.find((row) => row.id === id)
+    await deleteExtension(resourcePlural, id)
+    await appendQslAuditLog({
+      action: '删除卡片局记录',
+      resourceType: 'bureau-entry',
+      resourceName: id,
+      detail: target?.bureauName ? `卡片局：${target.bureauName}` : '',
+    })
+    await loadRows()
+    feedback.value = `已删除卡片局：${target?.bureauName || id}`
+  } catch (error) {
+    feedback.value = `删除卡片局失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    submitting.value = false
+  }
+}
+
+onMounted(loadRows)
 </script>
 
 <template>
@@ -102,7 +184,8 @@ const removeBureau = (id: string) => {
       </div>
 
       <div class="qsl-actions">
-        <VButton type="secondary" @click="addBureau">新增卡片局</VButton>
+        <VButton type="secondary" :disabled="loading || submitting" @click="addBureau">新增卡片局</VButton>
+        <VButton :disabled="loading || submitting" @click="loadRows">刷新</VButton>
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
     </VCard>
@@ -125,11 +208,14 @@ const removeBureau = (id: string) => {
               <td>{{ row.bureauName }}</td>
               <td>{{ row.telephone || '-' }}</td>
               <td>{{ row.postalCode || '-' }}</td>
-              <td>{{ row.address }}</td>
+              <td>{{ row.address || '-' }}</td>
               <td>{{ row.remarks || '-' }}</td>
               <td>
-                <VButton size="xs" type="danger" @click="removeBureau(row.id)">删除</VButton>
+                <VButton size="xs" type="danger" :disabled="loading || submitting" @click="removeBureau(row.id)">删除</VButton>
               </td>
+            </tr>
+            <tr v-if="!rows.length">
+              <td colspan="6" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>
@@ -137,3 +223,10 @@ const removeBureau = (id: string) => {
     </VCard>
   </div>
 </template>
+
+<style scoped lang="scss">
+.qsl-table-empty {
+  text-align: center;
+  color: #6b7280;
+}
+</style>

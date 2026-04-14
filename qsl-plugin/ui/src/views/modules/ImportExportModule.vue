@@ -1,15 +1,25 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import JSZip from 'jszip'
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
-
-type DatasetValue =
-  | 'qso-record'
-  | 'card-record'
-  | 'exchange-request-review'
-  | 'address-management'
-  | 'bureau-management'
-  | 'equipment-catalog'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import {
+  datasetOptions,
+  detectDatasetByMarker,
+  getDatasetLabel,
+  getFirstCellFromCsv,
+  importDatasetCsv,
+  listDatasetCount,
+  parseCsvToRowObjects,
+  type DatasetValue,
+} from '../../api/qsl-import-export'
+import {
+  createExportJob,
+  createImportJob,
+  downloadExportJob,
+  type ImportExportJobSpec,
+  type ImportExportJobStatus,
+} from '../../api/qsl-console-api'
+import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 
 type ImportFileKind = 'none' | 'csv' | 'zip' | 'unsupported'
 
@@ -28,33 +38,18 @@ interface ZipImportItem {
   dataset: DatasetValue | ''
   selected: boolean
   detectSource: string
+  content: string
+  rowCount: number
 }
 
-const datasetOptions: { value: DatasetValue; label: string }[] = [
-  { value: 'qso-record', label: '通联记录' },
-  { value: 'card-record', label: '卡片记录' },
-  { value: 'exchange-request-review', label: '换卡申请' },
-  { value: 'address-management', label: '地址管理' },
-  { value: 'bureau-management', label: '卡片局管理' },
-  { value: 'equipment-catalog', label: '设备库维护' },
-]
-
-const datasetKeywordMap: { value: DatasetValue; keywords: string[] }[] = [
-  { value: 'qso-record', keywords: ['qso-record', 'qso', '通联记录'] },
-  { value: 'card-record', keywords: ['card-record', 'card', '卡片记录'] },
-  { value: 'exchange-request-review', keywords: ['exchange-request-review', 'exchange-request', '换卡申请'] },
-  { value: 'address-management', keywords: ['address-management', 'address', '地址管理'] },
-  { value: 'bureau-management', keywords: ['bureau-management', 'bureau', '卡片局管理'] },
-  { value: 'equipment-catalog', keywords: ['equipment-catalog', 'equipment', '设备库维护'] },
-]
-
 const importForm = reactive({
-  strategy: 'skip',
+  strategy: 'skip' as 'skip' | 'overwrite',
 })
 
 const importFile = ref<File | null>(null)
 const importFileKind = ref<ImportFileKind>('none')
 const importFileInputRef = ref<HTMLInputElement | null>(null)
+const csvContent = ref('')
 const csvDetectedDataset = ref<DatasetValue | ''>('')
 const csvManualDataset = ref<DatasetValue | ''>('')
 const csvDetectDetail = ref('')
@@ -71,6 +66,7 @@ const exportForm = reactive({
   includeFullFields: true,
 })
 
+const exportBusy = ref(false)
 const exportFeedback = ref('')
 const exportPreviewResult = ref('')
 const exportContent = ref('')
@@ -78,6 +74,7 @@ const exportBlobUrl = ref('')
 const exportFileName = ref('')
 
 const operationRecords = ref<OperationRecord[]>([])
+const jobPlural = 'import-export-jobs'
 
 const resolvedCsvDataset = computed<DatasetValue | ''>(() => {
   return csvDetectedDataset.value || csvManualDataset.value
@@ -93,47 +90,8 @@ const nowText = (): string => {
   })
 }
 
-const getDatasetLabel = (value: DatasetValue | ''): string => {
-  if (!value) {
-    return '未识别类型'
-  }
-  return datasetOptions.find((item) => item.value === value)?.label ?? value
-}
-
-const normalizeMarker = (value: string): string => {
-  return value.toLowerCase().replace(/[\uFEFF"']/g, '').replace(/\s+/g, '')
-}
-
-const detectDatasetByMarker = (marker: string): DatasetValue | '' => {
-  const normalized = normalizeMarker(marker)
-  if (!normalized) {
-    return ''
-  }
-
-  for (const item of datasetKeywordMap) {
-    if (item.keywords.some((keyword) => normalized.includes(normalizeMarker(keyword)))) {
-      return item.value
-    }
-  }
-
-  return ''
-}
-
-const getFirstCellFromCsv = (content: string): string => {
-  const firstLine = content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0)
-
-  if (!firstLine) {
-    return ''
-  }
-
-  const firstCell = firstLine.split(',')[0] ?? ''
-  return firstCell.trim()
-}
-
 const clearImportAnalyzeState = () => {
+  csvContent.value = ''
   csvDetectedDataset.value = ''
   csvManualDataset.value = ''
   csvDetectDetail.value = ''
@@ -146,13 +104,96 @@ const revokeExportBlob = () => {
     return
   }
 
-  URL.revokeObjectURL(exportBlobUrl.value)
+  if (exportBlobUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(exportBlobUrl.value)
+  }
   exportBlobUrl.value = ''
   exportFileName.value = ''
 }
 
-const appendRecord = (record: OperationRecord) => {
-  operationRecords.value.unshift(record)
+const parseDatasetValues = (value: string): string[] => {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+}
+
+const resolveDatasetLabel = (value: string): string => {
+  if (!value) {
+    return ''
+  }
+  if (value === 'all') {
+    return '全部数据集'
+  }
+
+  const datasetValues = parseDatasetValues(value)
+  if (!datasetValues.length) {
+    return value
+  }
+  if (datasetValues.length > 1) {
+    return datasetValues
+      .map((datasetValue) => {
+        const option = datasetOptions.find((item) => item.value === datasetValue)
+        return option ? option.label : datasetValue
+      })
+      .join('、')
+  }
+
+  const singleDataset = datasetValues[0]
+  const option = datasetOptions.find((item) => item.value === singleDataset)
+  return option ? option.label : singleDataset
+}
+
+const toOperationRecord = (
+  extension: QslExtension<ImportExportJobSpec, ImportExportJobStatus>,
+): OperationRecord => {
+  const spec = extension.spec ?? {
+    jobType: '',
+    dataset: '',
+    format: '',
+    strategy: '',
+    sourceFile: '',
+    outputFile: '',
+    requestedBy: '',
+  }
+  const status = extension.status ?? {
+    status: '',
+    totalCount: 0,
+    successCount: 0,
+    failedCount: 0,
+    errorReportPath: '',
+    startedAt: '',
+    finishedAt: '',
+  }
+
+  const isImport = spec.jobType === 'import'
+  const time = status.finishedAt || status.startedAt || extension.metadata.creationTimestamp || ''
+  const detail = isImport
+    ? `来源：${spec.sourceFile || '未提供'}；策略：${spec.strategy || '未指定'}；总量：${status.totalCount || 0}；成功：${
+        status.successCount || 0
+      }；失败：${status.failedCount || 0}`
+    : `输出：${spec.outputFile || '未生成'}；总量：${status.totalCount || 0}；成功：${status.successCount || 0}；失败：${
+        status.failedCount || 0
+      }`
+
+  return {
+    id: extension.metadata.name,
+    time,
+    action: isImport ? '导入' : '导出',
+    dataset: resolveDatasetLabel(spec.dataset || ''),
+    format: (spec.format || '').toUpperCase(),
+    detail,
+    status: status.status || (status.failedCount > 0 ? '部分成功' : '成功'),
+  }
+}
+
+const loadOperationRecords = async () => {
+  try {
+    const jobs = await listExtensions<ImportExportJobSpec, ImportExportJobStatus>(jobPlural)
+    operationRecords.value = jobs.map((item) => toOperationRecord(item))
+  } catch {
+    operationRecords.value = []
+  }
 }
 
 const onImportFileChange = async (event: Event) => {
@@ -171,8 +212,8 @@ const onImportFileChange = async (event: Event) => {
 
   if (lowerName.endsWith('.csv')) {
     importFileKind.value = 'csv'
-    const content = await importFile.value.text()
-    const firstCell = getFirstCellFromCsv(content)
+    csvContent.value = await importFile.value.text()
+    const firstCell = getFirstCellFromCsv(csvContent.value)
     const detected = detectDatasetByMarker(firstCell)
 
     csvDetectedDataset.value = detected
@@ -208,6 +249,7 @@ const onImportFileChange = async (event: Event) => {
         const markerDataset = detectDatasetByMarker(firstCell)
         const filenameDataset = detectDatasetByMarker(entry.name)
         const detected = markerDataset || filenameDataset
+        const parsed = parseCsvToRowObjects(content)
 
         parsedItems.push({
           entryName: entry.name,
@@ -218,6 +260,8 @@ const onImportFileChange = async (event: Event) => {
             : filenameDataset
               ? '文件名匹配'
               : '未识别，请手动选择',
+          content,
+          rowCount: parsed.dataRows,
         })
       }
 
@@ -249,11 +293,8 @@ const runImportPrecheck = () => {
       return
     }
 
-    const total = Math.max(5, Math.round(importFile.value.size / 220))
-    const valid = Math.max(1, total - 1)
-    const invalid = total - valid
-
-    importPrecheckResult.value = `CSV预检完成：类型 ${getDatasetLabel(resolvedCsvDataset.value)}，总计 ${total} 行，合法 ${valid} 行，异常 ${invalid} 行。`
+    const parsed = parseCsvToRowObjects(csvContent.value)
+    importPrecheckResult.value = `CSV预检完成：类型 ${getDatasetLabel(resolvedCsvDataset.value)}，可导入 ${parsed.dataRows} 行。`
     importFeedback.value = '预检完成，可执行导入。'
     return
   }
@@ -265,7 +306,8 @@ const runImportPrecheck = () => {
     }
 
     const selectedNames = selectedZipItems.value.map((item) => `${item.entryName}(${getDatasetLabel(item.dataset)})`)
-    importPrecheckResult.value = `ZIP预检完成：将导入 ${selectedZipItems.value.length} 个文件，${selectedNames.join('；')}`
+    const totalRows = selectedZipItems.value.reduce((sum, item) => sum + item.rowCount, 0)
+    importPrecheckResult.value = `ZIP预检完成：将导入 ${selectedZipItems.value.length} 个文件，共 ${totalRows} 行，${selectedNames.join('；')}`
     importFeedback.value = '预检完成，可执行导入。'
     return
   }
@@ -273,7 +315,7 @@ const runImportPrecheck = () => {
   importFeedback.value = '文件类型不支持，请选择CSV或ZIP。'
 }
 
-const runImportExecute = () => {
+const runImportExecute = async () => {
   if (!importFile.value) {
     importFeedback.value = '请先选择导入文件。'
     return
@@ -284,155 +326,154 @@ const runImportExecute = () => {
     return
   }
 
+  importBusy.value = true
   const time = nowText()
 
-  if (importFileKind.value === 'csv') {
-    const datasetLabel = getDatasetLabel(resolvedCsvDataset.value)
-    importFeedback.value = `CSV导入任务已提交（${time}）。`
-    appendRecord({
-      id: `IMP-${Date.now()}`,
-      time,
-      action: '导入',
-      dataset: datasetLabel,
-      format: 'CSV',
-      detail: `文件：${importFile.value.name}；策略：${importForm.strategy === 'skip' ? '跳过重复' : '覆盖重复'}`,
-      status: '成功',
-    })
-    return
-  }
+  try {
+    if (importFileKind.value === 'csv') {
+      if (!resolvedCsvDataset.value) {
+        importFeedback.value = '未识别CSV类型，请先手动选择。'
+        return
+      }
+      const result = await importDatasetCsv(resolvedCsvDataset.value, csvContent.value, importForm.strategy)
+      importFeedback.value = `CSV导入完成（${time}）：成功 ${result.success}，跳过 ${result.skipped}，失败 ${result.failed}。`
+      await createImportJob({
+        dataset: resolvedCsvDataset.value,
+        format: 'csv',
+        strategy: importForm.strategy,
+        sourceFile: importFile.value.name,
+        totalCount: result.total,
+        successCount: result.success,
+        failedCount: result.failed,
+        status: result.failed > 0 || result.skipped > 0 ? '部分成功' : '已完成',
+      })
+      await loadOperationRecords()
+      return
+    }
 
-  if (importFileKind.value === 'zip') {
-    const datasetLabel = selectedZipItems.value.map((item) => getDatasetLabel(item.dataset)).join('、')
-    importFeedback.value = `ZIP导入任务已提交（${time}）。`
-    appendRecord({
-      id: `IMP-${Date.now()}`,
-      time,
-      action: '导入',
-      dataset: datasetLabel,
-      format: 'ZIP',
-      detail: `文件：${importFile.value.name}；文件数：${selectedZipItems.value.length}；策略：${
-        importForm.strategy === 'skip' ? '跳过重复' : '覆盖重复'
-      }`,
-      status: '成功',
-    })
-    return
-  }
+    if (importFileKind.value === 'zip') {
+      if (!selectedZipItems.value.length) {
+        importFeedback.value = '请至少选择一个压缩包内CSV内容进行导入。'
+        return
+      }
 
-  importFeedback.value = '文件类型不支持，请选择CSV或ZIP。'
+      const selectedDatasetSet = new Set<DatasetValue>()
+      for (const item of selectedZipItems.value) {
+        if (item.dataset) {
+          selectedDatasetSet.add(item.dataset)
+        }
+      }
+      const selectedDatasets = datasetOptions
+        .map((item) => item.value)
+        .filter((datasetValue) => selectedDatasetSet.has(datasetValue))
+      const zipJobDatasetValue =
+        selectedDatasets.length === datasetOptions.length ? 'all' : selectedDatasets.join(',')
+
+      let total = 0
+      let success = 0
+      let skipped = 0
+      let failed = 0
+
+      for (const item of selectedZipItems.value) {
+        if (!item.dataset) {
+          continue
+        }
+        const result = await importDatasetCsv(item.dataset, item.content, importForm.strategy)
+        total += result.total
+        success += result.success
+        skipped += result.skipped
+        failed += result.failed
+      }
+
+      importFeedback.value = `ZIP导入完成（${time}）：成功 ${success}，跳过 ${skipped}，失败 ${failed}。`
+      await createImportJob({
+        dataset: zipJobDatasetValue,
+        format: 'zip',
+        strategy: importForm.strategy,
+        sourceFile: importFile.value.name,
+        totalCount: total,
+        successCount: success,
+        failedCount: failed,
+        status: failed > 0 || skipped > 0 ? '部分成功' : '已完成',
+      })
+      await loadOperationRecords()
+      return
+    }
+
+    importFeedback.value = '文件类型不支持，请选择CSV或ZIP。'
+  } catch (error) {
+    importFeedback.value = `导入失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    importBusy.value = false
+  }
 }
 
-const buildDatasetCsv = (dataset: DatasetValue): string => {
-  switch (dataset) {
-    case 'qso-record':
-      return [
-        'id#qso-record,call_sign,date,time,timezone,freq,mode,remarks',
-        'QSO-1001,BI1KBU,2026-04-14,1325,UTC,14.230,SSB,示例记录',
-        'QSO-1002,JA1ABC,2026-04-13,0840,UTC+8,7.074,FT8,示例记录',
-      ].join('\n')
-    case 'card-record':
-      return [
-        'id#card-record,call_sign,card_type,card_version,card_date,card_time,remarks',
-        'CARD-1001,BI1KBU,QSO,2026春季版,2026-04-14,1325,示例记录',
-      ].join('\n')
-    case 'exchange-request-review':
-      return [
-        'id#exchange-request-review,call_sign,use_bureau,email,remarks,status',
-        'REQ-1001,JA1ABC,false,ja1abc@example.com,示例申请,待审核',
-      ].join('\n')
-    case 'address-management':
-      return [
-        'id#address-management,call_sign,name,telephone,postal_code,address,email,remarks',
-        'ADDR-1001,BI1KBU,张三,13800000000,100000,北京市朝阳区示例路1号,bi1kbu@example.com,示例地址',
-      ].join('\n')
-    case 'bureau-management':
-      return [
-        'id#bureau-management,bureau_name,telephone,postal_code,address,remarks',
-        'BUREAU-1001,BEIJING-BUREAU,010-12345678,100000,北京市海淀区示例路2号,示例卡片局',
-      ].join('\n')
-    case 'equipment-catalog':
-      return [
-        'id#equipment-catalog,type,value,remarks',
-        'EQ-1001,RIG,IC-7300,示例设备',
-        'EQ-1002,MODE,FT8,示例模式',
-      ].join('\n')
-    default:
-      return 'id#unknown,value\n1,示例'
-  }
-}
+const runExportPreview = async () => {
+  exportBusy.value = true
+  try {
+    if (exportForm.mode === 'single') {
+      const count = await listDatasetCount(exportForm.dataset)
+      exportPreviewResult.value = `单独导出预估 ${count} 条${getDatasetLabel(exportForm.dataset)}数据，输出格式为CSV。`
+      exportFeedback.value = '预览成功，可执行导出。'
+      return
+    }
 
-const runExportPreview = () => {
-  if (exportForm.mode === 'single') {
-    const count = 20 + Math.floor(Math.random() * 180)
-    exportPreviewResult.value = `单独导出预估 ${count} 条${getDatasetLabel(exportForm.dataset)}数据，输出格式为CSV。`
+    let total = 0
+    for (const option of datasetOptions) {
+      total += await listDatasetCount(option.value)
+    }
+    exportPreviewResult.value = `全部导出预估 ${total} 条数据，将生成 ${datasetOptions.length} 个CSV并打包为ZIP。`
     exportFeedback.value = '预览成功，可执行导出。'
-    return
+  } catch (error) {
+    exportFeedback.value = `预览失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    exportBusy.value = false
   }
-
-  const total = 200 + Math.floor(Math.random() * 800)
-  exportPreviewResult.value = `全部导出预估 ${total} 条数据，将生成 ${datasetOptions.length} 个CSV并打包为ZIP。`
-  exportFeedback.value = '预览成功，可执行导出。'
 }
 
 const runExportExecute = async () => {
   revokeExportBlob()
+  exportBusy.value = true
 
   const time = nowText()
 
   try {
-    if (exportForm.mode === 'single') {
-      const csv = buildDatasetCsv(exportForm.dataset)
-      const fileName = `${exportForm.dataset}-${Date.now()}.csv`
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-      exportBlobUrl.value = URL.createObjectURL(blob)
-      exportFileName.value = fileName
-      exportContent.value = csv
-      exportFeedback.value = `单独导出完成（${time}）。`
+    const dataset = exportForm.mode === 'single' ? exportForm.dataset : 'all'
+    const format = exportForm.mode === 'single' ? 'csv' : 'zip'
+    const createdJob = await createExportJob({
+      dataset,
+      format,
+    })
 
-      appendRecord({
-        id: `EXP-${Date.now()}`,
-        time,
-        action: '导出',
-        dataset: getDatasetLabel(exportForm.dataset),
-        format: 'CSV',
-        detail: `范围：${exportForm.dateFrom || '最早'} 至 ${exportForm.dateTo || '最新'}；字段：${
-          exportForm.includeFullFields ? '全部字段' : '核心字段'
-        }`,
-        status: '成功',
-      })
-      return
+    const fallbackName = createdJob.spec?.outputFile || `${createdJob.metadata.name}.${format}`
+    exportBlobUrl.value = `/apis/console.api.qsl-management.halo.run/v1alpha1/exports/jobs/${encodeURIComponent(
+      createdJob.metadata.name,
+    )}/download`
+    exportFileName.value = fallbackName
+
+    if (format === 'csv') {
+      const download = await downloadExportJob(createdJob.metadata.name, fallbackName)
+      if (download.blob.size > 0) {
+        exportBlobUrl.value = URL.createObjectURL(download.blob)
+        exportFileName.value = download.fileName
+      }
+      exportContent.value = await download.blob.text()
+    } else {
+      exportContent.value = `已生成压缩包：${fallbackName}\n包含数据集：${datasetOptions.map((item) => item.label).join('、')}`
     }
 
-    const zip = new JSZip()
-    const fileNames: string[] = []
-
-    datasetOptions.forEach((item) => {
-      const csvName = `${item.value}.csv`
-      zip.file(csvName, buildDatasetCsv(item.value))
-      fileNames.push(csvName)
-    })
-
-    const zipBlob = await zip.generateAsync({ type: 'blob' })
-    const zipName = `qsl-export-all-${Date.now()}.zip`
-    exportBlobUrl.value = URL.createObjectURL(zipBlob)
-    exportFileName.value = zipName
-    exportContent.value = `ZIP内容清单：\n${fileNames.join('\n')}`
-    exportFeedback.value = `全部导出完成（${time}）。`
-
-    appendRecord({
-      id: `EXP-${Date.now()}`,
-      time,
-      action: '导出',
-      dataset: '全部数据集',
-      format: 'ZIP(全量CSV)',
-      detail: `共 ${fileNames.length} 个CSV文件；范围：${exportForm.dateFrom || '最早'} 至 ${
-        exportForm.dateTo || '最新'
-      }`,
-      status: '成功',
-    })
+    exportFeedback.value = exportForm.mode === 'single' ? `单独导出完成（${time}）。` : `全部导出完成（${time}）。`
+    await loadOperationRecords()
   } catch (error) {
     exportFeedback.value = `导出失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    exportBusy.value = false
   }
 }
+
+onMounted(() => {
+  loadOperationRecords()
+})
 
 onBeforeUnmount(() => {
   revokeExportBlob()
@@ -460,6 +501,7 @@ onBeforeUnmount(() => {
               ref="importFileInputRef"
               type="file"
               accept=".csv,.zip"
+              :disabled="importBusy"
               @change="onImportFileChange"
             />
           </div>
@@ -494,7 +536,7 @@ onBeforeUnmount(() => {
             <li v-for="item in zipImportItems" :key="item.entryName" class="qsl-zip-item">
               <label class="qsl-checkbox">
                 <input v-model="item.selected" type="checkbox" />
-                <span>{{ item.entryName }}</span>
+                <span>{{ item.entryName }}（{{ item.rowCount }} 行）</span>
               </label>
 
               <div class="qsl-input-shell">
@@ -515,8 +557,8 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="qsl-actions">
-        <VButton type="secondary" @click="runImportPrecheck">预检导入</VButton>
-        <VButton type="secondary" @click="runImportExecute">执行导入</VButton>
+        <VButton type="secondary" :disabled="importBusy" @click="runImportPrecheck">预检导入</VButton>
+        <VButton type="secondary" :disabled="importBusy" @click="runImportExecute">执行导入</VButton>
       </div>
 
       <div class="qsl-import-export-result">
@@ -570,8 +612,8 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="qsl-actions">
-        <VButton @click="runExportPreview">预览导出条数</VButton>
-        <VButton type="secondary" @click="runExportExecute">执行导出</VButton>
+        <VButton :disabled="exportBusy" @click="runExportPreview">预览导出条数</VButton>
+        <VButton type="secondary" :disabled="exportBusy" @click="runExportExecute">执行导出</VButton>
         <a v-if="exportBlobUrl" class="qsl-download-link" :href="exportBlobUrl" :download="exportFileName">
           下载导出文件
         </a>
@@ -615,7 +657,17 @@ onBeforeUnmount(() => {
               <td>{{ item.format }}</td>
               <td>{{ item.detail }}</td>
               <td>
-                <VTag :theme="item.status === '成功' ? 'secondary' : 'danger'">{{ item.status }}</VTag>
+                <VTag
+                  :theme="
+                    item.status === '成功' || item.status === '已完成'
+                      ? 'secondary'
+                      : item.status === '部分成功' || item.status === '待处理'
+                        ? 'default'
+                        : 'danger'
+                  "
+                >
+                  {{ item.status }}
+                </VTag>
               </td>
             </tr>
             <tr v-if="!operationRecords.length">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { VButton, VCard } from '@halo-dev/components'
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
+import { getExtensionOrNull, type QslExtension, upsertSingleton } from '../../api/qsl-extension-api'
 
 const stationProfileForm = reactive({
   myCallSign: '',
@@ -13,6 +14,22 @@ const stationProfileForm = reactive({
 })
 
 const feedback = ref('')
+const loading = ref(false)
+const saving = ref(false)
+
+interface StationProfileSpec {
+  myCallSign: string
+  myName: string
+  myTelephone: string
+  myPostalCode: string
+  myAddress: string
+  myEmail: string
+  stationRemarks: string
+}
+
+const resourceName = 'qsl-station-profile-default'
+const resourcePlural = 'station-profiles'
+const resourceKind = 'StationProfile'
 
 const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', {
@@ -20,14 +37,65 @@ const nowText = (): string => {
   })
 }
 
-const saveStationProfile = () => {
+const fillForm = (extension: QslExtension<StationProfileSpec>) => {
+  stationProfileForm.myCallSign = extension.spec?.myCallSign ?? ''
+  stationProfileForm.myName = extension.spec?.myName ?? ''
+  stationProfileForm.myTelephone = extension.spec?.myTelephone ?? ''
+  stationProfileForm.myPostalCode = extension.spec?.myPostalCode ?? ''
+  stationProfileForm.myAddress = extension.spec?.myAddress ?? ''
+  stationProfileForm.myEmail = extension.spec?.myEmail ?? ''
+  stationProfileForm.stationRemarks = extension.spec?.stationRemarks ?? ''
+}
+
+const loadStationProfile = async () => {
+  loading.value = true
+  feedback.value = ''
+  try {
+    const extension = await getExtensionOrNull<StationProfileSpec>(resourcePlural, resourceName)
+    if (extension) {
+      fillForm(extension)
+      feedback.value = `已加载持久化通信地址（${nowText()}）。`
+      return
+    }
+    feedback.value = '未发现持久化通信地址，当前为空白模板。'
+  } catch (error) {
+    feedback.value = `加载通信地址失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    loading.value = false
+  }
+}
+
+const saveStationProfile = async () => {
   if (!stationProfileForm.myCallSign.trim()) {
     feedback.value = '本台呼号不能为空。'
     return
   }
 
-  feedback.value = `通信地址已保存到本地草稿（${nowText()}）。`
+  saving.value = true
+  try {
+    await upsertSingleton<StationProfileSpec>({
+      plural: resourcePlural,
+      kind: resourceKind,
+      name: resourceName,
+      spec: {
+        myCallSign: stationProfileForm.myCallSign.trim().toUpperCase(),
+        myName: stationProfileForm.myName.trim(),
+        myTelephone: stationProfileForm.myTelephone.trim(),
+        myPostalCode: stationProfileForm.myPostalCode.trim(),
+        myAddress: stationProfileForm.myAddress.trim(),
+        myEmail: stationProfileForm.myEmail.trim(),
+        stationRemarks: stationProfileForm.stationRemarks.trim(),
+      },
+    })
+    feedback.value = `通信地址已持久化保存（${nowText()}）。`
+  } catch (error) {
+    feedback.value = `保存通信地址失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    saving.value = false
+  }
 }
+
+onMounted(loadStationProfile)
 </script>
 
 <template>
@@ -89,7 +157,7 @@ const saveStationProfile = () => {
       </div>
 
       <div class="qsl-actions">
-        <VButton type="secondary" @click="saveStationProfile">保存通信地址</VButton>
+        <VButton type="secondary" :disabled="loading || saving" @click="saveStationProfile">保存通信地址</VButton>
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
     </VCard>

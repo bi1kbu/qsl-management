@@ -1,8 +1,18 @@
 <script setup lang="ts">
 import { VButton, VCard, VEmpty } from '@halo-dev/components'
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import {
+  createExtension,
+  createResourceName,
+  deleteExtension,
+  listExtensions,
+  qslApiVersion,
+  updateExtension,
+  type QslExtension,
+} from '../../api/qsl-extension-api'
 
 interface StationRig {
+  resourceName?: string
   id: number
   name: string
   antennas: string[]
@@ -14,6 +24,8 @@ type RigPropertyKey = 'antennas' | 'powers' | 'modes'
 
 const stationRigs = ref<StationRig[]>([])
 const selectedRigId = ref<number | null>(null)
+const loading = ref(false)
+const saving = ref(false)
 const newRigName = ref('')
 const newRigPropertyInput = reactive<Record<RigPropertyKey, string>>({
   antennas: '',
@@ -22,6 +34,16 @@ const newRigPropertyInput = reactive<Record<RigPropertyKey, string>>({
 })
 
 const feedback = ref('')
+const resourcePlural = 'station-equipments'
+const resourceKind = 'StationEquipment'
+
+interface StationEquipmentSpec {
+  rigName: string
+  antennas: string[]
+  powers: string[]
+  modes: string[]
+  remarks: string
+}
 
 const rigPropertyLabelMap: Record<RigPropertyKey, string> = {
   antennas: '天线',
@@ -40,6 +62,12 @@ const nextRigId = (): number => {
   return stationRigs.value.reduce((max, rig) => Math.max(max, rig.id), 0) + 1
 }
 
+const nowText = (): string => {
+  return new Date().toLocaleString('zh-CN', {
+    hour12: false,
+  })
+}
+
 const ensureSelectedRig = () => {
   if (!stationRigs.value.length) {
     selectedRigId.value = null
@@ -48,6 +76,36 @@ const ensureSelectedRig = () => {
 
   if (!selectedRigId.value || !stationRigs.value.some((rig) => rig.id === selectedRigId.value)) {
     selectedRigId.value = stationRigs.value[0].id
+  }
+}
+
+const toRig = (extension: QslExtension<StationEquipmentSpec>, index: number): StationRig => {
+  return {
+    resourceName: extension.metadata.name,
+    id: index + 1,
+    name: extension.spec?.rigName ?? `未命名设备-${index + 1}`,
+    antennas: extension.spec?.antennas ?? [],
+    powers: extension.spec?.powers ?? [],
+    modes: extension.spec?.modes ?? [],
+  }
+}
+
+const loadStationEquipment = async () => {
+  loading.value = true
+  feedback.value = ''
+  try {
+    const extensions = await listExtensions<StationEquipmentSpec>(resourcePlural)
+    stationRigs.value = extensions.map((extension, index) => toRig(extension, index))
+    ensureSelectedRig()
+    if (extensions.length) {
+      feedback.value = `已加载 ${extensions.length} 台持久化设备（${nowText()}）。`
+      return
+    }
+    feedback.value = '未发现持久化设备配置。'
+  } catch (error) {
+    feedback.value = `加载本台设备失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    loading.value = false
   }
 }
 
@@ -123,12 +181,57 @@ const removeRigProperty = (key: RigPropertyKey, index: number) => {
   feedback.value = `已移除${rigPropertyLabelMap[key]}：${removed}`
 }
 
-const saveStationEquipment = () => {
-  const nowText = new Date().toLocaleString('zh-CN', {
-    hour12: false,
-  })
-  feedback.value = `本台设备配置已保存到本地草稿（${nowText}），共 ${stationRigs.value.length} 台设备。`
+const saveStationEquipment = async () => {
+  saving.value = true
+  try {
+    const currentRemote = await listExtensions<StationEquipmentSpec>(resourcePlural)
+    const remoteMap = new Map(currentRemote.map((item) => [item.metadata.name, item]))
+    const keepNames = new Set<string>()
+
+    for (const rig of stationRigs.value) {
+      const name = rig.resourceName || createResourceName('qsl-station-equipment')
+      const current = remoteMap.get(name)
+      const payload: QslExtension<StationEquipmentSpec> = {
+        apiVersion: qslApiVersion,
+        kind: resourceKind,
+        metadata: {
+          name,
+          version: current?.metadata.version,
+        },
+        spec: {
+          rigName: rig.name.trim(),
+          antennas: [...rig.antennas],
+          powers: [...rig.powers],
+          modes: [...rig.modes],
+          remarks: '',
+        },
+      }
+
+      if (current) {
+        await updateExtension(resourcePlural, name, payload)
+      } else {
+        await createExtension(resourcePlural, payload)
+      }
+
+      rig.resourceName = name
+      keepNames.add(name)
+    }
+
+    const deleteTasks = currentRemote
+      .filter((item) => !keepNames.has(item.metadata.name))
+      .map((item) => deleteExtension(resourcePlural, item.metadata.name))
+    await Promise.all(deleteTasks)
+
+    await loadStationEquipment()
+    feedback.value = `本台设备配置已持久化保存（${nowText()}），共 ${stationRigs.value.length} 台设备。`
+  } catch (error) {
+    feedback.value = `保存本台设备失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    saving.value = false
+  }
 }
+
+onMounted(loadStationEquipment)
 </script>
 
 <template>
@@ -138,7 +241,7 @@ const saveStationEquipment = () => {
         <div class="qsl-input-shell">
           <input v-model.trim="newRigName" type="text" placeholder="输入设备名称（My_RIG）" @keyup.enter="addRig" />
         </div>
-        <VButton type="secondary" @click="addRig">新增设备</VButton>
+        <VButton type="secondary" :disabled="loading || saving" @click="addRig">新增设备</VButton>
       </div>
 
       <ul v-if="stationRigs.length" class="qsl-list">
@@ -151,7 +254,7 @@ const saveStationEquipment = () => {
           >
             {{ rig.name }}
           </button>
-          <VButton size="xs" type="danger" @click="removeRig(rig.id)">删除</VButton>
+          <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeRig(rig.id)">删除</VButton>
         </li>
       </ul>
 
@@ -175,7 +278,7 @@ const saveStationEquipment = () => {
                 @keyup.enter="addRigProperty('antennas')"
               />
             </div>
-            <VButton size="sm" @click="addRigProperty('antennas')">添加</VButton>
+            <VButton size="sm" :disabled="loading || saving" @click="addRigProperty('antennas')">添加</VButton>
           </div>
           <div v-if="selectedRig.antennas.length" class="qsl-tag-list">
             <span v-for="(item, index) in selectedRig.antennas" :key="`${item}-${index}`" class="qsl-tag-pill">
@@ -197,7 +300,7 @@ const saveStationEquipment = () => {
                 @keyup.enter="addRigProperty('powers')"
               />
             </div>
-            <VButton size="sm" @click="addRigProperty('powers')">添加</VButton>
+            <VButton size="sm" :disabled="loading || saving" @click="addRigProperty('powers')">添加</VButton>
           </div>
           <div v-if="selectedRig.powers.length" class="qsl-tag-list">
             <span v-for="(item, index) in selectedRig.powers" :key="`${item}-${index}`" class="qsl-tag-pill">
@@ -219,7 +322,7 @@ const saveStationEquipment = () => {
                 @keyup.enter="addRigProperty('modes')"
               />
             </div>
-            <VButton size="sm" @click="addRigProperty('modes')">添加</VButton>
+            <VButton size="sm" :disabled="loading || saving" @click="addRigProperty('modes')">添加</VButton>
           </div>
           <div v-if="selectedRig.modes.length" class="qsl-tag-list">
             <span v-for="(item, index) in selectedRig.modes" :key="`${item}-${index}`" class="qsl-tag-pill">
@@ -231,7 +334,7 @@ const saveStationEquipment = () => {
         </div>
 
         <div class="qsl-actions">
-          <VButton type="secondary" @click="saveStationEquipment">保存设备配置</VButton>
+          <VButton type="secondary" :disabled="loading || saving" @click="saveStationEquipment">保存设备配置</VButton>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { VButton, VCard, VSwitch } from '@halo-dev/components'
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
+import { upsertSingleton, type QslExtension, getExtensionOrNull } from '../../api/qsl-extension-api'
 
 const systemSettingsForm = reactive({
   guestQueryPerMinute: 30,
@@ -8,6 +9,17 @@ const systemSettingsForm = reactive({
 })
 
 const feedback = ref('')
+const loading = ref(false)
+const saving = ref(false)
+
+interface SystemSettingSpec {
+  guestQueryPerMinute: number
+  requiresExchangeReview: boolean
+}
+
+const resourceName = 'qsl-system-setting-default'
+const resourcePlural = 'system-settings'
+const resourceKind = 'SystemSetting'
 
 const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', {
@@ -15,14 +27,55 @@ const nowText = (): string => {
   })
 }
 
-const saveSystemSettings = () => {
+const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
+  systemSettingsForm.guestQueryPerMinute = extension.spec?.guestQueryPerMinute ?? 30
+  systemSettingsForm.requiresExchangeReview = extension.spec?.requiresExchangeReview ?? true
+}
+
+const loadSystemSettings = async () => {
+  loading.value = true
+  feedback.value = ''
+  try {
+    const extension = await getExtensionOrNull<SystemSettingSpec>(resourcePlural, resourceName)
+    if (extension) {
+      fillForm(extension)
+      feedback.value = `已加载持久化系统参数（${nowText()}）。`
+      return
+    }
+    feedback.value = '未发现持久化系统参数，当前显示默认值。'
+  } catch (error) {
+    feedback.value = `加载系统参数失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    loading.value = false
+  }
+}
+
+const saveSystemSettings = async () => {
   if (!Number.isInteger(systemSettingsForm.guestQueryPerMinute) || systemSettingsForm.guestQueryPerMinute < 1) {
     feedback.value = '游客每分钟查询次数必须为大于 0 的整数。'
     return
   }
 
-  feedback.value = `系统参数已保存到本地草稿（${nowText()}）。`
+  saving.value = true
+  try {
+    await upsertSingleton<SystemSettingSpec>({
+      plural: resourcePlural,
+      kind: resourceKind,
+      name: resourceName,
+      spec: {
+        guestQueryPerMinute: systemSettingsForm.guestQueryPerMinute,
+        requiresExchangeReview: systemSettingsForm.requiresExchangeReview,
+      },
+    })
+    feedback.value = `系统参数已持久化保存（${nowText()}）。`
+  } catch (error) {
+    feedback.value = `保存系统参数失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    saving.value = false
+  }
 }
+
+onMounted(loadSystemSettings)
 </script>
 
 <template>
@@ -52,7 +105,7 @@ const saveSystemSettings = () => {
         </div>
 
         <div class="qsl-actions">
-          <VButton type="secondary" @click="saveSystemSettings">保存参数</VButton>
+          <VButton type="secondary" :disabled="loading || saving" @click="saveSystemSettings">保存参数</VButton>
           <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
         </div>
       </div>

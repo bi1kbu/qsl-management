@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import { reactive, ref } from 'vue'
+import { confirmMailReceive, type MailReceiveConfirmResult } from '../../api/qsl-console-api'
 
 interface ReceiveResult {
   id: string
@@ -11,8 +12,6 @@ interface ReceiveResult {
   createdAt: string
 }
 
-const knownCalls = ['JA1ABC', 'VK3XYZ', 'BI1KBU']
-
 const form = reactive({
   callSign: '',
   cardType: 'QSO' as 'QSO' | 'SWL' | 'EYEBALL',
@@ -21,48 +20,40 @@ const form = reactive({
 
 const results = ref<ReceiveResult[]>([])
 const feedback = ref('')
+const submitting = ref(false)
 
-const submitReceive = () => {
+const submitReceive = async () => {
   const callSign = form.callSign.trim().toUpperCase()
   if (!callSign) {
     feedback.value = '对方呼号不能为空。'
     return
   }
 
-  const createdAt = new Date().toLocaleString('zh-CN', { hour12: false })
-  const existed = knownCalls.includes(callSign)
+  submitting.value = true
+  try {
+    const result: MailReceiveConfirmResult = await confirmMailReceive({
+      callSign,
+      cardType: form.cardType,
+      receiptRemarks: form.receiptRemarks.trim(),
+    })
 
-  let action = '匹配已有记录并标记已收卡片'
-  let message = '已将对应记录标记为 Card_Received=True。'
-
-  if (!existed && form.cardType === 'QSO') {
-    action = '自动创建异常QSO与关联卡片记录'
-    message = '无法匹配原始QSO，已创建异常记录并写入备注。'
+    results.value.unshift({
+      id: `${result.cardRecordName || 'RCV'}-${Date.now()}`,
+      callSign: result.callSign || callSign,
+      cardType: result.cardType || form.cardType,
+      action: result.action,
+      message: result.message,
+      createdAt: result.handledAt,
+    })
+    feedback.value = `收信确认完成：${result.callSign || callSign}`
+    form.callSign = ''
+    form.cardType = 'QSO'
+    form.receiptRemarks = ''
+  } catch (error) {
+    feedback.value = `收信确认失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    submitting.value = false
   }
-
-  if (!existed && form.cardType === 'SWL') {
-    action = '自动创建SWL记录并标记无需发卡'
-    message = '已创建SWL收信记录，Card_Received=True 且 Card_Sent=True。'
-  }
-
-  if (!existed && form.cardType === 'EYEBALL') {
-    action = '自动创建EYEBALL卡片'
-    message = '未匹配记录，已自动创建eyeball类型卡片。'
-  }
-
-  results.value.unshift({
-    id: `RCV-${Date.now()}`,
-    callSign,
-    cardType: form.cardType,
-    action,
-    message,
-    createdAt,
-  })
-
-  feedback.value = `收信确认完成：${callSign}`
-  form.callSign = ''
-  form.cardType = 'QSO'
-  form.receiptRemarks = ''
 }
 </script>
 
@@ -97,7 +88,7 @@ const submitReceive = () => {
       </div>
 
       <div class="qsl-actions">
-        <VButton type="secondary" @click="submitReceive">确认收信</VButton>
+        <VButton type="secondary" :disabled="submitting" @click="submitReceive">确认收信</VButton>
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
     </VCard>

@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
+
+interface CardRecordSpec {
+  callSign: string
+  cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  cardVersion: string
+  cardDate: string
+  cardTime: string
+  cardRemarks: string
+  cardSent: boolean
+  cardReceived: boolean
+}
 
 interface CardQueryItem {
   id: string
@@ -14,36 +26,44 @@ interface CardQueryItem {
   remarks: string
 }
 
-const rows = ref<CardQueryItem[]>([
-  {
-    id: 'CARD-1001',
-    callSign: 'JA1ABC',
-    cardType: 'QSO',
-    cardVersion: '2026春季版',
-    cardDate: '2026-04-10',
-    cardTime: '1325',
-    cardSent: true,
-    cardReceived: false,
-    remarks: '待签收',
-  },
-  {
-    id: 'CARD-1002',
-    callSign: 'VK3XYZ',
-    cardType: 'SWL',
-    cardVersion: '2026基础版',
-    cardDate: '2026-04-11',
-    cardTime: '0845',
-    cardSent: true,
-    cardReceived: true,
-    remarks: '',
-  },
-])
+const rows = ref<CardQueryItem[]>([])
+const loading = ref(false)
+const feedback = ref('')
 
 const filters = reactive({
   callSign: '',
   cardType: '',
   receiptStatus: '',
 })
+
+const resourcePlural = 'card-records'
+
+const toRow = (extension: QslExtension<CardRecordSpec>): CardQueryItem => {
+  return {
+    id: extension.metadata.name,
+    callSign: extension.spec?.callSign ?? '',
+    cardType: extension.spec?.cardType ?? 'QSO',
+    cardVersion: extension.spec?.cardVersion ?? '',
+    cardDate: extension.spec?.cardDate ?? '',
+    cardTime: extension.spec?.cardTime ?? '',
+    cardSent: Boolean(extension.spec?.cardSent),
+    cardReceived: Boolean(extension.spec?.cardReceived),
+    remarks: extension.spec?.cardRemarks ?? '',
+  }
+}
+
+const loadRows = async () => {
+  loading.value = true
+  try {
+    const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
+    rows.value = extensions.map((extension) => toRow(extension))
+    feedback.value = `已加载 ${rows.value.length} 条持久化卡片记录。`
+  } catch (error) {
+    feedback.value = `加载卡片记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    loading.value = false
+  }
+}
 
 const filteredRows = computed(() => {
   return rows.value.filter((item) => {
@@ -67,6 +87,8 @@ const resetFilters = () => {
   filters.cardType = ''
   filters.receiptStatus = ''
 }
+
+onMounted(loadRows)
 </script>
 
 <template>
@@ -105,7 +127,8 @@ const resetFilters = () => {
       </div>
 
       <div class="qsl-actions">
-        <VButton @click="resetFilters">重置筛选</VButton>
+        <VButton :disabled="loading" @click="resetFilters">重置筛选</VButton>
+        <VButton type="secondary" :disabled="loading" @click="loadRows">刷新</VButton>
         <span class="qsl-muted">共 {{ filteredRows.length }} 条</span>
       </div>
 
@@ -126,9 +149,9 @@ const resetFilters = () => {
           <tbody>
             <tr v-for="item in filteredRows" :key="item.id">
               <td>{{ item.id }}</td>
-              <td>{{ item.callSign }}</td>
+              <td>{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType }}</td>
-              <td>{{ item.cardVersion }}</td>
+              <td>{{ item.cardVersion || '-' }}</td>
               <td>{{ item.cardDate }} {{ item.cardTime }}</td>
               <td>
                 <VTag :theme="item.cardSent ? 'secondary' : 'default'">{{ item.cardSent ? '是' : '否' }}</VTag>
@@ -138,9 +161,21 @@ const resetFilters = () => {
               </td>
               <td>{{ item.remarks || '无' }}</td>
             </tr>
+            <tr v-if="!filteredRows.length">
+              <td colspan="8" class="qsl-table-empty">暂无数据。</td>
+            </tr>
           </tbody>
         </table>
       </div>
+
+      <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
     </VCard>
   </div>
 </template>
+
+<style scoped lang="scss">
+.qsl-table-empty {
+  text-align: center;
+  color: #6b7280;
+}
+</style>

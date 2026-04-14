@@ -138,6 +138,82 @@
 | GET | `/apis/console.api.qsl-management.halo.run/v1alpha1/exports/jobs/{jobName}` | 查询导出任务状态 | 必须登录 | `plugin:qsl-management:import-export:view` |
 | GET | `/apis/console.api.qsl-management.halo.run/v1alpha1/exports/jobs/{jobName}/download` | 下载导出文件 | 必须登录 | `plugin:qsl-management:import-export:view` |
 
+## 7.4 请求体定义（控制台）
+
+### 7.4.1 收信确认
+
+`POST /mail-receive-confirms/confirm`
+
+```json
+{
+  "callSign": "BG7ABC",
+  "cardType": "QSO",
+  "receiptRemarks": "签收备注"
+}
+```
+
+说明：
+
+1. `callSign` 必填，服务端统一转大写。
+2. `cardType` 取值：`QSO` / `SWL` / `EYEBALL`。
+3. 未匹配到卡片时，按 `cardType` 执行自动补建规则。
+
+### 7.4.2 换卡申请拒绝
+
+`POST /exchange-requests/{name}/reject`
+
+```json
+{
+  "reason": "审批拒绝"
+}
+```
+
+### 7.4.3 导入预检
+
+`POST /imports/precheck`
+
+```json
+{
+  "dataset": "qso-record",
+  "format": "csv",
+  "sourceFile": "qso-record.csv",
+  "rowCount": 120
+}
+```
+
+### 7.4.4 创建导入任务
+
+`POST /imports/jobs`
+
+```json
+{
+  "dataset": "qso-record",
+  "format": "csv",
+  "strategy": "skip",
+  "sourceFile": "qso-record.csv",
+  "totalCount": 120,
+  "successCount": 118,
+  "failedCount": 2,
+  "status": "部分成功"
+}
+```
+
+说明：
+
+1. `totalCount/successCount/failedCount/status` 为可选，用于前端本地执行导入时回填最终任务状态。
+2. 不传上述可选字段时，后端默认创建 `待处理` 状态任务。
+
+### 7.4.5 创建导出任务
+
+`POST /exports/jobs`
+
+```json
+{
+  "dataset": "all",
+  "format": "zip"
+}
+```
+
 ## 8. 前台公开 API 合同（匿名）
 
 说明：以下接口由 `api.qsl-management.halo.run` 暴露；按需聚合角色到 `anonymous`，并叠加限流策略。
@@ -148,6 +224,44 @@
 | POST | `/apis/api.qsl-management.halo.run/v1alpha1/exchange-public/requests` | 提交换卡申请 | 匿名可访问 | 请求体字段校验 + 限流 |
 | POST | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/confirm` | 卡片签收确认 | 匿名可访问 | 呼号+卡片号强校验 + 限流 |
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/overview-public/summary` | 公共数据总览 | 匿名可访问 | 只读缓存，限流 |
+
+## 8.1 请求体与查询参数（公开）
+
+### 8.1.1 公开查询
+
+`GET /qso-public/records?callSign=BG7ABC`
+
+说明：`callSign` 为必填查询参数。
+
+### 8.1.2 匿名提交换卡申请
+
+`POST /exchange-public/requests`
+
+```json
+{
+  "callSign": "BG7ABC",
+  "useBureau": true,
+  "bureauName": "示例卡片局",
+  "email": "demo@example.com",
+  "name": "张三",
+  "telephone": "13800000000",
+  "postalCode": "510000",
+  "address": "广东省广州市",
+  "remarks": "请走卡片局"
+}
+```
+
+### 8.1.3 匿名签收确认
+
+`POST /receipt-public/confirm`
+
+```json
+{
+  "callSign": "BG7ABC",
+  "cardType": "QSO",
+  "remarks": "已签收"
+}
+```
 
 ## 9. 请求与响应约定
 
@@ -162,7 +276,7 @@
 ```json
 {
   "code": "QSL-0000",
-  "message": "success",
+  "message": "成功",
   "data": {}
 }
 ```
@@ -215,3 +329,11 @@
 
 1. `ProductDefinition.md` 的“4.2 权限节点”
 2. `qsl-plugin/src/main/resources/extensions/qsl-menu-role-templates.yaml`
+
+## 13. 一期当前实现说明（2026-04-14）
+
+1. 控制台业务动作接口已落地持久化写入：发信确认、收信确认、换卡审批。
+2. 导入/导出任务接口已落地 `import-export-jobs` 持久化（任务创建、状态查询、错误明细查询）。
+3. 导出下载接口已支持真实文件流：单项导出返回对应数据集 CSV，全量导出返回包含全部数据集 CSV 的 ZIP 压缩包。
+4. 前台公开接口已落地持久化写入：匿名换卡申请、匿名签收确认。
+5. `qsl-menu-role-templates.yaml` 已补齐服务端 `rules`，覆盖扩展资源 CRUD、控制台自定义 API、公开 API 匿名聚合角色。

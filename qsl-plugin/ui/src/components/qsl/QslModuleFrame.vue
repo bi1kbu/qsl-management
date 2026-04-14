@@ -13,7 +13,7 @@ const props = withDefaults(
   }>(),
   {
     functional: false,
-    functionalStatusText: '当前页面已接入可编辑表单，一期未接入后端持久化接口。',
+    functionalStatusText: '当前页面已接入可编辑表单，并支持后端持久化能力（按模块生效）。',
     placeholderStatusText: '后端业务接口将在下一阶段按模块逐步接入。',
   },
 )
