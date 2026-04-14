@@ -9,6 +9,7 @@ const props = defineProps<{
 const initialized = ref(false)
 
 const currentModule = computed(() => props.qslModule)
+const isImportExportModule = computed(() => currentModule.value?.key === 'import-export')
 
 const formatDependencyText = (items: string[]): string => {
   if (!items.length) {
@@ -45,6 +46,20 @@ onMounted(initializePage)
         <p v-if="initialized">菜单骨架页面已就绪。</p>
         <p v-else>页面正在初始化...</p>
         <p>后端业务接口将在下一阶段按模块逐步接入。</p>
+      </article>
+    </div>
+
+    <div v-if="isImportExportModule" class="panel-grid import-export-grid">
+      <article class="panel">
+        <h2>导入板块</h2>
+        <p>用于批量导入通联记录、卡片记录、换卡申请、地址管理、卡片局管理、设备库等数据。</p>
+        <p>建议提供文件上传、字段映射、预检、错误回滚等能力。</p>
+      </article>
+
+      <article class="panel">
+        <h2>导出板块</h2>
+        <p>用于按筛选条件导出通联记录、卡片记录、换卡申请、地址管理、卡片局管理、设备库等数据。</p>
+        <p>建议支持导出模板、范围筛选、脱敏规则与导出审计记录。</p>
       </article>
     </div>
   </section>
@@ -96,6 +111,10 @@ onMounted(initializePage)
     color: #374151;
     line-height: 1.6;
   }
+}
+
+.import-export-grid {
+  margin-top: 16px;
 }
 
 </style>

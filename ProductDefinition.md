@@ -39,10 +39,7 @@
 | 数据 | 地址管理 | `/qsl/data/address-management` | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 与“卡片局管理”共用节点 |
 | 数据 | 卡片局管理 | `/qsl/data/bureau-management` | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 与“地址管理”共用节点 |
 | 数据 | 设备库维护 | `/qsl/data/equipment-catalog` | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:equipment-catalog:edit` | 独立节点 |
-| 数据 | 导入 | `/qsl/data/import-export` | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | 与“导出”共用节点 |
-| 数据 | 导出 | `/qsl/data/export-data` | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | 与“导入”共用节点 |
-
-兼容路由：`/qsl/data/address-bureau` 自动重定向到 `/qsl/data/address-management`。
+| 数据 | 导入导出 | `/qsl/data/import-export` | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | 页内拆分“导入板块/导出板块” |
 
 ### 2.1 总览
 
@@ -206,13 +203,13 @@
 
 ​	包括：设备（RIG）、天线（ANT）、功率（PWR）、模式（MODE）等字段，每个字段可存放若干行内容
 
-**导入**
+**导入导出**
 
-​	导入入口用于批量写入“通联记录”、“卡片记录”、“换卡申请”、“地址管理”、“卡片局管理”、“设备库”等数据
+​	页面内拆分为两个功能板块：
 
-**导出**
+​	**导入板块**：用于批量写入“通联记录”、“卡片记录”、“换卡申请”、“地址管理”、“卡片局管理”、“设备库”等数据
 
-​	通过格式化的字符串形式，导出“通联记录”、“卡片记录”、“换卡申请”、“地址管理”、“卡片局管理”、“设备库”的全部字段内容
+​	**导出板块**：通过格式化字符串形式，导出“通联记录”、“卡片记录”、“换卡申请”、“地址管理”、“卡片局管理”、“设备库”的全部字段内容
 
 ------
 
@@ -286,8 +283,7 @@
 | 地址管理 | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 无 | `plugin:qsl-management:address-bureau:view` | 与“卡片局管理”共用同一权限节点（仅拆分菜单） |
 | 卡片局管理 | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 无 | `plugin:qsl-management:address-bureau:view` | 与“地址管理”共用同一权限节点（仅拆分菜单） |
 | 设备库维护 | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:equipment-catalog:edit` | 无 | `plugin:qsl-management:equipment-catalog:view` | 基础主数据维护 |
-| 导入 | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:address-bureau:view`,`plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:import-export:view`,`plugin:qsl-management:qso-record:edit`,`plugin:qsl-management:card-record:edit`,`plugin:qsl-management:exchange-request-review:edit`,`plugin:qsl-management:address-bureau:edit`,`plugin:qsl-management:equipment-catalog:edit` | 与“导出”共用同一权限节点（仅拆分菜单） |
-| 导出 | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:address-bureau:view`,`plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:import-export:view`,`plugin:qsl-management:qso-record:edit`,`plugin:qsl-management:card-record:edit`,`plugin:qsl-management:exchange-request-review:edit`,`plugin:qsl-management:address-bureau:edit`,`plugin:qsl-management:equipment-catalog:edit` | 与“导入”共用同一权限节点（仅拆分菜单） |
+| 导入导出 | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:address-bureau:view`,`plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:import-export:view`,`plugin:qsl-management:qso-record:edit`,`plugin:qsl-management:card-record:edit`,`plugin:qsl-management:exchange-request-review:edit`,`plugin:qsl-management:address-bureau:edit`,`plugin:qsl-management:equipment-catalog:edit` | 单一菜单，页内拆分导入/导出两个板块 |
 
 ### 4.2.3 权限节点复用关系（避免歧义）
 
@@ -296,7 +292,7 @@
 | `station-profile` | 通信地址、本台设备、本台卡片 |
 | `report-auditlog` | 统计报表、审计日志 |
 | `address-bureau` | 地址管理、卡片局管理 |
-| `import-export` | 导入、导出 |
+| `import-export` | 导入导出（页内导入板块、导出板块） |
 
 ### 4.2.4 一期与二期启用策略
 

@@ -217,32 +217,9 @@ export const qslMenuModules: QslMenuModule[] = [
   },
   {
     key: 'import-export',
-    title: '导入',
+    title: '导入导出',
     group: '数据',
     priority: 40,
-    viewPermission: importExportViewPermission,
-    editPermission: importExportEditPermission,
-    viewDependencies: [
-      toViewPermission('qso-query'),
-      toViewPermission('card-query'),
-      toViewPermission('exchange-request-review'),
-      addressBureauViewPermission,
-      toViewPermission('equipment-catalog'),
-    ],
-    editDependencies: [
-      importExportViewPermission,
-      toEditPermission('qso-record'),
-      toEditPermission('card-record'),
-      toEditPermission('exchange-request-review'),
-      addressBureauEditPermission,
-      toEditPermission('equipment-catalog'),
-    ],
-  },
-  {
-    key: 'export-data',
-    title: '导出',
-    group: '数据',
-    priority: 50,
     viewPermission: importExportViewPermission,
     editPermission: importExportEditPermission,
     viewDependencies: [

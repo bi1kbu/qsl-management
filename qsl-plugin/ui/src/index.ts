@@ -39,18 +39,6 @@ const routes = [
       },
     },
   },
-  {
-    parentName: 'Root',
-    route: {
-      path: '/qsl/data/address-bureau',
-      name: 'QslLegacyAddressBureauRedirect',
-      redirect: '/qsl/data/address-management',
-      meta: {
-        title: '地址管理跳转',
-        searchable: false,
-      },
-    },
-  },
   ...groupedModules.map((group) => ({
     parentName: 'Root',
     route: {
