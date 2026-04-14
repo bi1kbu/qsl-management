@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { VCard, VPageHeader, VTag } from '@halo-dev/components'
+import { VCard, VPageHeader } from '@halo-dev/components'
 import { computed } from 'vue'
 import type { QslMenuModule } from '../../constants/menu-modules'
 
@@ -7,7 +7,6 @@ const props = withDefaults(
   defineProps<{
     module: QslMenuModule
     initialized: boolean
-    categoryLabel: string
     functional?: boolean
     functionalStatusText?: string
     placeholderStatusText?: string
@@ -33,13 +32,7 @@ const statusText = computed(() => {
 
 <template>
   <section class="qsl-page">
-    <VPageHeader :title="module.title">
-      <template #actions>
-        <VTag :theme="functional ? 'secondary' : 'default'">
-          {{ categoryLabel }}
-        </VTag>
-      </template>
-    </VPageHeader>
+    <VPageHeader :title="module.title" />
 
     <div class="qsl-page__content">
       <div class="qsl-grid qsl-grid--meta">

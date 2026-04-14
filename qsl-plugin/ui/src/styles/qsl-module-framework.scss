@@ -81,7 +81,8 @@
   }
 
   input,
-  textarea {
+  textarea,
+  select {
     width: 100%;
     border: none;
     outline: none;
@@ -102,6 +103,11 @@
     padding: 8px 12px;
     resize: vertical;
     min-height: 112px;
+  }
+
+  select {
+    appearance: none;
+    cursor: pointer;
   }
 }
 
@@ -141,6 +147,11 @@
   gap: 8px;
 }
 
+.qsl-actions--tight {
+  margin-top: 0;
+  gap: 6px;
+}
+
 .qsl-feedback {
   color: #0f766e;
   font-size: 13px;
@@ -169,6 +180,11 @@
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+
+.qsl-list__item--column {
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .qsl-list__select {
@@ -219,6 +235,10 @@
   gap: 8px;
 }
 
+.qsl-tag-list--wide {
+  margin-top: 12px;
+}
+
 .qsl-tag-pill {
   display: inline-flex;
   align-items: center;
@@ -239,6 +259,118 @@
     line-height: 1;
     padding: 0;
   }
+}
+
+.qsl-tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.qsl-checkbox {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #374151;
+
+  input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+  }
+}
+
+.qsl-inline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.qsl-detail-grid {
+  margin-top: 8px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+
+  p {
+    margin: 0;
+    font-size: 13px;
+    color: #374151;
+  }
+}
+
+.qsl-detail-full {
+  grid-column: 1 / -1;
+}
+
+.qsl-stat-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.qsl-stat-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.qsl-stat-card__label {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.qsl-stat-card__value {
+  margin: 0;
+  color: #0f172a;
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.qsl-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.qsl-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+
+  th,
+  td {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+    font-size: 13px;
+    color: #374151;
+  }
+
+  thead th {
+    color: #111827;
+    background: #f8fafc;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+}
+
+.qsl-table-note {
+  display: block;
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 12px;
 }
 
 .qsl-muted {

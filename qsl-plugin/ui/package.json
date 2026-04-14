@@ -23,6 +23,7 @@
     "@halo-dev/ui-shared": "^2.23.0",
     "axios": "^1.13.5",
     "canvas-confetti": "^1.9.3",
+    "jszip": "^3.10.1",
     "vue": "^3.5.28"
   },
   "devDependencies": {

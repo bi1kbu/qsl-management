@@ -2,8 +2,21 @@
 import { computed, onMounted, ref, type Component } from 'vue'
 import type { QslMenuModule } from '../constants/menu-modules'
 import QslModuleFrame from '../components/qsl/QslModuleFrame.vue'
+import AddressManagementModule from './modules/AddressManagementModule.vue'
+import AuditLogModule from './modules/AuditLogModule.vue'
+import BureauManagementModule from './modules/BureauManagementModule.vue'
+import CardQueryModule from './modules/CardQueryModule.vue'
+import CardRecordModule from './modules/CardRecordModule.vue'
 import DefaultModulePlaceholder from './modules/DefaultModulePlaceholder.vue'
+import EquipmentCatalogModule from './modules/EquipmentCatalogModule.vue'
+import ExchangeRequestReviewModule from './modules/ExchangeRequestReviewModule.vue'
 import ImportExportModule from './modules/ImportExportModule.vue'
+import MailReceiveConfirmModule from './modules/MailReceiveConfirmModule.vue'
+import MailSendConfirmModule from './modules/MailSendConfirmModule.vue'
+import OverviewDashboardModule from './modules/OverviewDashboardModule.vue'
+import QsoQueryModule from './modules/QsoQueryModule.vue'
+import QsoRecordModule from './modules/QsoRecordModule.vue'
+import ReportAuditlogModule from './modules/ReportAuditlogModule.vue'
 import StationCardModule from './modules/StationCardModule.vue'
 import StationEquipmentModule from './modules/StationEquipmentModule.vue'
 import StationProfileModule from './modules/StationProfileModule.vue'
@@ -22,32 +35,33 @@ const initialized = ref(false)
 
 const currentModule = computed(() => props.qslModule)
 
-const settingsModuleKeySet = new Set(['system-settings', 'station-profile', 'station-equipment', 'station-card'])
 const implementedModuleKeySet = new Set([
+  'overview-dashboard',
   'system-settings',
   'station-profile',
   'station-equipment',
   'station-card',
+  'qso-record',
+  'card-record',
+  'mail-send-confirm',
+  'mail-receive-confirm',
+  'exchange-request-review',
+  'qso-query',
+  'card-query',
+  'report-auditlog',
+  'audit-log',
+  'address-management',
+  'bureau-management',
+  'equipment-catalog',
   'import-export',
 ])
-
-const categoryLabel = computed(() => {
-  const key = currentModule.value.key
-  if (settingsModuleKeySet.has(key)) {
-    return '配置模块'
-  }
-
-  if (key === 'import-export') {
-    return '数据模块'
-  }
-
-  return `${currentModule.value.group}模块`
-})
 
 const isImplementedModule = computed(() => implementedModuleKeySet.has(currentModule.value.key))
 
 const renderer = computed<ModuleRenderer>(() => {
   switch (currentModule.value.key) {
+    case 'overview-dashboard':
+      return { component: OverviewDashboardModule }
     case 'system-settings':
       return { component: SystemSettingsModule }
     case 'station-profile':
@@ -56,6 +70,30 @@ const renderer = computed<ModuleRenderer>(() => {
       return { component: StationEquipmentModule }
     case 'station-card':
       return { component: StationCardModule }
+    case 'qso-record':
+      return { component: QsoRecordModule }
+    case 'card-record':
+      return { component: CardRecordModule }
+    case 'mail-send-confirm':
+      return { component: MailSendConfirmModule }
+    case 'mail-receive-confirm':
+      return { component: MailReceiveConfirmModule }
+    case 'exchange-request-review':
+      return { component: ExchangeRequestReviewModule }
+    case 'qso-query':
+      return { component: QsoQueryModule }
+    case 'card-query':
+      return { component: CardQueryModule }
+    case 'report-auditlog':
+      return { component: ReportAuditlogModule }
+    case 'audit-log':
+      return { component: AuditLogModule }
+    case 'address-management':
+      return { component: AddressManagementModule }
+    case 'bureau-management':
+      return { component: BureauManagementModule }
+    case 'equipment-catalog':
+      return { component: EquipmentCatalogModule }
     case 'import-export':
       return { component: ImportExportModule }
     default:
@@ -76,12 +114,7 @@ onMounted(initializePage)
 </script>
 
 <template>
-  <QslModuleFrame
-    :module="currentModule"
-    :initialized="initialized"
-    :category-label="categoryLabel"
-    :functional="isImplementedModule"
-  >
+  <QslModuleFrame :module="currentModule" :initialized="initialized" :functional="isImplementedModule">
     <component :is="renderer.component" v-bind="renderer.props" />
   </QslModuleFrame>
 </template>
