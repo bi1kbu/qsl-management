@@ -1,24 +1,12 @@
 <script setup lang="ts">
-import { axiosInstance } from '@halo-dev/api-client'
 import { computed, onMounted, ref } from 'vue'
 import type { QslMenuModule } from '../constants/menu-modules'
-
-interface MenuModuleApiResult {
-  key: string
-  title: string
-  viewPermission: string
-  editPermission: string
-  viewDependencies: string[]
-  editDependencies: string[]
-}
 
 const props = defineProps<{
   qslModule: QslMenuModule
 }>()
 
-const loading = ref(false)
-const loadError = ref('')
-const apiResult = ref<MenuModuleApiResult | null>(null)
+const initialized = ref(false)
 
 const currentModule = computed(() => props.qslModule)
 
@@ -29,26 +17,11 @@ const formatDependencyText = (items: string[]): string => {
   return items.join('、')
 }
 
-const fetchModuleMeta = async () => {
-  if (!currentModule.value) {
-    return
-  }
-
-  loading.value = true
-  loadError.value = ''
-  try {
-    const { data } = await axiosInstance.get<MenuModuleApiResult>(
-      `/apis/qsl-management.halo.run/v1alpha1/menu-modules/${currentModule.value.key}`,
-    )
-    apiResult.value = data
-  } catch (error) {
-    loadError.value = `后端占位接口读取失败：${String(error)}`
-  } finally {
-    loading.value = false
-  }
+const initializePage = async () => {
+  initialized.value = true
 }
 
-onMounted(fetchModuleMeta)
+onMounted(initializePage)
 </script>
 
 <template>
@@ -68,16 +41,10 @@ onMounted(fetchModuleMeta)
       </article>
 
       <article class="panel">
-        <h2>后端占位接口状态</h2>
-        <p v-if="loading">正在读取后端定义...</p>
-        <p v-else-if="loadError" class="error">{{ loadError }}</p>
-        <div v-else-if="apiResult">
-          <p><strong>菜单键：</strong>{{ apiResult.key }}</p>
-          <p><strong>菜单名：</strong>{{ apiResult.title }}</p>
-          <p><strong>只读权限：</strong>{{ apiResult.viewPermission }}</p>
-          <p><strong>编辑权限：</strong>{{ apiResult.editPermission }}</p>
-        </div>
-        <p v-else>暂无后端返回。</p>
+        <h2>页面状态</h2>
+        <p v-if="initialized">菜单骨架页面已就绪。</p>
+        <p v-else>页面正在初始化...</p>
+        <p>后端业务接口将在下一阶段按模块逐步接入。</p>
       </article>
     </div>
   </section>
@@ -131,7 +98,4 @@ onMounted(fetchModuleMeta)
   }
 }
 
-.error {
-  color: #b91c1c;
-}
 </style>

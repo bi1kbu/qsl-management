@@ -8,9 +8,41 @@
 
 ## 2. 菜单组织
 
-后台主菜单（根路径名）：QSL管理
+零级菜单分组：QSL管理（左侧菜单分组名，不是可点击功能页面）
 
-后台一级菜单：总览、配置、业务、审核、审计、数据
+入口路由：`/qsl`（仅重定向到默认功能页）
+
+一级菜单：总览、配置、业务、审核、审计、数据
+
+二级菜单：一级菜单下的具体功能页（如总览看板、系统参数、通联记录等）
+
+说明：当前实现中，左侧展示结构为“QSL管理分组 -> 一级菜单 -> 二级菜单”。
+
+### 2.0 菜单与路由映射
+
+| 一级菜单 | 二级菜单 | 控制台路由 | 只读节点 | 编辑节点 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| 总览 | 总览看板 | `/qsl/overview/overview-dashboard` | `plugin:qsl-management:overview-dashboard:view` | `plugin:qsl-management:overview-dashboard:edit` | 独立节点 |
+| 配置 | 系统参数 | `/qsl/settings/system-settings` | `plugin:qsl-management:system-settings:view` | `plugin:qsl-management:system-settings:edit` | 独立节点 |
+| 配置 | 通信地址 | `/qsl/settings/station-profile` | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | 与“本台设备/本台卡片”共用节点 |
+| 配置 | 本台设备 | `/qsl/settings/station-equipment` | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | 与“通信地址/本台卡片”共用节点 |
+| 配置 | 本台卡片 | `/qsl/settings/station-card` | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | 与“通信地址/本台设备”共用节点 |
+| 业务 | 通联记录 | `/qsl/business/qso-record` | `plugin:qsl-management:qso-record:view` | `plugin:qsl-management:qso-record:edit` | 独立节点 |
+| 业务 | 卡片记录 | `/qsl/business/card-record` | `plugin:qsl-management:card-record:view` | `plugin:qsl-management:card-record:edit` | 独立节点 |
+| 业务 | 发信确认 | `/qsl/business/mail-send-confirm` | `plugin:qsl-management:mail-send-confirm:view` | `plugin:qsl-management:mail-send-confirm:edit` | 独立节点 |
+| 业务 | 收信确认 | `/qsl/business/mail-receive-confirm` | `plugin:qsl-management:mail-receive-confirm:view` | `plugin:qsl-management:mail-receive-confirm:edit` | 独立节点 |
+| 审核 | 换卡申请 | `/qsl/review/exchange-request-review` | `plugin:qsl-management:exchange-request-review:view` | `plugin:qsl-management:exchange-request-review:edit` | 独立节点 |
+| 审计 | 通联记录查询 | `/qsl/audit/qso-query` | `plugin:qsl-management:qso-query:view` | `plugin:qsl-management:qso-query:edit` | 独立节点 |
+| 审计 | 卡片记录查询 | `/qsl/audit/card-query` | `plugin:qsl-management:card-query:view` | `plugin:qsl-management:card-query:edit` | 独立节点 |
+| 审计 | 统计报表 | `/qsl/audit/report-auditlog` | `plugin:qsl-management:report-auditlog:view` | `plugin:qsl-management:report-auditlog:edit` | 与“审计日志”共用节点 |
+| 审计 | 审计日志 | `/qsl/audit/audit-log` | `plugin:qsl-management:report-auditlog:view` | `plugin:qsl-management:report-auditlog:edit` | 与“统计报表”共用节点 |
+| 数据 | 地址管理 | `/qsl/data/address-management` | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 与“卡片局管理”共用节点 |
+| 数据 | 卡片局管理 | `/qsl/data/bureau-management` | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 与“地址管理”共用节点 |
+| 数据 | 设备库维护 | `/qsl/data/equipment-catalog` | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:equipment-catalog:edit` | 独立节点 |
+| 数据 | 导入 | `/qsl/data/import-export` | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | 与“导出”共用节点 |
+| 数据 | 导出 | `/qsl/data/export-data` | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | 与“导入”共用节点 |
+
+兼容路由：`/qsl/data/address-bureau` 自动重定向到 `/qsl/data/address-management`。
 
 ### 2.1 总览
 
@@ -18,7 +50,7 @@
 
 ### 2.2 配置
 
-配置页包括以下内容：系统参数、通信地址、本台设备
+配置页包括以下内容：系统参数、通信地址、本台设备、本台卡片
 
 #### 系统参数
 
@@ -174,9 +206,13 @@
 
 ​	包括：设备（RIG）、天线（ANT）、功率（PWR）、模式（MODE）等字段，每个字段可存放若干行内容
 
-**导入导出**
+**导入**
 
-​	通过格式化的字符串的形式，导出“通联记录”、“卡片记录”、“换卡申请”、“地址管理”、“卡片局管理”、“设备库”的全部字段的内容
+​	导入入口用于批量写入“通联记录”、“卡片记录”、“换卡申请”、“地址管理”、“卡片局管理”、“设备库”等数据
+
+**导出**
+
+​	通过格式化的字符串形式，导出“通联记录”、“卡片记录”、“换卡申请”、“地址管理”、“卡片局管理”、“设备库”的全部字段内容
 
 ------
 
@@ -206,9 +242,9 @@
 
 ​	同后台的“总览”一致
 
-## 3. 角色模型与权限节点
+## 4. 角色模型与权限节点
 
-### 3.1 角色模型
+### 4.1 角色模型
 
 - 游客：仅可做公开呼号查询与公开报表查看。
 - HAM 用户：在通过呼号审核后，可查看本人相关记录并发起换卡/补卡申请。
@@ -217,24 +253,27 @@
 
 > 一期实施范围说明：当前仅落地管理员（含超级管理员）相关后台权限能力；HAM 用户与操作员角色暂不启用，作为二期能力预留。
 
-## 3.2 权限节点
+## 4.2 权限节点
 
-### 3.2.1 设计原则
+### 4.2.1 设计原则
 
-1. 按当前产品定义的菜单项设计权限节点：你列出的每一行拆分为两个节点（只读 `view`、编辑 `edit`）。
+1. 权限节点按“业务能力”设计：每个能力至少包含只读 `view` 与编辑 `edit` 两个节点。
 2. 权限节点命名统一为 `plugin:qsl-management:<slug>:<action>`，其中 `<action>` 仅允许 `view` 或 `edit`。
-3. `edit` 默认依赖同项 `view`，并可附加其他前置依赖。
-4. 跨模块依赖优先依赖对方的 `view` 节点；确需跨模块写操作时才依赖对方 `edit` 节点。
-5. 本期（一期）仅启用管理员相关授权，HAM 用户、操作员等角色不落地实现。
-6. 本节节点在一期先完成预留与定义，二期再按角色模型分配与启用。
+3. 多个菜单可复用同一组权限节点（仅拆分菜单展示，不强制新增节点）。
+4. `edit` 默认依赖同项 `view`，并可附加其他前置依赖。
+5. 跨模块依赖优先依赖对方的 `view` 节点；确需跨模块写操作时才依赖对方 `edit` 节点。
+6. 本期（一期）仅启用管理员相关授权，HAM 用户、操作员等角色不落地实现。
+7. 本节节点在一期先完成预留与定义，二期再按角色模型分配与启用。
 
-### 3.2.2 菜单权限节点（每行拆分只读与编辑，预留）
+### 4.2.2 菜单权限节点（当前实现）
 
 | 菜单项（按你给出的行） | 只读节点 | 编辑节点 | 只读依赖 | 编辑依赖 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | 总览看板 | `plugin:qsl-management:overview-dashboard:view` | `plugin:qsl-management:overview-dashboard:edit` | `plugin:qsl-management:qso-record:view`,`plugin:qsl-management:card-record:view`,`plugin:qsl-management:mail-send-confirm:view`,`plugin:qsl-management:mail-receive-confirm:view` | `plugin:qsl-management:overview-dashboard:view` | 总览依赖业务数据读取 |
 | 系统参数 | `plugin:qsl-management:system-settings:view` | `plugin:qsl-management:system-settings:edit` | 无 | `plugin:qsl-management:system-settings:view` | 独立配置项 |
-| 通信地址、本台设备、本台卡片 | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:station-profile:view`,`plugin:qsl-management:equipment-catalog:view` | 本台设备配置依赖设备库维护（只读） |
+| 通信地址 | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:station-profile:view`,`plugin:qsl-management:equipment-catalog:view` | 与“本台设备/本台卡片”共用同一权限节点（仅拆分菜单） |
+| 本台设备 | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:station-profile:view`,`plugin:qsl-management:equipment-catalog:view` | 与“通信地址/本台卡片”共用同一权限节点（仅拆分菜单） |
+| 本台卡片 | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:station-profile:view`,`plugin:qsl-management:equipment-catalog:view` | 与“通信地址/本台设备”共用同一权限节点（仅拆分菜单） |
 | 通联记录 | `plugin:qsl-management:qso-record:view` | `plugin:qsl-management:qso-record:edit` | `plugin:qsl-management:equipment-catalog:view`,`plugin:qsl-management:station-profile:view` | `plugin:qsl-management:qso-record:view` | 录入时使用本台配置与设备候选 |
 | 卡片记录 | `plugin:qsl-management:card-record:view` | `plugin:qsl-management:card-record:edit` | `plugin:qsl-management:qso-record:view`,`plugin:qsl-management:station-profile:view` | `plugin:qsl-management:card-record:view`,`plugin:qsl-management:qso-record:view` | 可关联 QSO，依赖本台卡片版本读取 |
 | 发信确认 | `plugin:qsl-management:mail-send-confirm:view` | `plugin:qsl-management:mail-send-confirm:edit` | `plugin:qsl-management:card-record:view` | `plugin:qsl-management:mail-send-confirm:view`,`plugin:qsl-management:card-record:view` | 发信对象来源于卡片记录 |
@@ -242,12 +281,24 @@
 | 换卡申请 | `plugin:qsl-management:exchange-request-review:view` | `plugin:qsl-management:exchange-request-review:edit` | `plugin:qsl-management:address-bureau:view`,`plugin:qsl-management:card-record:view` | `plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:card-record:edit` | 审批通过涉及创建卡片记录 |
 | 通联记录查询 | `plugin:qsl-management:qso-query:view` | `plugin:qsl-management:qso-query:edit` | `plugin:qsl-management:qso-record:view` | `plugin:qsl-management:qso-query:view` | 查询菜单编辑节点一期预留 |
 | 卡片记录查询 | `plugin:qsl-management:card-query:view` | `plugin:qsl-management:card-query:edit` | `plugin:qsl-management:card-record:view` | `plugin:qsl-management:card-query:view` | 查询菜单编辑节点一期预留 |
-| 统计报表、审计日志 | `plugin:qsl-management:report-auditlog:view` | `plugin:qsl-management:report-auditlog:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:mail-send-confirm:view`,`plugin:qsl-management:mail-receive-confirm:view` | `plugin:qsl-management:report-auditlog:view` | 按要求：本项只读依赖其他菜单只读权限 |
-| 地址管理、卡片局管理 | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 无 | `plugin:qsl-management:address-bureau:view` | 基础主数据维护 |
+| 统计报表 | `plugin:qsl-management:report-auditlog:view` | `plugin:qsl-management:report-auditlog:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:mail-send-confirm:view`,`plugin:qsl-management:mail-receive-confirm:view` | `plugin:qsl-management:report-auditlog:view` | 与“审计日志”共用同一权限节点（仅拆分菜单） |
+| 审计日志 | `plugin:qsl-management:report-auditlog:view` | `plugin:qsl-management:report-auditlog:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:mail-send-confirm:view`,`plugin:qsl-management:mail-receive-confirm:view` | `plugin:qsl-management:report-auditlog:view` | 与“统计报表”共用同一权限节点（仅拆分菜单） |
+| 地址管理 | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 无 | `plugin:qsl-management:address-bureau:view` | 与“卡片局管理”共用同一权限节点（仅拆分菜单） |
+| 卡片局管理 | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 无 | `plugin:qsl-management:address-bureau:view` | 与“地址管理”共用同一权限节点（仅拆分菜单） |
 | 设备库维护 | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:equipment-catalog:edit` | 无 | `plugin:qsl-management:equipment-catalog:view` | 基础主数据维护 |
-| 导入导出 | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:address-bureau:view`,`plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:import-export:view`,`plugin:qsl-management:qso-record:edit`,`plugin:qsl-management:card-record:edit`,`plugin:qsl-management:exchange-request-review:edit`,`plugin:qsl-management:address-bureau:edit`,`plugin:qsl-management:equipment-catalog:edit` | 导入导出覆盖多实体，导入涉及写入 |
+| 导入 | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:address-bureau:view`,`plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:import-export:view`,`plugin:qsl-management:qso-record:edit`,`plugin:qsl-management:card-record:edit`,`plugin:qsl-management:exchange-request-review:edit`,`plugin:qsl-management:address-bureau:edit`,`plugin:qsl-management:equipment-catalog:edit` | 与“导出”共用同一权限节点（仅拆分菜单） |
+| 导出 | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:address-bureau:view`,`plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:import-export:view`,`plugin:qsl-management:qso-record:edit`,`plugin:qsl-management:card-record:edit`,`plugin:qsl-management:exchange-request-review:edit`,`plugin:qsl-management:address-bureau:edit`,`plugin:qsl-management:equipment-catalog:edit` | 与“导入”共用同一权限节点（仅拆分菜单） |
 
-### 3.2.3 一期与二期启用策略
+### 4.2.3 权限节点复用关系（避免歧义）
+
+| 权限节点（view/edit） | 被哪些菜单复用 |
+| --- | --- |
+| `station-profile` | 通信地址、本台设备、本台卡片 |
+| `report-auditlog` | 统计报表、审计日志 |
+| `address-bureau` | 地址管理、卡片局管理 |
+| `import-export` | 导入、导出 |
+
+### 4.2.4 一期与二期启用策略
 
 1. 一期启用：后台仅管理员/超级管理员使用上述节点；普通游客前台访问走匿名接口与限流策略，不走后台 RBAC 分配。
 2. 一期不启用：HAM 用户、操作员角色及其差异化授权暂不实现，仅保留角色定义与权限预留。

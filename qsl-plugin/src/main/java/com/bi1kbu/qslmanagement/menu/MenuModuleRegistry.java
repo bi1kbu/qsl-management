@@ -2,9 +2,6 @@ package com.bi1kbu.qslmanagement.menu;
 
 import java.util.List;
 import java.util.Optional;
-import org.springframework.stereotype.Component;
-
-@Component
 public class MenuModuleRegistry {
 
     private static final String PREFIX = "plugin:qsl-management:";
