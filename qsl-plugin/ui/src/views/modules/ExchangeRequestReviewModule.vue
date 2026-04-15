@@ -27,16 +27,24 @@ interface ExchangeRequestItem {
   id: string
   callSign: string
   useBureau: boolean
+  bureauName: string
   email: string
+  name: string
+  telephone: string
+  postalCode: string
+  address: string
   remarks: string
   status: '待审核' | '已通过' | '已拒绝'
-  decisionAt: string
+  reviewReason: string
+  reviewedBy: string
+  reviewedAt: string
 }
 
 const rows = ref<ExchangeRequestItem[]>([])
 const loading = ref(false)
 const pendingId = ref('')
 const feedback = ref('')
+const expandedId = ref('')
 
 const resourcePlural = 'exchange-requests'
 
@@ -45,10 +53,17 @@ const toRow = (extension: QslExtension<ExchangeRequestSpec, ExchangeRequestStatu
     id: extension.metadata.name,
     callSign: extension.spec?.callSign ?? '',
     useBureau: Boolean(extension.spec?.useBureau),
+    bureauName: extension.spec?.bureauName ?? '',
     email: extension.spec?.email ?? '',
+    name: extension.spec?.name ?? '',
+    telephone: extension.spec?.telephone ?? '',
+    postalCode: extension.spec?.postalCode ?? '',
+    address: extension.spec?.address ?? '',
     remarks: extension.spec?.remarks ?? '',
     status: extension.status?.reviewStatus ?? '待审核',
-    decisionAt: extension.status?.reviewedAt ?? '',
+    reviewReason: extension.status?.reviewReason ?? '',
+    reviewedBy: extension.status?.reviewedBy ?? '',
+    reviewedAt: extension.status?.reviewedAt ?? '',
   }
 }
 
@@ -95,6 +110,10 @@ const reject = async (row: ExchangeRequestItem) => {
   await updateReviewStatus(row, '已拒绝', '审批拒绝')
 }
 
+const toggleDetails = (id: string) => {
+  expandedId.value = expandedId.value === id ? '' : id
+}
+
 onMounted(loadRows)
 </script>
 
@@ -107,36 +126,65 @@ onMounted(loadRows)
             <tr>
               <th>申请ID</th>
               <th>呼号</th>
-              <th>是否卡片局</th>
-              <th>电子邮件</th>
-              <th>备注</th>
               <th>状态</th>
+              <th>审核时间</th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in rows" :key="row.id">
-              <td>{{ row.id }}</td>
-              <td>{{ row.callSign }}</td>
-              <td>{{ row.useBureau ? '是' : '否' }}</td>
-              <td>{{ row.email || '-' }}</td>
-              <td>{{ row.remarks || '无' }}</td>
-              <td>
-                <VTag :theme="row.status === '待审核' ? 'default' : row.status === '已通过' ? 'secondary' : 'danger'">
-                  {{ row.status }}
-                </VTag>
-                <span v-if="row.decisionAt" class="qsl-table-note">{{ row.decisionAt }}</span>
-              </td>
-              <td>
-                <div v-if="row.status === '待审核'" class="qsl-actions qsl-actions--tight">
-                  <VButton size="xs" type="secondary" :disabled="pendingId === row.id || loading" @click="approve(row)">同意</VButton>
-                  <VButton size="xs" type="danger" :disabled="pendingId === row.id || loading" @click="reject(row)">拒绝</VButton>
-                </div>
-                <span v-else class="qsl-muted">已处理</span>
-              </td>
-            </tr>
+            <template v-for="row in rows" :key="row.id">
+              <tr>
+                <td>{{ row.id }}</td>
+                <td>{{ row.callSign }}</td>
+                <td>
+                  <VTag :theme="row.status === '待审核' ? 'default' : row.status === '已通过' ? 'secondary' : 'danger'">
+                    {{ row.status }}
+                  </VTag>
+                </td>
+                <td>{{ row.reviewedAt || '-' }}</td>
+                <td>
+                  <div class="qsl-actions qsl-actions--tight">
+                    <VButton size="xs" :disabled="loading" @click="toggleDetails(row.id)">{{ expandedId === row.id ? '收起' : '展开' }}</VButton>
+                    <VButton
+                      v-if="row.status === '待审核'"
+                      size="xs"
+                      type="secondary"
+                      :disabled="pendingId === row.id || loading"
+                      @click="approve(row)"
+                    >
+                      同意
+                    </VButton>
+                    <VButton
+                      v-if="row.status === '待审核'"
+                      size="xs"
+                      type="danger"
+                      :disabled="pendingId === row.id || loading"
+                      @click="reject(row)"
+                    >
+                      拒绝
+                    </VButton>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="expandedId === row.id" class="qsl-table-detail-row">
+                <td colspan="5">
+                  <div class="qsl-detail-grid">
+                    <p><strong>是否使用卡片局：</strong>{{ row.useBureau ? '是' : '否' }}</p>
+                    <p><strong>卡片局名称：</strong>{{ row.bureauName || '-' }}</p>
+                    <p><strong>姓名：</strong>{{ row.name || '-' }}</p>
+                    <p><strong>电子邮件：</strong>{{ row.email || '-' }}</p>
+                    <p><strong>电话：</strong>{{ row.telephone || '-' }}</p>
+                    <p><strong>邮编：</strong>{{ row.postalCode || '-' }}</p>
+                    <p class="qsl-detail-full"><strong>收件地址：</strong>{{ row.address || '-' }}</p>
+                    <p class="qsl-detail-full"><strong>申请备注：</strong>{{ row.remarks || '-' }}</p>
+                    <p><strong>审核人：</strong>{{ row.reviewedBy || '-' }}</p>
+                    <p class="qsl-detail-full"><strong>审核说明：</strong>{{ row.reviewReason || '-' }}</p>
+                  </div>
+                </td>
+              </tr>
+            </template>
             <tr v-if="!rows.length">
-              <td colspan="7" class="qsl-table-empty">暂无数据。</td>
+              <td colspan="5" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>
@@ -150,5 +198,9 @@ onMounted(loadRows)
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;
+}
+
+.qsl-table-detail-row td {
+  background: #f8fafc;
 }
 </style>

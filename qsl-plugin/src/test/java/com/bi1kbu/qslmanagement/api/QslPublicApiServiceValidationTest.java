@@ -52,7 +52,20 @@ class QslPublicApiServiceValidationTest {
         );
 
         var tooLongRemarks = "x".repeat(501);
-        var command = new QslPublicApiService.PublicReceiptConfirmCommand("BG7ABC", "QSO", tooLongRemarks);
+        var command = new QslPublicApiService.PublicReceiptConfirmCommand("BG7ABC", "card-record-001", tooLongRemarks);
+        var error = assertThrows(QslApiException.class, () -> service.confirmReceipt(command, "127.0.0.1").block());
+        assertEquals("QSL-400-0001", error.getCode());
+        assertEquals(400, error.getStatus().value());
+    }
+
+    @Test
+    void shouldRejectBlankCardIdOnReceiptConfirm() {
+        var service = new QslPublicApiService(
+            Mockito.mock(ReactiveExtensionClient.class),
+            Mockito.mock(QslAuditService.class)
+        );
+
+        var command = new QslPublicApiService.PublicReceiptConfirmCommand("BG7ABC", "", "测试");
         var error = assertThrows(QslApiException.class, () -> service.confirmReceipt(command, "127.0.0.1").block());
         assertEquals("QSL-400-0001", error.getCode());
         assertEquals(400, error.getStatus().value());

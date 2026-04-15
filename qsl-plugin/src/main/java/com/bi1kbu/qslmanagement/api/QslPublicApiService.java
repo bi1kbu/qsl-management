@@ -4,7 +4,6 @@ import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import java.util.List;
-import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -16,7 +15,6 @@ import run.halo.app.extension.ReactiveExtensionClient;
 @Service
 public class QslPublicApiService {
 
-    private static final Set<String> ALLOWED_CARD_TYPES = Set.of("QSO", "SWL", "EYEBALL");
     private static final ListOptions EMPTY_OPTIONS = ListOptions.builder().build();
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("metadata.creationTimestamp"));
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
@@ -158,22 +156,27 @@ public class QslPublicApiService {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
         }
 
-        var cardType = QslApiSupport.normalizeCardType(command.cardType());
-        if (!ALLOWED_CARD_TYPES.contains(cardType)) {
-            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片类型不支持"));
+        var cardId = nullToEmpty(command.cardId()).trim();
+        if (cardId.isBlank()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片编号不能为空"));
         }
         if (!validateLength(command.remarks(), 500)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "签收备注长度不能超过500字符"));
         }
 
-        return client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
-            .filter(cardRecord -> cardRecord.getSpec() != null)
-            .filter(cardRecord -> callSign.equals(QslApiSupport.normalizeCallSign(cardRecord.getSpec().getCallSign())))
-            .filter(cardRecord -> cardType.equals(QslApiSupport.normalizeCardType(cardRecord.getSpec().getCardType())))
-            .next()
+        return client.fetch(CardRecord.class, cardId)
             .switchIfEmpty(Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                 "QSL-422-0001", "未找到可签收的卡片记录")))
             .flatMap(cardRecord -> {
+                if (cardRecord.getSpec() == null) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "卡片记录缺少业务字段，无法签收"));
+                }
+                var cardCallSign = QslApiSupport.normalizeCallSign(cardRecord.getSpec().getCallSign());
+                if (!callSign.equals(cardCallSign)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "卡片和呼号不匹配"));
+                }
                 cardRecord.getSpec().setReceiptConfirmed(Boolean.TRUE);
                 cardRecord.getSpec().setCardReceived(Boolean.TRUE);
                 cardRecord.getSpec().setReceivedAt(QslApiSupport.nowText());
@@ -189,14 +192,14 @@ public class QslPublicApiService {
                 "公开签收确认",
                 "card-record",
                 updated.getMetadata().getName(),
-                "呼号=" + callSign + "，类型=" + cardType,
+                "呼号=" + callSign + "，卡片ID=" + updated.getMetadata().getName(),
                 "匿名用户",
                 clientIp
             ).thenReturn(updated))
             .map(updated -> new PublicReceiptConfirmResult(
                 updated.getMetadata().getName(),
                 callSign,
-                cardType,
+                QslApiSupport.normalizeCardType(updated.getSpec().getCardType()),
                 QslApiSupport.nowText()
             ));
     }
@@ -292,7 +295,7 @@ public class QslPublicApiService {
 
     public record PublicReceiptConfirmCommand(
         String callSign,
-        String cardType,
+        String cardId,
         String remarks
     ) {
     }

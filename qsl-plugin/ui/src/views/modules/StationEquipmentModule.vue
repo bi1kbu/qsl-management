@@ -10,6 +10,7 @@ import {
   updateExtension,
   type QslExtension,
 } from '../../api/qsl-extension-api'
+import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 
 interface StationRig {
   resourceName?: string
@@ -184,6 +185,8 @@ const removeRigProperty = (key: RigPropertyKey, index: number) => {
 const saveStationEquipment = async () => {
   saving.value = true
   try {
+    let createdCount = 0
+    let updatedCount = 0
     const currentRemote = await listExtensions<StationEquipmentSpec>(resourcePlural)
     const remoteMap = new Map(currentRemote.map((item) => [item.metadata.name, item]))
     const keepNames = new Set<string>()
@@ -209,20 +212,28 @@ const saveStationEquipment = async () => {
 
       if (current) {
         await updateExtension(resourcePlural, name, payload)
+        updatedCount += 1
       } else {
         await createExtension(resourcePlural, payload)
+        createdCount += 1
       }
 
       rig.resourceName = name
       keepNames.add(name)
     }
 
-    const deleteTasks = currentRemote
-      .filter((item) => !keepNames.has(item.metadata.name))
-      .map((item) => deleteExtension(resourcePlural, item.metadata.name))
+    const removedItems = currentRemote.filter((item) => !keepNames.has(item.metadata.name))
+    const deleteTasks = removedItems.map((item) => deleteExtension(resourcePlural, item.metadata.name))
     await Promise.all(deleteTasks)
+    const deletedCount = removedItems.length
 
     await loadStationEquipment()
+    await appendQslAuditLog({
+      action: '保存本台设备配置',
+      resourceType: 'station-equipment',
+      resourceName: 'station-equipments',
+      detail: `新增=${createdCount}，更新=${updatedCount}，删除=${deletedCount}，当前总数=${stationRigs.value.length}`,
+    })
     feedback.value = `本台设备配置已持久化保存（${nowText()}），共 ${stationRigs.value.length} 台设备。`
   } catch (error) {
     feedback.value = `保存本台设备失败：${error instanceof Error ? error.message : '未知错误'}`

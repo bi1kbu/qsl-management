@@ -2,6 +2,7 @@
 import { VButton, VCard } from '@halo-dev/components'
 import { onMounted, reactive, ref } from 'vue'
 import { getExtensionOrNull, type QslExtension, upsertSingleton } from '../../api/qsl-extension-api'
+import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 
 const stationProfileForm = reactive({
   myCallSign: '',
@@ -86,6 +87,12 @@ const saveStationProfile = async () => {
         myEmail: stationProfileForm.myEmail.trim(),
         stationRemarks: stationProfileForm.stationRemarks.trim(),
       },
+    })
+    await appendQslAuditLog({
+      action: '更新通信地址',
+      resourceType: 'station-profile',
+      resourceName,
+      detail: `呼号=${stationProfileForm.myCallSign.trim().toUpperCase()}，姓名=${stationProfileForm.myName.trim() || '未填'}`,
     })
     feedback.value = `通信地址已持久化保存（${nowText()}）。`
   } catch (error) {

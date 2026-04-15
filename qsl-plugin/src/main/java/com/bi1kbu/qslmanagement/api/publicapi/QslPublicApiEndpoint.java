@@ -75,7 +75,7 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
         return publicRateLimitService.checkLimit("receipt-public-confirm", clientIp)
             .then(request.bodyToMono(QslPublicApiService.PublicReceiptConfirmCommand.class)
-                .defaultIfEmpty(new QslPublicApiService.PublicReceiptConfirmCommand("", "QSO", ""))
+                .defaultIfEmpty(new QslPublicApiService.PublicReceiptConfirmCommand("", "", ""))
                 .flatMap(payload -> publicApiService.confirmReceipt(payload, clientIp)))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);

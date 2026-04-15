@@ -2,6 +2,7 @@
 import { VButton, VCard, VSwitch } from '@halo-dev/components'
 import { onMounted, reactive, ref } from 'vue'
 import { upsertSingleton, type QslExtension, getExtensionOrNull } from '../../api/qsl-extension-api'
+import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 
 const systemSettingsForm = reactive({
   guestQueryPerMinute: 30,
@@ -66,6 +67,12 @@ const saveSystemSettings = async () => {
         guestQueryPerMinute: systemSettingsForm.guestQueryPerMinute,
         requiresExchangeReview: systemSettingsForm.requiresExchangeReview,
       },
+    })
+    await appendQslAuditLog({
+      action: '更新系统参数',
+      resourceType: 'system-setting',
+      resourceName,
+      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，换卡审核=${systemSettingsForm.requiresExchangeReview ? '是' : '否'}`,
     })
     feedback.value = `系统参数已持久化保存（${nowText()}）。`
   } catch (error) {

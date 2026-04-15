@@ -46,6 +46,22 @@ interface QsoRecordItem {
   remarks: string
 }
 
+interface StationEquipmentSpec {
+  rigName: string
+  antennas: string[]
+  powers: string[]
+  modes: string[]
+  remarks: string
+}
+
+interface EquipmentCatalogSpec {
+  type: 'RIG' | 'ANT' | 'PWR' | 'MODE'
+  value: string
+  remarks: string
+}
+
+type OpponentCatalogType = 'RIG' | 'ANT' | 'PWR'
+
 const form = reactive({
   date: '',
   time: '',
@@ -53,7 +69,7 @@ const form = reactive({
   realtime: false,
   freq: '',
   myRig: '',
-  mode: 'SSB',
+  mode: '',
   myRigAnt: '',
   myRigPwr: '',
   callSign: '',
@@ -67,6 +83,9 @@ const form = reactive({
 })
 
 const records = ref<QsoRecordItem[]>([])
+const stationEquipments = ref<StationEquipmentSpec[]>([])
+const equipmentCatalog = ref<EquipmentCatalogSpec[]>([])
+
 const feedback = ref('')
 const timerId = ref<number | null>(null)
 const loading = ref(false)
@@ -74,6 +93,49 @@ const saving = ref(false)
 
 const resourcePlural = 'qso-records'
 const resourceKind = 'QsoRecord'
+const stationEquipmentPlural = 'station-equipments'
+const equipmentCatalogPlural = 'equipment-catalog-entries'
+const equipmentCatalogKind = 'EquipmentCatalogEntry'
+
+const myRigOptions = computed(() => {
+  return stationEquipments.value
+    .map((item) => item.rigName?.trim() ?? '')
+    .filter((item, index, array) => item.length > 0 && array.indexOf(item) === index)
+})
+
+const selectedStationRig = computed(() => {
+  return stationEquipments.value.find((item) => item.rigName?.trim() === form.myRig.trim())
+})
+
+const myRigModeOptions = computed(() => {
+  return selectedStationRig.value?.modes?.filter((item) => item.trim().length > 0) ?? []
+})
+
+const myRigAntOptions = computed(() => {
+  return selectedStationRig.value?.antennas?.filter((item) => item.trim().length > 0) ?? []
+})
+
+const myRigPwrOptions = computed(() => {
+  return selectedStationRig.value?.powers?.filter((item) => item.trim().length > 0) ?? []
+})
+
+const rigSuggestionOptions = computed(() => {
+  return equipmentCatalog.value
+    .filter((item) => item.type === 'RIG')
+    .map((item) => item.value)
+})
+
+const antSuggestionOptions = computed(() => {
+  return equipmentCatalog.value
+    .filter((item) => item.type === 'ANT')
+    .map((item) => item.value)
+})
+
+const pwrSuggestionOptions = computed(() => {
+  return equipmentCatalog.value
+    .filter((item) => item.type === 'PWR')
+    .map((item) => item.value)
+})
 
 const syncUtcNow = () => {
   const now = new Date()
@@ -117,10 +179,79 @@ watch(
   },
 )
 
+watch(
+  () => form.myRig,
+  () => {
+    const rig = selectedStationRig.value
+    if (!rig) {
+      form.mode = ''
+      form.myRigAnt = ''
+      form.myRigPwr = ''
+      return
+    }
+
+    if (!rig.modes.includes(form.mode)) {
+      form.mode = rig.modes[0] ?? ''
+    }
+    if (!rig.antennas.includes(form.myRigAnt)) {
+      form.myRigAnt = rig.antennas[0] ?? ''
+    }
+    if (!rig.powers.includes(form.myRigPwr)) {
+      form.myRigPwr = rig.powers[0] ?? ''
+    }
+  },
+)
+
 const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', {
     hour12: false,
   })
+}
+
+const normalizeValue = (value: string): string => {
+  return value.trim()
+}
+
+const hasCatalogValue = (type: OpponentCatalogType, value: string): boolean => {
+  const normalized = normalizeValue(value).toLowerCase()
+  if (!normalized) {
+    return true
+  }
+  return equipmentCatalog.value.some(
+    (item) => item.type === type && normalizeValue(item.value).toLowerCase() === normalized,
+  )
+}
+
+const createCatalogValue = async (type: OpponentCatalogType, value: string) => {
+  const normalized = normalizeValue(value)
+  if (!normalized || hasCatalogValue(type, normalized)) {
+    return
+  }
+
+  await createExtension<EquipmentCatalogSpec>(equipmentCatalogPlural, {
+    apiVersion: qslApiVersion,
+    kind: equipmentCatalogKind,
+    metadata: {
+      name: createResourceName('equipment-catalog'),
+    },
+    spec: {
+      type,
+      value: normalized,
+      remarks: '通联记录自动补充',
+    },
+  })
+
+  equipmentCatalog.value.unshift({
+    type,
+    value: normalized,
+    remarks: '通联记录自动补充',
+  })
+}
+
+const ensureOpponentCatalogValues = async () => {
+  await createCatalogValue('RIG', form.rig)
+  await createCatalogValue('ANT', form.ant)
+  await createCatalogValue('PWR', form.pwr)
 }
 
 const toRecordItem = (extension: QslExtension<QsoRecordSpec>): QsoRecordItem => {
@@ -142,8 +273,31 @@ const toRecordItem = (extension: QslExtension<QsoRecordSpec>): QsoRecordItem => 
   }
 }
 
-const loadRecords = async (options: { silent?: boolean } = {}) => {
-  loading.value = true
+const loadStationEquipments = async () => {
+  const extensions = await listExtensions<StationEquipmentSpec>(stationEquipmentPlural)
+  stationEquipments.value = extensions
+    .map((extension) => extension.spec)
+    .filter((spec): spec is StationEquipmentSpec => Boolean(spec?.rigName?.trim()))
+    .map((spec) => ({
+      rigName: spec.rigName?.trim() ?? '',
+      antennas: Array.isArray(spec.antennas) ? spec.antennas : [],
+      powers: Array.isArray(spec.powers) ? spec.powers : [],
+      modes: Array.isArray(spec.modes) ? spec.modes : [],
+      remarks: spec.remarks ?? '',
+    }))
+}
+
+const loadEquipmentCatalog = async () => {
+  const extensions = await listExtensions<EquipmentCatalogSpec>(equipmentCatalogPlural)
+  equipmentCatalog.value = extensions
+    .map((extension) => extension.spec)
+    .filter((spec): spec is EquipmentCatalogSpec => Boolean(spec?.type && spec?.value?.trim()))
+}
+
+const loadRecords = async (options: { silent?: boolean; skipLoading?: boolean } = {}) => {
+  if (!options.skipLoading) {
+    loading.value = true
+  }
   try {
     const extensions = await listExtensions<QsoRecordSpec>(resourcePlural)
     records.value = extensions.map((extension) => toRecordItem(extension))
@@ -155,6 +309,23 @@ const loadRecords = async (options: { silent?: boolean } = {}) => {
     }
   } catch (error) {
     feedback.value = `加载通联记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    if (!options.skipLoading) {
+      loading.value = false
+    }
+  }
+}
+
+const loadPageData = async () => {
+  loading.value = true
+  try {
+    await Promise.all([loadStationEquipments(), loadEquipmentCatalog(), loadRecords({ skipLoading: true })])
+
+    if (!form.myRig && myRigOptions.value.length > 0) {
+      form.myRig = myRigOptions.value[0]
+    }
+  } catch (error) {
+    feedback.value = `初始化通联记录页面失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     loading.value = false
   }
@@ -171,8 +342,8 @@ const filteredHistory = computed(() => {
 
 const resetForm = () => {
   form.freq = ''
-  form.myRig = ''
-  form.mode = 'SSB'
+  form.myRig = myRigOptions.value[0] ?? ''
+  form.mode = ''
   form.myRigAnt = ''
   form.myRigPwr = ''
   form.callSign = ''
@@ -201,8 +372,20 @@ const saveRecord = async () => {
     return
   }
 
+  if (!form.myRig.trim()) {
+    feedback.value = '请先选择本台设备。'
+    return
+  }
+
+  if (!form.mode.trim() || !form.myRigAnt.trim() || !form.myRigPwr.trim()) {
+    feedback.value = '请完整选择本台设备的模式、天线和功率。'
+    return
+  }
+
   saving.value = true
   try {
+    await ensureOpponentCatalogValues()
+
     await createExtension<QsoRecordSpec>(resourcePlural, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
@@ -215,7 +398,7 @@ const saveRecord = async () => {
         timezone: form.timezone,
         freq: form.freq.trim(),
         myRig: form.myRig.trim(),
-        myRigMode: form.mode,
+        myRigMode: form.mode.trim(),
         myRigAnt: form.myRigAnt.trim(),
         myRigPwr: form.myRigPwr.trim(),
         callSign: form.callSign.trim().toUpperCase(),
@@ -228,12 +411,14 @@ const saveRecord = async () => {
         remarks: form.remarks.trim(),
       },
     })
+
     await appendQslAuditLog({
       action: '新增通联记录',
       resourceType: 'qso-record',
       resourceName: form.callSign.trim().toUpperCase(),
       detail: `${form.date} ${form.time} ${form.timezone}`,
     })
+
     await loadRecords({ silent: true })
     feedback.value = `通联记录已持久化保存（${nowText()}）。`
     resetForm()
@@ -251,7 +436,7 @@ onBeforeUnmount(() => {
 })
 
 onMounted(() => {
-  loadRecords()
+  loadPageData()
 })
 </script>
 
@@ -301,18 +486,19 @@ onMounted(() => {
         <label class="qsl-field">
           <span class="qsl-field__label">设备（My_RIG）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="form.myRig" type="text" placeholder="输入本台设备" />
+            <select v-model="form.myRig">
+              <option value="">请选择本台设备</option>
+              <option v-for="item in myRigOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
           </div>
         </label>
 
         <label class="qsl-field">
           <span class="qsl-field__label">模式（My_RIG_MODE）</span>
           <div class="qsl-input-shell">
-            <select v-model="form.mode">
-              <option value="SSB">SSB</option>
-              <option value="CW">CW</option>
-              <option value="FT8">FT8</option>
-              <option value="FM">FM</option>
+            <select v-model="form.mode" :disabled="!form.myRig">
+              <option value="">请选择模式</option>
+              <option v-for="item in myRigModeOptions" :key="item" :value="item">{{ item }}</option>
             </select>
           </div>
         </label>
@@ -320,14 +506,20 @@ onMounted(() => {
         <label class="qsl-field">
           <span class="qsl-field__label">天线（My_RIG_ANT）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="form.myRigAnt" type="text" placeholder="输入天线" />
+            <select v-model="form.myRigAnt" :disabled="!form.myRig">
+              <option value="">请选择天线</option>
+              <option v-for="item in myRigAntOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
           </div>
         </label>
 
         <label class="qsl-field">
           <span class="qsl-field__label">功率（My_RIG_PWR）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="form.myRigPwr" type="text" placeholder="输入功率" />
+            <select v-model="form.myRigPwr" :disabled="!form.myRig">
+              <option value="">请选择功率</option>
+              <option v-for="item in myRigPwrOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
           </div>
         </label>
 
@@ -341,21 +533,30 @@ onMounted(() => {
         <label class="qsl-field">
           <span class="qsl-field__label">设备（RIG）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="form.rig" type="text" placeholder="自动联想设备库" />
+            <input v-model.trim="form.rig" list="qsl-opponent-rig-options" type="text" placeholder="自动联想设备库" />
+            <datalist id="qsl-opponent-rig-options">
+              <option v-for="item in rigSuggestionOptions" :key="item" :value="item" />
+            </datalist>
           </div>
         </label>
 
         <label class="qsl-field">
           <span class="qsl-field__label">天线（ANT）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="form.ant" type="text" placeholder="自动联想设备库" />
+            <input v-model.trim="form.ant" list="qsl-opponent-ant-options" type="text" placeholder="自动联想设备库" />
+            <datalist id="qsl-opponent-ant-options">
+              <option v-for="item in antSuggestionOptions" :key="item" :value="item" />
+            </datalist>
           </div>
         </label>
 
         <label class="qsl-field">
           <span class="qsl-field__label">功率（PWR）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="form.pwr" type="text" placeholder="自动联想设备库" />
+            <input v-model.trim="form.pwr" list="qsl-opponent-pwr-options" type="text" placeholder="自动联想设备库" />
+            <datalist id="qsl-opponent-pwr-options">
+              <option v-for="item in pwrSuggestionOptions" :key="item" :value="item" />
+            </datalist>
           </div>
         </label>
 

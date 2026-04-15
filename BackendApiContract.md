@@ -335,7 +335,7 @@
 ```json
 {
   "callSign": "BG7ABC",
-  "cardType": "QSO",
+  "cardId": "card-record-001",
   "remarks": "已签收"
 }
 ```
@@ -343,7 +343,7 @@
 ### 8.2.4 输入校验基线（一期）
 
 1. `callSign`：仅允许大写字母、数字、`/`、`-`，长度 `3-16`。
-2. `cardType`：仅允许 `QSO` / `SWL` / `EYEBALL`。
+2. `cardId`：必填，必须能匹配到已存在卡片记录，并与 `callSign` 一致。
 3. `useBureau=true` 时，`bureauName` 必填。
 4. 可选字段格式约束：
    - `email`：邮箱格式校验，最大 `120` 字符。
