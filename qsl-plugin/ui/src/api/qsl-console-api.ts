@@ -39,6 +39,7 @@ export interface ImportJobCreatePayload {
   successCount?: number
   failedCount?: number
   status?: string
+  errors?: string[]
 }
 
 export interface ExportJobCreatePayload {
@@ -62,6 +63,7 @@ export interface ImportExportJobStatus {
   successCount: number
   failedCount: number
   errorReportPath: string
+  errorLines?: string[]
   startedAt: string
   finishedAt: string
 }
@@ -78,6 +80,12 @@ export interface ImportExportJob {
 }
 
 export interface ExportDownloadPayload {
+  blob: Blob
+  fileName: string
+  contentType: string
+}
+
+export interface ImportErrorDownloadPayload {
   blob: Blob
   fileName: string
   contentType: string
@@ -152,6 +160,25 @@ export async function downloadExportJob(jobName: string, fallbackName: string): 
   })
   if (!response.ok) {
     throw new Error(`下载导出文件失败（HTTP ${response.status}）。`)
+  }
+  const blob = await response.blob()
+  return {
+    blob,
+    fileName: parseDownloadFileName(response.headers.get('content-disposition') || undefined, fallbackName),
+    contentType: response.headers.get('content-type') || '',
+  }
+}
+
+export async function downloadImportJobErrors(
+  jobName: string,
+  fallbackName: string,
+): Promise<ImportErrorDownloadPayload> {
+  const response = await fetch(`${consoleApiBase}/imports/jobs/${encodeURIComponent(jobName)}/errors/download`, {
+    method: 'GET',
+    credentials: 'same-origin',
+  })
+  if (!response.ok) {
+    throw new Error(`下载导入错误回执失败（HTTP ${response.status}）。`)
   }
   const blob = await response.blob()
   return {

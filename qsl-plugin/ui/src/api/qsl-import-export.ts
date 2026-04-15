@@ -22,6 +22,7 @@ export interface ImportResult {
   success: number
   skipped: number
   failed: number
+  errors: string[]
 }
 
 interface DatasetConfig {
@@ -483,9 +484,11 @@ export const importDatasetCsv = async (
     success: 0,
     skipped: 0,
     failed: 0,
+    errors: [],
   }
 
-  for (const rowObject of rowObjects) {
+  for (let index = 0; index < rowObjects.length; index += 1) {
+    const rowObject = rowObjects[index]
     const resourceName = rowObject.id || createResourceName(config.idPrefix)
     const converted = config.fromRow(rowObject)
     const existingItem = existingMap.get(resourceName)
@@ -520,8 +523,10 @@ export const importDatasetCsv = async (
         status: converted.status,
       })
       result.success += 1
-    } catch {
+    } catch (error) {
       result.failed += 1
+      const reason = error instanceof Error ? error.message : '未知错误'
+      result.errors.push(`第${index + 2}行（ID=${resourceName}）：${reason}`)
     }
   }
 

@@ -47,6 +47,7 @@ public class QslImportExportJobService {
     );
     private static final Set<String> SUPPORTED_EXPORT_DATASETS = Set.copyOf(DATASET_EXPORT_ORDER);
     private static final Set<String> SUPPORTED_FORMATS = Set.of(FORMAT_CSV, FORMAT_ZIP);
+    private static final int MAX_ERROR_LINES = 1000;
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
@@ -82,11 +83,16 @@ public class QslImportExportJobService {
         var totalCount = positiveOrZero(command.totalCount());
         var successCount = positiveOrZero(command.successCount());
         var failedCount = positiveOrZero(command.failedCount());
+        var errorLines = normalizeErrorLines(command.errorLines());
         status.setStatus(resolveImportJobStatus(command.status(), totalCount, successCount, failedCount));
         status.setTotalCount(totalCount);
         status.setSuccessCount(successCount);
         status.setFailedCount(failedCount);
-        status.setErrorReportPath("");
+        status.setErrorLines(errorLines);
+        status.setErrorReportPath(errorLines.isEmpty()
+            ? ""
+            : "/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/"
+                + job.getMetadata().getName() + "/errors/download");
         status.setStartedAt(QslApiSupport.nowText());
         status.setFinishedAt(isBlank(command.status()) ? "" : QslApiSupport.nowText());
         job.setStatus(status);
@@ -141,6 +147,7 @@ public class QslImportExportJobService {
                 status.setSuccessCount(totalCount);
                 status.setFailedCount(0L);
                 status.setErrorReportPath("");
+                status.setErrorLines(List.of());
                 status.setStartedAt(QslApiSupport.nowText());
                 status.setFinishedAt(QslApiSupport.nowText());
                 job.setStatus(status);
@@ -169,9 +176,30 @@ public class QslImportExportJobService {
         return fetchOr404(ImportExportJob.class, jobName)
             .map(job -> new JobErrorResult(
                 job.getMetadata().getName(),
-                List.of(),
+                resolveErrorLines(job),
                 job.getStatus() == null ? "" : nullToEmpty(job.getStatus().getErrorReportPath())
             ));
+    }
+
+    public Mono<DownloadPayload> buildImportErrorDownload(String jobName) {
+        return fetchOr404(ImportExportJob.class, jobName)
+            .flatMap(job -> {
+                if (job.getSpec() == null || !"import".equalsIgnoreCase(job.getSpec().getJobType())) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "仅导入任务支持错误回执下载"));
+                }
+                var errorLines = resolveErrorLines(job);
+                if (errorLines.isEmpty()) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "该导入任务没有错误明细"));
+                }
+                var csvContent = renderImportErrorCsv(errorLines);
+                return Mono.just(new DownloadPayload(
+                    job.getMetadata().getName() + "-errors.csv",
+                    "text/csv;charset=UTF-8",
+                    csvContent.getBytes(StandardCharsets.UTF_8)
+                ));
+            });
     }
 
     public Mono<DownloadPayload> buildExportDownload(String jobName) {
@@ -545,6 +573,33 @@ public class QslImportExportJobService {
         return "已完成";
     }
 
+    private List<String> normalizeErrorLines(List<String> rawErrorLines) {
+        if (rawErrorLines == null || rawErrorLines.isEmpty()) {
+            return List.of();
+        }
+        return rawErrorLines.stream()
+            .filter(errorLine -> errorLine != null && !errorLine.isBlank())
+            .map(String::trim)
+            .limit(MAX_ERROR_LINES)
+            .toList();
+    }
+
+    private List<String> resolveErrorLines(ImportExportJob job) {
+        if (job.getStatus() == null || job.getStatus().getErrorLines() == null) {
+            return List.of();
+        }
+        return job.getStatus().getErrorLines();
+    }
+
+    private String renderImportErrorCsv(List<String> errorLines) {
+        var csvLines = new ArrayList<String>();
+        csvLines.add(renderCsvLine(List.of("序号", "错误信息")));
+        for (int index = 0; index < errorLines.size(); index++) {
+            csvLines.add(renderCsvLine(List.of(String.valueOf(index + 1), errorLines.get(index))));
+        }
+        return String.join("\n", csvLines);
+    }
+
     private long positiveOrZero(Long value) {
         if (value == null || value < 0) {
             return 0L;
@@ -573,7 +628,8 @@ public class QslImportExportJobService {
         Long totalCount,
         Long successCount,
         Long failedCount,
-        String status
+        String status,
+        List<String> errorLines
     ) {
     }
 

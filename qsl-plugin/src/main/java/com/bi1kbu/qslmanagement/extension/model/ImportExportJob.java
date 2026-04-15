@@ -1,6 +1,7 @@
 package com.bi1kbu.qslmanagement.extension.model;
 
 import com.bi1kbu.qslmanagement.extension.QslBaseExtension;
+import java.util.List;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import run.halo.app.extension.GVK;
@@ -34,6 +35,7 @@ public class ImportExportJob extends QslBaseExtension<ImportExportJob.ImportExpo
         private Long successCount;
         private Long failedCount;
         private String errorReportPath;
+        private List<String> errorLines;
         private String startedAt;
         private String finishedAt;
     }

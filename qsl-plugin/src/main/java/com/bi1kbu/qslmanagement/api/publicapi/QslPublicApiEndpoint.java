@@ -6,6 +6,8 @@ import static org.springframework.web.reactive.function.server.RouterFunctions.r
 
 import com.bi1kbu.qslmanagement.api.QslApiResponses;
 import com.bi1kbu.qslmanagement.api.QslPublicApiService;
+import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
+import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
@@ -18,9 +20,14 @@ import run.halo.app.extension.GroupVersion;
 public class QslPublicApiEndpoint implements CustomEndpoint {
 
     private final QslPublicApiService publicApiService;
+    private final QslPublicRateLimitService publicRateLimitService;
 
-    public QslPublicApiEndpoint(QslPublicApiService publicApiService) {
+    public QslPublicApiEndpoint(
+        QslPublicApiService publicApiService,
+        QslPublicRateLimitService publicRateLimitService
+    ) {
         this.publicApiService = publicApiService;
+        this.publicRateLimitService = publicRateLimitService;
     }
 
     @Override
@@ -36,36 +43,40 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
     }
 
     private Mono<ServerResponse> listPublicQso(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
         var callSign = request.queryParam("callSign").orElse("");
-        return publicApiService.listPublicRecords(callSign)
+        return publicRateLimitService.checkLimit("qso-public-records", clientIp)
+            .then(publicApiService.listPublicRecords(callSign))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }
 
     private Mono<ServerResponse> submitExchangeRequest(ServerRequest request) {
-        var clientIp = request.remoteAddress().map(address -> address.getAddress().getHostAddress()).orElse("unknown");
-        return request.bodyToMono(QslPublicApiService.PublicExchangeSubmitCommand.class)
-            .defaultIfEmpty(new QslPublicApiService.PublicExchangeSubmitCommand(
-                "",
-                Boolean.FALSE,
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                ""
-            ))
-            .flatMap(payload -> publicApiService.submitExchangeRequest(payload, clientIp))
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        return publicRateLimitService.checkLimit("exchange-public-requests", clientIp)
+            .then(request.bodyToMono(QslPublicApiService.PublicExchangeSubmitCommand.class)
+                .defaultIfEmpty(new QslPublicApiService.PublicExchangeSubmitCommand(
+                    "",
+                    Boolean.FALSE,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    ""
+                ))
+                .flatMap(payload -> publicApiService.submitExchangeRequest(payload, clientIp)))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }
 
     private Mono<ServerResponse> confirmReceipt(ServerRequest request) {
-        var clientIp = request.remoteAddress().map(address -> address.getAddress().getHostAddress()).orElse("unknown");
-        return request.bodyToMono(QslPublicApiService.PublicReceiptConfirmCommand.class)
-            .defaultIfEmpty(new QslPublicApiService.PublicReceiptConfirmCommand("", "QSO", ""))
-            .flatMap(payload -> publicApiService.confirmReceipt(payload, clientIp))
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        return publicRateLimitService.checkLimit("receipt-public-confirm", clientIp)
+            .then(request.bodyToMono(QslPublicApiService.PublicReceiptConfirmCommand.class)
+                .defaultIfEmpty(new QslPublicApiService.PublicReceiptConfirmCommand("", "QSO", ""))
+                .flatMap(payload -> publicApiService.confirmReceipt(payload, clientIp)))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

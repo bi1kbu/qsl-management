@@ -9,6 +9,7 @@ import com.bi1kbu.qslmanagement.api.QslApiResponses;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -49,6 +50,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/imports/jobs"), this::createImportJob)
             .andRoute(GET("/imports/jobs/{jobName}"), this::getImportJob)
             .andRoute(GET("/imports/jobs/{jobName}/errors"), this::getImportJobErrors)
+            .andRoute(GET("/imports/jobs/{jobName}/errors/download"), this::downloadImportJobErrors)
             .andRoute(POST("/exports/jobs"), this::createExportJob)
             .andRoute(GET("/exports/jobs/{jobName}"), this::getExportJob)
             .andRoute(GET("/exports/jobs/{jobName}/download"), this::downloadExportJob);
@@ -148,7 +150,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> createImportJob(ServerRequest request) {
         return ensureAuthenticated(request)
             .flatMap(authenticatedOperator -> request.bodyToMono(ImportJobRequest.class)
-                .defaultIfEmpty(new ImportJobRequest("", "", "skip", "", null, null, null, ""))
+                .defaultIfEmpty(new ImportJobRequest("", "", "skip", "", null, null, null, "", List.of()))
                 .flatMap(payload -> importExportJobService.createImportJob(
                     new QslImportExportJobService.CreateImportJobCommand(
                         payload.dataset(),
@@ -158,7 +160,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                         payload.totalCount(),
                         payload.successCount(),
                         payload.failedCount(),
-                        payload.status()
+                        payload.status(),
+                        payload.errors()
                     ),
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp()
@@ -180,6 +183,17 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         return ensureAuthenticated(request)
             .then(importExportJobService.getJobErrors(jobName))
             .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> downloadImportJobErrors(ServerRequest request) {
+        var jobName = request.pathVariable("jobName");
+        return ensureAuthenticated(request)
+            .then(importExportJobService.buildImportErrorDownload(jobName))
+            .flatMap(payload -> ServerResponse.ok()
+                .contentType(MediaType.parseMediaType(payload.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + payload.fileName() + "\"")
+                .bodyValue(payload.content()))
             .onErrorResume(QslApiResponses::handleError);
     }
 
@@ -262,7 +276,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         Long totalCount,
         Long successCount,
         Long failedCount,
-        String status
+        String status,
+        List<String> errors
     ) {
     }
 

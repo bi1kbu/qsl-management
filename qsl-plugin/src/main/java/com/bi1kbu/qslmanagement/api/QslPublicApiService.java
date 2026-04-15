@@ -5,6 +5,7 @@ import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,10 @@ public class QslPublicApiService {
     private static final Set<String> ALLOWED_CARD_TYPES = Set.of("QSO", "SWL", "EYEBALL");
     private static final ListOptions EMPTY_OPTIONS = ListOptions.builder().build();
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("metadata.creationTimestamp"));
+    private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$");
+    private static final Pattern TELEPHONE_PATTERN = Pattern.compile("^[0-9+\\-\\s]{0,30}$");
+    private static final Pattern POSTAL_CODE_PATTERN = Pattern.compile("^[A-Za-z0-9\\-]{0,20}$");
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
@@ -31,6 +36,9 @@ public class QslPublicApiService {
         var normalizedCallSign = QslApiSupport.normalizeCallSign(callSign);
         if (normalizedCallSign.isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "请提供呼号"));
+        }
+        if (!isValidCallSign(normalizedCallSign)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
         }
 
         var qsoItemsMono = client.listAll(QsoRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
@@ -73,6 +81,33 @@ public class QslPublicApiService {
         var callSign = QslApiSupport.normalizeCallSign(command.callSign());
         if (callSign.isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号不能为空"));
+        }
+        if (!isValidCallSign(callSign)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
+        }
+        if (Boolean.TRUE.equals(command.useBureau()) && nullToEmpty(command.bureauName()).isBlank()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "选择卡片局模式时必须填写卡片局名称"));
+        }
+        if (!validateLength(command.bureauName(), 80)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片局名称长度不能超过80字符"));
+        }
+        if (!validateLength(command.name(), 60)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "联系人姓名长度不能超过60字符"));
+        }
+        if (!validateLength(command.address(), 200)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "通信地址长度不能超过200字符"));
+        }
+        if (!validateLength(command.remarks(), 500)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "备注长度不能超过500字符"));
+        }
+        if (!validateOptionalEmail(command.email())) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "邮箱格式不合法"));
+        }
+        if (!validateOptionalTelephone(command.telephone())) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "联系电话格式不合法"));
+        }
+        if (!validateOptionalPostalCode(command.postalCode())) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "邮编格式不合法"));
         }
 
         var request = new ExchangeRequest();
@@ -119,10 +154,16 @@ public class QslPublicApiService {
         if (callSign.isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号不能为空"));
         }
+        if (!isValidCallSign(callSign)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
+        }
 
         var cardType = QslApiSupport.normalizeCardType(command.cardType());
         if (!ALLOWED_CARD_TYPES.contains(cardType)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片类型不支持"));
+        }
+        if (!validateLength(command.remarks(), 500)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "签收备注长度不能超过500字符"));
         }
 
         return client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
@@ -162,6 +203,41 @@ public class QslPublicApiService {
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private boolean isValidCallSign(String callSign) {
+        return CALL_SIGN_PATTERN.matcher(callSign).matches();
+    }
+
+    private boolean validateLength(String value, int maxLength) {
+        return nullToEmpty(value).trim().length() <= maxLength;
+    }
+
+    private boolean validateOptionalEmail(String value) {
+        var normalized = nullToEmpty(value).trim();
+        if (normalized.isBlank()) {
+            return true;
+        }
+        if (normalized.length() > 120) {
+            return false;
+        }
+        return EMAIL_PATTERN.matcher(normalized).matches();
+    }
+
+    private boolean validateOptionalTelephone(String value) {
+        var normalized = nullToEmpty(value).trim();
+        if (normalized.isBlank()) {
+            return true;
+        }
+        return TELEPHONE_PATTERN.matcher(normalized).matches();
+    }
+
+    private boolean validateOptionalPostalCode(String value) {
+        var normalized = nullToEmpty(value).trim();
+        if (normalized.isBlank()) {
+            return true;
+        }
+        return POSTAL_CODE_PATTERN.matcher(normalized).matches();
     }
 
     public record PublicQsoQueryResult(

@@ -15,6 +15,7 @@ import {
 import {
   createExportJob,
   createImportJob,
+  downloadImportJobErrors,
   downloadExportJob,
   type ImportExportJobSpec,
   type ImportExportJobStatus,
@@ -31,6 +32,8 @@ interface OperationRecord {
   format: string
   detail: string
   status: string
+  errorReportPath: string
+  errorCount: number
 }
 
 interface ZipImportItem {
@@ -162,16 +165,18 @@ const toOperationRecord = (
     successCount: 0,
     failedCount: 0,
     errorReportPath: '',
+    errorLines: [],
     startedAt: '',
     finishedAt: '',
   }
+  const errorCount = status.errorLines?.length ?? 0
 
   const isImport = spec.jobType === 'import'
   const time = status.finishedAt || status.startedAt || extension.metadata.creationTimestamp || ''
   const detail = isImport
     ? `来源：${spec.sourceFile || '未提供'}；策略：${spec.strategy || '未指定'}；总量：${status.totalCount || 0}；成功：${
         status.successCount || 0
-      }；失败：${status.failedCount || 0}`
+      }；失败：${status.failedCount || 0}；错误明细：${errorCount}`
     : `输出：${spec.outputFile || '未生成'}；总量：${status.totalCount || 0}；成功：${status.successCount || 0}；失败：${
         status.failedCount || 0
       }`
@@ -184,6 +189,8 @@ const toOperationRecord = (
     format: (spec.format || '').toUpperCase(),
     detail,
     status: status.status || (status.failedCount > 0 ? '部分成功' : '成功'),
+    errorReportPath: status.errorReportPath || '',
+    errorCount,
   }
 }
 
@@ -346,6 +353,7 @@ const runImportExecute = async () => {
         successCount: result.success,
         failedCount: result.failed,
         status: result.failed > 0 || result.skipped > 0 ? '部分成功' : '已完成',
+        errors: result.errors,
       })
       await loadOperationRecords()
       return
@@ -373,6 +381,7 @@ const runImportExecute = async () => {
       let success = 0
       let skipped = 0
       let failed = 0
+      const errors: string[] = []
 
       for (const item of selectedZipItems.value) {
         if (!item.dataset) {
@@ -383,6 +392,9 @@ const runImportExecute = async () => {
         success += result.success
         skipped += result.skipped
         failed += result.failed
+        result.errors.forEach((errorLine) => {
+          errors.push(`${item.entryName}：${errorLine}`)
+        })
       }
 
       importFeedback.value = `ZIP导入完成（${time}）：成功 ${success}，跳过 ${skipped}，失败 ${failed}。`
@@ -395,6 +407,7 @@ const runImportExecute = async () => {
         successCount: success,
         failedCount: failed,
         status: failed > 0 || skipped > 0 ? '部分成功' : '已完成',
+        errors,
       })
       await loadOperationRecords()
       return
@@ -405,6 +418,28 @@ const runImportExecute = async () => {
     importFeedback.value = `导入失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     importBusy.value = false
+  }
+}
+
+const downloadImportErrorReport = async (record: OperationRecord) => {
+  if (!record.errorReportPath) {
+    importFeedback.value = '当前任务没有可下载的错误回执。'
+    return
+  }
+
+  try {
+    const fallbackName = `${record.id}-errors.csv`
+    const download = await downloadImportJobErrors(record.id, fallbackName)
+    const blobUrl = URL.createObjectURL(download.blob)
+    const anchor = document.createElement('a')
+    anchor.href = blobUrl
+    anchor.download = download.fileName
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(blobUrl)
+  } catch (error) {
+    importFeedback.value = `下载错误回执失败：${error instanceof Error ? error.message : '未知错误'}`
   }
 }
 
@@ -646,6 +681,7 @@ onBeforeUnmount(() => {
               <th>格式</th>
               <th>详情</th>
               <th>状态</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -669,9 +705,19 @@ onBeforeUnmount(() => {
                   {{ item.status }}
                 </VTag>
               </td>
+              <td>
+                <VButton
+                  v-if="item.action === '导入' && item.errorReportPath"
+                  type="secondary"
+                  @click="downloadImportErrorReport(item)"
+                >
+                  下载错误回执
+                </VButton>
+                <span v-else class="qsl-muted">-</span>
+              </td>
             </tr>
             <tr v-if="!operationRecords.length">
-              <td colspan="7" class="qsl-table-empty">暂无任务记录。</td>
+              <td colspan="8" class="qsl-table-empty">暂无任务记录。</td>
             </tr>
           </tbody>
         </table>

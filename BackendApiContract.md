@@ -1,6 +1,6 @@
 # QSL 管理插件后端 API 合同（一期）
 
-更新时间：2026-04-14  
+更新时间：2026-04-15  
 适用插件：`qsl-management`  
 状态：`v1alpha1` 基线合同（用于后续编码与联调）
 
@@ -20,7 +20,7 @@
 2. HAM 用户、操作员角色的细分授权在二期启用（节点已预留）。
 3. 不做旧版兼容，按当前合同直接实现。
 
-## 2. 官方依据（核验日期：2026-04-14）
+## 2. 官方依据（核验日期：2026-04-15）
 
 1. 自定义模型与自动 CRUD、CustomEndpoint、Group 规则  
    https://docs.halo.run/developer-guide/plugin/api-reference/server/extension
@@ -30,6 +30,8 @@
    https://docs.halo.run/developer-guide/plugin/security/rbac
 4. RESTful API 介绍（Console/UC/Extension/Public 分组、PAT 推荐）  
    https://docs.halo.run/developer-guide/restful-api/introduction
+5. 插件 API 变更日志  
+   https://docs.halo.run/developer-guide/plugin/api-changelog/
 
 ## 3. API 分组与版本约定
 
@@ -134,6 +136,7 @@
 | POST | `/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs` | 创建导入任务 | 必须登录 | `plugin:qsl-management:import-export:edit` |
 | GET | `/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/{jobName}` | 查询导入任务状态 | 必须登录 | `plugin:qsl-management:import-export:view` |
 | GET | `/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/{jobName}/errors` | 查询导入错误明细 | 必须登录 | `plugin:qsl-management:import-export:view` |
+| GET | `/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/{jobName}/errors/download` | 下载导入错误回执 CSV | 必须登录 | `plugin:qsl-management:import-export:view` |
 | POST | `/apis/console.api.qsl-management.halo.run/v1alpha1/exports/jobs` | 创建导出任务（单项CSV/全量ZIP） | 必须登录 | `plugin:qsl-management:import-export:edit` |
 | GET | `/apis/console.api.qsl-management.halo.run/v1alpha1/exports/jobs/{jobName}` | 查询导出任务状态 | 必须登录 | `plugin:qsl-management:import-export:view` |
 | GET | `/apis/console.api.qsl-management.halo.run/v1alpha1/exports/jobs/{jobName}/download` | 下载导出文件 | 必须登录 | `plugin:qsl-management:import-export:view` |
@@ -194,14 +197,18 @@
   "totalCount": 120,
   "successCount": 118,
   "failedCount": 2,
-  "status": "部分成功"
+  "status": "部分成功",
+  "errors": [
+    "第5行（ID=qso-record-xxxx）：字段校验失败"
+  ]
 }
 ```
 
 说明：
 
-1. `totalCount/successCount/failedCount/status` 为可选，用于前端本地执行导入时回填最终任务状态。
-2. 不传上述可选字段时，后端默认创建 `待处理` 状态任务。
+1. `totalCount/successCount/failedCount/status/errors` 为可选，用于前端本地执行导入后回填最终任务状态与错误明细。
+2. `errors` 最多持久化 1000 条非空错误信息，并可通过错误下载接口导出 CSV 回执。
+3. 不传上述可选字段时，后端默认创建 `待处理` 状态任务。
 
 ### 7.4.5 创建导出任务
 
@@ -223,17 +230,26 @@
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/qso-public/records` | 按完整呼号查询公开通联/卡片信息 | 匿名可访问 | 受“游客每分钟查询次数”限制 |
 | POST | `/apis/api.qsl-management.halo.run/v1alpha1/exchange-public/requests` | 提交换卡申请 | 匿名可访问 | 请求体字段校验 + 限流 |
 | POST | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/confirm` | 卡片签收确认 | 匿名可访问 | 呼号+卡片号强校验 + 限流 |
-| GET | `/apis/api.qsl-management.halo.run/v1alpha1/overview-public/summary` | 公共数据总览 | 匿名可访问 | 只读缓存，限流 |
+| GET | `/apis/api.qsl-management.halo.run/v1alpha1/overview-public/summary` | 公共数据总览 | 匿名可访问 | 只读查询 + 限流 |
 
-## 8.1 请求体与查询参数（公开）
+## 8.1 匿名接口限流规则（一期）
 
-### 8.1.1 公开查询
+1. 限流维度：`endpoint + clientIp`，其中 `clientIp` 解析顺序为 `X-Forwarded-For` 首段、`X-Real-IP`、`remoteAddress`。
+2. 限流窗口：固定窗口 1 分钟。
+3. 阈值来源：优先读取持久化系统参数 `SystemSetting.spec.guestQueryPerMinute`，未配置时回退默认值 `30`。
+4. 触发限流返回：`HTTP 429`，错误码 `QSL-429-0001`。
+5. 当前实现为插件进程内计数（单实例一致）；若二期进入多实例部署，需升级为网关层或共享存储限流，避免实例间配额不一致。
+6. 临时回退方案：将 `guestQueryPerMinute` 提高到较大值（如 `10000`）可快速放宽限流，再安排升级限流架构。
+
+## 8.2 请求体与查询参数（公开）
+
+### 8.2.1 公开查询
 
 `GET /qso-public/records?callSign=BG7ABC`
 
 说明：`callSign` 为必填查询参数。
 
-### 8.1.2 匿名提交换卡申请
+### 8.2.2 匿名提交换卡申请
 
 `POST /exchange-public/requests`
 
@@ -251,7 +267,7 @@
 }
 ```
 
-### 8.1.3 匿名签收确认
+### 8.2.3 匿名签收确认
 
 `POST /receipt-public/confirm`
 
@@ -262,6 +278,21 @@
   "remarks": "已签收"
 }
 ```
+
+### 8.2.4 输入校验基线（一期）
+
+1. `callSign`：仅允许大写字母、数字、`/`、`-`，长度 `3-16`。
+2. `cardType`：仅允许 `QSO` / `SWL` / `EYEBALL`。
+3. `useBureau=true` 时，`bureauName` 必填。
+4. 可选字段格式约束：
+   - `email`：邮箱格式校验，最大 `120` 字符。
+   - `telephone`：仅允许数字、空格、`+`、`-`，最大 `30` 字符。
+   - `postalCode`：仅允许字母、数字、`-`，最大 `20` 字符。
+5. 长度约束：
+   - `bureauName` 最大 `80` 字符。
+   - `name` 最大 `60` 字符。
+   - `address` 最大 `200` 字符。
+   - `remarks` / `receiptRemarks` 最大 `500` 字符。
 
 ## 9. 请求与响应约定
 
@@ -302,6 +333,7 @@
 | QSL-403-0001 | 无权限（RBAC 拒绝） |
 | QSL-404-0001 | 资源不存在 |
 | QSL-409-0001 | 版本冲突（乐观锁） |
+| QSL-429-0001 | 请求过于频繁（限流触发） |
 | QSL-422-0001 | 业务规则不满足（如签收不匹配） |
 | QSL-500-0001 | 服务端内部错误 |
 
@@ -330,10 +362,12 @@
 1. `ProductDefinition.md` 的“4.2 权限节点”
 2. `qsl-plugin/src/main/resources/extensions/qsl-menu-role-templates.yaml`
 
-## 13. 一期当前实现说明（2026-04-14）
+## 13. 一期当前实现说明（2026-04-15）
 
 1. 控制台业务动作接口已落地持久化写入：发信确认、收信确认、换卡审批。
 2. 导入/导出任务接口已落地 `import-export-jobs` 持久化（任务创建、状态查询、错误明细查询）。
 3. 导出下载接口已支持真实文件流：单项导出返回对应数据集 CSV，全量导出返回包含全部数据集 CSV 的 ZIP 压缩包。
 4. 前台公开接口已落地持久化写入：匿名换卡申请、匿名签收确认。
 5. `qsl-menu-role-templates.yaml` 已补齐服务端 `rules`，覆盖扩展资源 CRUD、控制台自定义 API、公开 API 匿名聚合角色。
+6. 前台公开接口已接入服务端限流：按 `endpoint + clientIp` 固定窗口 1 分钟计数，阈值读取持久化系统参数 `guestQueryPerMinute`，触发时返回 `HTTP 429 / QSL-429-0001`。
+7. 导入任务已支持错误明细持久化：`imports/jobs` 可写入 `errors`，`imports/jobs/{jobName}/errors` 返回明细，`imports/jobs/{jobName}/errors/download` 可下载 CSV 错误回执。
