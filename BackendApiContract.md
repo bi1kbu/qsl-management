@@ -70,6 +70,9 @@
 2. 读接口要求对应 `:view` 节点；写接口要求对应 `:edit` 节点。
 3. 超级管理员（`super-role`）天然可访问；其他用户通过角色模板授权。
 4. 前台公开 API 通过聚合角色到 `anonymous` 暴露只读或受控写接口。
+5. RBAC `rules.resources` 使用 API 路径中的实际资源段，不使用 `qsl-management/` 前缀：
+   - 扩展资源使用 `plural`（如 `qso-records`、`import-export-jobs`）
+   - CustomEndpoint 使用首段资源名（如 `reports`、`imports`、`exports`、`qso-public`）
 
 ## 5. 统一数据资源（自动 CRUD）
 
@@ -177,16 +180,27 @@
 
 ```json
 {
-  "dataset": "qso-record",
   "format": "csv",
+  "strategy": "skip",
   "sourceFile": "qso-record.csv",
-  "rowCount": 120
+  "datasets": [
+    {
+      "dataset": "qso-record",
+      "rows": [
+        {
+          "id": "qso-record-001",
+          "callSign": "BG7ABC",
+          "date": "2026-04-15",
+          "time": "1200",
+          "timezone": "UTC"
+        }
+      ]
+    }
+  ]
 }
 ```
 
-### 7.4.4 创建导入任务
-
-`POST /imports/jobs`
+响应 `data` 示例：
 
 ```json
 {
@@ -194,21 +208,68 @@
   "format": "csv",
   "strategy": "skip",
   "sourceFile": "qso-record.csv",
-  "totalCount": 120,
-  "successCount": 118,
-  "failedCount": 2,
   "status": "部分成功",
-  "errors": [
-    "第5行（ID=qso-record-xxxx）：字段校验失败"
+  "totalCount": 120,
+  "successCount": 100,
+  "skippedCount": 18,
+  "failedCount": 2,
+  "errorLines": [
+    "【qso-record】第10行（ID=qso-record-010）：字段格式错误"
+  ],
+  "datasets": [
+    {
+      "dataset": "qso-record",
+      "totalCount": 120,
+      "successCount": 100,
+      "skippedCount": 18,
+      "failedCount": 2,
+      "errorLines": [
+        "【qso-record】第10行（ID=qso-record-010）：字段格式错误"
+      ]
+    }
   ]
 }
 ```
 
 说明：
 
-1. `totalCount/successCount/failedCount/status/errors` 为可选，用于前端本地执行导入后回填最终任务状态与错误明细。
-2. `errors` 最多持久化 1000 条非空错误信息，并可通过错误下载接口导出 CSV 回执。
-3. 不传上述可选字段时，后端默认创建 `待处理` 状态任务。
+1. 预检请求结构与 `POST /imports/jobs` 一致，便于前端复用同一份解析结果。
+2. 预检由服务端执行统一校验，不落库、不创建导入任务，只返回校验统计与错误明细。
+3. `status/totalCount/successCount/skippedCount/failedCount` 口径与导入任务执行结果一致。
+
+### 7.4.4 创建导入任务
+
+`POST /imports/jobs`
+
+```json
+{
+  "format": "csv",
+  "strategy": "skip",
+  "sourceFile": "qso-record.csv",
+  "datasets": [
+    {
+      "dataset": "qso-record",
+      "rows": [
+        {
+          "id": "qso-record-001",
+          "callSign": "BG7ABC",
+          "date": "2026-04-15",
+          "time": "1200",
+          "timezone": "UTC"
+        }
+      ]
+    }
+  ]
+}
+```
+
+说明：
+
+1. 导入执行由服务端完成，前端仅上传结构化行数据，不再由前端本地写库后回填结果。
+2. `datasets` 支持一个或多个数据集；`format=csv` 时要求仅一个数据集，`format=zip` 时可多个数据集。
+3. 服务端执行后自动计算并持久化 `totalCount/successCount/skippedCount/failedCount/status/errorLines`。
+4. `errorLines` 最多持久化 1000 条非空错误信息，并可通过错误下载接口导出 CSV 回执。
+5. 导入任务状态新增 `skippedCount`（跳过条数），用于区分“覆盖策略=skip”导致的跳过与真实失败。
 
 ### 7.4.5 创建导出任务
 
@@ -343,6 +404,7 @@
 2. 导入任务必须输出预检结果与错误行明细，避免脏数据静默写入。
 3. 前台公开接口必须启用限流、输入白名单校验、敏感字段脱敏返回。
 4. 涉及跨模块写入（如换卡审批创建卡片记录）必须在同一事务边界内处理。
+5. 审计写入涉及的 `clientIp` 统一按 `X-Forwarded-For` 首段、`X-Real-IP`、`remoteAddress` 顺序解析，避免代理场景记录偏差。
 
 ## 11. 一期不实现（预留）
 
@@ -370,4 +432,6 @@
 4. 前台公开接口已落地持久化写入：匿名换卡申请、匿名签收确认。
 5. `qsl-menu-role-templates.yaml` 已补齐服务端 `rules`，覆盖扩展资源 CRUD、控制台自定义 API、公开 API 匿名聚合角色。
 6. 前台公开接口已接入服务端限流：按 `endpoint + clientIp` 固定窗口 1 分钟计数，阈值读取持久化系统参数 `guestQueryPerMinute`，触发时返回 `HTTP 429 / QSL-429-0001`。
-7. 导入任务已支持错误明细持久化：`imports/jobs` 可写入 `errors`，`imports/jobs/{jobName}/errors` 返回明细，`imports/jobs/{jobName}/errors/download` 可下载 CSV 错误回执。
+7. 导入任务已支持错误明细持久化：`imports/jobs/{jobName}/errors` 返回明细，`imports/jobs/{jobName}/errors/download` 可下载 CSV 错误回执。
+8. 导入任务已切换为服务端执行：`imports/jobs` 接收结构化行数据后由后端完成写库、统计成功/跳过/失败并持久化任务结果。
+9. 已增加权限模板合同自动校验测试：校验 `qsl-menu-role-templates.yaml` 对控制台/公开 CustomEndpoint 的 `apiGroup + resource + verb` 覆盖完整。

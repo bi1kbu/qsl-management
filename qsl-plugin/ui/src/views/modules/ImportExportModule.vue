@@ -7,7 +7,6 @@ import {
   detectDatasetByMarker,
   getDatasetLabel,
   getFirstCellFromCsv,
-  importDatasetCsv,
   listDatasetCount,
   parseCsvToRowObjects,
   type DatasetValue,
@@ -17,8 +16,10 @@ import {
   createImportJob,
   downloadImportJobErrors,
   downloadExportJob,
+  precheckImportJob,
   type ImportExportJobSpec,
   type ImportExportJobStatus,
+  type ImportJobPrecheckResult,
 } from '../../api/qsl-console-api'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 
@@ -147,6 +148,24 @@ const resolveDatasetLabel = (value: string): string => {
   return option ? option.label : singleDataset
 }
 
+const resolveDatasetLabelByValue = (dataset: string): string => {
+  const option = datasetOptions.find((item) => item.value === dataset)
+  return option ? option.label : dataset || '未识别类型'
+}
+
+const buildPrecheckResultText = (result: ImportJobPrecheckResult): string => {
+  const datasetParts = result.datasets
+    .map((item) => {
+      return `${resolveDatasetLabelByValue(item.dataset)}：总 ${item.totalCount}，成功 ${item.successCount}，跳过 ${
+        item.skippedCount
+      }，失败 ${item.failedCount}`
+    })
+    .join('；')
+  const errorsPart = result.errorLines.length ? `；错误 ${result.errorLines.length} 条` : ''
+  const datasetDetailPart = datasetParts ? `；明细：${datasetParts}` : ''
+  return `预检完成：总 ${result.totalCount} 行，成功 ${result.successCount}，跳过 ${result.skippedCount}，失败 ${result.failedCount}${errorsPart}${datasetDetailPart}`
+}
+
 const toOperationRecord = (
   extension: QslExtension<ImportExportJobSpec, ImportExportJobStatus>,
 ): OperationRecord => {
@@ -163,6 +182,7 @@ const toOperationRecord = (
     status: '',
     totalCount: 0,
     successCount: 0,
+    skippedCount: 0,
     failedCount: 0,
     errorReportPath: '',
     errorLines: [],
@@ -176,7 +196,7 @@ const toOperationRecord = (
   const detail = isImport
     ? `来源：${spec.sourceFile || '未提供'}；策略：${spec.strategy || '未指定'}；总量：${status.totalCount || 0}；成功：${
         status.successCount || 0
-      }；失败：${status.failedCount || 0}；错误明细：${errorCount}`
+      }；跳过：${status.skippedCount || 0}；失败：${status.failedCount || 0}；错误明细：${errorCount}`
     : `输出：${spec.outputFile || '未生成'}；总量：${status.totalCount || 0}；成功：${status.successCount || 0}；失败：${
         status.failedCount || 0
       }`
@@ -288,38 +308,68 @@ const onImportFileChange = async (event: Event) => {
   importFeedback.value = '仅支持CSV或ZIP文件。'
 }
 
-const runImportPrecheck = () => {
+const runImportPrecheck = async () => {
   if (!importFile.value) {
     importFeedback.value = '请先选择导入文件。'
     return
   }
 
-  if (importFileKind.value === 'csv') {
-    if (!resolvedCsvDataset.value) {
-      importFeedback.value = '未识别CSV类型，请先手动选择。'
+  importBusy.value = true
+
+  try {
+    if (importFileKind.value === 'csv') {
+      if (!resolvedCsvDataset.value) {
+        importFeedback.value = '未识别CSV类型，请先手动选择。'
+        return
+      }
+
+      const parsed = parseCsvToRowObjects(csvContent.value)
+      const result = await precheckImportJob({
+        format: 'csv',
+        strategy: importForm.strategy,
+        sourceFile: importFile.value.name,
+        datasets: [
+          {
+            dataset: resolvedCsvDataset.value,
+            rows: parsed.rowObjects,
+          },
+        ],
+      })
+
+      importPrecheckResult.value = buildPrecheckResultText(result)
+      importFeedback.value = result.failedCount > 0 ? '预检发现问题，请先修复后再执行导入。' : '预检完成，可执行导入。'
       return
     }
 
-    const parsed = parseCsvToRowObjects(csvContent.value)
-    importPrecheckResult.value = `CSV预检完成：类型 ${getDatasetLabel(resolvedCsvDataset.value)}，可导入 ${parsed.dataRows} 行。`
-    importFeedback.value = '预检完成，可执行导入。'
-    return
-  }
+    if (importFileKind.value === 'zip') {
+      if (!selectedZipItems.value.length) {
+        importFeedback.value = '请至少选择一个压缩包内CSV内容进行导入。'
+        return
+      }
 
-  if (importFileKind.value === 'zip') {
-    if (!selectedZipItems.value.length) {
-      importFeedback.value = '请至少选择一个压缩包内CSV内容进行导入。'
+      const result = await precheckImportJob({
+        format: 'zip',
+        strategy: importForm.strategy,
+        sourceFile: importFile.value.name,
+        datasets: selectedZipItems.value
+          .filter((item) => item.dataset)
+          .map((item) => ({
+            dataset: item.dataset as DatasetValue,
+            rows: parseCsvToRowObjects(item.content).rowObjects,
+          })),
+      })
+
+      importPrecheckResult.value = buildPrecheckResultText(result)
+      importFeedback.value = result.failedCount > 0 ? '预检发现问题，请先修复后再执行导入。' : '预检完成，可执行导入。'
       return
     }
 
-    const selectedNames = selectedZipItems.value.map((item) => `${item.entryName}(${getDatasetLabel(item.dataset)})`)
-    const totalRows = selectedZipItems.value.reduce((sum, item) => sum + item.rowCount, 0)
-    importPrecheckResult.value = `ZIP预检完成：将导入 ${selectedZipItems.value.length} 个文件，共 ${totalRows} 行，${selectedNames.join('；')}`
-    importFeedback.value = '预检完成，可执行导入。'
-    return
+    importFeedback.value = '文件类型不支持，请选择CSV或ZIP。'
+  } catch (error) {
+    importFeedback.value = `预检失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    importBusy.value = false
   }
-
-  importFeedback.value = '文件类型不支持，请选择CSV或ZIP。'
 }
 
 const runImportExecute = async () => {
@@ -342,19 +392,22 @@ const runImportExecute = async () => {
         importFeedback.value = '未识别CSV类型，请先手动选择。'
         return
       }
-      const result = await importDatasetCsv(resolvedCsvDataset.value, csvContent.value, importForm.strategy)
-      importFeedback.value = `CSV导入完成（${time}）：成功 ${result.success}，跳过 ${result.skipped}，失败 ${result.failed}。`
-      await createImportJob({
-        dataset: resolvedCsvDataset.value,
+      const parsed = parseCsvToRowObjects(csvContent.value)
+      const createdJob = await createImportJob({
         format: 'csv',
         strategy: importForm.strategy,
         sourceFile: importFile.value.name,
-        totalCount: result.total,
-        successCount: result.success,
-        failedCount: result.failed,
-        status: result.failed > 0 || result.skipped > 0 ? '部分成功' : '已完成',
-        errors: result.errors,
+        datasets: [
+          {
+            dataset: resolvedCsvDataset.value,
+            rows: parsed.rowObjects,
+          },
+        ],
       })
+      const status = createdJob.status
+      importFeedback.value = `CSV导入完成（${time}）：成功 ${status?.successCount || 0}，跳过 ${status?.skippedCount || 0}，失败 ${
+        status?.failedCount || 0
+      }。`
       await loadOperationRecords()
       return
     }
@@ -365,50 +418,22 @@ const runImportExecute = async () => {
         return
       }
 
-      const selectedDatasetSet = new Set<DatasetValue>()
-      for (const item of selectedZipItems.value) {
-        if (item.dataset) {
-          selectedDatasetSet.add(item.dataset)
-        }
-      }
-      const selectedDatasets = datasetOptions
-        .map((item) => item.value)
-        .filter((datasetValue) => selectedDatasetSet.has(datasetValue))
-      const zipJobDatasetValue =
-        selectedDatasets.length === datasetOptions.length ? 'all' : selectedDatasets.join(',')
-
-      let total = 0
-      let success = 0
-      let skipped = 0
-      let failed = 0
-      const errors: string[] = []
-
-      for (const item of selectedZipItems.value) {
-        if (!item.dataset) {
-          continue
-        }
-        const result = await importDatasetCsv(item.dataset, item.content, importForm.strategy)
-        total += result.total
-        success += result.success
-        skipped += result.skipped
-        failed += result.failed
-        result.errors.forEach((errorLine) => {
-          errors.push(`${item.entryName}：${errorLine}`)
-        })
-      }
-
-      importFeedback.value = `ZIP导入完成（${time}）：成功 ${success}，跳过 ${skipped}，失败 ${failed}。`
-      await createImportJob({
-        dataset: zipJobDatasetValue,
+      const datasets = selectedZipItems.value
+        .filter((item) => item.dataset)
+        .map((item) => ({
+          dataset: item.dataset as DatasetValue,
+          rows: parseCsvToRowObjects(item.content).rowObjects,
+        }))
+      const createdJob = await createImportJob({
         format: 'zip',
         strategy: importForm.strategy,
         sourceFile: importFile.value.name,
-        totalCount: total,
-        successCount: success,
-        failedCount: failed,
-        status: failed > 0 || skipped > 0 ? '部分成功' : '已完成',
-        errors,
+        datasets,
       })
+      const status = createdJob.status
+      importFeedback.value = `ZIP导入完成（${time}）：成功 ${status?.successCount || 0}，跳过 ${status?.skippedCount || 0}，失败 ${
+        status?.failedCount || 0
+      }。`
       await loadOperationRecords()
       return
     }

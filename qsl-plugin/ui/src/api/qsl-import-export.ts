@@ -1,11 +1,4 @@
-import {
-  createExtension,
-  createResourceName,
-  listExtensions,
-  qslApiVersion,
-  updateExtension,
-  type QslExtension,
-} from './qsl-extension-api'
+import { listExtensions, type QslExtension } from './qsl-extension-api'
 
 export type DatasetValue =
   | 'qso-record'
@@ -14,16 +7,6 @@ export type DatasetValue =
   | 'address-management'
   | 'bureau-management'
   | 'equipment-catalog'
-
-export type ImportStrategy = 'skip' | 'overwrite'
-
-export interface ImportResult {
-  total: number
-  success: number
-  skipped: number
-  failed: number
-  errors: string[]
-}
 
 interface DatasetConfig {
   value: DatasetValue
@@ -467,68 +450,4 @@ export const buildDatasetCsv = (
   })
 
   return rows.map((row) => row.map((cell) => escapeCsvCell(cell)).join(',')).join('\n')
-}
-
-export const importDatasetCsv = async (
-  dataset: DatasetValue,
-  csvContent: string,
-  strategy: ImportStrategy,
-): Promise<ImportResult> => {
-  const config = datasetConfigMap[dataset]
-  const { rowObjects } = parseCsvToRowObjects(csvContent)
-  const existing = await listExtensions<Record<string, any>, Record<string, any>>(config.plural)
-  const existingMap = new Map(existing.map((item) => [item.metadata.name, item]))
-
-  const result: ImportResult = {
-    total: rowObjects.length,
-    success: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  }
-
-  for (let index = 0; index < rowObjects.length; index += 1) {
-    const rowObject = rowObjects[index]
-    const resourceName = rowObject.id || createResourceName(config.idPrefix)
-    const converted = config.fromRow(rowObject)
-    const existingItem = existingMap.get(resourceName)
-
-    try {
-      if (existingItem) {
-        if (strategy === 'skip') {
-          result.skipped += 1
-          continue
-        }
-        await updateExtension<Record<string, any>, Record<string, any>>(config.plural, resourceName, {
-          apiVersion: qslApiVersion,
-          kind: config.kind,
-          metadata: {
-            name: resourceName,
-            version: existingItem.metadata.version,
-          },
-          spec: converted.spec,
-          status: converted.status,
-        })
-        result.success += 1
-        continue
-      }
-
-      await createExtension<Record<string, any>, Record<string, any>>(config.plural, {
-        apiVersion: qslApiVersion,
-        kind: config.kind,
-        metadata: {
-          name: resourceName,
-        },
-        spec: converted.spec,
-        status: converted.status,
-      })
-      result.success += 1
-    } catch (error) {
-      result.failed += 1
-      const reason = error instanceof Error ? error.message : '未知错误'
-      result.errors.push(`第${index + 2}行（ID=${resourceName}）：${reason}`)
-    }
-  }
-
-  return result
 }

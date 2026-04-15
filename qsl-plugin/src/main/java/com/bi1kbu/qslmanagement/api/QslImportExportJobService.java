@@ -11,10 +11,13 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.slf4j.Logger;
@@ -36,6 +39,8 @@ public class QslImportExportJobService {
     private static final Logger log = LoggerFactory.getLogger(QslImportExportJobService.class);
     private static final String FORMAT_CSV = "csv";
     private static final String FORMAT_ZIP = "zip";
+    private static final String STRATEGY_SKIP = "skip";
+    private static final String STRATEGY_OVERWRITE = "overwrite";
     private static final String DATASET_ALL = "all";
     private static final List<String> DATASET_EXPORT_ORDER = List.of(
         "qso-record",
@@ -47,6 +52,7 @@ public class QslImportExportJobService {
     );
     private static final Set<String> SUPPORTED_EXPORT_DATASETS = Set.copyOf(DATASET_EXPORT_ORDER);
     private static final Set<String> SUPPORTED_FORMATS = Set.of(FORMAT_CSV, FORMAT_ZIP);
+    private static final Set<String> SUPPORTED_IMPORT_STRATEGIES = Set.of(STRATEGY_SKIP, STRATEGY_OVERWRITE);
     private static final int MAX_ERROR_LINES = 1000;
 
     private final ReactiveExtensionClient client;
@@ -57,52 +63,53 @@ public class QslImportExportJobService {
         this.qslAuditService = qslAuditService;
     }
 
-    public Mono<ImportExportJob> createImportJob(CreateImportJobCommand command, String operator, String clientIp) {
-        if (isBlank(command.dataset()) || isBlank(command.format())) {
-            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "导入任务参数不完整"));
-        }
-        var normalizedFormat = normalizeFormat(command.format());
-        if (!SUPPORTED_FORMATS.contains(normalizedFormat)) {
-            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0002", "导入文件格式不支持"));
-        }
+    public Mono<ImportPrecheckResult> precheckImport(ExecuteImportJobCommand command) {
+        var executionPlan = prepareImportExecutionPlan(command);
+        return Flux.fromIterable(executionPlan.importDatasets())
+            .concatMap(datasetPayload -> importDatasetRows(
+                datasetPayload.dataset(),
+                datasetPayload.rows(),
+                executionPlan.strategy(),
+                true
+            ))
+            .collectList()
+            .map(importResults -> summarizeImportPrecheckResult(executionPlan, importResults));
+    }
 
-        var job = new ImportExportJob();
-        job.setMetadata(QslApiSupport.createMetadata(QslApiSupport.createResourceName("import-job")));
+    public Mono<ImportExportJob> executeImportJob(ExecuteImportJobCommand command, String operator, String clientIp) {
+        var executionPlan = prepareImportExecutionPlan(command);
+        var initialJob = buildInitialImportJob(
+            executionPlan.datasetForStorage(),
+            executionPlan.format(),
+            executionPlan.strategy(),
+            executionPlan.sourceFile(),
+            operator
+        );
 
-        var spec = new ImportExportJob.ImportExportJobSpec();
-        spec.setJobType("import");
-        spec.setDataset(command.dataset().trim());
-        spec.setFormat(normalizedFormat);
-        spec.setStrategy(isBlank(command.strategy()) ? "skip" : command.strategy().trim().toLowerCase(Locale.ROOT));
-        spec.setSourceFile(nullToEmpty(command.sourceFile()));
-        spec.setOutputFile("");
-        spec.setRequestedBy(safeOperator(operator));
-        job.setSpec(spec);
-
-        var status = new ImportExportJob.ImportExportJobStatus();
-        var totalCount = positiveOrZero(command.totalCount());
-        var successCount = positiveOrZero(command.successCount());
-        var failedCount = positiveOrZero(command.failedCount());
-        var errorLines = normalizeErrorLines(command.errorLines());
-        status.setStatus(resolveImportJobStatus(command.status(), totalCount, successCount, failedCount));
-        status.setTotalCount(totalCount);
-        status.setSuccessCount(successCount);
-        status.setFailedCount(failedCount);
-        status.setErrorLines(errorLines);
-        status.setErrorReportPath(errorLines.isEmpty()
-            ? ""
-            : "/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/"
-                + job.getMetadata().getName() + "/errors/download");
-        status.setStartedAt(QslApiSupport.nowText());
-        status.setFinishedAt(isBlank(command.status()) ? "" : QslApiSupport.nowText());
-        job.setStatus(status);
-
-        return client.create(job)
+        return client.create(initialJob)
+            .flatMap(createdJob -> Flux.fromIterable(executionPlan.importDatasets())
+                .concatMap(datasetPayload -> importDatasetRows(
+                    datasetPayload.dataset(),
+                    datasetPayload.rows(),
+                    executionPlan.strategy(),
+                    false
+                ))
+                .collectList()
+                .flatMap(importResults -> {
+                    applyImportResult(createdJob, importResults);
+                    return client.update(createdJob);
+                })
+                .onErrorResume(error -> {
+                    applyImportExecutionFailure(createdJob, safeErrorMessage(error));
+                    return client.update(createdJob)
+                        .onErrorResume(updateError -> Mono.just(createdJob));
+                }))
             .flatMap(created -> qslAuditService.appendAuditLog(
-                "创建导入任务",
+                "执行导入任务",
                 "import-export-job",
                 created.getMetadata().getName(),
-                "数据集=" + spec.getDataset() + "，格式=" + spec.getFormat(),
+                "数据集=" + nullToEmpty(created.getSpec().getDataset()) + "，格式="
+                    + nullToEmpty(created.getSpec().getFormat()) + "，策略=" + nullToEmpty(created.getSpec().getStrategy()),
                 safeOperator(operator),
                 clientIp
             ).onErrorResume(error -> {
@@ -110,6 +117,148 @@ public class QslImportExportJobService {
                     created.getMetadata().getName(), error.getMessage());
                 return Mono.empty();
             }).thenReturn(created));
+    }
+
+    private ImportExecutionPlan prepareImportExecutionPlan(ExecuteImportJobCommand command) {
+        var normalizedFormat = normalizeFormat(command.format());
+        if (!SUPPORTED_FORMATS.contains(normalizedFormat)) {
+            throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0002", "导入文件格式不支持");
+        }
+
+        var strategy = normalizeImportStrategy(command.strategy());
+        if (!SUPPORTED_IMPORT_STRATEGIES.contains(strategy)) {
+            throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "导入策略不支持");
+        }
+
+        var importDatasets = normalizeImportDatasets(command.datasets());
+        if (importDatasets.isEmpty()) {
+            throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "导入任务缺少数据集内容");
+        }
+        if (FORMAT_CSV.equals(normalizedFormat) && importDatasets.size() != 1) {
+            throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0002", "CSV 导入仅支持单个数据集");
+        }
+
+        var datasetForStorage = normalizeDatasetForStorage(
+            importDatasets.stream().map(ImportDatasetPayload::dataset).toList()
+        );
+        return new ImportExecutionPlan(
+            normalizedFormat,
+            strategy,
+            nullToEmpty(command.sourceFile()),
+            importDatasets,
+            datasetForStorage
+        );
+    }
+
+    private ImportPrecheckResult summarizeImportPrecheckResult(
+        ImportExecutionPlan executionPlan,
+        List<ImportDatasetResult> importResults
+    ) {
+        var totalCount = importResults.stream().mapToLong(ImportDatasetResult::totalCount).sum();
+        var successCount = importResults.stream().mapToLong(ImportDatasetResult::successCount).sum();
+        var skippedCount = importResults.stream().mapToLong(ImportDatasetResult::skippedCount).sum();
+        var failedCount = importResults.stream().mapToLong(ImportDatasetResult::failedCount).sum();
+        var errorLines = importResults.stream()
+            .flatMap(result -> result.errorLines().stream())
+            .limit(MAX_ERROR_LINES)
+            .toList();
+        var datasetResults = importResults.stream()
+            .map(result -> new ImportPrecheckDatasetResult(
+                result.dataset(),
+                result.totalCount(),
+                result.successCount(),
+                result.skippedCount(),
+                result.failedCount(),
+                result.errorLines()
+            ))
+            .toList();
+
+        return new ImportPrecheckResult(
+            executionPlan.datasetForStorage(),
+            executionPlan.format(),
+            executionPlan.strategy(),
+            executionPlan.sourceFile(),
+            resolveImportJobStatus(totalCount, successCount, skippedCount, failedCount),
+            totalCount,
+            successCount,
+            skippedCount,
+            failedCount,
+            errorLines,
+            datasetResults
+        );
+    }
+
+    private ImportExportJob buildInitialImportJob(
+        String dataset,
+        String format,
+        String strategy,
+        String sourceFile,
+        String operator
+    ) {
+        var job = new ImportExportJob();
+        job.setMetadata(QslApiSupport.createMetadata(QslApiSupport.createResourceName("import-job")));
+
+        var spec = new ImportExportJob.ImportExportJobSpec();
+        spec.setJobType("import");
+        spec.setDataset(dataset);
+        spec.setFormat(format);
+        spec.setStrategy(strategy);
+        spec.setSourceFile(nullToEmpty(sourceFile));
+        spec.setOutputFile("");
+        spec.setRequestedBy(safeOperator(operator));
+        job.setSpec(spec);
+
+        var status = new ImportExportJob.ImportExportJobStatus();
+        status.setStatus("处理中");
+        status.setTotalCount(0L);
+        status.setSuccessCount(0L);
+        status.setSkippedCount(0L);
+        status.setFailedCount(0L);
+        status.setErrorReportPath("");
+        status.setErrorLines(List.of());
+        status.setStartedAt(QslApiSupport.nowText());
+        status.setFinishedAt("");
+        job.setStatus(status);
+        return job;
+    }
+
+    private void applyImportResult(ImportExportJob job, List<ImportDatasetResult> importResults) {
+        var status = job.getStatus() == null ? new ImportExportJob.ImportExportJobStatus() : job.getStatus();
+        var totalCount = importResults.stream().mapToLong(ImportDatasetResult::totalCount).sum();
+        var successCount = importResults.stream().mapToLong(ImportDatasetResult::successCount).sum();
+        var skippedCount = importResults.stream().mapToLong(ImportDatasetResult::skippedCount).sum();
+        var failedCount = importResults.stream().mapToLong(ImportDatasetResult::failedCount).sum();
+        var errorLines = importResults.stream()
+            .flatMap(result -> result.errorLines().stream())
+            .limit(MAX_ERROR_LINES)
+            .toList();
+
+        status.setStatus(resolveImportJobStatus(totalCount, successCount, skippedCount, failedCount));
+        status.setTotalCount(totalCount);
+        status.setSuccessCount(successCount);
+        status.setSkippedCount(skippedCount);
+        status.setFailedCount(failedCount);
+        status.setErrorLines(errorLines);
+        status.setErrorReportPath(errorLines.isEmpty()
+            ? ""
+            : "/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/"
+            + job.getMetadata().getName() + "/errors/download");
+        status.setFinishedAt(QslApiSupport.nowText());
+        job.setStatus(status);
+    }
+
+    private void applyImportExecutionFailure(ImportExportJob job, String errorMessage) {
+        var status = job.getStatus() == null ? new ImportExportJob.ImportExportJobStatus() : job.getStatus();
+        var safeError = defaultIfBlank(errorMessage, "导入任务执行失败");
+        var errorLines = new ArrayList<String>();
+        errorLines.add("任务执行异常：" + safeError);
+        status.setStatus("失败");
+        status.setFailedCount(Math.max(status.getFailedCount() == null ? 0L : status.getFailedCount(), 1L));
+        status.setErrorLines(errorLines);
+        status.setErrorReportPath("/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/"
+            + job.getMetadata().getName() + "/errors/download");
+        status.setFinishedAt(QslApiSupport.nowText());
+        job.setStatus(status);
     }
 
     public Mono<ImportExportJob> createExportJob(CreateExportJobCommand command, String operator, String clientIp) {
@@ -145,6 +294,7 @@ public class QslImportExportJobService {
                 status.setStatus("已完成");
                 status.setTotalCount(totalCount);
                 status.setSuccessCount(totalCount);
+                status.setSkippedCount(0L);
                 status.setFailedCount(0L);
                 status.setErrorReportPath("");
                 status.setErrorLines(List.of());
@@ -222,6 +372,200 @@ public class QslImportExportJobService {
                 }
                 return buildCsvPayload(job, exportDatasets.get(0));
             });
+    }
+
+    private Mono<ImportDatasetResult> importDatasetRows(
+        String dataset,
+        List<Map<String, String>> rows,
+        String strategy,
+        boolean dryRun
+    ) {
+        return switch (dataset) {
+            case "qso-record" -> importRows(
+                dataset, rows, strategy, "qso-record", QsoRecord.class, QsoRecord::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new QsoRecord.QsoRecordSpec() : record.getSpec();
+                    spec.setCallSign(value(row, "callSign"));
+                    spec.setDate(value(row, "date"));
+                    spec.setTime(value(row, "time"));
+                    spec.setTimezone(defaultIfBlank(value(row, "timezone"), "UTC"));
+                    spec.setFreq(value(row, "freq"));
+                    spec.setMyRig(value(row, "myRig"));
+                    spec.setMyRigMode(value(row, "myRigMode"));
+                    spec.setMyRigAnt(value(row, "myRigAnt"));
+                    spec.setMyRigPwr(value(row, "myRigPwr"));
+                    spec.setRig(value(row, "rig"));
+                    spec.setAnt(value(row, "ant"));
+                    spec.setPwr(value(row, "pwr"));
+                    spec.setQth(value(row, "qth"));
+                    spec.setRstSent(value(row, "rstSent"));
+                    spec.setRstRcvd(value(row, "rstRcvd"));
+                    spec.setRemarks(value(row, "remarks"));
+                    record.setSpec(spec);
+                }
+            );
+            case "card-record" -> importRows(
+                dataset, rows, strategy, "card-record", CardRecord.class, CardRecord::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new CardRecord.CardRecordSpec() : record.getSpec();
+                    spec.setCallSign(value(row, "callSign"));
+                    spec.setCardType(defaultIfBlank(value(row, "cardType"), "QSO"));
+                    spec.setCardVersion(value(row, "cardVersion"));
+                    spec.setQsoRecordName(value(row, "qsoRecordName"));
+                    spec.setCardDate(value(row, "cardDate"));
+                    spec.setCardTime(value(row, "cardTime"));
+                    spec.setCardRemarks(value(row, "cardRemarks"));
+                    spec.setCardSent(parseBoolean(value(row, "cardSent")));
+                    spec.setCardReceived(parseBoolean(value(row, "cardReceived")));
+                    spec.setReceiptConfirmed(parseBoolean(value(row, "receiptConfirmed")));
+                    spec.setSentAt(value(row, "sentAt"));
+                    spec.setReceivedAt(value(row, "receivedAt"));
+                    record.setSpec(spec);
+                }
+            );
+            case "exchange-request-review" -> importRows(
+                dataset, rows, strategy, "exchange-request", ExchangeRequest.class, ExchangeRequest::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new ExchangeRequest.ExchangeRequestSpec() : record.getSpec();
+                    spec.setCallSign(value(row, "callSign"));
+                    spec.setUseBureau(parseBoolean(value(row, "useBureau")));
+                    spec.setBureauName(value(row, "bureauName"));
+                    spec.setEmail(value(row, "email"));
+                    spec.setName(value(row, "name"));
+                    spec.setTelephone(value(row, "telephone"));
+                    spec.setPostalCode(value(row, "postalCode"));
+                    spec.setAddress(value(row, "address"));
+                    spec.setRemarks(value(row, "remarks"));
+                    record.setSpec(spec);
+
+                    var status = record.getStatus() == null
+                        ? new ExchangeRequest.ExchangeRequestStatus()
+                        : record.getStatus();
+                    status.setReviewStatus(defaultIfBlank(value(row, "reviewStatus"), "待审核"));
+                    status.setReviewReason(value(row, "reviewReason"));
+                    status.setReviewedBy(value(row, "reviewedBy"));
+                    status.setReviewedAt(value(row, "reviewedAt"));
+                    record.setStatus(status);
+                }
+            );
+            case "address-management" -> importRows(
+                dataset, rows, strategy, "address-entry", AddressBookEntry.class, AddressBookEntry::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new AddressBookEntry.AddressBookSpec() : record.getSpec();
+                    spec.setCallSign(value(row, "callSign"));
+                    spec.setName(value(row, "name"));
+                    spec.setTelephone(value(row, "telephone"));
+                    spec.setPostalCode(value(row, "postalCode"));
+                    spec.setAddress(value(row, "address"));
+                    spec.setEmail(value(row, "email"));
+                    spec.setAddressRemarks(value(row, "addressRemarks"));
+                    record.setSpec(spec);
+                }
+            );
+            case "bureau-management" -> importRows(
+                dataset, rows, strategy, "bureau-entry", BureauEntry.class, BureauEntry::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new BureauEntry.BureauSpec() : record.getSpec();
+                    spec.setBureauName(value(row, "bureauName"));
+                    spec.setTelephone(value(row, "telephone"));
+                    spec.setPostalCode(value(row, "postalCode"));
+                    spec.setAddress(value(row, "address"));
+                    spec.setAddressRemarks(value(row, "addressRemarks"));
+                    record.setSpec(spec);
+                }
+            );
+            case "equipment-catalog" -> importRows(
+                dataset, rows, strategy, "equipment-catalog", EquipmentCatalogEntry.class,
+                EquipmentCatalogEntry::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null
+                        ? new EquipmentCatalogEntry.EquipmentCatalogSpec()
+                        : record.getSpec();
+                    spec.setType(value(row, "type"));
+                    spec.setValue(value(row, "value"));
+                    spec.setRemarks(value(row, "remarks"));
+                    record.setSpec(spec);
+                }
+            );
+            default -> Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0003", "数据集类型不支持"));
+        };
+    }
+
+    private <E extends Extension> Mono<ImportDatasetResult> importRows(
+        String dataset,
+        List<Map<String, String>> rows,
+        String strategy,
+        String idPrefix,
+        Class<E> extensionType,
+        Supplier<E> instanceSupplier,
+        boolean dryRun,
+        ImportRowWriter<E> rowWriter
+    ) {
+        return client.listAll(extensionType, EMPTY_OPTIONS, DEFAULT_SORT)
+            .collectMap(extension -> extension.getMetadata().getName(), extension -> extension)
+            .flatMap(existingMap -> Flux.range(0, rows.size())
+                .concatMap(index -> {
+                    var row = rows.get(index);
+                    var rowNo = index + 2;
+                    var resourceName = resolveRowResourceName(row, idPrefix);
+                    var existed = existingMap.get(resourceName);
+                    if (existed != null && STRATEGY_SKIP.equals(strategy)) {
+                        return Mono.just(ImportRowResult.skipped());
+                    }
+
+                    var createNew = existed == null;
+                    E target = createNew ? instanceSupplier.get() : existed;
+                    if (createNew) {
+                        target.setMetadata(QslApiSupport.createMetadata(resourceName));
+                    }
+
+                    try {
+                        rowWriter.write(target, row);
+                    } catch (Exception exception) {
+                        return Mono.just(ImportRowResult.failed(
+                            buildImportErrorMessage(dataset, rowNo, resourceName, safeErrorMessage(exception))
+                        ));
+                    }
+
+                    if (dryRun) {
+                        return Mono.just(ImportRowResult.success());
+                    }
+
+                    Mono<? extends Extension> operation = createNew ? client.create(target) : client.update(target);
+                    return operation.thenReturn(ImportRowResult.success())
+                        .onErrorResume(error -> Mono.just(ImportRowResult.failed(
+                            buildImportErrorMessage(dataset, rowNo, resourceName, safeErrorMessage(error))
+                        )));
+                })
+                .collectList()
+                .map(rowResults -> summarizeImportDatasetResult(dataset, rows.size(), rowResults)));
+    }
+
+    private ImportDatasetResult summarizeImportDatasetResult(
+        String dataset,
+        int totalRows,
+        List<ImportRowResult> rowResults
+    ) {
+        long successCount = 0;
+        long skippedCount = 0;
+        long failedCount = 0;
+        var errorLines = new ArrayList<String>();
+
+        for (var rowResult : rowResults) {
+            switch (rowResult.action()) {
+                case SUCCESS -> successCount += 1;
+                case SKIPPED -> skippedCount += 1;
+                case FAILED -> {
+                    failedCount += 1;
+                    if (!isBlank(rowResult.errorMessage())) {
+                        errorLines.add(rowResult.errorMessage());
+                    }
+                }
+                default -> {
+                }
+            }
+        }
+        return new ImportDatasetResult(dataset, totalRows, successCount, skippedCount, failedCount, errorLines);
     }
 
     private Mono<DownloadPayload> buildCsvPayload(ImportExportJob job, String dataset) {
@@ -547,10 +891,17 @@ public class QslImportExportJobService {
     }
 
     private String normalizeDatasetForStorage(List<String> datasets) {
-        if (datasets.size() == DATASET_EXPORT_ORDER.size() && new LinkedHashSet<>(datasets).containsAll(DATASET_EXPORT_ORDER)) {
+        var orderedValues = new LinkedHashSet<String>();
+        for (var dataset : datasets) {
+            if (isBlank(dataset)) {
+                continue;
+            }
+            orderedValues.add(dataset.trim().toLowerCase(Locale.ROOT));
+        }
+        if (orderedValues.size() == DATASET_EXPORT_ORDER.size() && orderedValues.containsAll(DATASET_EXPORT_ORDER)) {
             return DATASET_ALL;
         }
-        return String.join(",", datasets);
+        return String.join(",", orderedValues);
     }
 
     private String safeOperator(String operator) {
@@ -560,28 +911,65 @@ public class QslImportExportJobService {
         return operator;
     }
 
-    private String resolveImportJobStatus(String explicitStatus, long totalCount, long successCount, long failedCount) {
-        if (!isBlank(explicitStatus)) {
-            return explicitStatus.trim();
+    private String resolveImportJobStatus(long totalCount, long successCount, long skippedCount, long failedCount) {
+        if (totalCount <= 0) {
+            return "已完成";
         }
-        if (totalCount <= 0 && successCount <= 0 && failedCount <= 0) {
-            return "待处理";
+        if (failedCount > 0 && successCount <= 0 && skippedCount <= 0) {
+            return "失败";
         }
-        if (failedCount > 0) {
+        if (failedCount > 0 || skippedCount > 0) {
             return "部分成功";
         }
         return "已完成";
     }
 
-    private List<String> normalizeErrorLines(List<String> rawErrorLines) {
-        if (rawErrorLines == null || rawErrorLines.isEmpty()) {
+    private String normalizeImportStrategy(String strategy) {
+        if (isBlank(strategy)) {
+            return STRATEGY_SKIP;
+        }
+        return strategy.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private List<ImportDatasetPayload> normalizeImportDatasets(List<ImportDatasetPayload> datasets) {
+        if (datasets == null || datasets.isEmpty()) {
             return List.of();
         }
-        return rawErrorLines.stream()
-            .filter(errorLine -> errorLine != null && !errorLine.isBlank())
-            .map(String::trim)
-            .limit(MAX_ERROR_LINES)
-            .toList();
+        var normalized = new ArrayList<ImportDatasetPayload>();
+        for (var datasetPayload : datasets) {
+            if (datasetPayload == null || isBlank(datasetPayload.dataset())) {
+                continue;
+            }
+            var dataset = datasetPayload.dataset().trim().toLowerCase(Locale.ROOT);
+            if (!SUPPORTED_EXPORT_DATASETS.contains(dataset)) {
+                throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0003", "数据集类型不支持");
+            }
+            normalized.add(new ImportDatasetPayload(dataset, normalizeImportRows(datasetPayload.rows())));
+        }
+        return normalized;
+    }
+
+    private List<Map<String, String>> normalizeImportRows(List<Map<String, String>> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        var normalizedRows = new ArrayList<Map<String, String>>();
+        for (var row : rows) {
+            if (row == null || row.isEmpty()) {
+                continue;
+            }
+            var normalizedRow = new LinkedHashMap<String, String>();
+            for (var entry : row.entrySet()) {
+                if (entry.getKey() == null || entry.getKey().isBlank()) {
+                    continue;
+                }
+                normalizedRow.put(entry.getKey().trim(), entry.getValue() == null ? "" : entry.getValue().trim());
+            }
+            if (!normalizedRow.isEmpty()) {
+                normalizedRows.add(normalizedRow);
+            }
+        }
+        return normalizedRows;
     }
 
     private List<String> resolveErrorLines(ImportExportJob job) {
@@ -600,11 +988,51 @@ public class QslImportExportJobService {
         return String.join("\n", csvLines);
     }
 
-    private long positiveOrZero(Long value) {
-        if (value == null || value < 0) {
-            return 0L;
+    private String resolveRowResourceName(Map<String, String> row, String idPrefix) {
+        var id = value(row, "id");
+        if (!isBlank(id)) {
+            return id;
+        }
+        return QslApiSupport.createResourceName(idPrefix);
+    }
+
+    private String buildImportErrorMessage(String dataset, int rowNo, String resourceName, String reason) {
+        return "【" + dataset + "】第" + rowNo + "行（ID=" + resourceName + "）："
+            + defaultIfBlank(reason, "未知错误");
+    }
+
+    private String safeErrorMessage(Throwable error) {
+        if (error == null || isBlank(error.getMessage())) {
+            return "未知错误";
+        }
+        return error.getMessage().trim();
+    }
+
+    private String value(Map<String, String> row, String key) {
+        if (row == null || key == null) {
+            return "";
+        }
+        var value = row.get(key);
+        return value == null ? "" : value.trim();
+    }
+
+    private String defaultIfBlank(String value, String defaultValue) {
+        if (isBlank(value)) {
+            return defaultValue;
         }
         return value;
+    }
+
+    private Boolean parseBoolean(String value) {
+        if (isBlank(value)) {
+            return Boolean.FALSE;
+        }
+        var normalized = value.trim().toLowerCase(Locale.ROOT);
+        return "true".equals(normalized)
+            || "1".equals(normalized)
+            || "yes".equals(normalized)
+            || "y".equals(normalized)
+            || "是".equals(normalized);
     }
 
     private String nullToEmpty(String value) {
@@ -620,16 +1048,86 @@ public class QslImportExportJobService {
             .switchIfEmpty(Mono.error(new QslApiException(HttpStatus.NOT_FOUND, "QSL-404-0001", "资源不存在")));
     }
 
-    public record CreateImportJobCommand(
+    @FunctionalInterface
+    private interface ImportRowWriter<E extends Extension> {
+        void write(E extension, Map<String, String> row);
+    }
+
+    private enum ImportAction {
+        SUCCESS,
+        SKIPPED,
+        FAILED
+    }
+
+    private record ImportRowResult(ImportAction action, String errorMessage) {
+        static ImportRowResult success() {
+            return new ImportRowResult(ImportAction.SUCCESS, "");
+        }
+
+        static ImportRowResult skipped() {
+            return new ImportRowResult(ImportAction.SKIPPED, "");
+        }
+
+        static ImportRowResult failed(String errorMessage) {
+            return new ImportRowResult(ImportAction.FAILED, errorMessage);
+        }
+    }
+
+    private record ImportDatasetResult(
+        String dataset,
+        long totalCount,
+        long successCount,
+        long skippedCount,
+        long failedCount,
+        List<String> errorLines
+    ) {
+    }
+
+    public record ExecuteImportJobCommand(
+        String format,
+        String strategy,
+        String sourceFile,
+        List<ImportDatasetPayload> datasets
+    ) {
+    }
+
+    public record ImportDatasetPayload(
+        String dataset,
+        List<Map<String, String>> rows
+    ) {
+    }
+
+    private record ImportExecutionPlan(
+        String format,
+        String strategy,
+        String sourceFile,
+        List<ImportDatasetPayload> importDatasets,
+        String datasetForStorage
+    ) {
+    }
+
+    public record ImportPrecheckDatasetResult(
+        String dataset,
+        long totalCount,
+        long successCount,
+        long skippedCount,
+        long failedCount,
+        List<String> errorLines
+    ) {
+    }
+
+    public record ImportPrecheckResult(
         String dataset,
         String format,
         String strategy,
         String sourceFile,
-        Long totalCount,
-        Long successCount,
-        Long failedCount,
         String status,
-        List<String> errorLines
+        long totalCount,
+        long successCount,
+        long skippedCount,
+        long failedCount,
+        List<String> errorLines,
+        List<ImportPrecheckDatasetResult> datasets
     ) {
     }
 

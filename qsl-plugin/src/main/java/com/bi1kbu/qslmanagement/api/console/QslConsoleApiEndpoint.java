@@ -9,6 +9,7 @@ import com.bi1kbu.qslmanagement.api.QslApiResponses;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
+import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpHeaders;
@@ -129,40 +130,29 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> importPrecheck(ServerRequest request) {
         return ensureAuthenticated(request)
-            .flatMap(ignored -> request.bodyToMono(ImportPrecheckRequest.class).defaultIfEmpty(
-                    new ImportPrecheckRequest("", "", "", 0L))
-                .flatMap(payload -> {
-                    if (isBlank(payload.dataset()) || isBlank(payload.format())) {
-                        return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST,
-                            "QSL-400-0001", "请提供 dataset 和 format"));
-                    }
-                    return QslApiResponses.ok(Map.of(
-                        "dataset", payload.dataset(),
-                        "format", payload.format(),
-                        "sourceFile", nullToEmpty(payload.sourceFile()),
-                        "rowCount", payload.rowCount(),
-                        "message", "导入预检通过"
-                    ));
-                }))
+            .flatMap(ignored -> request.bodyToMono(ImportJobRequest.class)
+                .defaultIfEmpty(new ImportJobRequest(
+                    "csv",
+                    "skip",
+                    "",
+                    List.of()
+                ))
+                .flatMap(payload -> importExportJobService.precheckImport(toImportCommand(payload))))
+            .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }
 
     private Mono<ServerResponse> createImportJob(ServerRequest request) {
         return ensureAuthenticated(request)
             .flatMap(authenticatedOperator -> request.bodyToMono(ImportJobRequest.class)
-                .defaultIfEmpty(new ImportJobRequest("", "", "skip", "", null, null, null, "", List.of()))
-                .flatMap(payload -> importExportJobService.createImportJob(
-                    new QslImportExportJobService.CreateImportJobCommand(
-                        payload.dataset(),
-                        payload.format(),
-                        payload.strategy(),
-                        payload.sourceFile(),
-                        payload.totalCount(),
-                        payload.successCount(),
-                        payload.failedCount(),
-                        payload.status(),
-                        payload.errors()
-                    ),
+                .defaultIfEmpty(new ImportJobRequest(
+                    "csv",
+                    "skip",
+                    "",
+                    List.of()
+                ))
+                .flatMap(payload -> importExportJobService.executeImportJob(
+                    toImportCommand(payload),
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp()
                 )))
@@ -243,17 +233,25 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                 }
                 return Mono.just(new AuthenticatedOperator(
                     principalName,
-                    request.remoteAddress().map(address -> address.getAddress().getHostAddress()).orElse("unknown")
+                    QslRequestIdentitySupport.resolveClientIp(request)
                 ));
             });
     }
 
-    private boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
-    private String nullToEmpty(String value) {
-        return value == null ? "" : value;
+    private QslImportExportJobService.ExecuteImportJobCommand toImportCommand(ImportJobRequest payload) {
+        return new QslImportExportJobService.ExecuteImportJobCommand(
+            payload.format(),
+            payload.strategy(),
+            payload.sourceFile(),
+            payload.datasets() == null
+                ? List.of()
+                : payload.datasets().stream()
+                    .map(item -> new QslImportExportJobService.ImportDatasetPayload(
+                        item.dataset(),
+                        item.rows() == null ? List.of() : item.rows()
+                    ))
+                    .toList()
+        );
     }
 
     private record AuthenticatedOperator(String name, String clientIp) {
@@ -265,19 +263,17 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private record ExchangeRejectRequest(String reason) {
     }
 
-    private record ImportPrecheckRequest(String dataset, String format, String sourceFile, long rowCount) {
-    }
-
     private record ImportJobRequest(
-        String dataset,
         String format,
         String strategy,
         String sourceFile,
-        Long totalCount,
-        Long successCount,
-        Long failedCount,
-        String status,
-        List<String> errors
+        List<ImportDatasetRequest> datasets
+    ) {
+    }
+
+    private record ImportDatasetRequest(
+        String dataset,
+        List<Map<String, String>> rows
     ) {
     }
 

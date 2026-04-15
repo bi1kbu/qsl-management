@@ -31,15 +31,38 @@ export interface ExchangeReviewResult {
 }
 
 export interface ImportJobCreatePayload {
+  format: string
+  strategy: 'skip' | 'overwrite'
+  sourceFile: string
+  datasets: Array<{
+    dataset: string
+    rows: Record<string, string>[]
+  }>
+}
+
+export interface ImportJobPrecheckPayload extends ImportJobCreatePayload {}
+
+export interface ImportJobPrecheckDatasetResult {
+  dataset: string
+  totalCount: number
+  successCount: number
+  skippedCount: number
+  failedCount: number
+  errorLines: string[]
+}
+
+export interface ImportJobPrecheckResult {
   dataset: string
   format: string
-  strategy?: string
-  sourceFile?: string
-  totalCount?: number
-  successCount?: number
-  failedCount?: number
-  status?: string
-  errors?: string[]
+  strategy: string
+  sourceFile: string
+  status: string
+  totalCount: number
+  successCount: number
+  skippedCount: number
+  failedCount: number
+  errorLines: string[]
+  datasets: ImportJobPrecheckDatasetResult[]
 }
 
 export interface ExportJobCreatePayload {
@@ -61,6 +84,7 @@ export interface ImportExportJobStatus {
   status: string
   totalCount: number
   successCount: number
+  skippedCount?: number
   failedCount: number
   errorReportPath: string
   errorLines?: string[]
@@ -118,8 +142,17 @@ export async function rejectExchangeRequest(requestName: string, reason: string)
   return response.data.data
 }
 
-export async function createImportJob(payload: ImportJobCreatePayload): Promise<void> {
-  await axiosInstance.post(`${consoleApiBase}/imports/jobs`, payload)
+export async function createImportJob(payload: ImportJobCreatePayload): Promise<ImportExportJob> {
+  const response = await axiosInstance.post<ApiResult<ImportExportJob>>(`${consoleApiBase}/imports/jobs`, payload)
+  return response.data.data
+}
+
+export async function precheckImportJob(payload: ImportJobPrecheckPayload): Promise<ImportJobPrecheckResult> {
+  const response = await axiosInstance.post<ApiResult<ImportJobPrecheckResult>>(
+    `${consoleApiBase}/imports/precheck`,
+    payload,
+  )
+  return response.data.data
 }
 
 export async function createExportJob(payload: ExportJobCreatePayload): Promise<ImportExportJob> {

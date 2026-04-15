@@ -33,6 +33,7 @@ public class ImportExportJob extends QslBaseExtension<ImportExportJob.ImportExpo
         private String status;
         private Long totalCount;
         private Long successCount;
+        private Long skippedCount;
         private Long failedCount;
         private String errorReportPath;
         private List<String> errorLines;
