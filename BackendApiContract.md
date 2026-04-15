@@ -289,6 +289,7 @@
 | 方法 | 路径 | 说明 | 认证 | 限制 |
 | --- | --- | --- | --- | --- |
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/qso-public/records` | 按完整呼号查询公开通联/卡片信息 | 匿名可访问 | 受“游客每分钟查询次数”限制 |
+| GET | `/apis/api.qsl-management.halo.run/v1alpha1/cards/page` | 前台查询页面（HTML） | 匿名可访问 | 受“游客每分钟查询次数”限制 |
 | POST | `/apis/api.qsl-management.halo.run/v1alpha1/exchange-public/requests` | 提交换卡申请 | 匿名可访问 | 请求体字段校验 + 限流 |
 | POST | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/confirm` | 卡片签收确认 | 匿名可访问 | 呼号+卡片号强校验 + 限流 |
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/overview-public/summary` | 公共数据总览 | 匿名可访问 | 只读查询 + 限流 |
@@ -340,7 +341,18 @@
 }
 ```
 
-### 8.2.4 输入校验基线（一期）
+### 8.2.4 前台查询页面（可嵌入）
+
+`GET /cards/page?callSign=BG7ABC&embed=1&embedId=qsl-card-1`
+
+说明：
+
+1. 返回 `text/html` 页面，页面内通过公开接口加载总览与查询数据。
+2. `callSign` 选填，传入后页面默认执行一次查询。
+3. `embed` 选填（`1/true/yes`），用于启用嵌入模式（紧凑样式 + 高度回传）。
+4. `embedId` 选填，嵌入模式下通过 `window.postMessage` 回传高度时用于父页面匹配对应 iframe。
+
+### 8.2.5 输入校验基线（一期）
 
 1. `callSign`：仅允许大写字母、数字、`/`、`-`，长度 `3-16`。
 2. `cardId`：必填，必须能匹配到已存在卡片记录，并与 `callSign` 一致。
@@ -435,3 +447,5 @@
 7. 导入任务已支持错误明细持久化：`imports/jobs/{jobName}/errors` 返回明细，`imports/jobs/{jobName}/errors/download` 可下载 CSV 错误回执。
 8. 导入任务已切换为服务端执行：`imports/jobs` 接收结构化行数据后由后端完成写库、统计成功/跳过/失败并持久化任务结果。
 9. 已增加权限模板合同自动校验测试：校验 `qsl-menu-role-templates.yaml` 对控制台/公开 CustomEndpoint 的 `apiGroup + resource + verb` 覆盖完整。
+10. 已新增前台页面接口：`GET /cards/page` 返回可直接访问的公开查询页面（支持嵌入模式）。
+11. 已新增文章/单页内容扩展：支持在正文中使用 `[qsl-card]` 或 `[qsl-card callSign="BG7ABC"]` 自动渲染嵌入卡片。

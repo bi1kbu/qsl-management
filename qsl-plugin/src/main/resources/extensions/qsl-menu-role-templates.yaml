@@ -486,7 +486,7 @@ metadata:
     rbac.authorization.halo.run/display-name: "QSL 公共查询（匿名）"
 rules:
   - apiGroups: [ "api.qsl-management.halo.run" ]
-    resources: [ "qso-public", "overview-public" ]
+    resources: [ "qso-public", "overview-public", "cards" ]
     verbs: [ "get", "list" ]
 ---
 apiVersion: v1alpha1

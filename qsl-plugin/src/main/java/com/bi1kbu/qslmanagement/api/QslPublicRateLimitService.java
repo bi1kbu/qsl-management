@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -30,6 +31,7 @@ public class QslPublicRateLimitService {
     );
     private final AtomicLong lastCleanupMinute = new AtomicLong(Long.MIN_VALUE);
 
+    @Autowired
     public QslPublicRateLimitService(ReactiveExtensionClient client) {
         this(client, Clock.systemUTC());
     }
