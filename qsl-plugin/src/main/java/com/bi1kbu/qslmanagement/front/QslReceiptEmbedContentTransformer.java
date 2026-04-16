@@ -8,28 +8,32 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
-public class QslCardEmbedContentTransformer {
+public class QslReceiptEmbedContentTransformer {
 
-    private static final Pattern SHORTCODE_PATTERN = Pattern.compile("(?is)\\[qsl-card([^\\]]*)\\]");
+    private static final Pattern SHORTCODE_PATTERN = Pattern.compile("(?is)\\[qsl-receipt-card([^\\]]*)\\]");
     private static final Pattern CALL_SIGN_ATTR_PATTERN = Pattern.compile(
         "(?i)callSign\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
+    );
+    private static final Pattern CARD_ID_ATTR_PATTERN = Pattern.compile(
+        "(?i)cardId\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
     );
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
 
     public String transform(String content) {
-        if (content == null || content.isBlank() || !content.contains("[qsl-card")) {
+        if (content == null || content.isBlank() || !content.contains("[qsl-receipt-card")) {
             return content;
         }
 
         var matcher = SHORTCODE_PATTERN.matcher(content);
         var builder = new StringBuilder();
-        var prefix = "qsl-card-" + UUID.randomUUID().toString().replace("-", "");
+        var prefix = "qsl-receipt-card-" + UUID.randomUUID().toString().replace("-", "");
         var sequence = 1;
         while (matcher.find()) {
             var attributes = matcher.group(1);
             var callSign = extractCallSign(attributes);
+            var cardId = extractCardId(attributes);
             var embedId = prefix + "-" + sequence++;
-            var replacement = buildEmbedBlock(callSign, embedId);
+            var replacement = buildEmbedBlock(callSign, cardId, embedId);
             matcher.appendReplacement(builder, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(builder);
@@ -37,18 +41,7 @@ public class QslCardEmbedContentTransformer {
     }
 
     private String extractCallSign(String attributes) {
-        if (attributes == null || attributes.isBlank()) {
-            return "";
-        }
-        var matcher = CALL_SIGN_ATTR_PATTERN.matcher(attributes);
-        if (!matcher.find()) {
-            return "";
-        }
-        var raw = firstNotBlank(
-            matcher.group(2),
-            matcher.group(3),
-            matcher.group(4)
-        );
+        var raw = extractAttributeValue(attributes, CALL_SIGN_ATTR_PATTERN);
         var normalized = QslApiSupport.normalizeCallSign(raw);
         if (!CALL_SIGN_PATTERN.matcher(normalized).matches()) {
             return "";
@@ -56,13 +49,31 @@ public class QslCardEmbedContentTransformer {
         return normalized;
     }
 
-    private String buildEmbedBlock(String callSign, String embedId) {
+    private String extractCardId(String attributes) {
+        return extractAttributeValue(attributes, CARD_ID_ATTR_PATTERN).trim();
+    }
+
+    private String extractAttributeValue(String attributes, Pattern pattern) {
+        if (attributes == null || attributes.isBlank()) {
+            return "";
+        }
+        var matcher = pattern.matcher(attributes);
+        if (!matcher.find()) {
+            return "";
+        }
+        return firstNotBlank(matcher.group(2), matcher.group(3), matcher.group(4));
+    }
+
+    private String buildEmbedBlock(String callSign, String cardId, String embedId) {
         var uriBuilder = UriComponentsBuilder
-            .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/cards/page")
+            .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/page")
             .queryParam("embed", "1")
             .queryParam("embedId", embedId);
         if (!callSign.isBlank()) {
             uriBuilder.queryParam("callSign", callSign);
+        }
+        if (!cardId.isBlank()) {
+            uriBuilder.queryParam("cardId", cardId);
         }
         var src = uriBuilder.build().toUriString();
 
@@ -74,7 +85,7 @@ public class QslCardEmbedContentTransformer {
                 style="width: 100%%; min-height: 260px; border: 0; border-radius: 10px; background: transparent;"
                 loading="lazy"
                 referrerpolicy="same-origin"
-                title="QSL 卡片查询"
+                title="QSL 卡片签收"
               ></iframe>
             </div>
             <script>

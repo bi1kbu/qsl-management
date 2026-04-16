@@ -290,6 +290,7 @@
 | --- | --- | --- | --- | --- |
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/qso-public/records` | 按完整呼号查询公开通联/卡片信息 | 匿名可访问 | 受“游客每分钟查询次数”限制 |
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/cards/page` | 前台查询页面（HTML） | 匿名可访问 | 受“游客每分钟查询次数”限制 |
+| GET | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/page` | 前台签收页面（HTML） | 匿名可访问 | 受“游客每分钟查询次数”限制 |
 | POST | `/apis/api.qsl-management.halo.run/v1alpha1/exchange-public/requests` | 提交换卡申请 | 匿名可访问 | 请求体字段校验 + 限流 |
 | POST | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/confirm` | 卡片签收确认 | 匿名可访问 | 呼号+卡片号强校验 + 限流 |
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/overview-public/summary` | 公共数据总览 | 匿名可访问 | 只读查询 + 限流 |
@@ -351,8 +352,20 @@
 2. `callSign` 选填，传入后页面默认执行一次查询。
 3. `embed` 选填（`1/true/yes`），用于启用嵌入模式（紧凑样式 + 高度回传）。
 4. `embedId` 选填，嵌入模式下通过 `window.postMessage` 回传高度时用于父页面匹配对应 iframe。
+5. 文章/页面短码：`[qsl-receipt-card callSign="BG7ABC" cardId="card-record-001"]`，渲染独立签收卡片。
 
-### 8.2.5 输入校验基线（一期）
+### 8.2.5 前台签收页面（可嵌入）
+
+`GET /receipt-public/page?callSign=BG7ABC&cardId=card-record-001&embed=1&embedId=qsl-receipt-card-1`
+
+说明：
+
+1. 返回 `text/html` 页面，签收提交由页面内调用 `POST /receipt-public/confirm` 完成。
+2. `callSign`、`cardId` 选填，传入后仅用于页面表单预填，不会自动提交。
+3. `embed` 选填（`1/true/yes`），用于启用嵌入模式（紧凑样式 + 高度回传）。
+4. `embedId` 选填，嵌入模式下通过 `window.postMessage` 回传高度时用于父页面匹配对应 iframe。
+
+### 8.2.6 输入校验基线（一期）
 
 1. `callSign`：仅允许大写字母、数字、`/`、`-`，长度 `3-16`。
 2. `cardId`：必填，必须能匹配到已存在卡片记录，并与 `callSign` 一致。

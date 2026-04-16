@@ -124,6 +124,9 @@ public class QslPublicCardPageRenderService {
                 background: #f3f5f9;
                 color: #111827;
               }
+              body.qsl-embed {
+                background: transparent;
+              }
               .qsl-page {
                 box-sizing: border-box;
                 max-width: 980px;
@@ -140,6 +143,9 @@ public class QslPublicCardPageRenderService {
                 border-radius: 12px;
                 box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
                 padding: 16px;
+              }
+              .qsl-page.embed .qsl-card {
+                background: transparent;
               }
               .qsl-header {
                 margin-bottom: 14px;
@@ -362,6 +368,7 @@ public class QslPublicCardPageRenderService {
                 const cardEmpty = document.getElementById("qsl-card-empty");
 
                 if (EMBED_MODE) {
+                  document.body.classList.add("qsl-embed");
                   page.classList.add("embed");
                 }
 
