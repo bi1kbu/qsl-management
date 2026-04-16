@@ -415,6 +415,26 @@ public class QslPublicReceiptPageRenderService {
                   return result.data ?? {};
                 };
 
+                const parseResponse = async (response) => {
+                  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+                  if (contentType.includes("application/json")) {
+                    try {
+                      return await response.json();
+                    } catch (error) {
+                      throw new Error("签收接口返回 JSON 解析失败。");
+                    }
+                  }
+
+                  const responseText = await response.text();
+                  if (response.redirected || response.url.includes("/login")) {
+                    throw new Error("签收接口被重定向到登录页，请刷新页面后重试。");
+                  }
+                  if (responseText && responseText.includes("authentication_required")) {
+                    throw new Error("签收接口要求认证，请检查匿名提交权限。");
+                  }
+                  throw new Error(`签收接口返回了非 JSON 响应（HTTP ${response.status}）。`);
+                };
+
                 form.addEventListener("submit", async (event) => {
                   event.preventDefault();
                   clearError();
@@ -453,12 +473,7 @@ public class QslPublicReceiptPageRenderService {
                         remarks
                       })
                     });
-                    let result = null;
-                    try {
-                      result = await response.json();
-                    } catch (error) {
-                      result = null;
-                    }
+                    const result = await parseResponse(response);
                     const data = parseResult(result);
                     renderSuccess(data, callSign);
                   } catch (error) {

@@ -11,6 +11,7 @@ interface CardRecordSpec {
   cardTime: string
   cardRemarks: string
   cardSent: boolean
+  receiptConfirmed: boolean
   cardReceived: boolean
 }
 
@@ -22,6 +23,7 @@ interface CardQueryItem {
   cardDate: string
   cardTime: string
   cardSent: boolean
+  receiptConfirmed: boolean
   cardReceived: boolean
   remarks: string
 }
@@ -47,6 +49,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>): CardQueryItem => {
     cardDate: extension.spec?.cardDate ?? '',
     cardTime: extension.spec?.cardTime ?? '',
     cardSent: Boolean(extension.spec?.cardSent),
+    receiptConfirmed: Boolean(extension.spec?.receiptConfirmed),
     cardReceived: Boolean(extension.spec?.cardReceived),
     remarks: extension.spec?.cardRemarks ?? '',
   }
@@ -142,6 +145,7 @@ onMounted(loadRows)
               <th>版本</th>
               <th>日期时间</th>
               <th>已发</th>
+              <th>签收</th>
               <th>已收</th>
               <th>备注</th>
             </tr>
@@ -157,12 +161,17 @@ onMounted(loadRows)
                 <VTag :theme="item.cardSent ? 'secondary' : 'default'">{{ item.cardSent ? '是' : '否' }}</VTag>
               </td>
               <td>
+                <VTag :theme="item.receiptConfirmed ? 'secondary' : 'default'">{{
+                  item.receiptConfirmed ? '是' : '否'
+                }}</VTag>
+              </td>
+              <td>
                 <VTag :theme="item.cardReceived ? 'secondary' : 'default'">{{ item.cardReceived ? '是' : '否' }}</VTag>
               </td>
               <td>{{ item.remarks || '无' }}</td>
             </tr>
             <tr v-if="!filteredRows.length">
-              <td colspan="8" class="qsl-table-empty">暂无数据。</td>
+              <td colspan="9" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>
