@@ -33,8 +33,8 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
     @Override
     public RouterFunction<ServerResponse> endpoint() {
         return route(GET("/qso-public/records"), this::listPublicQso)
-            .andRoute(POST("/exchange-public/requests"), this::submitExchangeRequest)
-            .andRoute(POST("/receipt-public/confirm"), this::confirmReceipt);
+            .andRoute(POST("/exchange-public/-/requests"), this::submitExchangeRequest)
+            .andRoute(POST("/receipt-public/-/confirm"), this::confirmReceipt);
     }
 
     @Override

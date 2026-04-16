@@ -43,8 +43,8 @@ class QslRoleTemplateContractTest {
 
         // QslPublicApiEndpoint + QslOverviewPublicEndpoint
         assertHasRule(rules, "api.qsl-management.halo.run", "qso-public", "get");
-        assertHasRule(rules, "api.qsl-management.halo.run", "exchange-public", "create");
-        assertHasRule(rules, "api.qsl-management.halo.run", "receipt-public", "create");
+        assertHasRule(rules, "api.qsl-management.halo.run", "exchange-public/requests", "create");
+        assertHasRule(rules, "api.qsl-management.halo.run", "receipt-public/confirm", "create");
         assertHasRule(rules, "api.qsl-management.halo.run", "receipt-public", "get");
         assertHasRule(rules, "api.qsl-management.halo.run", "overview-public", "get");
         assertHasRule(rules, "api.qsl-management.halo.run", "cards", "get");

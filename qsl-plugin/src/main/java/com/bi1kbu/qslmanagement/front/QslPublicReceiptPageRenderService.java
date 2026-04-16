@@ -441,7 +441,7 @@ public class QslPublicReceiptPageRenderService {
 
                   setLoading(true);
                   try {
-                    const response = await fetch(`${API_BASE}/receipt-public/confirm`, {
+                    const response = await fetch(`${API_BASE}/receipt-public/-/confirm`, {
                       method: "POST",
                       credentials: "same-origin",
                       headers: {

@@ -72,7 +72,8 @@
 4. 前台公开 API 通过聚合角色到 `anonymous` 暴露只读或受控写接口。
 5. RBAC `rules.resources` 使用 API 路径中的实际资源段，不使用 `qsl-management/` 前缀：
    - 扩展资源使用 `plural`（如 `qso-records`、`import-export-jobs`）
-   - CustomEndpoint 使用首段资源名（如 `reports`、`imports`、`exports`、`qso-public`）
+   - CustomEndpoint 读操作使用首段资源名（如 `reports`、`imports`、`exports`、`qso-public`）
+   - CustomEndpoint 动作型写操作使用 `资源/子资源`（如 `exchange-public/requests`、`receipt-public/confirm`）
 
 ## 5. 统一数据资源（自动 CRUD）
 
@@ -291,8 +292,8 @@
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/qso-public/records` | 按完整呼号查询公开通联/卡片信息 | 匿名可访问 | 受“游客每分钟查询次数”限制 |
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/cards/page` | 前台查询页面（HTML） | 匿名可访问 | 受“游客每分钟查询次数”限制 |
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/page` | 前台签收页面（HTML） | 匿名可访问 | 受“游客每分钟查询次数”限制 |
-| POST | `/apis/api.qsl-management.halo.run/v1alpha1/exchange-public/requests` | 提交换卡申请 | 匿名可访问 | 请求体字段校验 + 限流 |
-| POST | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/confirm` | 卡片签收确认 | 匿名可访问 | 呼号+卡片号强校验 + 限流 |
+| POST | `/apis/api.qsl-management.halo.run/v1alpha1/exchange-public/-/requests` | 提交换卡申请 | 匿名可访问 | 请求体字段校验 + 限流 |
+| POST | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/-/confirm` | 卡片签收确认 | 匿名可访问 | 呼号+卡片号强校验 + 限流 |
 | GET | `/apis/api.qsl-management.halo.run/v1alpha1/overview-public/summary` | 公共数据总览 | 匿名可访问 | 只读查询 + 限流 |
 
 ## 8.1 匿名接口限流规则（一期）
@@ -314,7 +315,7 @@
 
 ### 8.2.2 匿名提交换卡申请
 
-`POST /exchange-public/requests`
+`POST /exchange-public/-/requests`
 
 ```json
 {
@@ -332,7 +333,7 @@
 
 ### 8.2.3 匿名签收确认
 
-`POST /receipt-public/confirm`
+`POST /receipt-public/-/confirm`
 
 ```json
 {
@@ -360,7 +361,7 @@
 
 说明：
 
-1. 返回 `text/html` 页面，签收提交由页面内调用 `POST /receipt-public/confirm` 完成。
+1. 返回 `text/html` 页面，签收提交由页面内调用 `POST /receipt-public/-/confirm` 完成。
 2. `callSign`、`cardId` 选填，传入后仅用于页面表单预填，不会自动提交。
 3. `embed` 选填（`1/true/yes`），用于启用嵌入模式（紧凑样式 + 高度回传）。
 4. `embedId` 选填，嵌入模式下通过 `window.postMessage` 回传高度时用于父页面匹配对应 iframe。
