@@ -37,6 +37,16 @@ export const isNotFoundError = (error: unknown): boolean => {
   return isAxiosError(error) && error.response?.status === 404
 }
 
+const containsNotFoundMessage = (error: unknown): boolean => {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : ''
+  return message.includes('was not found') || message.includes('资源不存在') || message.includes('404')
+}
+
 export const createResourceName = (prefix: string): string => {
   const randomPart = Math.random().toString(36).slice(2, 8)
   return `${prefix}-${Date.now()}-${randomPart}`
@@ -63,7 +73,7 @@ export async function getExtensionOrNull<TSpec, TStatus = Record<string, unknown
     const response = await axiosInstance.get<QslExtension<TSpec, TStatus>>(buildUrl(plural, name))
     return response.data
   } catch (error) {
-    if (isNotFoundError(error)) {
+    if (isNotFoundError(error) || containsNotFoundMessage(error)) {
       return null
     }
     throw error

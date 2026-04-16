@@ -48,6 +48,27 @@ const fillForm = (extension: QslExtension<StationProfileSpec>) => {
   stationProfileForm.stationRemarks = extension.spec?.stationRemarks ?? ''
 }
 
+const createDefaultProfileSpec = (): StationProfileSpec => {
+  return {
+    myCallSign: '',
+    myName: '',
+    myTelephone: '',
+    myPostalCode: '',
+    myAddress: '',
+    myEmail: '',
+    stationRemarks: '',
+  }
+}
+
+const ensureDefaultStationProfile = async () => {
+  await upsertSingleton<StationProfileSpec>({
+    plural: resourcePlural,
+    kind: resourceKind,
+    name: resourceName,
+    spec: createDefaultProfileSpec(),
+  })
+}
+
 const loadStationProfile = async () => {
   loading.value = true
   feedback.value = ''
@@ -58,7 +79,16 @@ const loadStationProfile = async () => {
       feedback.value = `已加载持久化通信地址（${nowText()}）。`
       return
     }
-    feedback.value = '未发现持久化通信地址，当前为空白模板。'
+    await ensureDefaultStationProfile()
+    fillForm({
+      apiVersion: '',
+      kind: resourceKind,
+      metadata: {
+        name: resourceName,
+      },
+      spec: createDefaultProfileSpec(),
+    })
+    feedback.value = `未发现默认通信地址，已自动初始化（${nowText()}）。`
   } catch (error) {
     feedback.value = `加载通信地址失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
