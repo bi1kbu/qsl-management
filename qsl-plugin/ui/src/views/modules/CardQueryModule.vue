@@ -435,12 +435,19 @@ onMounted(loadRows)
               <th>签收</th>
               <th>已收</th>
               <th>备注</th>
-              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             <template v-for="item in pagedRows" :key="item.id">
-              <tr>
+              <tr
+                class="qsl-table-clickable-row"
+                tabindex="0"
+                role="button"
+                :aria-expanded="expandedId === item.id"
+                @click="toggleDetail(item.id)"
+                @keydown.enter.prevent="toggleDetail(item.id)"
+                @keydown.space.prevent="toggleDetail(item.id)"
+              >
                 <td>{{ item.id }}</td>
                 <td>{{ item.callSign || '-' }}</td>
                 <td>{{ item.cardType }}</td>
@@ -460,14 +467,9 @@ onMounted(loadRows)
                 <td>
                   {{ summarizeRemarks(item.remarks) }}
                 </td>
-                <td>
-                  <VButton size="xs" :disabled="loading" @click="toggleDetail(item.id)">{{
-                    expandedId === item.id ? '收起' : '展开'
-                  }}</VButton>
-                </td>
               </tr>
               <tr v-if="expandedId === item.id" class="qsl-table-detail-row">
-                <td colspan="10">
+                <td colspan="9">
                   <div class="qsl-detail-grid">
                     <p><strong>卡片ID：</strong>{{ item.id }}</p>
                     <p><strong>呼号：</strong>{{ item.callSign || '-' }}</p>
@@ -484,7 +486,7 @@ onMounted(loadRows)
               </tr>
             </template>
             <tr v-if="!pagedRows.length">
-              <td colspan="10" class="qsl-table-empty">暂无数据。</td>
+              <td colspan="9" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>
@@ -508,9 +510,5 @@ onMounted(loadRows)
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;
-}
-
-.qsl-table-detail-row td {
-  background: #f8fafc;
 }
 </style>

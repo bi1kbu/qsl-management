@@ -162,7 +162,15 @@ onMounted(loadRows)
           </thead>
           <tbody>
             <template v-for="row in pagedRows" :key="row.id">
-              <tr>
+              <tr
+                class="qsl-table-clickable-row"
+                tabindex="0"
+                role="button"
+                :aria-expanded="expandedId === row.id"
+                @click="toggleDetails(row.id)"
+                @keydown.enter.prevent="toggleDetails(row.id)"
+                @keydown.space.prevent="toggleDetails(row.id)"
+              >
                 <td>{{ row.id }}</td>
                 <td>{{ row.callSign }}</td>
                 <td>
@@ -171,15 +179,14 @@ onMounted(loadRows)
                   </VTag>
                 </td>
                 <td>{{ row.reviewedAt || '-' }}</td>
-                <td>
+                <td @click.stop>
                   <div class="qsl-actions qsl-actions--tight">
-                    <VButton size="xs" :disabled="loading" @click="toggleDetails(row.id)">{{ expandedId === row.id ? '收起' : '展开' }}</VButton>
                     <VButton
                       v-if="row.status === '待审核'"
                       size="xs"
                       type="secondary"
                       :disabled="pendingId === row.id || loading"
-                      @click="approve(row)"
+                      @click.stop="approve(row)"
                     >
                       同意
                     </VButton>
@@ -188,7 +195,7 @@ onMounted(loadRows)
                       size="xs"
                       type="danger"
                       :disabled="pendingId === row.id || loading"
-                      @click="reject(row)"
+                      @click.stop="reject(row)"
                     >
                       拒绝
                     </VButton>
@@ -235,9 +242,5 @@ onMounted(loadRows)
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;
-}
-
-.qsl-table-detail-row td {
-  background: #f8fafc;
 }
 </style>
