@@ -147,6 +147,61 @@
   gap: 8px;
 }
 
+.qsl-filter-toolbar {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.qsl-filter-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.qsl-filter-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.qsl-filter-chip {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.qsl-filter-chip:hover {
+  border-color: #9ca3af;
+}
+
+.qsl-filter-chip.is-active {
+  border-color: #111827;
+  color: #111827;
+  background: #f3f4f6;
+  font-weight: 700;
+}
+
+.qsl-inline-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #374151;
+  font-size: 13px;
+}
+
+.qsl-inline-control .qsl-input-shell {
+  min-width: 220px;
+}
+
 .qsl-actions--tight {
   margin-top: 0;
   gap: 6px;
@@ -426,6 +481,23 @@
 
   .qsl-form-inline {
     grid-template-columns: 1fr;
+  }
+
+  .qsl-filter-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .qsl-filter-toolbar__actions {
+    justify-content: flex-start;
+  }
+
+  .qsl-inline-control {
+    width: 100%;
+  }
+
+  .qsl-inline-control .qsl-input-shell {
+    flex: 1;
+    min-width: 0;
   }
 
   .qsl-card-list__item {
