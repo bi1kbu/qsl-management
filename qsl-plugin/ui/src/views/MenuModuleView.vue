@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, type Component } from 'vue'
+import { computed, type Component } from 'vue'
 import type { QslMenuModule } from '../constants/menu-modules'
 import QslModuleFrame from '../components/qsl/QslModuleFrame.vue'
 import AddressManagementModule from './modules/AddressManagementModule.vue'
@@ -31,32 +31,7 @@ const props = defineProps<{
   qslModule: QslMenuModule
 }>()
 
-const initialized = ref(false)
-
 const currentModule = computed(() => props.qslModule)
-
-const implementedModuleKeySet = new Set([
-  'overview-dashboard',
-  'system-settings',
-  'station-profile',
-  'station-equipment',
-  'station-card',
-  'qso-record',
-  'card-record',
-  'mail-send-confirm',
-  'mail-receive-confirm',
-  'exchange-request-review',
-  'qso-query',
-  'card-query',
-  'report-auditlog',
-  'audit-log',
-  'address-management',
-  'bureau-management',
-  'equipment-catalog',
-  'import-export',
-])
-
-const isImplementedModule = computed(() => implementedModuleKeySet.has(currentModule.value.key))
 
 const renderer = computed<ModuleRenderer>(() => {
   switch (currentModule.value.key) {
@@ -106,15 +81,10 @@ const renderer = computed<ModuleRenderer>(() => {
   }
 })
 
-const initializePage = async () => {
-  initialized.value = true
-}
-
-onMounted(initializePage)
 </script>
 
 <template>
-  <QslModuleFrame :module="currentModule" :initialized="initialized" :functional="isImplementedModule">
+  <QslModuleFrame :module="currentModule">
     <component :is="renderer.component" v-bind="renderer.props" />
   </QslModuleFrame>
 </template>

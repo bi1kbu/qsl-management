@@ -64,7 +64,7 @@ const loadRows = async () => {
   try {
     const extensions = await listExtensions<BureauSpec>(resourcePlural)
     rows.value = extensions.map((extension) => toRow(extension))
-    feedback.value = `已加载 ${rows.value.length} 条持久化卡片局记录。`
+    feedback.value = ''
   } catch (error) {
     feedback.value = `加载卡片局记录失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

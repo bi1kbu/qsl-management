@@ -83,10 +83,10 @@ const loadStationCards = async () => {
     const extensions = await listExtensions<StationCardSpec>(resourcePlural)
     stationCards.value = extensions.map((extension, index) => toCard(extension, index))
     if (extensions.length) {
-      feedback.value = `已加载 ${extensions.length} 个持久化卡片版本（${nowText()}）。`
+      feedback.value = ''
       return
     }
-    feedback.value = '未发现持久化卡片版本。'
+    feedback.value = ''
   } catch (error) {
     feedback.value = `加载本台卡片失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -199,7 +199,7 @@ const saveStationCard = async () => {
       resourceName: 'station-cards',
       detail: `新增=${createdCount}，更新=${updatedCount}，删除=${deletedCount}，当前总数=${stationCards.value.length}`,
     })
-    feedback.value = `本台卡片配置已持久化保存（${nowText()}），共 ${stationCards.value.length} 个版本。`
+    feedback.value = `本台卡片配置已保存，共 ${stationCards.value.length} 个版本。`
   } catch (error) {
     feedback.value = `保存本台卡片失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

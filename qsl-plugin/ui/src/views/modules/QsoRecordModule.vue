@@ -389,11 +389,8 @@ const loadRecords = async (options: { silent?: boolean; skipLoading?: boolean } 
   try {
     const extensions = await listExtensions<QsoRecordSpec>(resourcePlural)
     records.value = extensions.map((extension) => toRecordItem(extension))
-    if (!options.silent && extensions.length) {
-      feedback.value = `已加载 ${extensions.length} 条持久化通联记录（${nowText()}）。`
-    }
-    if (!options.silent && !extensions.length) {
-      feedback.value = '暂无持久化通联记录。'
+    if (!options.silent) {
+      feedback.value = ''
     }
   } catch (error) {
     feedback.value = `加载通联记录失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -673,7 +670,7 @@ const saveRecord = async () => {
     })
 
     await loadRecords({ silent: true })
-    feedback.value = `通联记录已持久化保存（${nowText()}）。`
+    feedback.value = '通联记录已保存。'
     resetForm()
   } catch (error) {
     feedback.value = `保存通联记录失败：${error instanceof Error ? error.message : '未知错误'}`

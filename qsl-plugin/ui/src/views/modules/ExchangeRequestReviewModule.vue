@@ -76,7 +76,7 @@ const loadRows = async () => {
   try {
     const extensions = await listExtensions<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural)
     rows.value = extensions.map((extension) => toRow(extension))
-    feedback.value = `已加载 ${rows.value.length} 条持久化换卡申请。`
+    feedback.value = ''
   } catch (error) {
     feedback.value = `加载换卡申请失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

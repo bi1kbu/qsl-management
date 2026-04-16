@@ -99,10 +99,10 @@ const loadStationEquipment = async () => {
     stationRigs.value = extensions.map((extension, index) => toRig(extension, index))
     ensureSelectedRig()
     if (extensions.length) {
-      feedback.value = `已加载 ${extensions.length} 台持久化设备（${nowText()}）。`
+      feedback.value = ''
       return
     }
-    feedback.value = '未发现持久化设备配置。'
+    feedback.value = ''
   } catch (error) {
     feedback.value = `加载本台设备失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -234,7 +234,7 @@ const saveStationEquipment = async () => {
       resourceName: 'station-equipments',
       detail: `新增=${createdCount}，更新=${updatedCount}，删除=${deletedCount}，当前总数=${stationRigs.value.length}`,
     })
-    feedback.value = `本台设备配置已持久化保存（${nowText()}），共 ${stationRigs.value.length} 台设备。`
+    feedback.value = `本台设备配置已保存，共 ${stationRigs.value.length} 台设备。`
   } catch (error) {
     feedback.value = `保存本台设备失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

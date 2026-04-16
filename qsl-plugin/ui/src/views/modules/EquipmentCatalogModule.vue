@@ -61,7 +61,7 @@ const loadCatalog = async () => {
   try {
     const extensions = await listExtensions<EquipmentCatalogSpec>(resourcePlural)
     allItems.value = extensions.map((extension) => toItem(extension))
-    feedback.value = `已加载 ${allItems.value.length} 条持久化设备库记录。`
+    feedback.value = ''
   } catch (error) {
     feedback.value = `加载设备库失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

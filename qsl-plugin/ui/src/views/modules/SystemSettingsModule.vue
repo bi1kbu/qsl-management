@@ -40,10 +40,10 @@ const loadSystemSettings = async () => {
     const extension = await getExtensionOrNull<SystemSettingSpec>(resourcePlural, resourceName)
     if (extension) {
       fillForm(extension)
-      feedback.value = `已加载持久化系统参数（${nowText()}）。`
+      feedback.value = ''
       return
     }
-    feedback.value = '未发现持久化系统参数，当前显示默认值。'
+    feedback.value = ''
   } catch (error) {
     feedback.value = `加载系统参数失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -74,7 +74,7 @@ const saveSystemSettings = async () => {
       resourceName,
       detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，换卡审核=${systemSettingsForm.requiresExchangeReview ? '是' : '否'}`,
     })
-    feedback.value = `系统参数已持久化保存（${nowText()}）。`
+    feedback.value = '系统参数已保存。'
   } catch (error) {
     feedback.value = `保存系统参数失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

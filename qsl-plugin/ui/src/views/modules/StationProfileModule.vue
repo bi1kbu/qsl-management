@@ -76,7 +76,7 @@ const loadStationProfile = async () => {
     const extension = await getExtensionOrNull<StationProfileSpec>(resourcePlural, resourceName)
     if (extension) {
       fillForm(extension)
-      feedback.value = `已加载持久化通信地址（${nowText()}）。`
+      feedback.value = ''
       return
     }
     await ensureDefaultStationProfile()
@@ -124,7 +124,7 @@ const saveStationProfile = async () => {
       resourceName,
       detail: `呼号=${stationProfileForm.myCallSign.trim().toUpperCase()}，姓名=${stationProfileForm.myName.trim() || '未填'}`,
     })
-    feedback.value = `通信地址已持久化保存（${nowText()}）。`
+    feedback.value = '通信地址已保存。'
   } catch (error) {
     feedback.value = `保存通信地址失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

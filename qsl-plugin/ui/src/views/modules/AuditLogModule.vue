@@ -54,7 +54,7 @@ const loadLogs = async () => {
   try {
     const extensions = await listExtensions<QslAuditLogSpec>(resourcePlural)
     logs.value = extensions.map((extension) => toLog(extension))
-    feedback.value = `已加载 ${logs.value.length} 条持久化审计日志。`
+    feedback.value = ''
   } catch (error) {
     feedback.value = `加载审计日志失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

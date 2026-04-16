@@ -191,7 +191,7 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
     if (!options.silent && results.value.length) {
-      feedback.value = `已加载 ${results.value.length} 条收信确认记录（${nowText()}）。`
+      feedback.value = ''
     }
     if (!options.silent && !results.value.length) {
       feedback.value = '暂无收信确认记录（仅展示已收卡片）。'

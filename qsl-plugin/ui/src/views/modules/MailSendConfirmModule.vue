@@ -172,7 +172,7 @@ const loadRows = async (options: { silent?: boolean } = {}) => {
     const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
     rows.value = extensions.map((extension) => toRow(extension))
     if (!options.silent && extensions.length) {
-      feedback.value = `已加载 ${extensions.length} 条持久化卡片记录（${nowText()}）。`
+      feedback.value = ''
     }
     if (!options.silent && !extensions.length) {
       feedback.value = '暂无可确认发信的卡片记录。'

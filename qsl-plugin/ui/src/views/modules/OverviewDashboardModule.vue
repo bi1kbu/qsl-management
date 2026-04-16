@@ -66,7 +66,7 @@ const loadSummary = async () => {
     )
     applySummary(response.data?.data)
     updatedAt.value = nowText()
-    feedback.value = '已从后端刷新统计数据。'
+    feedback.value = ''
   } catch (error) {
     feedback.value = `刷新统计失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

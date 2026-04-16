@@ -259,11 +259,8 @@ const loadCardRecords = async (options: { silent?: boolean; skipLoading?: boolea
   try {
     const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
     records.value = extensions.map((extension) => toRecordItem(extension))
-    if (!options.silent && extensions.length) {
-      feedback.value = `已加载 ${extensions.length} 条持久化卡片记录（${nowText()}）。`
-    }
-    if (!options.silent && !extensions.length) {
-      feedback.value = '暂无持久化卡片记录。'
+    if (!options.silent) {
+      feedback.value = ''
     }
   } catch (error) {
     feedback.value = `加载卡片记录失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -543,7 +540,7 @@ const saveCardRecord = async () => {
     })
 
     await loadCardRecords({ silent: true })
-    feedback.value = `卡片记录已持久化保存（${nowText()}）。`
+    feedback.value = '卡片记录已保存。'
     resetForm()
   } catch (error) {
     feedback.value = `保存卡片记录失败：${error instanceof Error ? error.message : '未知错误'}`

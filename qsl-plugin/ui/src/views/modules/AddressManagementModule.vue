@@ -72,7 +72,7 @@ const loadRows = async () => {
   try {
     const extensions = await listExtensions<AddressBookSpec>(resourcePlural)
     rows.value = extensions.map((extension) => toRow(extension))
-    feedback.value = `已加载 ${rows.value.length} 条持久化地址记录。`
+    feedback.value = ''
   } catch (error) {
     feedback.value = `加载地址记录失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
