@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
+import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 
 interface QslAuditLogSpec {
   action: string
@@ -26,6 +28,9 @@ interface AuditLogItem {
 const logs = ref<AuditLogItem[]>([])
 const loading = ref(false)
 const feedback = ref('')
+const currentPage = ref(1)
+const pageSize = ref(20)
+const pageSizeOptions: number[] = [20, 30, 50, 100]
 const filters = reactive({
   keyword: '',
 })
@@ -74,19 +79,56 @@ const filteredLogs = computed(() => {
   })
 })
 
+const totalPages = computed(() => {
+  if (!filteredLogs.value.length) {
+    return 1
+  }
+  return Math.ceil(filteredLogs.value.length / pageSize.value)
+})
+
+const pagedLogs = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredLogs.value.slice(start, start + pageSize.value)
+})
+
+watch(filteredLogs, () => {
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+  if (currentPage.value < 1) {
+    currentPage.value = 1
+  }
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
+
+watch(
+  () => filters.keyword,
+  () => {
+    currentPage.value = 1
+  },
+)
+
 onMounted(loadLogs)
 </script>
 
 <template>
   <div class="qsl-block">
-    <VCard title="审计日志">
-      <div class="qsl-form-inline">
-        <div class="qsl-input-shell">
-          <input v-model.trim="filters.keyword" type="text" placeholder="按日志ID/操作人/动作/资源/详情筛选" />
-        </div>
-        <VButton type="secondary" :disabled="loading" @click="loadLogs">刷新</VButton>
-        <VTag theme="danger" rounded>日志不可删除</VTag>
-      </div>
+    <VCard>
+      <QslQueryToolbar>
+        <template #left>
+          <div class="qsl-input-shell qsl-filter-toolbar__search">
+            <input v-model.trim="filters.keyword" type="text" placeholder="按日志ID/操作人/动作/资源/详情筛选" />
+          </div>
+        </template>
+        <template #right>
+          <VButton :disabled="loading" @click="filters.keyword = ''">重置</VButton>
+          <VButton type="secondary" :disabled="loading" @click="loadLogs">刷新</VButton>
+          <VTag theme="danger" rounded>日志不可删除</VTag>
+        </template>
+      </QslQueryToolbar>
 
       <div class="qsl-table-wrap">
         <table class="qsl-table">
@@ -102,7 +144,7 @@ onMounted(loadLogs)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in filteredLogs" :key="item.id">
+            <tr v-for="item in pagedLogs" :key="item.id">
               <td>{{ item.id }}</td>
               <td>{{ item.time }}</td>
               <td>{{ item.operator }}</td>
@@ -111,12 +153,21 @@ onMounted(loadLogs)
               <td>{{ item.ip }}</td>
               <td>{{ item.detail || '-' }}</td>
             </tr>
-            <tr v-if="!filteredLogs.length">
+            <tr v-if="!pagedLogs.length">
               <td colspan="7" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>
       </div>
+
+      <QslPaginationBar
+        :total="filteredLogs.length"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        @update:current-page="(value) => (currentPage = value)"
+        @update:page-size="(value) => (pageSize = value)"
+      />
 
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
     </VCard>

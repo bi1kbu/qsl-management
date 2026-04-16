@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
+import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 
 interface CardRecordSpec {
   callSign: string
@@ -58,6 +60,10 @@ type SortOption = (typeof sortOptions)[number]['value']
 const quickReceipt = ref<QuickReceiptOption>('全部')
 const sortBy = ref<SortOption>('datetime-desc')
 const showAdvancedFilters = ref(false)
+const keywordInput = ref('')
+const currentPage = ref(1)
+const pageSize = ref(20)
+const pageSizeOptions: number[] = [20, 30, 50, 100]
 const resourcePlural = 'card-records'
 
 const normalize = (value: string) => value.trim().toUpperCase()
@@ -82,7 +88,7 @@ const loadRows = async () => {
   try {
     const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
     rows.value = extensions.map((extension) => toRow(extension))
-    feedback.value = `已加载 ${rows.value.length} 条持久化卡片记录。`
+    feedback.value = ''
   } catch (error) {
     feedback.value = `加载卡片记录失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -157,6 +163,18 @@ const sortedRows = computed(() => {
   return items.sort((a, b) => `${b.cardDate} ${b.cardTime}`.localeCompare(`${a.cardDate} ${a.cardTime}`))
 })
 
+const totalPages = computed(() => {
+  if (!sortedRows.value.length) {
+    return 1
+  }
+  return Math.ceil(sortedRows.value.length / pageSize.value)
+})
+
+const pagedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return sortedRows.value.slice(start, start + pageSize.value)
+})
+
 const activeFilterTags = computed(() => {
   const tags: Array<{ key: string; label: string }> = []
   if (filters.keyword.trim()) {
@@ -201,14 +219,33 @@ const toggleDetail = (id: string) => {
   expandedId.value = expandedId.value === id ? '' : id
 }
 
-const applyQuickReceipt = (value: QuickReceiptOption) => {
-  quickReceipt.value = value
+const applyKeywordSearch = () => {
+  filters.keyword = keywordInput.value.trim()
+  currentPage.value = 1
 }
+
+watch([quickReceipt, sortBy], () => {
+  currentPage.value = 1
+})
+
+watch(sortedRows, () => {
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+  if (currentPage.value < 1) {
+    currentPage.value = 1
+  }
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
 
 const clearFilterTag = (key: string) => {
   switch (key) {
     case 'keyword':
       filters.keyword = ''
+      keywordInput.value = ''
       break
     case 'callSign':
       filters.callSign = ''
@@ -237,10 +274,12 @@ const clearFilterTag = (key: string) => {
     default:
       break
   }
+  currentPage.value = 1
 }
 
 const resetFilters = () => {
   filters.keyword = ''
+  keywordInput.value = ''
   filters.callSign = ''
   filters.cardType = ''
   filters.sentStatus = ''
@@ -253,6 +292,7 @@ const resetFilters = () => {
   sortBy.value = 'datetime-desc'
   expandedId.value = ''
   showAdvancedFilters.value = false
+  currentPage.value = 1
 }
 
 onMounted(loadRows)
@@ -260,35 +300,47 @@ onMounted(loadRows)
 
 <template>
   <div class="qsl-block">
-    <VCard title="卡片记录查询">
-      <div class="qsl-filter-toolbar">
-        <label class="qsl-field">
-          <span class="qsl-field__label">关键词检索</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="filters.keyword" type="text" placeholder="搜索卡片ID、呼号、类型、备注" />
-          </div>
-        </label>
-        <div class="qsl-filter-toolbar__actions">
-          <VButton :disabled="loading" @click="showAdvancedFilters = !showAdvancedFilters">{{
-            showAdvancedFilters ? '收起筛选' : '高级筛选'
-          }}</VButton>
-          <VButton type="secondary" :disabled="loading" @click="loadRows">刷新</VButton>
-          <VButton :disabled="loading" @click="resetFilters">重置</VButton>
-        </div>
-      </div>
+    <VCard>
+      <QslQueryToolbar>
+        <template #left>
+            <div class="qsl-input-shell qsl-filter-toolbar__search">
+              <input
+                v-model.trim="keywordInput"
+                type="text"
+                placeholder="输入关键词搜索"
+                @keyup.enter="applyKeywordSearch"
+              />
+            </div>
+            <VButton type="secondary" :disabled="loading" @click="applyKeywordSearch">搜索</VButton>
+        </template>
 
-      <div class="qsl-filter-chip-row">
-        <button
-          v-for="option in quickReceiptOptions"
-          :key="option"
-          type="button"
-          class="qsl-filter-chip"
-          :class="{ 'is-active': quickReceipt === option }"
-          @click="applyQuickReceipt(option)"
-        >
-          {{ option }}
-        </button>
-      </div>
+        <template #right>
+            <label class="qsl-filter-inline">
+              <span>签收视图：</span>
+              <select v-model="quickReceipt">
+                <option v-for="option in quickReceiptOptions" :key="option" :value="option">
+                  {{ option }}
+                </option>
+              </select>
+            </label>
+
+            <label class="qsl-filter-inline">
+              <span>排序：</span>
+              <select v-model="sortBy">
+                <option v-for="option in sortOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+
+            <button type="button" class="qsl-filter-link" @click="showAdvancedFilters = !showAdvancedFilters">
+              {{ showAdvancedFilters ? '收起筛选' : '高级筛选' }}
+            </button>
+
+            <VButton :disabled="loading" @click="resetFilters">重置</VButton>
+            <VButton :disabled="loading" @click="loadRows">刷新</VButton>
+        </template>
+      </QslQueryToolbar>
 
       <div v-if="showAdvancedFilters" class="qsl-form-grid">
         <label class="qsl-field">
@@ -370,20 +422,6 @@ onMounted(loadRows)
         </span>
       </div>
 
-      <div class="qsl-actions">
-        <label class="qsl-inline-control">
-          <span>排序</span>
-          <div class="qsl-input-shell">
-            <select v-model="sortBy">
-              <option v-for="option in sortOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </div>
-        </label>
-        <span class="qsl-muted">共 {{ sortedRows.length }} 条</span>
-      </div>
-
       <div class="qsl-table-wrap">
         <table class="qsl-table">
           <thead>
@@ -401,7 +439,7 @@ onMounted(loadRows)
             </tr>
           </thead>
           <tbody>
-            <template v-for="item in sortedRows" :key="item.id">
+            <template v-for="item in pagedRows" :key="item.id">
               <tr>
                 <td>{{ item.id }}</td>
                 <td>{{ item.callSign || '-' }}</td>
@@ -445,12 +483,21 @@ onMounted(loadRows)
                 </td>
               </tr>
             </template>
-            <tr v-if="!sortedRows.length">
+            <tr v-if="!pagedRows.length">
               <td colspan="10" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>
       </div>
+
+      <QslPaginationBar
+        :total="sortedRows.length"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        @update:current-page="(value) => (currentPage = value)"
+        @update:page-size="(value) => (pageSize = value)"
+      />
 
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
     </VCard>

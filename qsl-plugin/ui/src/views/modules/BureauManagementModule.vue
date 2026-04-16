@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { VButton, VCard } from '@halo-dev/components'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
   createResourceName,
@@ -10,6 +10,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
 interface BureauSpec {
   bureauName: string
@@ -40,6 +41,9 @@ const rows = ref<BureauItem[]>([])
 const feedback = ref('')
 const loading = ref(false)
 const submitting = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(20)
+const pageSizeOptions: number[] = [20, 30, 50, 100]
 
 const resourcePlural = 'bureau-entries'
 const resourceKind = 'BureauEntry'
@@ -140,6 +144,31 @@ const removeBureau = async (id: string) => {
   }
 }
 
+const totalPages = computed(() => {
+  if (!rows.value.length) {
+    return 1
+  }
+  return Math.ceil(rows.value.length / pageSize.value)
+})
+
+const pagedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return rows.value.slice(start, start + pageSize.value)
+})
+
+watch(rows, () => {
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+  if (currentPage.value < 1) {
+    currentPage.value = 1
+  }
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
+
 onMounted(loadRows)
 </script>
 
@@ -204,7 +233,7 @@ onMounted(loadRows)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in rows" :key="row.id">
+            <tr v-for="row in pagedRows" :key="row.id">
               <td>{{ row.bureauName }}</td>
               <td>{{ row.telephone || '-' }}</td>
               <td>{{ row.postalCode || '-' }}</td>
@@ -214,12 +243,20 @@ onMounted(loadRows)
                 <VButton size="xs" type="danger" :disabled="loading || submitting" @click="removeBureau(row.id)">删除</VButton>
               </td>
             </tr>
-            <tr v-if="!rows.length">
+            <tr v-if="!pagedRows.length">
               <td colspan="6" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>
       </div>
+      <QslPaginationBar
+        :total="rows.length"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        @update:current-page="(value) => (currentPage = value)"
+        @update:page-size="(value) => (pageSize = value)"
+      />
     </VCard>
   </div>
 </template>

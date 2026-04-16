@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import { approveExchangeRequest, rejectExchangeRequest } from '../../api/qsl-console-api'
+import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
 interface ExchangeRequestSpec {
   callSign: string
@@ -45,6 +46,9 @@ const loading = ref(false)
 const pendingId = ref('')
 const feedback = ref('')
 const expandedId = ref('')
+const currentPage = ref(1)
+const pageSize = ref(20)
+const pageSizeOptions: number[] = [20, 30, 50, 100]
 
 const resourcePlural = 'exchange-requests'
 
@@ -114,6 +118,31 @@ const toggleDetails = (id: string) => {
   expandedId.value = expandedId.value === id ? '' : id
 }
 
+const totalPages = computed(() => {
+  if (!rows.value.length) {
+    return 1
+  }
+  return Math.ceil(rows.value.length / pageSize.value)
+})
+
+const pagedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return rows.value.slice(start, start + pageSize.value)
+})
+
+watch(rows, () => {
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+  if (currentPage.value < 1) {
+    currentPage.value = 1
+  }
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
+
 onMounted(loadRows)
 </script>
 
@@ -132,7 +161,7 @@ onMounted(loadRows)
             </tr>
           </thead>
           <tbody>
-            <template v-for="row in rows" :key="row.id">
+            <template v-for="row in pagedRows" :key="row.id">
               <tr>
                 <td>{{ row.id }}</td>
                 <td>{{ row.callSign }}</td>
@@ -183,12 +212,20 @@ onMounted(loadRows)
                 </td>
               </tr>
             </template>
-            <tr v-if="!rows.length">
+            <tr v-if="!pagedRows.length">
               <td colspan="5" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>
       </div>
+      <QslPaginationBar
+        :total="rows.length"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        @update:current-page="(value) => (currentPage = value)"
+        @update:page-size="(value) => (pageSize = value)"
+      />
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
     </VCard>
   </div>

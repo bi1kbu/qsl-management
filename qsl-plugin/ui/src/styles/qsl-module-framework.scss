@@ -147,47 +147,184 @@
   gap: 8px;
 }
 
-.qsl-filter-toolbar {
+.qsl-filter-panel {
+  background: #f9fafb;
+  padding: 12px 16px;
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) auto;
-  align-items: end;
+  gap: 12px;
+}
+
+.qsl-query-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.qsl-query-toolbar__left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+  flex: 1 1 420px;
+}
+
+.qsl-query-toolbar__right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.qsl-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.qsl-filter-toolbar__search {
+  min-width: min(460px, 100%);
+  max-width: 520px;
+  flex: 1 1 320px;
 }
 
 .qsl-filter-toolbar__actions {
   display: flex;
   flex-wrap: wrap;
+  margin-left: auto;
+  gap: 8px;
+}
+
+.qsl-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.qsl-filter-inline {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #374151;
+  font-size: 14px;
+  line-height: 20px;
+  padding-right: 14px;
+}
+
+.qsl-filter-inline::after {
+  content: '▾';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.qsl-filter-inline span {
+  white-space: nowrap;
+}
+
+.qsl-filter-inline select {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #111827;
+  font-size: 14px;
+  line-height: 20px;
+  appearance: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.qsl-filter-inline select:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.qsl-filter-link {
+  border: none;
+  background: transparent;
+  color: #374151;
+  font-size: 14px;
+  line-height: 20px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.qsl-filter-link:hover {
+  color: #111827;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.qsl-filter-count {
+  margin-left: auto;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.qsl-pagination {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.qsl-filter-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.qsl-pagination__summary {
+  margin-right: auto;
 }
 
-.qsl-filter-chip {
+.qsl-pagination__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.qsl-pagination__nav {
+  display: inline-flex;
+}
+
+.qsl-pagination__btn {
+  min-height: 32px;
+  padding: 6px 10px;
   border: 1px solid #d1d5db;
   background: #fff;
   color: #374151;
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 18px;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
-.qsl-filter-chip:hover {
-  border-color: #9ca3af;
+.qsl-pagination__btn:first-child {
+  border-radius: 4px 0 0 4px;
 }
 
-.qsl-filter-chip.is-active {
-  border-color: #111827;
-  color: #111827;
-  background: #f3f4f6;
-  font-weight: 700;
+.qsl-pagination__btn:last-child {
+  border-radius: 0 4px 4px 0;
+  border-left: none;
+}
+
+.qsl-pagination__btn:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+  background: #f9fafb;
+}
+
+.qsl-pagination__select,
+.qsl-pagination__size-select {
+  min-width: 96px;
 }
 
 .qsl-inline-control {
@@ -483,12 +620,51 @@
     grid-template-columns: 1fr;
   }
 
+  .qsl-query-toolbar {
+    align-items: stretch;
+  }
+
+  .qsl-query-toolbar__left,
+  .qsl-query-toolbar__right {
+    flex: 1 1 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
   .qsl-filter-toolbar {
-    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .qsl-filter-toolbar__actions {
-    justify-content: flex-start;
+    margin-left: 0;
+  }
+
+  .qsl-filter-row {
+    gap: 12px;
+  }
+
+  .qsl-filter-count {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .qsl-pagination__nav {
+    width: 100%;
+  }
+
+  .qsl-pagination__summary {
+    margin-right: 0;
+    width: 100%;
+  }
+
+  .qsl-pagination__controls {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .qsl-pagination__btn {
+    flex: 1;
   }
 
   .qsl-inline-control {

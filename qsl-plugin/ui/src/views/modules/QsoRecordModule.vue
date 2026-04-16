@@ -10,6 +10,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
 interface QsoRecordSpec {
   date: string
@@ -98,6 +99,9 @@ const saving = ref(false)
 const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
 const batchUpdating = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(20)
+const pageSizeOptions: number[] = [20, 30, 50, 100]
 
 const batchEditForm = reactive({
   mode: '',
@@ -188,6 +192,16 @@ const allFilteredSelected = computed(() => {
 })
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
+const totalPages = computed(() => {
+  if (!filteredHistory.value.length) {
+    return 1
+  }
+  return Math.ceil(filteredHistory.value.length / pageSize.value)
+})
+const pagedFilteredHistory = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredHistory.value.slice(start, start + pageSize.value)
+})
 
 const syncUtcNow = () => {
   const now = new Date()
@@ -257,6 +271,19 @@ watch(
 watch(records, () => {
   const nameSet = new Set(records.value.map((item) => item.resourceName))
   selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => nameSet.has(name))
+})
+
+watch(filteredHistory, () => {
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+  if (currentPage.value < 1) {
+    currentPage.value = 1
+  }
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
 })
 
 const nowText = (): string => {
@@ -874,8 +901,12 @@ onMounted(() => {
         </label>
       </div>
 
-      <ul v-if="filteredHistory.length" class="qsl-list">
-        <li v-for="item in filteredHistory" :key="item.resourceName" class="qsl-list__item qsl-list__item--column">
+      <ul v-if="pagedFilteredHistory.length" class="qsl-list">
+        <li
+          v-for="item in pagedFilteredHistory"
+          :key="item.resourceName"
+          class="qsl-list__item qsl-list__item--column"
+        >
           <div class="qsl-inline-meta">
             <label class="qsl-checkbox">
               <input
@@ -899,6 +930,14 @@ onMounted(() => {
         </li>
       </ul>
       <p v-else class="qsl-muted">暂无历史记录。</p>
+      <QslPaginationBar
+        :total="filteredHistory.length"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        @update:current-page="(value) => (currentPage = value)"
+        @update:page-size="(value) => (pageSize = value)"
+      />
     </VCard>
   </div>
 </template>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import JSZip from 'jszip'
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   datasetOptions,
   detectDatasetByMarker,
@@ -22,6 +22,7 @@ import {
   type ImportJobPrecheckResult,
 } from '../../api/qsl-console-api'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
+import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
 type ImportFileKind = 'none' | 'csv' | 'zip' | 'unsupported'
 
@@ -78,7 +79,22 @@ const exportBlobUrl = ref('')
 const exportFileName = ref('')
 
 const operationRecords = ref<OperationRecord[]>([])
+const currentPage = ref(1)
+const pageSize = ref(20)
+const pageSizeOptions: number[] = [20, 30, 50, 100]
 const jobPlural = 'import-export-jobs'
+
+const totalPages = computed(() => {
+  if (!operationRecords.value.length) {
+    return 1
+  }
+  return Math.ceil(operationRecords.value.length / pageSize.value)
+})
+
+const pagedOperationRecords = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return operationRecords.value.slice(start, start + pageSize.value)
+})
 
 const resolvedCsvDataset = computed<DatasetValue | ''>(() => {
   return csvDetectedDataset.value || csvManualDataset.value
@@ -222,6 +238,19 @@ const loadOperationRecords = async () => {
     operationRecords.value = []
   }
 }
+
+watch(operationRecords, () => {
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+  if (currentPage.value < 1) {
+    currentPage.value = 1
+  }
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
 
 const onImportFileChange = async (event: Event) => {
   const input = event.target as HTMLInputElement
@@ -710,7 +739,7 @@ onBeforeUnmount(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in operationRecords" :key="item.id">
+            <tr v-for="item in pagedOperationRecords" :key="item.id">
               <td>{{ item.id }}</td>
               <td>{{ item.time }}</td>
               <td>{{ item.action }}</td>
@@ -741,12 +770,20 @@ onBeforeUnmount(() => {
                 <span v-else class="qsl-muted">-</span>
               </td>
             </tr>
-            <tr v-if="!operationRecords.length">
+            <tr v-if="!pagedOperationRecords.length">
               <td colspan="8" class="qsl-table-empty">暂无任务记录。</td>
             </tr>
           </tbody>
         </table>
       </div>
+      <QslPaginationBar
+        :total="operationRecords.length"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        @update:current-page="(value) => (currentPage = value)"
+        @update:page-size="(value) => (pageSize = value)"
+      />
     </VCard>
   </div>
 </template>

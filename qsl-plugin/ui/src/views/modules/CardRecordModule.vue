@@ -10,6 +10,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
 interface CardRecordSpec {
   callSign: string
@@ -91,6 +92,9 @@ const historyKeyword = ref('')
 const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
 const batchUpdating = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(20)
+const pageSizeOptions: number[] = [20, 30, 50, 100]
 
 const batchEditForm = reactive({
   cardType: '',
@@ -146,6 +150,16 @@ const allFilteredSelected = computed(() => {
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
 const isEditing = computed(() => Boolean(editingResourceName.value))
+const totalPages = computed(() => {
+  if (!filteredRecords.value.length) {
+    return 1
+  }
+  return Math.ceil(filteredRecords.value.length / pageSize.value)
+})
+const pagedFilteredRecords = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredRecords.value.slice(start, start + pageSize.value)
+})
 
 watch(
   selectedQso,
@@ -169,6 +183,19 @@ watch(records, () => {
   if (editingResourceName.value && !nameSet.has(editingResourceName.value)) {
     editingResourceName.value = ''
   }
+})
+
+watch(filteredRecords, () => {
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+  if (currentPage.value < 1) {
+    currentPage.value = 1
+  }
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
 })
 
 const nowText = (): string => {
@@ -698,8 +725,8 @@ onMounted(() => {
         </label>
       </div>
 
-      <ul v-if="filteredRecords.length" class="qsl-list">
-        <li v-for="item in filteredRecords" :key="item.resourceName" class="qsl-list__item qsl-list__item--column">
+      <ul v-if="pagedFilteredRecords.length" class="qsl-list">
+        <li v-for="item in pagedFilteredRecords" :key="item.resourceName" class="qsl-list__item qsl-list__item--column">
           <div class="qsl-inline-meta">
             <label class="qsl-checkbox">
               <input
@@ -726,6 +753,14 @@ onMounted(() => {
         </li>
       </ul>
       <p v-else class="qsl-muted">暂无卡片记录。</p>
+      <QslPaginationBar
+        :total="filteredRecords.length"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        @update:current-page="(value) => (currentPage = value)"
+        @update:page-size="(value) => (pageSize = value)"
+      />
     </VCard>
   </div>
 </template>
