@@ -10,6 +10,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
 interface QsoRecordSpec {
@@ -100,7 +101,6 @@ const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
 const batchEditEnabled = ref(false)
 const batchUpdating = ref(false)
-const expandedHistoryName = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
@@ -111,6 +111,16 @@ const batchEditForm = reactive({
   qth: '',
   remarks: '',
 })
+
+const historyColumns = [
+  { key: 'resourceName', label: '通联记录编号' },
+  { key: 'callSign', label: '对方呼号' },
+  { key: 'date', label: '日期' },
+  { key: 'time', label: '时间' },
+  { key: 'timezone', label: '时区' },
+  { key: 'freq', label: '频率' },
+  { key: 'mode', label: '模式' },
+]
 
 const resourcePlural = 'qso-records'
 const resourceKind = 'QsoRecord'
@@ -184,13 +194,6 @@ const filteredHistory = computed(() => {
   }
 
   return records.value.filter((item) => item.callSign.toUpperCase().includes(callSign))
-})
-
-const allPagedSelected = computed(() => {
-  if (!pagedFilteredHistory.value.length) {
-    return false
-  }
-  return pagedFilteredHistory.value.every((item) => selectedHistoryNames.value.includes(item.resourceName))
 })
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
@@ -273,9 +276,6 @@ watch(
 watch(records, () => {
   const nameSet = new Set(records.value.map((item) => item.resourceName))
   selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => nameSet.has(name))
-  if (expandedHistoryName.value && !nameSet.has(expandedHistoryName.value)) {
-    expandedHistoryName.value = ''
-  }
 })
 
 watch(filteredHistory, () => {
@@ -284,9 +284,6 @@ watch(filteredHistory, () => {
   }
   if (currentPage.value < 1) {
     currentPage.value = 1
-  }
-  if (expandedHistoryName.value && !filteredHistory.value.some((item) => item.resourceName === expandedHistoryName.value)) {
-    expandedHistoryName.value = ''
   }
 })
 
@@ -502,6 +499,10 @@ const resetForm = () => {
   }
 }
 
+const toHistoryItem = (row: Record<string, unknown>): QsoRecordItem => {
+  return row as unknown as QsoRecordItem
+}
+
 const startEditRecord = (item: QsoRecordItem) => {
   editingResourceName.value = item.resourceName
   fillFormFromRecord(item)
@@ -512,38 +513,6 @@ const cancelEditRecord = () => {
   editingResourceName.value = ''
   resetForm()
   feedback.value = ''
-}
-
-const isHistorySelected = (resourceName: string): boolean => {
-  return selectedHistoryNames.value.includes(resourceName)
-}
-
-const toggleHistorySelection = (resourceName: string) => {
-  if (isHistorySelected(resourceName)) {
-    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => name !== resourceName)
-    return
-  }
-  selectedHistoryNames.value = [...selectedHistoryNames.value, resourceName]
-}
-
-const toggleAllPagedHistorySelection = () => {
-  if (allPagedSelected.value) {
-    const pagedNameSet = new Set(pagedFilteredHistory.value.map((item) => item.resourceName))
-    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !pagedNameSet.has(name))
-    return
-  }
-
-  const merged = new Set(selectedHistoryNames.value)
-  pagedFilteredHistory.value.forEach((item) => merged.add(item.resourceName))
-  selectedHistoryNames.value = Array.from(merged)
-}
-
-const toggleHistoryExpand = (resourceName: string) => {
-  expandedHistoryName.value = expandedHistoryName.value === resourceName ? '' : resourceName
-}
-
-const isHistoryExpanded = (resourceName: string): boolean => {
-  return expandedHistoryName.value === resourceName
 }
 
 const clearHistorySelection = () => {
@@ -903,154 +872,109 @@ onMounted(() => {
     </VCard>
 
     <VCard>
-      <div class="qsl-history-toolbar">
-        <label class="qsl-checkbox qsl-history-toolbar__title">
-          <input
-            :checked="allPagedSelected"
-            type="checkbox"
-            :disabled="!pagedFilteredHistory.length"
-            @change="toggleAllPagedHistorySelection"
-          />
-          <span>历史记录</span>
-        </label>
-        <label class="qsl-checkbox">
-          <input v-model="batchEditEnabled" type="checkbox" />
-          <span>批量编辑</span>
-        </label>
-        <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
-      </div>
+      <QslExpandableHistoryTable
+        title="历史记录"
+        :rows="pagedFilteredHistory"
+        :columns="historyColumns"
+        row-key-field="resourceName"
+        :selected-keys="selectedHistoryNames"
+        :batch-edit-enabled="batchEditEnabled"
+        empty-text="暂无历史记录。"
+        @update:selected-keys="(value) => (selectedHistoryNames = value)"
+        @update:batch-edit-enabled="(value) => (batchEditEnabled = value)"
+      >
+        <template #batch-actions>
+          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+          <VButton
+            size="sm"
+            type="secondary"
+            :disabled="batchUpdating || !selectedHistoryCount"
+            @click="applyHistoryBatchEdit"
+          >
+            批量编辑已选记录
+          </VButton>
+        </template>
 
-      <div v-if="batchEditEnabled" class="qsl-actions">
-        <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
-        <VButton
-          size="sm"
-          type="secondary"
-          :disabled="batchUpdating || !selectedHistoryCount"
-          @click="applyHistoryBatchEdit"
-        >
-          批量编辑已选记录
-        </VButton>
-      </div>
+        <template #batch-form>
+          <label class="qsl-field">
+            <span class="qsl-field__label">批量模式（留空不改）</span>
+            <div class="qsl-input-shell">
+              <select v-model="batchEditForm.mode">
+                <option value="">不修改</option>
+                <option v-for="item in historyModeOptions" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
+          </label>
 
-      <div v-if="batchEditEnabled" class="qsl-form-grid">
-        <label class="qsl-field">
-          <span class="qsl-field__label">批量模式（留空不改）</span>
-          <div class="qsl-input-shell">
-            <select v-model="batchEditForm.mode">
-              <option value="">不修改</option>
-              <option v-for="item in historyModeOptions" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </div>
-        </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">批量频率（留空不改）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="batchEditForm.freq" type="text" placeholder="例如 7.050" />
+            </div>
+          </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">批量频率（留空不改）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="batchEditForm.freq" type="text" placeholder="例如 7.050" />
-          </div>
-        </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">批量位置（留空不改）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="batchEditForm.qth" type="text" placeholder="例如 广州" />
+            </div>
+          </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">批量位置（留空不改）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="batchEditForm.qth" type="text" placeholder="例如 广州" />
-          </div>
-        </label>
+          <label class="qsl-field qsl-field--full">
+            <span class="qsl-field__label">批量备注（留空不改）</span>
+            <div class="qsl-input-shell qsl-input-shell--textarea">
+              <textarea v-model.trim="batchEditForm.remarks" rows="2" placeholder="填写后将覆盖已选记录备注" />
+            </div>
+          </label>
+        </template>
 
-        <label class="qsl-field qsl-field--full">
-          <span class="qsl-field__label">批量备注（留空不改）</span>
-          <div class="qsl-input-shell qsl-input-shell--textarea">
-            <textarea v-model.trim="batchEditForm.remarks" rows="2" placeholder="填写后将覆盖已选记录备注" />
-          </div>
-        </label>
-      </div>
+        <template #cell-freq="{ row }">
+          {{ toHistoryItem(row).freq || '未填频率' }}
+        </template>
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table qsl-table--clickable">
-          <thead>
-            <tr>
-              <th>选择</th>
-              <th>通联记录编号</th>
-              <th>对方呼号</th>
-              <th>日期</th>
-              <th>时间</th>
-              <th>时区</th>
-              <th>频率</th>
-              <th>模式</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="item in pagedFilteredHistory" :key="item.resourceName">
-              <tr
-                class="qsl-history-row"
-                :class="{ 'is-expanded': isHistoryExpanded(item.resourceName) }"
-                @click="toggleHistoryExpand(item.resourceName)"
-              >
-                <td @click.stop>
-                  <label class="qsl-checkbox">
-                    <input
-                      :checked="isHistorySelected(item.resourceName)"
-                      type="checkbox"
-                      @change="toggleHistorySelection(item.resourceName)"
-                    />
-                    <span>选择</span>
-                  </label>
-                </td>
-                <td>{{ item.resourceName }}</td>
-                <td>{{ item.callSign }}</td>
-                <td>{{ item.date || '-' }}</td>
-                <td>{{ item.time || '-' }}</td>
-                <td>{{ item.timezone || '-' }}</td>
-                <td>{{ item.freq || '未填频率' }}</td>
-                <td>{{ item.mode || '未填模式' }}</td>
-                <td @click.stop>
-                  <VButton size="xs" type="secondary" @click="startEditRecord(item)">编辑</VButton>
-                </td>
+        <template #cell-mode="{ row }">
+          {{ toHistoryItem(row).mode || '未填模式' }}
+        </template>
+
+        <template #row-actions="{ row }">
+          <VButton size="xs" type="secondary" @click="startEditRecord(toHistoryItem(row))">编辑</VButton>
+        </template>
+
+        <template #detail="{ row }">
+          <table class="qsl-history-detail-table">
+            <tbody>
+              <tr>
+                <th>本台设备</th>
+                <td>{{ toHistoryItem(row).myRig || '未填' }}</td>
+                <th>本台天线</th>
+                <td>{{ toHistoryItem(row).myRigAnt || '未填' }}</td>
               </tr>
-              <tr v-if="isHistoryExpanded(item.resourceName)" class="qsl-history-detail-row">
-                <td colspan="9">
-                  <table class="qsl-history-detail-table">
-                    <tbody>
-                      <tr>
-                        <th>本台设备</th>
-                        <td>{{ item.myRig || '未填' }}</td>
-                        <th>本台天线</th>
-                        <td>{{ item.myRigAnt || '未填' }}</td>
-                      </tr>
-                      <tr>
-                        <th>本台功率</th>
-                        <td>{{ item.myRigPwr || '未填' }}</td>
-                        <th>对方设备</th>
-                        <td>{{ item.rig || '未填' }}</td>
-                      </tr>
-                      <tr>
-                        <th>对方天线</th>
-                        <td>{{ item.ant || '未填' }}</td>
-                        <th>对方功率</th>
-                        <td>{{ item.pwr || '未填' }}</td>
-                      </tr>
-                      <tr>
-                        <th>位置</th>
-                        <td>{{ item.qth || '未填' }}</td>
-                        <th>信号报告</th>
-                        <td>给对方 {{ item.rstSent || '-' }} / 给我方 {{ item.rstRcvd || '-' }}</td>
-                      </tr>
-                      <tr>
-                        <th>备注</th>
-                        <td colspan="3">{{ item.remarks || '无' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </td>
+              <tr>
+                <th>本台功率</th>
+                <td>{{ toHistoryItem(row).myRigPwr || '未填' }}</td>
+                <th>对方设备</th>
+                <td>{{ toHistoryItem(row).rig || '未填' }}</td>
               </tr>
-            </template>
-            <tr v-if="!pagedFilteredHistory.length">
-              <td colspan="9" class="qsl-table-empty">暂无历史记录。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+              <tr>
+                <th>对方天线</th>
+                <td>{{ toHistoryItem(row).ant || '未填' }}</td>
+                <th>对方功率</th>
+                <td>{{ toHistoryItem(row).pwr || '未填' }}</td>
+              </tr>
+              <tr>
+                <th>位置</th>
+                <td>{{ toHistoryItem(row).qth || '未填' }}</td>
+                <th>信号报告</th>
+                <td>给对方 {{ toHistoryItem(row).rstSent || '-' }} / 给我方 {{ toHistoryItem(row).rstRcvd || '-' }}</td>
+              </tr>
+              <tr>
+                <th>备注</th>
+                <td colspan="3">{{ toHistoryItem(row).remarks || '无' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
+      </QslExpandableHistoryTable>
       <QslPaginationBar
         :total="filteredHistory.length"
         :current-page="currentPage"
@@ -1082,38 +1006,6 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 600;
   line-height: 20px;
-}
-
-.qsl-history-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.qsl-history-toolbar__title span {
-  color: #111827;
-  font-weight: 600;
-}
-
-.qsl-history-toolbar .qsl-muted {
-  margin-left: auto;
-}
-
-.qsl-history-row {
-  cursor: pointer;
-}
-
-.qsl-history-row:hover td {
-  background: #f9fafb;
-}
-
-.qsl-history-row.is-expanded td {
-  background: #f3f4f6;
-}
-
-.qsl-history-detail-row td {
-  padding: 0;
 }
 
 .qsl-history-detail-table {

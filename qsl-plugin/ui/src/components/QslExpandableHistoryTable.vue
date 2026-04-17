@@ -1,0 +1,216 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+
+interface HistoryTableColumn {
+  key: string
+  label: string
+}
+
+const props = withDefaults(
+  defineProps<{
+    title: string
+    rows: Record<string, unknown>[]
+    columns: HistoryTableColumn[]
+    rowKeyField?: string
+    selectedKeys: string[]
+    batchEditEnabled: boolean
+    emptyText?: string
+    showBatchToggle?: boolean
+  }>(),
+  {
+    rowKeyField: 'id',
+    emptyText: '暂无数据。',
+    showBatchToggle: true,
+  },
+)
+
+const emit = defineEmits<{
+  (event: 'update:selectedKeys', value: string[]): void
+  (event: 'update:batchEditEnabled', value: boolean): void
+}>()
+
+const expandedRowKey = ref('')
+
+const getRowKey = (row: Record<string, unknown>): string => {
+  const raw = row[props.rowKeyField]
+  return typeof raw === 'string' || typeof raw === 'number' ? String(raw) : ''
+}
+
+const selectedKeySet = computed(() => new Set(props.selectedKeys))
+
+const selectedCount = computed(() => props.selectedKeys.length)
+
+const allRowsSelected = computed(() => {
+  if (!props.rows.length) {
+    return false
+  }
+  return props.rows.every((row) => selectedKeySet.value.has(getRowKey(row)))
+})
+
+watch(
+  () => props.rows,
+  () => {
+    if (!expandedRowKey.value) {
+      return
+    }
+    if (!props.rows.some((row) => getRowKey(row) === expandedRowKey.value)) {
+      expandedRowKey.value = ''
+    }
+  },
+)
+
+const toggleAllRowsSelection = () => {
+  const rowKeys = props.rows.map((row) => getRowKey(row)).filter((key) => key.length > 0)
+  if (allRowsSelected.value) {
+    const currentRowKeySet = new Set(rowKeys)
+    emit(
+      'update:selectedKeys',
+      props.selectedKeys.filter((key) => !currentRowKeySet.has(key)),
+    )
+    return
+  }
+
+  const merged = new Set(props.selectedKeys)
+  rowKeys.forEach((key) => merged.add(key))
+  emit('update:selectedKeys', Array.from(merged))
+}
+
+const isRowSelected = (row: Record<string, unknown>): boolean => {
+  return selectedKeySet.value.has(getRowKey(row))
+}
+
+const toggleRowSelection = (row: Record<string, unknown>) => {
+  const rowKey = getRowKey(row)
+  if (!rowKey) {
+    return
+  }
+  if (selectedKeySet.value.has(rowKey)) {
+    emit(
+      'update:selectedKeys',
+      props.selectedKeys.filter((key) => key !== rowKey),
+    )
+    return
+  }
+  emit('update:selectedKeys', [...props.selectedKeys, rowKey])
+}
+
+const toggleRowExpand = (row: Record<string, unknown>) => {
+  const rowKey = getRowKey(row)
+  if (!rowKey) {
+    return
+  }
+  expandedRowKey.value = expandedRowKey.value === rowKey ? '' : rowKey
+}
+
+const isRowExpanded = (row: Record<string, unknown>): boolean => {
+  return expandedRowKey.value === getRowKey(row)
+}
+
+const toggleBatchEditEnabled = (value: boolean) => {
+  emit('update:batchEditEnabled', value)
+}
+
+const formatCellValue = (value: unknown): string => {
+  if (value === null || value === undefined) {
+    return '-'
+  }
+  const text = String(value).trim()
+  return text || '-'
+}
+</script>
+
+<template>
+  <div class="qsl-history-toolbar">
+    <label class="qsl-checkbox qsl-history-toolbar__title">
+      <input :checked="allRowsSelected" type="checkbox" :disabled="!rows.length" @change="toggleAllRowsSelection" />
+      <span>{{ title }}</span>
+    </label>
+    <label v-if="showBatchToggle" class="qsl-checkbox">
+      <input :checked="batchEditEnabled" type="checkbox" @change="toggleBatchEditEnabled(($event.target as HTMLInputElement).checked)" />
+      <span>批量编辑</span>
+    </label>
+    <span class="qsl-muted">已选 {{ selectedCount }} 条</span>
+  </div>
+
+  <div v-if="batchEditEnabled" class="qsl-actions">
+    <slot name="batch-actions" :selected-count="selectedCount" />
+  </div>
+
+  <div v-if="batchEditEnabled" class="qsl-form-grid">
+    <slot name="batch-form" />
+  </div>
+
+  <div class="qsl-table-wrap">
+    <table class="qsl-table qsl-table--clickable">
+      <thead>
+        <tr>
+          <th>选择</th>
+          <th v-for="column in columns" :key="column.key">{{ column.label }}</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template v-for="row in rows" :key="getRowKey(row)">
+          <tr class="qsl-history-row" :class="{ 'is-expanded': isRowExpanded(row) }" @click="toggleRowExpand(row)">
+            <td @click.stop>
+              <label class="qsl-checkbox">
+                <input :checked="isRowSelected(row)" type="checkbox" @change="toggleRowSelection(row)" />
+                <span>选择</span>
+              </label>
+            </td>
+            <td v-for="column in columns" :key="column.key">
+              <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]">
+                {{ formatCellValue(row[column.key]) }}
+              </slot>
+            </td>
+            <td @click.stop>
+              <slot name="row-actions" :row="row" />
+            </td>
+          </tr>
+          <tr v-if="isRowExpanded(row)" class="qsl-history-detail-row">
+            <td :colspan="columns.length + 2">
+              <slot name="detail" :row="row" />
+            </td>
+          </tr>
+        </template>
+        <tr v-if="!rows.length">
+          <td :colspan="columns.length + 2" class="qsl-table-empty">{{ emptyText }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</template>
+
+<style scoped lang="scss">
+.qsl-history-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.qsl-history-toolbar__title span {
+  color: #111827;
+  font-weight: 600;
+}
+
+.qsl-history-toolbar .qsl-muted {
+  margin-left: auto;
+}
+
+.qsl-history-row {
+  cursor: pointer;
+}
+
+.qsl-history-row:hover td {
+  background: #f9fafb;
+}
+
+.qsl-history-row.is-expanded td {
+  background: #f3f4f6;
+}
+
+.qsl-history-detail-row td {
+  padding: 0;
+}
+</style>
