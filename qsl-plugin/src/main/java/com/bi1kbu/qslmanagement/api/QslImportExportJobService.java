@@ -420,6 +420,16 @@ public class QslImportExportJobService {
                     spec.setReceiptConfirmed(parseBoolean(value(row, "receiptConfirmed")));
                     spec.setSentAt(value(row, "sentAt"));
                     spec.setReceivedAt(value(row, "receivedAt"));
+                    spec.setCreatedMailStatus(value(row, "createdMailStatus"));
+                    spec.setCreatedMailSentAt(value(row, "createdMailSentAt"));
+                    spec.setCreatedMailLastError(value(row, "createdMailLastError"));
+                    spec.setSentMailStatus(value(row, "sentMailStatus"));
+                    spec.setSentMailSentAt(value(row, "sentMailSentAt"));
+                    spec.setSentMailLastError(value(row, "sentMailLastError"));
+                    spec.setReceivedMailStatus(value(row, "receivedMailStatus"));
+                    spec.setReceivedMailSentAt(value(row, "receivedMailSentAt"));
+                    spec.setReceivedMailLastError(value(row, "receivedMailLastError"));
+                    spec.setMailTargetEmail(value(row, "mailTargetEmail"));
                     record.setSpec(spec);
                 }
             );
@@ -698,7 +708,17 @@ public class QslImportExportJobService {
                         spec == null ? "false" : boolToText(spec.getCardReceived()),
                         spec == null ? "false" : boolToText(spec.getReceiptConfirmed()),
                         spec == null ? "" : nullToEmpty(spec.getSentAt()),
-                        spec == null ? "" : nullToEmpty(spec.getReceivedAt())
+                        spec == null ? "" : nullToEmpty(spec.getReceivedAt()),
+                        spec == null ? "" : nullToEmpty(spec.getCreatedMailStatus()),
+                        spec == null ? "" : nullToEmpty(spec.getCreatedMailSentAt()),
+                        spec == null ? "" : nullToEmpty(spec.getCreatedMailLastError()),
+                        spec == null ? "" : nullToEmpty(spec.getSentMailStatus()),
+                        spec == null ? "" : nullToEmpty(spec.getSentMailSentAt()),
+                        spec == null ? "" : nullToEmpty(spec.getSentMailLastError()),
+                        spec == null ? "" : nullToEmpty(spec.getReceivedMailStatus()),
+                        spec == null ? "" : nullToEmpty(spec.getReceivedMailSentAt()),
+                        spec == null ? "" : nullToEmpty(spec.getReceivedMailLastError()),
+                        spec == null ? "" : nullToEmpty(spec.getMailTargetEmail())
                     );
                 })
                 .collectList()
@@ -715,7 +735,17 @@ public class QslImportExportJobService {
                     "cardReceived",
                     "receiptConfirmed",
                     "sentAt",
-                    "receivedAt"
+                    "receivedAt",
+                    "createdMailStatus",
+                    "createdMailSentAt",
+                    "createdMailLastError",
+                    "sentMailStatus",
+                    "sentMailSentAt",
+                    "sentMailLastError",
+                    "receivedMailStatus",
+                    "receivedMailSentAt",
+                    "receivedMailLastError",
+                    "mailTargetEmail"
                 ), rows));
             case "exchange-request-review" -> client.listAll(ExchangeRequest.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {

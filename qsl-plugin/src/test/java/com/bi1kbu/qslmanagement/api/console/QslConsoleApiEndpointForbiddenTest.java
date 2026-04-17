@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import com.bi1kbu.qslmanagement.api.OverviewSummary;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
+import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
 import java.security.Principal;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ class QslConsoleApiEndpointForbiddenTest {
     private final QslOverviewService overviewService = mock(QslOverviewService.class);
     private final QslConsoleActionService actionService = mock(QslConsoleActionService.class);
     private final QslImportExportJobService importExportJobService = mock(QslImportExportJobService.class);
+    private final QslNotificationMailService notificationMailService = mock(QslNotificationMailService.class);
 
     @Test
     void shouldRejectReportSummaryWhenAuthorizedButForbidden() {
@@ -77,7 +79,12 @@ class QslConsoleApiEndpointForbiddenTest {
     }
 
     private WebTestClient buildAuthenticatedClient() {
-        var endpoint = new QslConsoleApiEndpoint(overviewService, actionService, importExportJobService);
+        var endpoint = new QslConsoleApiEndpoint(
+            overviewService,
+            actionService,
+            importExportJobService,
+            notificationMailService
+        );
         var principal = (Principal) () -> "operator";
         return WebTestClient.bindToRouterFunction(endpoint.endpoint())
             .webFilter((exchange, chain) -> chain.filter(exchange.mutate().principal(Mono.just(principal)).build()))

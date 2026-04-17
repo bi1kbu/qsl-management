@@ -21,10 +21,16 @@ public class QslConsoleActionService {
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
+    private final QslNotificationMailService notificationMailService;
 
-    public QslConsoleActionService(ReactiveExtensionClient client, QslAuditService qslAuditService) {
+    public QslConsoleActionService(
+        ReactiveExtensionClient client,
+        QslAuditService qslAuditService,
+        QslNotificationMailService notificationMailService
+    ) {
         this.client = client;
         this.qslAuditService = qslAuditService;
+        this.notificationMailService = notificationMailService;
     }
 
     public Mono<CardRecord> confirmMailSend(String cardRecordName, String operator, String clientIp) {
@@ -47,6 +53,12 @@ public class QslConsoleActionService {
                 updated.getMetadata().getName(),
                 "卡片已标记为已发出",
                 safeOperator(operator),
+                clientIp
+            ).thenReturn(updated))
+            .flatMap(updated -> notificationMailService.autoSendIfEnabled(
+                updated.getMetadata().getName(),
+                QslNotificationMailService.MailScene.CARD_SENT,
+                operator,
                 clientIp
             ).thenReturn(updated));
     }
@@ -82,6 +94,12 @@ public class QslConsoleActionService {
                 result.cardRecordName(),
                 result.message(),
                 safeOperator(operator),
+                clientIp
+            ).thenReturn(result))
+            .flatMap(result -> notificationMailService.autoSendIfEnabled(
+                result.cardRecordName(),
+                QslNotificationMailService.MailScene.CARD_RECEIVED,
+                operator,
                 clientIp
             ).thenReturn(result));
     }
@@ -253,6 +271,16 @@ public class QslConsoleActionService {
         spec.setReceiptConfirmed(Boolean.FALSE);
         spec.setSentAt(sent ? QslApiSupport.nowText() : "");
         spec.setReceivedAt(QslApiSupport.nowText());
+        spec.setCreatedMailStatus("");
+        spec.setCreatedMailSentAt("");
+        spec.setCreatedMailLastError("");
+        spec.setSentMailStatus("");
+        spec.setSentMailSentAt("");
+        spec.setSentMailLastError("");
+        spec.setReceivedMailStatus("");
+        spec.setReceivedMailSentAt("");
+        spec.setReceivedMailLastError("");
+        spec.setMailTargetEmail("");
         cardRecord.setSpec(spec);
 
         var status = new CardRecord.CardRecordStatus();
@@ -293,6 +321,16 @@ public class QslConsoleActionService {
         spec.setReceiptConfirmed(Boolean.FALSE);
         spec.setSentAt("");
         spec.setReceivedAt("");
+        spec.setCreatedMailStatus("");
+        spec.setCreatedMailSentAt("");
+        spec.setCreatedMailLastError("");
+        spec.setSentMailStatus("");
+        spec.setSentMailSentAt("");
+        spec.setSentMailLastError("");
+        spec.setReceivedMailStatus("");
+        spec.setReceivedMailSentAt("");
+        spec.setReceivedMailLastError("");
+        spec.setMailTargetEmail("");
         cardRecord.setSpec(spec);
         return spec;
     }

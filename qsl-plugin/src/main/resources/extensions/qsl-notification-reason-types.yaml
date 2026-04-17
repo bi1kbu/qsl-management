@@ -1,0 +1,102 @@
+apiVersion: notification.halo.run/v1alpha1
+kind: ReasonType
+metadata:
+  name: qsl-card-created
+  labels:
+    halo.run/hidden: "true"
+spec:
+  displayName: "QSL 制卡通知"
+  description: "当卡片记录创建完成时触发，用于发送制卡场景邮件通知。"
+  properties:
+    - name: sceneDisplay
+      type: string
+    - name: callSign
+      type: string
+    - name: cardType
+      type: string
+    - name: cardVersion
+      type: string
+    - name: cardDate
+      type: string
+    - name: cardTime
+      type: string
+    - name: cardRecordName
+      type: string
+    - name: remarks
+      type: string
+      optional: true
+    - name: targetEmail
+      type: string
+    - name: triggerAt
+      type: string
+    - name: operator
+      type: string
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: ReasonType
+metadata:
+  name: qsl-card-sent
+  labels:
+    halo.run/hidden: "true"
+spec:
+  displayName: "QSL 发卡通知"
+  description: "当卡片记录确认发信时触发，用于发送发卡场景邮件通知。"
+  properties:
+    - name: sceneDisplay
+      type: string
+    - name: callSign
+      type: string
+    - name: cardType
+      type: string
+    - name: cardVersion
+      type: string
+    - name: cardDate
+      type: string
+    - name: cardTime
+      type: string
+    - name: cardRecordName
+      type: string
+    - name: remarks
+      type: string
+      optional: true
+    - name: targetEmail
+      type: string
+    - name: triggerAt
+      type: string
+    - name: operator
+      type: string
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: ReasonType
+metadata:
+  name: qsl-card-received
+  labels:
+    halo.run/hidden: "true"
+spec:
+  displayName: "QSL 收卡通知"
+  description: "当卡片记录确认收信时触发，用于发送收卡场景邮件通知。"
+  properties:
+    - name: sceneDisplay
+      type: string
+    - name: callSign
+      type: string
+    - name: cardType
+      type: string
+    - name: cardVersion
+      type: string
+    - name: cardDate
+      type: string
+    - name: cardTime
+      type: string
+    - name: cardRecordName
+      type: string
+    - name: remarks
+      type: string
+      optional: true
+    - name: targetEmail
+      type: string
+    - name: triggerAt
+      type: string
+    - name: operator
+      type: string
+

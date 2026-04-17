@@ -17,7 +17,8 @@ class QslConsoleActionServiceValidationTest {
     void shouldRejectMailReceiveWhenCallSignBlank() {
         var service = new QslConsoleActionService(
             mock(ReactiveExtensionClient.class),
-            mock(QslAuditService.class)
+            mock(QslAuditService.class),
+            mock(QslNotificationMailService.class)
         );
 
         var error = assertThrows(QslApiException.class, () -> service.confirmMailReceive(
@@ -34,7 +35,8 @@ class QslConsoleActionServiceValidationTest {
     void shouldRejectMailReceiveWhenCardTypeUnsupported() {
         var service = new QslConsoleActionService(
             mock(ReactiveExtensionClient.class),
-            mock(QslAuditService.class)
+            mock(QslAuditService.class),
+            mock(QslNotificationMailService.class)
         );
 
         var error = assertThrows(QslApiException.class, () -> service.confirmMailReceive(
@@ -50,7 +52,11 @@ class QslConsoleActionServiceValidationTest {
     @Test
     void shouldRejectReviewWhenExchangeAlreadyProcessed() {
         var client = mock(ReactiveExtensionClient.class);
-        var service = new QslConsoleActionService(client, mock(QslAuditService.class));
+        var service = new QslConsoleActionService(
+            client,
+            mock(QslAuditService.class),
+            mock(QslNotificationMailService.class)
+        );
 
         var exchangeRequest = new ExchangeRequest();
         exchangeRequest.setMetadata(QslApiSupport.createMetadata("exchange-request-1"));

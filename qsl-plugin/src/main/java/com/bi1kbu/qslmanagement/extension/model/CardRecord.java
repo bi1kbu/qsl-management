@@ -30,6 +30,16 @@ public class CardRecord extends QslBaseExtension<CardRecord.CardRecordSpec, Card
         private Boolean receiptConfirmed;
         private String sentAt;
         private String receivedAt;
+        private String createdMailStatus;
+        private String createdMailSentAt;
+        private String createdMailLastError;
+        private String sentMailStatus;
+        private String sentMailSentAt;
+        private String sentMailLastError;
+        private String receivedMailStatus;
+        private String receivedMailSentAt;
+        private String receivedMailLastError;
+        private String mailTargetEmail;
     }
 
     @Data
@@ -37,4 +47,3 @@ public class CardRecord extends QslBaseExtension<CardRecord.CardRecordSpec, Card
         private String flowStatus;
     }
 }
-

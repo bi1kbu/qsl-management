@@ -2,7 +2,7 @@
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import { confirmMailSend } from '../../api/qsl-console-api'
+import { batchSendNotificationMail, confirmMailSend, sendNotificationMail } from '../../api/qsl-console-api'
 import { listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
@@ -19,6 +19,16 @@ interface CardRecordSpec {
   receiptConfirmed: boolean
   sentAt: string
   receivedAt: string
+  createdMailStatus: string
+  createdMailSentAt: string
+  createdMailLastError: string
+  sentMailStatus: string
+  sentMailSentAt: string
+  sentMailLastError: string
+  receivedMailStatus: string
+  receivedMailSentAt: string
+  receivedMailLastError: string
+  mailTargetEmail: string
 }
 
 interface SendConfirmItem {
@@ -45,6 +55,7 @@ const selectedHistoryNames = ref<string[]>([])
 const editingResourceName = ref('')
 const savingEdit = ref(false)
 const batchUpdating = ref(false)
+const batchSendingSentMail = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
@@ -142,6 +153,16 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     receiptConfirmed: Boolean(spec?.receiptConfirmed),
     sentAt: spec?.sentAt ?? '',
     receivedAt: spec?.receivedAt ?? '',
+    createdMailStatus: spec?.createdMailStatus ?? '',
+    createdMailSentAt: spec?.createdMailSentAt ?? '',
+    createdMailLastError: spec?.createdMailLastError ?? '',
+    sentMailStatus: spec?.sentMailStatus ?? '',
+    sentMailSentAt: spec?.sentMailSentAt ?? '',
+    sentMailLastError: spec?.sentMailLastError ?? '',
+    receivedMailStatus: spec?.receivedMailStatus ?? '',
+    receivedMailSentAt: spec?.receivedMailSentAt ?? '',
+    receivedMailLastError: spec?.receivedMailLastError ?? '',
+    mailTargetEmail: spec?.mailTargetEmail ?? '',
   }
 }
 
@@ -392,6 +413,45 @@ const applyHistoryBatchEdit = async () => {
   }
 }
 
+const sendSentMailForRow = async (row: SendConfirmItem, source = '发信确认-单条发送') => {
+  pendingRowName.value = row.resourceName
+  try {
+    const result = await sendNotificationMail({
+      cardRecordName: row.resourceName,
+      scene: 'sent',
+      source,
+    })
+    await loadRows({ silent: true })
+    feedback.value = `发卡邮件${result.status === 'SENT' ? '发送成功' : '未发送'}：${result.message}`
+  } catch (error) {
+    feedback.value = `发送发卡邮件失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    pendingRowName.value = ''
+  }
+}
+
+const batchSendSentMail = async () => {
+  if (!selectedHistoryNames.value.length) {
+    feedback.value = '请先选择要批量发送邮件的记录。'
+    return
+  }
+
+  batchSendingSentMail.value = true
+  try {
+    const result = await batchSendNotificationMail({
+      cardRecordNames: selectedHistoryNames.value,
+      scene: 'sent',
+      source: '发信确认-批量发送',
+    })
+    await loadRows({ silent: true })
+    feedback.value = `批量发送完成：成功 ${result.sentCount}，跳过 ${result.skippedCount}，失败 ${result.failedCount}。`
+  } catch (error) {
+    feedback.value = `批量发送发卡邮件失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    batchSendingSentMail.value = false
+  }
+}
+
 onMounted(() => {
   loadRows()
 })
@@ -419,6 +479,14 @@ onMounted(() => {
           @click="applyHistoryBatchEdit"
         >
           批量编辑已选记录
+        </VButton>
+        <VButton
+          size="sm"
+          type="secondary"
+          :disabled="batchSendingSentMail || !selectedHistoryCount"
+          @click="batchSendSentMail"
+        >
+          批量发送发卡邮件
         </VButton>
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
       </div>
@@ -567,6 +635,25 @@ onMounted(() => {
                     确认发信
                   </VButton>
                   <VTag v-else theme="secondary">已发卡（{{ row.sentAt }}）</VTag>
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="pendingRowName === row.resourceName || row.spec.sentMailStatus === 'SENT'"
+                    @click="sendSentMailForRow(row)"
+                  >
+                    发送发卡邮件
+                  </VButton>
+                  <VTag
+                    :theme="
+                      row.spec.sentMailStatus === 'SENT'
+                        ? 'secondary'
+                        : row.spec.sentMailStatus === 'FAILED'
+                          ? 'danger'
+                          : 'default'
+                    "
+                  >
+                    {{ row.spec.sentMailStatus || '未发送' }}
+                  </VTag>
                 </div>
               </td>
             </tr>

@@ -1,0 +1,120 @@
+apiVersion: notification.halo.run/v1alpha1
+kind: NotificationTemplate
+metadata:
+  name: template-qsl-card-created
+spec:
+  reasonSelector:
+    reasonType: qsl-card-created
+    language: default
+  template:
+    title: "【QSL】[(${sceneDisplay})]通知：[(${callSign})] [(${cardType})]"
+    rawBody: |
+      [(${subscriber.displayName})] 您好：
+
+        已触发 QSL [(${sceneDisplay})] 通知，详情如下：
+        呼号：[(${callSign})]
+        卡片类型：[(${cardType})]
+        卡片版本：[(${cardVersion})]
+        卡片时间：[(${cardDate})] [(${cardTime})]
+        记录编号：[(${cardRecordName})]
+        备注：[(${remarks})]
+        触发时间：[(${triggerAt})]
+        操作人：[(${operator})]
+    htmlBody: |
+      <div class="notification-content">
+        <div class="head">
+          <p class="honorific" th:text="|${subscriber.displayName} 您好：|"></p>
+        </div>
+        <div class="body">
+          <p th:text="|已触发 QSL ${sceneDisplay} 通知，详情如下：|"></p>
+          <p th:text="|呼号：${callSign}|"></p>
+          <p th:text="|卡片类型：${cardType}|"></p>
+          <p th:text="|卡片版本：${cardVersion}|"></p>
+          <p th:text="|卡片时间：${cardDate} ${cardTime}|"></p>
+          <p th:text="|记录编号：${cardRecordName}|"></p>
+          <p th:text="|备注：${remarks}|"></p>
+          <p th:text="|触发时间：${triggerAt}|"></p>
+          <p th:text="|操作人：${operator}|"></p>
+        </div>
+      </div>
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: NotificationTemplate
+metadata:
+  name: template-qsl-card-sent
+spec:
+  reasonSelector:
+    reasonType: qsl-card-sent
+    language: default
+  template:
+    title: "【QSL】[(${sceneDisplay})]通知：[(${callSign})] [(${cardType})]"
+    rawBody: |
+      [(${subscriber.displayName})] 您好：
+
+        已触发 QSL [(${sceneDisplay})] 通知，详情如下：
+        呼号：[(${callSign})]
+        卡片类型：[(${cardType})]
+        卡片版本：[(${cardVersion})]
+        卡片时间：[(${cardDate})] [(${cardTime})]
+        记录编号：[(${cardRecordName})]
+        备注：[(${remarks})]
+        触发时间：[(${triggerAt})]
+        操作人：[(${operator})]
+    htmlBody: |
+      <div class="notification-content">
+        <div class="head">
+          <p class="honorific" th:text="|${subscriber.displayName} 您好：|"></p>
+        </div>
+        <div class="body">
+          <p th:text="|已触发 QSL ${sceneDisplay} 通知，详情如下：|"></p>
+          <p th:text="|呼号：${callSign}|"></p>
+          <p th:text="|卡片类型：${cardType}|"></p>
+          <p th:text="|卡片版本：${cardVersion}|"></p>
+          <p th:text="|卡片时间：${cardDate} ${cardTime}|"></p>
+          <p th:text="|记录编号：${cardRecordName}|"></p>
+          <p th:text="|备注：${remarks}|"></p>
+          <p th:text="|触发时间：${triggerAt}|"></p>
+          <p th:text="|操作人：${operator}|"></p>
+        </div>
+      </div>
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: NotificationTemplate
+metadata:
+  name: template-qsl-card-received
+spec:
+  reasonSelector:
+    reasonType: qsl-card-received
+    language: default
+  template:
+    title: "【QSL】[(${sceneDisplay})]通知：[(${callSign})] [(${cardType})]"
+    rawBody: |
+      [(${subscriber.displayName})] 您好：
+
+        已触发 QSL [(${sceneDisplay})] 通知，详情如下：
+        呼号：[(${callSign})]
+        卡片类型：[(${cardType})]
+        卡片版本：[(${cardVersion})]
+        卡片时间：[(${cardDate})] [(${cardTime})]
+        记录编号：[(${cardRecordName})]
+        备注：[(${remarks})]
+        触发时间：[(${triggerAt})]
+        操作人：[(${operator})]
+    htmlBody: |
+      <div class="notification-content">
+        <div class="head">
+          <p class="honorific" th:text="|${subscriber.displayName} 您好：|"></p>
+        </div>
+        <div class="body">
+          <p th:text="|已触发 QSL ${sceneDisplay} 通知，详情如下：|"></p>
+          <p th:text="|呼号：${callSign}|"></p>
+          <p th:text="|卡片类型：${cardType}|"></p>
+          <p th:text="|卡片版本：${cardVersion}|"></p>
+          <p th:text="|卡片时间：${cardDate} ${cardTime}|"></p>
+          <p th:text="|记录编号：${cardRecordName}|"></p>
+          <p th:text="|备注：${remarks}|"></p>
+          <p th:text="|触发时间：${triggerAt}|"></p>
+          <p th:text="|操作人：${operator}|"></p>
+        </div>
+      </div>
+

@@ -8,6 +8,7 @@ import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslApiResponses;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
+import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
 import java.util.List;
@@ -29,15 +30,18 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private final QslOverviewService overviewService;
     private final QslConsoleActionService actionService;
     private final QslImportExportJobService importExportJobService;
+    private final QslNotificationMailService notificationMailService;
 
     public QslConsoleApiEndpoint(
         QslOverviewService overviewService,
         QslConsoleActionService actionService,
-        QslImportExportJobService importExportJobService
+        QslImportExportJobService importExportJobService,
+        QslNotificationMailService notificationMailService
     ) {
         this.overviewService = overviewService;
         this.actionService = actionService;
         this.importExportJobService = importExportJobService;
+        this.notificationMailService = notificationMailService;
     }
 
     @Override
@@ -47,6 +51,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/mail-receive-confirms/confirm"), this::confirmMailReceive)
             .andRoute(POST("/exchange-requests/{name}/approve"), this::approveExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/reject"), this::rejectExchangeRequest)
+            .andRoute(POST("/notification-mails/send"), this::sendNotificationMail)
+            .andRoute(POST("/notification-mails/batch-send"), this::batchSendNotificationMail)
             .andRoute(POST("/imports/precheck"), this::importPrecheck)
             .andRoute(POST("/imports/jobs"), this::createImportJob)
             .andRoute(GET("/imports/jobs/{jobName}"), this::getImportJob)
@@ -123,6 +129,34 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                     payload.reason(),
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> sendNotificationMail(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(NotificationMailSendRequest.class)
+                .flatMap(payload -> notificationMailService.sendSingle(
+                    payload.cardRecordName(),
+                    payload.scene(),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp(),
+                    payload.source()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> batchSendNotificationMail(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(NotificationMailBatchSendRequest.class)
+                .flatMap(payload -> notificationMailService.sendBatch(
+                    payload.cardRecordNames(),
+                    payload.scene(),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp(),
+                    payload.source()
                 )))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
@@ -278,5 +312,11 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     }
 
     private record ExportJobRequest(String dataset, String format) {
+    }
+
+    private record NotificationMailSendRequest(String cardRecordName, String scene, String source) {
+    }
+
+    private record NotificationMailBatchSendRequest(List<String> cardRecordNames, String scene, String source) {
     }
 }

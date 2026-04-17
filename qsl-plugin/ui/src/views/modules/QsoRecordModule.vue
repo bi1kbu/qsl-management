@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Toast, VButton, VCard, VTag } from '@halo-dev/components'
+import { Toast, VButton, VCard } from '@halo-dev/components'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
@@ -98,7 +98,9 @@ const loading = ref(false)
 const saving = ref(false)
 const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
+const batchEditEnabled = ref(false)
 const batchUpdating = ref(false)
+const expandedHistoryName = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
@@ -184,11 +186,11 @@ const filteredHistory = computed(() => {
   return records.value.filter((item) => item.callSign.toUpperCase().includes(callSign))
 })
 
-const allFilteredSelected = computed(() => {
-  if (!filteredHistory.value.length) {
+const allPagedSelected = computed(() => {
+  if (!pagedFilteredHistory.value.length) {
     return false
   }
-  return filteredHistory.value.every((item) => selectedHistoryNames.value.includes(item.resourceName))
+  return pagedFilteredHistory.value.every((item) => selectedHistoryNames.value.includes(item.resourceName))
 })
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
@@ -271,6 +273,9 @@ watch(
 watch(records, () => {
   const nameSet = new Set(records.value.map((item) => item.resourceName))
   selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => nameSet.has(name))
+  if (expandedHistoryName.value && !nameSet.has(expandedHistoryName.value)) {
+    expandedHistoryName.value = ''
+  }
 })
 
 watch(filteredHistory, () => {
@@ -279,6 +284,9 @@ watch(filteredHistory, () => {
   }
   if (currentPage.value < 1) {
     currentPage.value = 1
+  }
+  if (expandedHistoryName.value && !filteredHistory.value.some((item) => item.resourceName === expandedHistoryName.value)) {
+    expandedHistoryName.value = ''
   }
 })
 
@@ -518,16 +526,24 @@ const toggleHistorySelection = (resourceName: string) => {
   selectedHistoryNames.value = [...selectedHistoryNames.value, resourceName]
 }
 
-const toggleAllFilteredHistorySelection = () => {
-  if (allFilteredSelected.value) {
-    const filteredNameSet = new Set(filteredHistory.value.map((item) => item.resourceName))
-    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !filteredNameSet.has(name))
+const toggleAllPagedHistorySelection = () => {
+  if (allPagedSelected.value) {
+    const pagedNameSet = new Set(pagedFilteredHistory.value.map((item) => item.resourceName))
+    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !pagedNameSet.has(name))
     return
   }
 
   const merged = new Set(selectedHistoryNames.value)
-  filteredHistory.value.forEach((item) => merged.add(item.resourceName))
+  pagedFilteredHistory.value.forEach((item) => merged.add(item.resourceName))
   selectedHistoryNames.value = Array.from(merged)
+}
+
+const toggleHistoryExpand = (resourceName: string) => {
+  expandedHistoryName.value = expandedHistoryName.value === resourceName ? '' : resourceName
+}
+
+const isHistoryExpanded = (resourceName: string): boolean => {
+  return expandedHistoryName.value === resourceName
 }
 
 const clearHistorySelection = () => {
@@ -718,150 +734,163 @@ onMounted(() => {
         }}</VButton>
       </template>
 
-      <div class="qsl-form-grid">
-        <label class="qsl-field">
-          <span class="qsl-field__label">日期（DATE）</span>
-          <div class="qsl-input-shell">
-            <input v-model="form.date" type="date" :disabled="form.realtime" />
-          </div>
-        </label>
+      <div class="qsl-record-section">
+        <p class="qsl-record-section__title">第一部分：本台基本信息</p>
+        <div class="qsl-form-grid">
+          <label class="qsl-field">
+            <span class="qsl-field__label">日期（DATE）</span>
+            <div class="qsl-input-shell">
+              <input v-model="form.date" type="date" :disabled="form.realtime" />
+            </div>
+          </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">时间（TIME）</span>
-          <div class="qsl-input-shell">
-            <input v-model="form.time" type="time" :disabled="form.realtime" />
-          </div>
-        </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">时间（TIME）</span>
+            <div class="qsl-input-shell">
+              <input v-model="form.time" type="time" :disabled="form.realtime" />
+            </div>
+          </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">时区（TIMEZONE）</span>
-          <div class="qsl-input-shell">
-            <select v-model="form.timezone">
-              <option value="UTC">UTC</option>
-              <option value="UTC+8">UTC+8</option>
-            </select>
-          </div>
-        </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">时区（TIMEZONE）</span>
+            <div class="qsl-input-shell">
+              <select v-model="form.timezone">
+                <option value="UTC">UTC</option>
+                <option value="UTC+8">UTC+8</option>
+              </select>
+            </div>
+          </label>
 
-        <div class="qsl-field">
-          <span class="qsl-field__label">是否实时</span>
-          <label class="qsl-checkbox">
-            <input v-model="form.realtime" type="checkbox" />
-            <span>启用 UTC 实时填充</span>
+          <div class="qsl-field">
+            <span class="qsl-field__label">是否实时</span>
+            <label class="qsl-checkbox">
+              <input v-model="form.realtime" type="checkbox" />
+              <span>启用 UTC 实时填充</span>
+            </label>
+          </div>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">频率（FREQ）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.freq" type="text" placeholder="例如：14.230" />
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">设备（My_RIG）</span>
+            <div class="qsl-input-shell">
+              <select v-model="form.myRig">
+                <option value="">请选择本台设备</option>
+                <option v-for="item in myRigOptions" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">模式（My_RIG_MODE）</span>
+            <div class="qsl-input-shell">
+              <select v-model="form.mode" :disabled="!form.myRig">
+                <option value="">请选择模式</option>
+                <option v-for="item in myRigModeOptions" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">天线（My_RIG_ANT）</span>
+            <div class="qsl-input-shell">
+              <select v-model="form.myRigAnt" :disabled="!form.myRig">
+                <option value="">请选择天线</option>
+                <option v-for="item in myRigAntOptions" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">功率（My_RIG_PWR）</span>
+            <div class="qsl-input-shell">
+              <select v-model="form.myRigPwr" :disabled="!form.myRig">
+                <option value="">请选择功率</option>
+                <option v-for="item in myRigPwrOptions" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
           </label>
         </div>
+      </div>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">频率（FREQ）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="form.freq" type="text" placeholder="例如：14.230" />
-          </div>
-        </label>
+      <div class="qsl-record-section">
+        <p class="qsl-record-section__title">第二部分：对方信息</p>
+        <div class="qsl-form-grid">
+          <label class="qsl-field">
+            <span class="qsl-field__label">对方呼号（Call_Sign）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.callSign" type="text" placeholder="例如：JA1ABC" />
+            </div>
+          </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">设备（My_RIG）</span>
-          <div class="qsl-input-shell">
-            <select v-model="form.myRig">
-              <option value="">请选择本台设备</option>
-              <option v-for="item in myRigOptions" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </div>
-        </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">设备（RIG）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.rig" list="qsl-opponent-rig-options" type="text" placeholder="自动联想设备库" />
+              <datalist id="qsl-opponent-rig-options">
+                <option v-for="item in rigSuggestionOptions" :key="item" :value="item" />
+              </datalist>
+            </div>
+          </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">模式（My_RIG_MODE）</span>
-          <div class="qsl-input-shell">
-            <select v-model="form.mode" :disabled="!form.myRig">
-              <option value="">请选择模式</option>
-              <option v-for="item in myRigModeOptions" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </div>
-        </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">天线（ANT）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.ant" list="qsl-opponent-ant-options" type="text" placeholder="自动联想设备库" />
+              <datalist id="qsl-opponent-ant-options">
+                <option v-for="item in antSuggestionOptions" :key="item" :value="item" />
+              </datalist>
+            </div>
+          </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">天线（My_RIG_ANT）</span>
-          <div class="qsl-input-shell">
-            <select v-model="form.myRigAnt" :disabled="!form.myRig">
-              <option value="">请选择天线</option>
-              <option v-for="item in myRigAntOptions" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </div>
-        </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">功率（PWR）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.pwr" list="qsl-opponent-pwr-options" type="text" placeholder="自动联想设备库" />
+              <datalist id="qsl-opponent-pwr-options">
+                <option v-for="item in pwrSuggestionOptions" :key="item" :value="item" />
+              </datalist>
+            </div>
+          </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">功率（My_RIG_PWR）</span>
-          <div class="qsl-input-shell">
-            <select v-model="form.myRigPwr" :disabled="!form.myRig">
-              <option value="">请选择功率</option>
-              <option v-for="item in myRigPwrOptions" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </div>
-        </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">位置（QTH）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.qth" type="text" placeholder="输入位置" />
+            </div>
+          </label>
+        </div>
+      </div>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">对方呼号（Call_Sign）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="form.callSign" type="text" placeholder="例如：JA1ABC" />
-          </div>
-        </label>
+      <div class="qsl-record-section">
+        <p class="qsl-record-section__title">第三部分：报告</p>
+        <div class="qsl-form-grid">
+          <label class="qsl-field">
+            <span class="qsl-field__label">给对方（RST_Sent）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.rstSent" type="text" placeholder="59 或 599" />
+            </div>
+          </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">设备（RIG）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="form.rig" list="qsl-opponent-rig-options" type="text" placeholder="自动联想设备库" />
-            <datalist id="qsl-opponent-rig-options">
-              <option v-for="item in rigSuggestionOptions" :key="item" :value="item" />
-            </datalist>
-          </div>
-        </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">给我方（RST_Rcvd）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.rstRcvd" type="text" placeholder="59 或 599" />
+            </div>
+          </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">天线（ANT）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="form.ant" list="qsl-opponent-ant-options" type="text" placeholder="自动联想设备库" />
-            <datalist id="qsl-opponent-ant-options">
-              <option v-for="item in antSuggestionOptions" :key="item" :value="item" />
-            </datalist>
-          </div>
-        </label>
-
-        <label class="qsl-field">
-          <span class="qsl-field__label">功率（PWR）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="form.pwr" list="qsl-opponent-pwr-options" type="text" placeholder="自动联想设备库" />
-            <datalist id="qsl-opponent-pwr-options">
-              <option v-for="item in pwrSuggestionOptions" :key="item" :value="item" />
-            </datalist>
-          </div>
-        </label>
-
-        <label class="qsl-field">
-          <span class="qsl-field__label">位置（QTH）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="form.qth" type="text" placeholder="输入位置" />
-          </div>
-        </label>
-
-        <label class="qsl-field">
-          <span class="qsl-field__label">给对方（RST_Sent）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="form.rstSent" type="text" placeholder="59 或 599" />
-          </div>
-        </label>
-
-        <label class="qsl-field">
-          <span class="qsl-field__label">给我方（RST_Rcvd）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="form.rstRcvd" type="text" placeholder="59 或 599" />
-          </div>
-        </label>
-
-        <label class="qsl-field qsl-field--full">
-          <span class="qsl-field__label">备注（Remarks）</span>
-          <div class="qsl-input-shell qsl-input-shell--textarea">
-            <textarea v-model.trim="form.remarks" rows="3" placeholder="输入备注" />
-          </div>
-        </label>
+          <label class="qsl-field qsl-field--full">
+            <span class="qsl-field__label">备注（Remarks）</span>
+            <div class="qsl-input-shell qsl-input-shell--textarea">
+              <textarea v-model.trim="form.remarks" rows="3" placeholder="输入备注" />
+            </div>
+          </label>
+        </div>
       </div>
 
       <div class="qsl-actions">
@@ -873,11 +902,25 @@ onMounted(() => {
       </div>
     </VCard>
 
-    <VCard title="历史记录">
-      <div class="qsl-actions">
-        <VButton size="sm" :disabled="!filteredHistory.length" @click="toggleAllFilteredHistorySelection">{{
-          allFilteredSelected ? '取消全选当前列表' : '全选当前列表'
-        }}</VButton>
+    <VCard>
+      <div class="qsl-history-toolbar">
+        <label class="qsl-checkbox qsl-history-toolbar__title">
+          <input
+            :checked="allPagedSelected"
+            type="checkbox"
+            :disabled="!pagedFilteredHistory.length"
+            @change="toggleAllPagedHistorySelection"
+          />
+          <span>历史记录</span>
+        </label>
+        <label class="qsl-checkbox">
+          <input v-model="batchEditEnabled" type="checkbox" />
+          <span>批量编辑</span>
+        </label>
+        <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
+      </div>
+
+      <div v-if="batchEditEnabled" class="qsl-actions">
         <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
         <VButton
           size="sm"
@@ -887,10 +930,9 @@ onMounted(() => {
         >
           批量编辑已选记录
         </VButton>
-        <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
       </div>
 
-      <div class="qsl-form-grid">
+      <div v-if="batchEditEnabled" class="qsl-form-grid">
         <label class="qsl-field">
           <span class="qsl-field__label">批量模式（留空不改）</span>
           <div class="qsl-input-shell">
@@ -923,35 +965,92 @@ onMounted(() => {
         </label>
       </div>
 
-      <ul v-if="pagedFilteredHistory.length" class="qsl-list">
-        <li
-          v-for="item in pagedFilteredHistory"
-          :key="item.resourceName"
-          class="qsl-list__item qsl-list__item--column"
-        >
-          <div class="qsl-inline-meta">
-            <label class="qsl-checkbox">
-              <input
-                :checked="isHistorySelected(item.resourceName)"
-                type="checkbox"
-                @change="toggleHistorySelection(item.resourceName)"
-              />
-              <span>选择</span>
-            </label>
-            <VTag>{{ item.callSign }}</VTag>
-            <span>{{ item.date }} {{ item.time }} {{ item.timezone }}</span>
-            <span>{{ item.freq || '未填频率' }}</span>
-            <span>{{ item.mode || '未填模式' }}</span>
-            <VButton size="xs" @click="startEditRecord(item)">编辑</VButton>
-          </div>
-          <p class="qsl-muted">
-            设备：{{ item.myRig || '未填' }} / 天线：{{ item.myRigAnt || '未填' }} / 功率：{{ item.myRigPwr || '未填' }}
-          </p>
-          <p class="qsl-muted">对方设备：{{ item.rig || '未填' }} / {{ item.ant || '未填' }} / {{ item.pwr || '未填' }}</p>
-          <p class="qsl-muted">位置：{{ item.qth || '未填' }}，备注：{{ item.remarks || '无' }}</p>
-        </li>
-      </ul>
-      <p v-else class="qsl-muted">暂无历史记录。</p>
+      <div class="qsl-table-wrap">
+        <table class="qsl-table qsl-table--clickable">
+          <thead>
+            <tr>
+              <th>选择</th>
+              <th>通联记录编号</th>
+              <th>对方呼号</th>
+              <th>日期</th>
+              <th>时间</th>
+              <th>时区</th>
+              <th>频率</th>
+              <th>模式</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="item in pagedFilteredHistory" :key="item.resourceName">
+              <tr
+                class="qsl-history-row"
+                :class="{ 'is-expanded': isHistoryExpanded(item.resourceName) }"
+                @click="toggleHistoryExpand(item.resourceName)"
+              >
+                <td @click.stop>
+                  <label class="qsl-checkbox">
+                    <input
+                      :checked="isHistorySelected(item.resourceName)"
+                      type="checkbox"
+                      @change="toggleHistorySelection(item.resourceName)"
+                    />
+                    <span>选择</span>
+                  </label>
+                </td>
+                <td>{{ item.resourceName }}</td>
+                <td>{{ item.callSign }}</td>
+                <td>{{ item.date || '-' }}</td>
+                <td>{{ item.time || '-' }}</td>
+                <td>{{ item.timezone || '-' }}</td>
+                <td>{{ item.freq || '未填频率' }}</td>
+                <td>{{ item.mode || '未填模式' }}</td>
+                <td @click.stop>
+                  <VButton size="xs" type="secondary" @click="startEditRecord(item)">编辑</VButton>
+                </td>
+              </tr>
+              <tr v-if="isHistoryExpanded(item.resourceName)" class="qsl-history-detail-row">
+                <td colspan="9">
+                  <table class="qsl-history-detail-table">
+                    <tbody>
+                      <tr>
+                        <th>本台设备</th>
+                        <td>{{ item.myRig || '未填' }}</td>
+                        <th>本台天线</th>
+                        <td>{{ item.myRigAnt || '未填' }}</td>
+                      </tr>
+                      <tr>
+                        <th>本台功率</th>
+                        <td>{{ item.myRigPwr || '未填' }}</td>
+                        <th>对方设备</th>
+                        <td>{{ item.rig || '未填' }}</td>
+                      </tr>
+                      <tr>
+                        <th>对方天线</th>
+                        <td>{{ item.ant || '未填' }}</td>
+                        <th>对方功率</th>
+                        <td>{{ item.pwr || '未填' }}</td>
+                      </tr>
+                      <tr>
+                        <th>位置</th>
+                        <td>{{ item.qth || '未填' }}</td>
+                        <th>信号报告</th>
+                        <td>给对方 {{ item.rstSent || '-' }} / 给我方 {{ item.rstRcvd || '-' }}</td>
+                      </tr>
+                      <tr>
+                        <th>备注</th>
+                        <td colspan="3">{{ item.remarks || '无' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </template>
+            <tr v-if="!pagedFilteredHistory.length">
+              <td colspan="9" class="qsl-table-empty">暂无历史记录。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <QslPaginationBar
         :total="filteredHistory.length"
         :current-page="currentPage"
@@ -963,3 +1062,82 @@ onMounted(() => {
     </VCard>
   </div>
 </template>
+
+<style scoped lang="scss">
+.qsl-record-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.qsl-record-section:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.qsl-record-section__title {
+  margin: 0 0 10px;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.qsl-history-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.qsl-history-toolbar__title span {
+  color: #111827;
+  font-weight: 600;
+}
+
+.qsl-history-toolbar .qsl-muted {
+  margin-left: auto;
+}
+
+.qsl-history-row {
+  cursor: pointer;
+}
+
+.qsl-history-row:hover td {
+  background: #f9fafb;
+}
+
+.qsl-history-row.is-expanded td {
+  background: #f3f4f6;
+}
+
+.qsl-history-detail-row td {
+  padding: 0;
+}
+
+.qsl-history-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #f9fafb;
+}
+
+.qsl-history-detail-table th,
+.qsl-history-detail-table td {
+  padding: 8px 12px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+}
+
+.qsl-history-detail-table th {
+  width: 120px;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.qsl-history-detail-table td {
+  color: #111827;
+}
+</style>

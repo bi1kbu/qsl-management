@@ -4,12 +4,14 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
   createResourceName,
+  getExtensionOrNull,
   listExtensions,
   qslApiVersion,
   updateExtension,
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import { batchSendNotificationMail, sendNotificationMail } from '../../api/qsl-console-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
 interface CardRecordSpec {
@@ -25,6 +27,16 @@ interface CardRecordSpec {
   receiptConfirmed: boolean
   sentAt: string
   receivedAt: string
+  createdMailStatus: string
+  createdMailSentAt: string
+  createdMailLastError: string
+  sentMailStatus: string
+  sentMailSentAt: string
+  sentMailLastError: string
+  receivedMailStatus: string
+  receivedMailSentAt: string
+  receivedMailLastError: string
+  mailTargetEmail: string
 }
 
 interface CardRecordItem {
@@ -69,6 +81,10 @@ interface StationCardSpec {
   remarks: string
 }
 
+interface SystemSettingSpec {
+  autoNotifyOnCardCreated: boolean
+}
+
 const form = reactive({
   callSign: '',
   cardType: 'QSO' as 'QSO' | 'SWL' | 'EYEBALL',
@@ -92,9 +108,11 @@ const historyKeyword = ref('')
 const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
 const batchUpdating = ref(false)
+const batchSendingCreatedMail = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
+const autoNotifyOnCardCreated = ref(false)
 
 const batchEditForm = reactive({
   cardType: '',
@@ -106,6 +124,8 @@ const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
 const qsoRecordPlural = 'qso-records'
 const stationCardPlural = 'station-cards'
+const systemSettingPlural = 'system-settings'
+const systemSettingName = 'qsl-system-setting-default'
 
 const selectedQso = computed(() => {
   if (!form.qsoRecordName.trim()) {
@@ -218,6 +238,16 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     receiptConfirmed: Boolean(spec?.receiptConfirmed),
     sentAt: spec?.sentAt ?? '',
     receivedAt: spec?.receivedAt ?? '',
+    createdMailStatus: spec?.createdMailStatus ?? '',
+    createdMailSentAt: spec?.createdMailSentAt ?? '',
+    createdMailLastError: spec?.createdMailLastError ?? '',
+    sentMailStatus: spec?.sentMailStatus ?? '',
+    sentMailSentAt: spec?.sentMailSentAt ?? '',
+    sentMailLastError: spec?.sentMailLastError ?? '',
+    receivedMailStatus: spec?.receivedMailStatus ?? '',
+    receivedMailSentAt: spec?.receivedMailSentAt ?? '',
+    receivedMailLastError: spec?.receivedMailLastError ?? '',
+    mailTargetEmail: spec?.mailTargetEmail ?? '',
   }
 }
 
@@ -287,10 +317,20 @@ const loadCardVersions = async () => {
   }
 }
 
+const loadSystemSetting = async () => {
+  const extension = await getExtensionOrNull<SystemSettingSpec>(systemSettingPlural, systemSettingName)
+  autoNotifyOnCardCreated.value = Boolean(extension?.spec?.autoNotifyOnCardCreated)
+}
+
 const loadPageData = async () => {
   loading.value = true
   try {
-    await Promise.all([loadCardRecords({ skipLoading: true }), loadQsoRecords(), loadCardVersions()])
+    await Promise.all([
+      loadCardRecords({ skipLoading: true }),
+      loadQsoRecords(),
+      loadCardVersions(),
+      loadSystemSetting(),
+    ])
   } catch (error) {
     feedback.value = `初始化卡片记录页面失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -442,6 +482,45 @@ const applyHistoryBatchEdit = async () => {
   }
 }
 
+const sendCreatedMailForItem = async (item: CardRecordItem, source = '卡片记录-单条发送') => {
+  loading.value = true
+  try {
+    const result = await sendNotificationMail({
+      cardRecordName: item.resourceName,
+      scene: 'created',
+      source,
+    })
+    await loadCardRecords({ silent: true, skipLoading: true })
+    feedback.value = `制卡邮件${result.status === 'SENT' ? '发送成功' : '未发送'}：${result.message}`
+  } catch (error) {
+    feedback.value = `发送制卡邮件失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    loading.value = false
+  }
+}
+
+const batchSendCreatedMail = async () => {
+  if (!selectedHistoryNames.value.length) {
+    feedback.value = '请先选择要批量发送邮件的卡片记录。'
+    return
+  }
+
+  batchSendingCreatedMail.value = true
+  try {
+    const result = await batchSendNotificationMail({
+      cardRecordNames: selectedHistoryNames.value,
+      scene: 'created',
+      source: '卡片记录-批量发送',
+    })
+    await loadCardRecords({ silent: true, skipLoading: true })
+    feedback.value = `批量发送完成：成功 ${result.sentCount}，跳过 ${result.skippedCount}，失败 ${result.failedCount}。`
+  } catch (error) {
+    feedback.value = `批量发送制卡邮件失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    batchSendingCreatedMail.value = false
+  }
+}
+
 const saveCardRecord = async () => {
   if (!form.callSign.trim()) {
     feedback.value = '对方呼号不能为空。'
@@ -510,7 +589,7 @@ const saveCardRecord = async () => {
       return
     }
 
-    await createExtension<CardRecordSpec>(resourcePlural, {
+    const created = await createExtension<CardRecordSpec>(resourcePlural, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
@@ -529,6 +608,16 @@ const saveCardRecord = async () => {
         receiptConfirmed: false,
         sentAt: '',
         receivedAt: '',
+        createdMailStatus: '',
+        createdMailSentAt: '',
+        createdMailLastError: '',
+        sentMailStatus: '',
+        sentMailSentAt: '',
+        sentMailLastError: '',
+        receivedMailStatus: '',
+        receivedMailSentAt: '',
+        receivedMailLastError: '',
+        mailTargetEmail: '',
       },
     })
 
@@ -540,6 +629,18 @@ const saveCardRecord = async () => {
     })
 
     await loadCardRecords({ silent: true })
+    if (autoNotifyOnCardCreated.value) {
+      try {
+        await sendNotificationMail({
+          cardRecordName: created.metadata.name,
+          scene: 'created',
+          source: '卡片记录-自动触发',
+        })
+        await loadCardRecords({ silent: true })
+      } catch {
+        // 自动邮件发送失败由后端状态与审计记录体现，这里不覆盖主流程结果。
+      }
+    }
     feedback.value = '卡片记录已保存。'
     resetForm()
   } catch (error) {
@@ -691,6 +792,14 @@ onMounted(() => {
         >
           批量编辑已选记录
         </VButton>
+        <VButton
+          size="sm"
+          type="secondary"
+          :disabled="batchSendingCreatedMail || !selectedHistoryCount"
+          @click="batchSendCreatedMail"
+        >
+          批量发送制卡邮件
+        </VButton>
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
       </div>
 
@@ -738,6 +847,17 @@ onMounted(() => {
             <span>{{ item.cardType }}</span>
             <span>{{ item.cardDate }} {{ item.cardTime }}</span>
             <VButton size="xs" @click="startEditRecord(item)">编辑</VButton>
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="item.spec.createdMailStatus === 'SENT' || loading"
+              @click="sendCreatedMailForItem(item)"
+            >
+              发送制卡邮件
+            </VButton>
+            <VTag :theme="item.spec.createdMailStatus === 'SENT' ? 'secondary' : item.spec.createdMailStatus === 'FAILED' ? 'danger' : 'default'">
+              {{ item.spec.createdMailStatus || '未发送' }}
+            </VTag>
           </div>
           <p class="qsl-muted">
             版本：{{ item.cardVersion || '未填' }}，关联QSO：{{ item.qsoRecordName || '无' }}，备注：{{ item.cardRemarks || '无' }}
@@ -746,6 +866,9 @@ onMounted(() => {
             发卡：{{ item.cardSent ? '是' : '否' }}，收卡：{{ item.cardReceived ? '是' : '否' }}，签收：{{
               item.receiptConfirmed ? '是' : '否'
             }}
+          </p>
+          <p class="qsl-muted">
+            制卡邮件时间：{{ item.spec.createdMailSentAt || '未记录' }}，目标邮箱：{{ item.spec.mailTargetEmail || '未匹配' }}
           </p>
         </li>
       </ul>

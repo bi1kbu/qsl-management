@@ -2,7 +2,12 @@
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import { confirmMailReceive, type MailReceiveConfirmResult } from '../../api/qsl-console-api'
+import {
+  batchSendNotificationMail,
+  confirmMailReceive,
+  sendNotificationMail,
+  type MailReceiveConfirmResult,
+} from '../../api/qsl-console-api'
 import { listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
@@ -19,6 +24,16 @@ interface CardRecordSpec {
   receiptConfirmed: boolean
   sentAt: string
   receivedAt: string
+  createdMailStatus: string
+  createdMailSentAt: string
+  createdMailLastError: string
+  sentMailStatus: string
+  sentMailSentAt: string
+  sentMailLastError: string
+  receivedMailStatus: string
+  receivedMailSentAt: string
+  receivedMailLastError: string
+  mailTargetEmail: string
 }
 
 interface CardRecordStatus {
@@ -51,6 +66,8 @@ const selectedHistoryNames = ref<string[]>([])
 const editingResourceName = ref('')
 const savingEdit = ref(false)
 const batchUpdating = ref(false)
+const batchSendingReceivedMail = ref(false)
+const pendingMailRowName = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
@@ -150,6 +167,16 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     receiptConfirmed: Boolean(spec?.receiptConfirmed),
     sentAt: spec?.sentAt ?? '',
     receivedAt: spec?.receivedAt ?? '',
+    createdMailStatus: spec?.createdMailStatus ?? '',
+    createdMailSentAt: spec?.createdMailSentAt ?? '',
+    createdMailLastError: spec?.createdMailLastError ?? '',
+    sentMailStatus: spec?.sentMailStatus ?? '',
+    sentMailSentAt: spec?.sentMailSentAt ?? '',
+    sentMailLastError: spec?.sentMailLastError ?? '',
+    receivedMailStatus: spec?.receivedMailStatus ?? '',
+    receivedMailSentAt: spec?.receivedMailSentAt ?? '',
+    receivedMailLastError: spec?.receivedMailLastError ?? '',
+    mailTargetEmail: spec?.mailTargetEmail ?? '',
   }
 }
 
@@ -422,6 +449,45 @@ const applyHistoryBatchEdit = async () => {
   }
 }
 
+const sendReceivedMailForRow = async (item: ReceiveResult, source = '收信确认-单条发送') => {
+  pendingMailRowName.value = item.resourceName
+  try {
+    const result = await sendNotificationMail({
+      cardRecordName: item.resourceName,
+      scene: 'received',
+      source,
+    })
+    await loadResults({ silent: true })
+    feedback.value = `收卡邮件${result.status === 'SENT' ? '发送成功' : '未发送'}：${result.message}`
+  } catch (error) {
+    feedback.value = `发送收卡邮件失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    pendingMailRowName.value = ''
+  }
+}
+
+const batchSendReceivedMail = async () => {
+  if (!selectedHistoryNames.value.length) {
+    feedback.value = '请先选择要批量发送邮件的记录。'
+    return
+  }
+
+  batchSendingReceivedMail.value = true
+  try {
+    const result = await batchSendNotificationMail({
+      cardRecordNames: selectedHistoryNames.value,
+      scene: 'received',
+      source: '收信确认-批量发送',
+    })
+    await loadResults({ silent: true })
+    feedback.value = `批量发送完成：成功 ${result.sentCount}，跳过 ${result.skippedCount}，失败 ${result.failedCount}。`
+  } catch (error) {
+    feedback.value = `批量发送收卡邮件失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    batchSendingReceivedMail.value = false
+  }
+}
+
 onMounted(() => {
   loadResults()
 })
@@ -483,6 +549,14 @@ onMounted(() => {
           @click="applyHistoryBatchEdit"
         >
           批量编辑已选记录
+        </VButton>
+        <VButton
+          size="sm"
+          type="secondary"
+          :disabled="batchSendingReceivedMail || !selectedHistoryCount"
+          @click="batchSendReceivedMail"
+        >
+          批量发送收卡邮件
         </VButton>
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
       </div>
@@ -606,6 +680,25 @@ onMounted(() => {
             <span>{{ item.cardType }}</span>
             <span>{{ item.createdAt }}</span>
             <VButton size="xs" type="secondary" @click="startEditResult(item)">编辑</VButton>
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="pendingMailRowName === item.resourceName || item.spec.receivedMailStatus === 'SENT'"
+              @click="sendReceivedMailForRow(item)"
+            >
+              发送收卡邮件
+            </VButton>
+            <VTag
+              :theme="
+                item.spec.receivedMailStatus === 'SENT'
+                  ? 'secondary'
+                  : item.spec.receivedMailStatus === 'FAILED'
+                    ? 'danger'
+                    : 'default'
+              "
+            >
+              {{ item.spec.receivedMailStatus || '未发送' }}
+            </VTag>
           </div>
           <p class="qsl-muted">动作：{{ item.action }}，记录ID：{{ item.resourceName }}</p>
           <p class="qsl-muted">结果：{{ item.message }}</p>

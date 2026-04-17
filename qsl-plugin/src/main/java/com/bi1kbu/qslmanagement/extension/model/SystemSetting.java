@@ -20,6 +20,9 @@ public class SystemSetting extends QslBaseExtension<SystemSetting.SystemSettingS
     public static class SystemSettingSpec {
         private Integer guestQueryPerMinute;
         private Boolean requiresExchangeReview;
+        private Boolean autoNotifyOnCardCreated;
+        private Boolean autoNotifyOnCardSent;
+        private Boolean autoNotifyOnCardReceived;
     }
 
     @Data

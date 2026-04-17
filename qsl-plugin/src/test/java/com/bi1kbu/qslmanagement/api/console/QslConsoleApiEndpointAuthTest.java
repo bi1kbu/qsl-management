@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import com.bi1kbu.qslmanagement.api.OverviewSummary;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
+import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ class QslConsoleApiEndpointAuthTest {
     private final QslOverviewService overviewService = mock(QslOverviewService.class);
     private final QslConsoleActionService actionService = mock(QslConsoleActionService.class);
     private final QslImportExportJobService importExportJobService = mock(QslImportExportJobService.class);
+    private final QslNotificationMailService notificationMailService = mock(QslNotificationMailService.class);
 
     @Test
     void shouldRejectReportSummaryWhenUnauthenticated() {
@@ -172,7 +174,12 @@ class QslConsoleApiEndpointAuthTest {
                 "application/zip",
                 new byte[] {1}
             )));
-        var endpoint = new QslConsoleApiEndpoint(overviewService, actionService, importExportJobService);
+        var endpoint = new QslConsoleApiEndpoint(
+            overviewService,
+            actionService,
+            importExportJobService,
+            notificationMailService
+        );
         return WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
     }
 }

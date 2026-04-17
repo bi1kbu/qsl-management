@@ -7,6 +7,9 @@ import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 const systemSettingsForm = reactive({
   guestQueryPerMinute: 30,
   requiresExchangeReview: true,
+  autoNotifyOnCardCreated: false,
+  autoNotifyOnCardSent: false,
+  autoNotifyOnCardReceived: false,
 })
 
 const feedback = ref('')
@@ -16,6 +19,9 @@ const saving = ref(false)
 interface SystemSettingSpec {
   guestQueryPerMinute: number
   requiresExchangeReview: boolean
+  autoNotifyOnCardCreated: boolean
+  autoNotifyOnCardSent: boolean
+  autoNotifyOnCardReceived: boolean
 }
 
 const resourceName = 'qsl-system-setting-default'
@@ -31,6 +37,9 @@ const nowText = (): string => {
 const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
   systemSettingsForm.guestQueryPerMinute = extension.spec?.guestQueryPerMinute ?? 30
   systemSettingsForm.requiresExchangeReview = extension.spec?.requiresExchangeReview ?? true
+  systemSettingsForm.autoNotifyOnCardCreated = Boolean(extension.spec?.autoNotifyOnCardCreated)
+  systemSettingsForm.autoNotifyOnCardSent = Boolean(extension.spec?.autoNotifyOnCardSent)
+  systemSettingsForm.autoNotifyOnCardReceived = Boolean(extension.spec?.autoNotifyOnCardReceived)
 }
 
 const loadSystemSettings = async () => {
@@ -66,13 +75,16 @@ const saveSystemSettings = async () => {
       spec: {
         guestQueryPerMinute: systemSettingsForm.guestQueryPerMinute,
         requiresExchangeReview: systemSettingsForm.requiresExchangeReview,
+        autoNotifyOnCardCreated: systemSettingsForm.autoNotifyOnCardCreated,
+        autoNotifyOnCardSent: systemSettingsForm.autoNotifyOnCardSent,
+        autoNotifyOnCardReceived: systemSettingsForm.autoNotifyOnCardReceived,
       },
     })
     await appendQslAuditLog({
       action: '更新系统参数',
       resourceType: 'system-setting',
       resourceName,
-      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，换卡审核=${systemSettingsForm.requiresExchangeReview ? '是' : '否'}`,
+      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，换卡审核=${systemSettingsForm.requiresExchangeReview ? '是' : '否'}，自动通知（制卡/发卡/收卡）=${systemSettingsForm.autoNotifyOnCardCreated ? '开' : '关'}/${systemSettingsForm.autoNotifyOnCardSent ? '开' : '关'}/${systemSettingsForm.autoNotifyOnCardReceived ? '开' : '关'}`,
     })
     feedback.value = '系统参数已保存。'
   } catch (error) {
@@ -109,6 +121,30 @@ onMounted(loadSystemSettings)
             <p class="qsl-switch-row__desc">开启后，前台换卡申请需要管理员审批。</p>
           </div>
           <VSwitch v-model="systemSettingsForm.requiresExchangeReview" />
+        </div>
+
+        <div class="qsl-switch-row">
+          <div>
+            <p class="qsl-switch-row__title">制卡后自动发送邮件</p>
+            <p class="qsl-switch-row__desc">开启后，在卡片记录页面新增记录时会自动尝试发送制卡通知邮件。</p>
+          </div>
+          <VSwitch v-model="systemSettingsForm.autoNotifyOnCardCreated" />
+        </div>
+
+        <div class="qsl-switch-row">
+          <div>
+            <p class="qsl-switch-row__title">发卡后自动发送邮件</p>
+            <p class="qsl-switch-row__desc">开启后，发信确认成功会自动尝试发送发卡通知邮件。</p>
+          </div>
+          <VSwitch v-model="systemSettingsForm.autoNotifyOnCardSent" />
+        </div>
+
+        <div class="qsl-switch-row">
+          <div>
+            <p class="qsl-switch-row__title">收卡后自动发送邮件</p>
+            <p class="qsl-switch-row__desc">开启后，收信确认成功会自动尝试发送收卡通知邮件。</p>
+          </div>
+          <VSwitch v-model="systemSettingsForm.autoNotifyOnCardReceived" />
         </div>
 
         <div class="qsl-actions">

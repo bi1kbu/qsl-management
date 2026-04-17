@@ -30,6 +30,7 @@ class QslRoleTemplateContractTest {
         assertHasRule(rules, "console.api.qsl-management.halo.run", "mail-send-confirms", "create");
         assertHasRule(rules, "console.api.qsl-management.halo.run", "mail-receive-confirms", "create");
         assertHasRule(rules, "console.api.qsl-management.halo.run", "exchange-requests", "create");
+        assertHasRule(rules, "console.api.qsl-management.halo.run", "notification-mails", "create");
 
         assertHasRule(rules, "console.api.qsl-management.halo.run", "imports", "create");
         assertHasRule(rules, "console.api.qsl-management.halo.run", "imports", "get");
