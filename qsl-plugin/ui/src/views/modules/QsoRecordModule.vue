@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { VButton, VCard, VTag } from '@halo-dev/components'
+import { Toast, VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
@@ -212,7 +212,7 @@ const syncUtcNow = () => {
   const min = String(now.getUTCMinutes()).padStart(2, '0')
 
   form.date = `${yyyy}-${mm}-${dd}`
-  form.time = `${hh}${min}`
+  form.time = `${hh}:${min}`
   form.timezone = 'UTC'
 }
 
@@ -286,10 +286,26 @@ watch(pageSize, () => {
   currentPage.value = 1
 })
 
-const nowText = (): string => {
-  return new Date().toLocaleString('zh-CN', {
-    hour12: false,
-  })
+const toInputTime = (value: string): string => {
+  const normalized = value.trim()
+  if (/^\d{4}$/.test(normalized)) {
+    return `${normalized.slice(0, 2)}:${normalized.slice(2, 4)}`
+  }
+  if (/^\d{2}:\d{2}$/.test(normalized)) {
+    return normalized
+  }
+  return ''
+}
+
+const toStorageTime = (value: string): string => {
+  const normalized = value.trim()
+  if (/^\d{2}:\d{2}$/.test(normalized)) {
+    return normalized.replace(':', '')
+  }
+  if (/^\d{4}$/.test(normalized)) {
+    return normalized
+  }
+  return normalized
 }
 
 const normalizeValue = (value: string): string => {
@@ -419,7 +435,7 @@ const loadPageData = async () => {
 const buildSpecFromForm = (): QsoRecordSpec => {
   return {
     date: form.date,
-    time: form.time,
+    time: toStorageTime(form.time),
     timezone: form.timezone,
     freq: form.freq.trim(),
     myRig: form.myRig.trim(),
@@ -439,7 +455,7 @@ const buildSpecFromForm = (): QsoRecordSpec => {
 
 const fillFormFromRecord = (item: QsoRecordItem) => {
   form.date = item.date
-  form.time = item.time
+  form.time = toInputTime(item.time)
   form.timezone = item.timezone
   form.realtime = false
   form.freq = item.freq
@@ -481,13 +497,13 @@ const resetForm = () => {
 const startEditRecord = (item: QsoRecordItem) => {
   editingResourceName.value = item.resourceName
   fillFormFromRecord(item)
-  feedback.value = `正在编辑通联记录：${item.resourceName}`
+  feedback.value = ''
 }
 
 const cancelEditRecord = () => {
   editingResourceName.value = ''
   resetForm()
-  feedback.value = '已取消编辑模式。'
+  feedback.value = ''
 }
 
 const isHistorySelected = (resourceName: string): boolean => {
@@ -588,7 +604,8 @@ const applyHistoryBatchEdit = async () => {
     batchEditForm.freq = ''
     batchEditForm.qth = ''
     batchEditForm.remarks = ''
-    feedback.value = `已批量编辑 ${targets.length} 条通联记录。`
+    feedback.value = ''
+    Toast.success(`已批量编辑 ${targets.length} 条通联记录。`)
   } catch (error) {
     feedback.value = `批量编辑通联记录失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -649,7 +666,8 @@ const saveRecord = async () => {
       await loadRecords({ silent: true })
       editingResourceName.value = ''
       resetForm()
-      feedback.value = `通联记录已更新（${nowText()}）。`
+      feedback.value = ''
+      Toast.success('通联记录已更新。')
       return
     }
 
@@ -670,7 +688,8 @@ const saveRecord = async () => {
     })
 
     await loadRecords({ silent: true })
-    feedback.value = '通联记录已保存。'
+    feedback.value = ''
+    Toast.success('通联记录已保存。')
     resetForm()
   } catch (error) {
     feedback.value = `保存通联记录失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -693,6 +712,12 @@ onMounted(() => {
 <template>
   <div class="qsl-block">
     <VCard :title="isEditing ? '通联记录编辑' : '通联记录录入'">
+      <template #actions>
+        <VButton size="sm" type="secondary" :disabled="loading || saving" @click="saveRecord">{{
+          isEditing ? '保存编辑' : '保存通联记录'
+        }}</VButton>
+      </template>
+
       <div class="qsl-form-grid">
         <label class="qsl-field">
           <span class="qsl-field__label">日期（DATE）</span>
@@ -704,7 +729,7 @@ onMounted(() => {
         <label class="qsl-field">
           <span class="qsl-field__label">时间（TIME）</span>
           <div class="qsl-input-shell">
-            <input v-model="form.time" type="text" maxlength="4" placeholder="HHmm" :disabled="form.realtime" />
+            <input v-model="form.time" type="time" :disabled="form.realtime" />
           </div>
         </label>
 
