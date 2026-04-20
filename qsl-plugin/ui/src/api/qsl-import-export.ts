@@ -34,7 +34,7 @@ const datasetConfigs: DatasetConfig[] = [
     label: '通联记录',
     plural: 'qso-records',
     kind: 'QsoRecord',
-    idPrefix: 'qso-record',
+    idPrefix: 'qso',
     headers: [
       'id',
       'callSign',
@@ -100,7 +100,7 @@ const datasetConfigs: DatasetConfig[] = [
     label: '卡片记录',
     plural: 'card-records',
     kind: 'CardRecord',
-    idPrefix: 'card-record',
+    idPrefix: 'c',
     headers: [
       'id',
       'callSign',
@@ -243,7 +243,7 @@ const datasetConfigs: DatasetConfig[] = [
     label: '地址管理',
     plural: 'address-book-entries',
     kind: 'AddressBookEntry',
-    idPrefix: 'address-entry',
+    idPrefix: 'address',
     headers: ['id', 'callSign', 'name', 'telephone', 'postalCode', 'address', 'email', 'addressRemarks'],
     keywords: ['address-management', 'address', '地址管理'],
     toRow: (item) => ({
@@ -273,7 +273,7 @@ const datasetConfigs: DatasetConfig[] = [
     label: '卡片局管理',
     plural: 'bureau-entries',
     kind: 'BureauEntry',
-    idPrefix: 'bureau-entry',
+    idPrefix: 'buro',
     headers: ['id', 'bureauName', 'telephone', 'postalCode', 'address', 'addressRemarks'],
     keywords: ['bureau-management', 'bureau', '卡片局管理'],
     toRow: (item) => ({

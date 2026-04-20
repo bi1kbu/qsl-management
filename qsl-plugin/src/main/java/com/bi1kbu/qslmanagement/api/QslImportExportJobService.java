@@ -18,6 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.slf4j.Logger;
@@ -54,6 +55,9 @@ public class QslImportExportJobService {
     private static final Set<String> SUPPORTED_FORMATS = Set.of(FORMAT_CSV, FORMAT_ZIP);
     private static final Set<String> SUPPORTED_IMPORT_STRATEGIES = Set.of(STRATEGY_SKIP, STRATEGY_OVERWRITE);
     private static final int MAX_ERROR_LINES = 1000;
+    private static final Pattern QSO_RESOURCE_PATTERN = Pattern.compile("^QSO(\\d+)$");
+    private static final Pattern CARD_RESOURCE_PATTERN = Pattern.compile("^C(\\d+)$");
+    private static final Pattern BURO_RESOURCE_PATTERN = Pattern.compile("^BURO-(\\d+)$");
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
@@ -382,7 +386,7 @@ public class QslImportExportJobService {
     ) {
         return switch (dataset) {
             case "qso-record" -> importRows(
-                dataset, rows, strategy, "qso-record", QsoRecord.class, QsoRecord::new, dryRun,
+                dataset, rows, strategy, "QSO", QsoRecord.class, QsoRecord::new, dryRun,
                 (record, row) -> {
                     var spec = record.getSpec() == null ? new QsoRecord.QsoRecordSpec() : record.getSpec();
                     spec.setCallSign(value(row, "callSign"));
@@ -405,7 +409,7 @@ public class QslImportExportJobService {
                 }
             );
             case "card-record" -> importRows(
-                dataset, rows, strategy, "card-record", CardRecord.class, CardRecord::new, dryRun,
+                dataset, rows, strategy, "C", CardRecord.class, CardRecord::new, dryRun,
                 (record, row) -> {
                     var spec = record.getSpec() == null ? new CardRecord.CardRecordSpec() : record.getSpec();
                     spec.setCallSign(value(row, "callSign"));
@@ -459,7 +463,7 @@ public class QslImportExportJobService {
                 }
             );
             case "address-management" -> importRows(
-                dataset, rows, strategy, "address-entry", AddressBookEntry.class, AddressBookEntry::new, dryRun,
+                dataset, rows, strategy, "ADDRESS", AddressBookEntry.class, AddressBookEntry::new, dryRun,
                 (record, row) -> {
                     var spec = record.getSpec() == null ? new AddressBookEntry.AddressBookSpec() : record.getSpec();
                     spec.setCallSign(value(row, "callSign"));
@@ -473,7 +477,7 @@ public class QslImportExportJobService {
                 }
             );
             case "bureau-management" -> importRows(
-                dataset, rows, strategy, "bureau-entry", BureauEntry.class, BureauEntry::new, dryRun,
+                dataset, rows, strategy, "BURO", BureauEntry.class, BureauEntry::new, dryRun,
                 (record, row) -> {
                     var spec = record.getSpec() == null ? new BureauEntry.BureauSpec() : record.getSpec();
                     spec.setBureauName(value(row, "bureauName"));
@@ -513,11 +517,14 @@ public class QslImportExportJobService {
     ) {
         return client.listAll(extensionType, EMPTY_OPTIONS, DEFAULT_SORT)
             .collectMap(extension -> extension.getMetadata().getName(), extension -> extension)
-            .flatMap(existingMap -> Flux.range(0, rows.size())
+            .flatMap(existingMap -> {
+                var occupiedNames = new LinkedHashSet<String>(existingMap.keySet());
+                return Flux.range(0, rows.size())
                 .concatMap(index -> {
                     var row = rows.get(index);
                     var rowNo = index + 2;
-                    var resourceName = resolveRowResourceName(row, idPrefix);
+                    var resourceName = resolveRowResourceName(row, idPrefix, occupiedNames);
+                    occupiedNames.add(resourceName);
                     var existed = existingMap.get(resourceName);
                     if (existed != null && STRATEGY_SKIP.equals(strategy)) {
                         return Mono.just(ImportRowResult.skipped());
@@ -527,6 +534,7 @@ public class QslImportExportJobService {
                     E target = createNew ? instanceSupplier.get() : existed;
                     if (createNew) {
                         target.setMetadata(QslApiSupport.createMetadata(resourceName));
+                        existingMap.put(resourceName, target);
                     }
 
                     try {
@@ -548,7 +556,8 @@ public class QslImportExportJobService {
                         )));
                 })
                 .collectList()
-                .map(rowResults -> summarizeImportDatasetResult(dataset, rows.size(), rowResults)));
+                .map(rowResults -> summarizeImportDatasetResult(dataset, rows.size(), rowResults));
+            });
     }
 
     private ImportDatasetResult summarizeImportDatasetResult(
@@ -1018,12 +1027,47 @@ public class QslImportExportJobService {
         return String.join("\n", csvLines);
     }
 
-    private String resolveRowResourceName(Map<String, String> row, String idPrefix) {
+    private String resolveRowResourceName(Map<String, String> row, String idPrefix, Set<String> occupiedNames) {
         var id = value(row, "id");
         if (!isBlank(id)) {
             return id;
         }
-        return QslApiSupport.createResourceName(idPrefix);
+
+        return switch (idPrefix) {
+            case "QSO" -> "QSO" + nextNumericSuffix(occupiedNames, QSO_RESOURCE_PATTERN, 1000);
+            case "C" -> "C" + nextNumericSuffix(occupiedNames, CARD_RESOURCE_PATTERN, 1000);
+            case "ADDRESS" -> {
+                var callSign = QslApiSupport.normalizeCallSign(value(row, "callSign"));
+                var normalizedPrefix = isBlank(callSign) ? "ADDRESS" : callSign;
+                var pattern = Pattern.compile("^" + Pattern.quote(normalizedPrefix) + "-(\\d+)$");
+                yield normalizedPrefix + "-" + nextNumericSuffix(occupiedNames, pattern, 0);
+            }
+            case "BURO" -> "BURO-" + nextNumericSuffix(occupiedNames, BURO_RESOURCE_PATTERN, 0);
+            default -> QslApiSupport.createResourceName(idPrefix);
+        };
+    }
+
+    private int nextNumericSuffix(Set<String> occupiedNames, Pattern pattern, int start) {
+        var max = start;
+        for (var rawName : occupiedNames) {
+            if (isBlank(rawName)) {
+                continue;
+            }
+            var matcher = pattern.matcher(rawName.trim());
+            if (!matcher.matches()) {
+                continue;
+            }
+            try {
+                var numeric = Integer.parseInt(matcher.group(1));
+                if (numeric > max) {
+                    max = numeric;
+                }
+            } catch (NumberFormatException ignored) {
+                // ignore
+            }
+        }
+        var next = max + 1;
+        return next;
     }
 
     private String buildImportErrorMessage(String dataset, int rowNo, String resourceName, String reason) {

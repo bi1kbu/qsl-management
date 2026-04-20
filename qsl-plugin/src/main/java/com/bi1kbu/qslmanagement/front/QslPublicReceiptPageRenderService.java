@@ -1,6 +1,7 @@
 package com.bi1kbu.qslmanagement.front;
 
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
+import java.util.Locale;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
@@ -89,7 +90,7 @@ public class QslPublicReceiptPageRenderService {
         if (rawCardId == null) {
             return "";
         }
-        var normalized = rawCardId.trim();
+        var normalized = rawCardId.trim().toUpperCase(Locale.ROOT);
         if (normalized.length() > 128) {
             return normalized.substring(0, 128);
         }
@@ -311,7 +312,7 @@ public class QslPublicReceiptPageRenderService {
                     </label>
                     <label class="qsl-field">
                       <span class="qsl-label">卡片编号（Card ID）</span>
-                      <input id="qsl-card-id-input" class="qsl-input" type="text" value="__CARD_ID_HTML__" maxlength="128" placeholder="例如 card-record-001" />
+                      <input id="qsl-card-id-input" class="qsl-input" type="text" value="__CARD_ID_HTML__" maxlength="128" placeholder="例如 C1001" />
                     </label>
                     <label class="qsl-field full">
                       <span class="qsl-label">签收备注（可选）</span>
@@ -363,7 +364,7 @@ public class QslPublicReceiptPageRenderService {
                 }
 
                 const normalizeCallSign = (value) => (value || "").trim().toUpperCase();
-                const normalizeCardId = (value) => (value || "").trim();
+                const normalizeCardId = (value) => (value || "").trim().toUpperCase();
                 const normalizeRemarks = (value) => (value || "").trim();
                 const safeText = (value) => String(value ?? "");
 

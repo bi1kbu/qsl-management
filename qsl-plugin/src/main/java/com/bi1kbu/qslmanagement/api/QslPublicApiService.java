@@ -4,6 +4,7 @@ import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -156,7 +157,7 @@ public class QslPublicApiService {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
         }
 
-        var cardId = nullToEmpty(command.cardId()).trim();
+        var cardId = nullToEmpty(command.cardId()).trim().toUpperCase(Locale.ROOT);
         if (cardId.isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片编号不能为空"));
         }

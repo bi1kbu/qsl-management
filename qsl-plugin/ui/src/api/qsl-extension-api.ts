@@ -58,7 +58,7 @@ export async function listExtensions<TSpec, TStatus = Record<string, unknown>>(
   const response = await axiosInstance.get<QslExtensionListResponse<TSpec, TStatus>>(buildUrl(plural), {
     params: {
       page: 1,
-      size: 200,
+      size: 1000,
       sort: ['metadata.creationTimestamp,desc'],
     },
   })

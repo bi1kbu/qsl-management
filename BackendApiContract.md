@@ -79,6 +79,14 @@
 
 说明：以下资源使用 Halo 扩展模型自动生成 CRUD API，用于主数据与核心业务数据持久化。
 
+编号约定（`metadata.name`）：
+
+1. 卡片记录：`C1001` 起步（顺序递增）
+2. 通联记录：`QSO1001` 起步（顺序递增）
+3. 地址管理：`{CALLSIGN}-1` 起步（按呼号分组递增，例如 `BI1KBU-1`）
+4. 卡片局管理：`BURO-1` 起步（顺序递增）
+5. 前台签收输入支持大小写，服务端会统一归一化后匹配。
+
 | 资源标识 | Kind（建议） | Plural（路径） | 主菜单归属 | 读权限 | 写权限 |
 | --- | --- | --- | --- | --- | --- |
 | system-settings | `SystemSetting` | `system-settings` | 配置/系统参数 | `plugin:qsl-management:system-settings:view` | `plugin:qsl-management:system-settings:edit` |
@@ -189,7 +197,7 @@
       "dataset": "qso-record",
       "rows": [
         {
-          "id": "qso-record-001",
+          "id": "QSO1001",
           "callSign": "BG7ABC",
           "date": "2026-04-15",
           "time": "1200",
@@ -215,7 +223,7 @@
   "skippedCount": 18,
   "failedCount": 2,
   "errorLines": [
-    "【qso-record】第10行（ID=qso-record-010）：字段格式错误"
+    "【qso-record】第10行（ID=QSO1010）：字段格式错误"
   ],
   "datasets": [
     {
@@ -225,7 +233,7 @@
       "skippedCount": 18,
       "failedCount": 2,
       "errorLines": [
-        "【qso-record】第10行（ID=qso-record-010）：字段格式错误"
+        "【qso-record】第10行（ID=QSO1010）：字段格式错误"
       ]
     }
   ]
@@ -252,7 +260,7 @@
       "dataset": "qso-record",
       "rows": [
         {
-          "id": "qso-record-001",
+          "id": "QSO1001",
           "callSign": "BG7ABC",
           "date": "2026-04-15",
           "time": "1200",
@@ -338,7 +346,7 @@
 ```json
 {
   "callSign": "BG7ABC",
-  "cardId": "card-record-001",
+  "cardId": "C1001",
   "remarks": "已签收"
 }
 ```
@@ -353,11 +361,11 @@
 2. `callSign` 选填，传入后页面默认执行一次查询。
 3. `embed` 选填（`1/true/yes`），用于启用嵌入模式（紧凑样式 + 高度回传）。
 4. `embedId` 选填，嵌入模式下通过 `window.postMessage` 回传高度时用于父页面匹配对应 iframe。
-5. 文章/页面短码：`[qsl-receipt-card callSign="BG7ABC" cardId="card-record-001"]`，渲染独立签收卡片。
+5. 文章/页面短码：`[qsl-receipt-card callSign="BG7ABC" cardId="C1001"]`，渲染独立签收卡片。
 
 ### 8.2.5 前台签收页面（可嵌入）
 
-`GET /receipt-public/page?callSign=BG7ABC&cardId=card-record-001&embed=1&embedId=qsl-receipt-card-1`
+`GET /receipt-public/page?callSign=BG7ABC&cardId=C1001&embed=1&embedId=qsl-receipt-card-1`
 
 说明：
 

@@ -4,6 +4,7 @@ import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,8 @@ public class QslConsoleActionService {
     private static final Set<String> ALLOWED_CARD_TYPES = Set.of("QSO", "SWL", "EYEBALL");
     private static final ListOptions EMPTY_OPTIONS = ListOptions.builder().build();
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("metadata.creationTimestamp"));
+    private static final Pattern QSO_NAME_PATTERN = Pattern.compile("^QSO(\\d+)$");
+    private static final Pattern CARD_NAME_PATTERN = Pattern.compile("^C(\\d+)$");
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
@@ -210,34 +213,37 @@ public class QslConsoleActionService {
     }
 
     private Mono<QsoRecord> createAutoQso(String callSign, String remarks) {
-        var qsoRecord = new QsoRecord();
-        qsoRecord.setMetadata(QslApiSupport.createMetadata(QslApiSupport.createResourceName("qso-record")));
+        return nextQsoRecordName()
+            .flatMap(resourceName -> {
+                var qsoRecord = new QsoRecord();
+                qsoRecord.setMetadata(QslApiSupport.createMetadata(resourceName));
 
-        var spec = new QsoRecord.QsoRecordSpec();
-        spec.setDate(QslApiSupport.utcDate());
-        spec.setTime(QslApiSupport.utcTime());
-        spec.setTimezone("UTC");
-        spec.setFreq("");
-        spec.setMyRig("");
-        spec.setMyRigMode("SSB");
-        spec.setMyRigAnt("");
-        spec.setMyRigPwr("");
-        spec.setCallSign(callSign);
-        spec.setRig("");
-        spec.setAnt("");
-        spec.setPwr("");
-        spec.setQth("");
-        spec.setRstSent("59");
-        spec.setRstRcvd("59");
-        spec.setRemarks(remarks);
-        qsoRecord.setSpec(spec);
+                var spec = new QsoRecord.QsoRecordSpec();
+                spec.setDate(QslApiSupport.utcDate());
+                spec.setTime(QslApiSupport.utcTime());
+                spec.setTimezone("UTC");
+                spec.setFreq("");
+                spec.setMyRig("");
+                spec.setMyRigMode("SSB");
+                spec.setMyRigAnt("");
+                spec.setMyRigPwr("");
+                spec.setCallSign(callSign);
+                spec.setRig("");
+                spec.setAnt("");
+                spec.setPwr("");
+                spec.setQth("");
+                spec.setRstSent("59");
+                spec.setRstRcvd("59");
+                spec.setRemarks(remarks);
+                qsoRecord.setSpec(spec);
 
-        var status = new QsoRecord.QsoRecordStatus();
-        status.setAutoCreated(Boolean.TRUE);
-        status.setSource("mail-receive-confirm");
-        qsoRecord.setStatus(status);
+                var status = new QsoRecord.QsoRecordStatus();
+                status.setAutoCreated(Boolean.TRUE);
+                status.setSource("mail-receive-confirm");
+                qsoRecord.setStatus(status);
 
-        return client.create(qsoRecord);
+                return client.create(qsoRecord);
+            });
     }
 
     private Mono<CardRecord> createEyeballCardByExchange(ExchangeRequest exchangeRequest) {
@@ -255,39 +261,42 @@ public class QslConsoleActionService {
 
     private Mono<CardRecord> createCardRecord(String callSign, String cardType, String qsoRecordName, String remarks,
         boolean sent) {
-        var cardRecord = new CardRecord();
-        cardRecord.setMetadata(QslApiSupport.createMetadata(QslApiSupport.createResourceName("card-record")));
+        return nextCardRecordName()
+            .flatMap(resourceName -> {
+                var cardRecord = new CardRecord();
+                cardRecord.setMetadata(QslApiSupport.createMetadata(resourceName));
 
-        var spec = new CardRecord.CardRecordSpec();
-        spec.setCallSign(callSign);
-        spec.setCardType(cardType);
-        spec.setCardVersion("自动生成");
-        spec.setQsoRecordName(qsoRecordName);
-        spec.setCardDate(QslApiSupport.utcDate());
-        spec.setCardTime(QslApiSupport.utcTime());
-        spec.setCardRemarks(remarks);
-        spec.setCardSent(sent);
-        spec.setCardReceived(Boolean.TRUE);
-        spec.setReceiptConfirmed(Boolean.FALSE);
-        spec.setSentAt(sent ? QslApiSupport.nowText() : "");
-        spec.setReceivedAt(QslApiSupport.nowText());
-        spec.setCreatedMailStatus("");
-        spec.setCreatedMailSentAt("");
-        spec.setCreatedMailLastError("");
-        spec.setSentMailStatus("");
-        spec.setSentMailSentAt("");
-        spec.setSentMailLastError("");
-        spec.setReceivedMailStatus("");
-        spec.setReceivedMailSentAt("");
-        spec.setReceivedMailLastError("");
-        spec.setMailTargetEmail("");
-        cardRecord.setSpec(spec);
+                var spec = new CardRecord.CardRecordSpec();
+                spec.setCallSign(callSign);
+                spec.setCardType(cardType);
+                spec.setCardVersion("自动生成");
+                spec.setQsoRecordName(qsoRecordName);
+                spec.setCardDate(QslApiSupport.utcDate());
+                spec.setCardTime(QslApiSupport.utcTime());
+                spec.setCardRemarks(remarks);
+                spec.setCardSent(sent);
+                spec.setCardReceived(Boolean.TRUE);
+                spec.setReceiptConfirmed(Boolean.FALSE);
+                spec.setSentAt(sent ? QslApiSupport.nowText() : "");
+                spec.setReceivedAt(QslApiSupport.nowText());
+                spec.setCreatedMailStatus("");
+                spec.setCreatedMailSentAt("");
+                spec.setCreatedMailLastError("");
+                spec.setSentMailStatus("");
+                spec.setSentMailSentAt("");
+                spec.setSentMailLastError("");
+                spec.setReceivedMailStatus("");
+                spec.setReceivedMailSentAt("");
+                spec.setReceivedMailLastError("");
+                spec.setMailTargetEmail("");
+                cardRecord.setSpec(spec);
 
-        var status = new CardRecord.CardRecordStatus();
-        status.setFlowStatus("已收卡片");
-        cardRecord.setStatus(status);
+                var status = new CardRecord.CardRecordStatus();
+                status.setFlowStatus("已收卡片");
+                cardRecord.setStatus(status);
 
-        return client.create(cardRecord);
+                return client.create(cardRecord);
+            });
     }
 
     private Mono<CardRecord> updateReceivedCardRecord(CardRecord cardRecord, String receiptRemarks) {
@@ -361,6 +370,42 @@ public class QslConsoleActionService {
     private <E extends Extension> Mono<E> fetchOr404(Class<E> extensionType, String name) {
         return client.fetch(extensionType, name)
             .switchIfEmpty(Mono.error(new QslApiException(HttpStatus.NOT_FOUND, "QSL-404-0001", "资源不存在")));
+    }
+
+    private Mono<String> nextQsoRecordName() {
+        return nextNumericResourceName(QsoRecord.class, QSO_NAME_PATTERN, "QSO", 1000);
+    }
+
+    private Mono<String> nextCardRecordName() {
+        return nextNumericResourceName(CardRecord.class, CARD_NAME_PATTERN, "C", 1000);
+    }
+
+    private <E extends Extension> Mono<String> nextNumericResourceName(
+        Class<E> extensionType,
+        Pattern pattern,
+        String prefix,
+        int start
+    ) {
+        return client.listAll(extensionType, EMPTY_OPTIONS, DEFAULT_SORT)
+            .map(item -> item.getMetadata() == null ? "" : item.getMetadata().getName())
+            .map(name -> extractSequence(name, pattern))
+            .reduce(start, Math::max)
+            .map(max -> prefix + (max + 1));
+    }
+
+    private int extractSequence(String resourceName, Pattern pattern) {
+        if (resourceName == null || resourceName.isBlank()) {
+            return -1;
+        }
+        var matcher = pattern.matcher(resourceName.trim());
+        if (!matcher.matches()) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(matcher.group(1));
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
     }
 
     public record MailReceiveConfirmCommand(

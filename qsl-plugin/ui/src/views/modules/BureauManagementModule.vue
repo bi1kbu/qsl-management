@@ -3,7 +3,6 @@ import { VButton, VCard } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
-  createResourceName,
   deleteExtension,
   listExtensions,
   qslApiVersion,
@@ -11,6 +10,7 @@ import {
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import { buildBureauResourceName } from '../../utils/resource-name'
 
 interface BureauSpec {
   bureauName: string
@@ -93,12 +93,13 @@ const addBureau = async () => {
 
   submitting.value = true
   const bureauName = form.bureauName.trim().toUpperCase()
+  const nextResourceName = buildBureauResourceName(rows.value.map((item) => item.id))
   try {
     const created = await createExtension<BureauSpec>(resourcePlural, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
-        name: createResourceName('bureau-entry'),
+        name: nextResourceName,
       },
       spec: {
         bureauName,

@@ -129,7 +129,10 @@ const formatCellValue = (value: unknown): string => {
       <input :checked="batchEditEnabled" type="checkbox" @change="toggleBatchEditEnabled(($event.target as HTMLInputElement).checked)" />
       <span>批量编辑</span>
     </label>
-    <span class="qsl-muted">已选 {{ selectedCount }} 条</span>
+    <div class="qsl-history-toolbar__right">
+      <slot name="toolbar-extra" />
+      <span class="qsl-muted">已选 {{ selectedCount }} 条</span>
+    </div>
   </div>
 
   <div v-if="batchEditEnabled" class="qsl-actions">
@@ -144,7 +147,7 @@ const formatCellValue = (value: unknown): string => {
     <table class="qsl-table qsl-table--clickable">
       <thead>
         <tr>
-          <th>选择</th>
+          <th class="qsl-select-col"></th>
           <th v-for="column in columns" :key="column.key">{{ column.label }}</th>
           <th>操作</th>
         </tr>
@@ -153,9 +156,8 @@ const formatCellValue = (value: unknown): string => {
         <template v-for="row in rows" :key="getRowKey(row)">
           <tr class="qsl-history-row" :class="{ 'is-expanded': isRowExpanded(row) }" @click="toggleRowExpand(row)">
             <td @click.stop>
-              <label class="qsl-checkbox">
-                <input :checked="isRowSelected(row)" type="checkbox" @change="toggleRowSelection(row)" />
-                <span>选择</span>
+              <label class="qsl-checkbox qsl-select-only">
+                <input :checked="isRowSelected(row)" type="checkbox" aria-label="选择记录" @change="toggleRowSelection(row)" />
               </label>
             </td>
             <td v-for="column in columns" :key="column.key">
@@ -194,7 +196,14 @@ const formatCellValue = (value: unknown): string => {
   font-weight: 600;
 }
 
-.qsl-history-toolbar .qsl-muted {
+.qsl-history-toolbar__right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.qsl-history-toolbar__right .qsl-muted {
   margin-left: auto;
 }
 
@@ -212,5 +221,20 @@ const formatCellValue = (value: unknown): string => {
 
 .qsl-history-detail-row td {
   padding: 0;
+}
+
+.qsl-table th,
+.qsl-table td {
+  vertical-align: middle;
+}
+
+.qsl-select-col,
+.qsl-table td:first-child {
+  width: 44px;
+}
+
+.qsl-select-only {
+  display: inline-flex;
+  align-items: center;
 }
 </style>

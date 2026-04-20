@@ -12,6 +12,7 @@ import {
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import { buildQsoResourceName } from '../../utils/resource-name'
 
 interface QsoRecordSpec {
   date: string
@@ -660,7 +661,7 @@ const saveRecord = async () => {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
-        name: createResourceName('qso-record'),
+        name: buildQsoResourceName(records.value.map((item) => item.resourceName)),
       },
       spec,
     })

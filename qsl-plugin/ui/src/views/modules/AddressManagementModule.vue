@@ -3,7 +3,6 @@ import { VButton, VCard } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
-  createResourceName,
   deleteExtension,
   listExtensions,
   qslApiVersion,
@@ -11,6 +10,7 @@ import {
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import { buildAddressResourceName } from '../../utils/resource-name'
 
 interface AddressBookSpec {
   callSign: string
@@ -103,12 +103,21 @@ const addAddress = async () => {
 
   submitting.value = true
   const callSign = form.callSign.trim().toUpperCase()
+  const nextResourceName = buildAddressResourceName(
+    rows.value.map((item) => item.id),
+    callSign,
+  )
+  if (!nextResourceName) {
+    feedback.value = '呼号不能为空。'
+    submitting.value = false
+    return
+  }
   try {
     const created = await createExtension<AddressBookSpec>(resourcePlural, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
-        name: createResourceName('address-entry'),
+        name: nextResourceName,
       },
       spec: {
         callSign,
