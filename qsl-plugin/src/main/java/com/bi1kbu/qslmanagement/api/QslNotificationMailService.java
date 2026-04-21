@@ -371,8 +371,10 @@ public class QslNotificationMailService {
         spec.setCardTime("");
         spec.setCardRemarks("");
         spec.setCardSent(Boolean.FALSE);
+        spec.setCardIssued(Boolean.FALSE);
         spec.setCardReceived(Boolean.FALSE);
         spec.setReceiptConfirmed(Boolean.FALSE);
+        spec.setCardIssuedAt("");
         spec.setSentAt("");
         spec.setReceivedAt("");
         spec.setCreatedMailStatus("");
@@ -517,4 +519,3 @@ public class QslNotificationMailService {
     ) {
     }
 }
-

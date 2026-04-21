@@ -275,8 +275,10 @@ public class QslConsoleActionService {
                 spec.setCardTime(QslApiSupport.utcTime());
                 spec.setCardRemarks(remarks);
                 spec.setCardSent(sent);
+                spec.setCardIssued(Boolean.FALSE);
                 spec.setCardReceived(Boolean.TRUE);
                 spec.setReceiptConfirmed(Boolean.FALSE);
+                spec.setCardIssuedAt("");
                 spec.setSentAt(sent ? QslApiSupport.nowText() : "");
                 spec.setReceivedAt(QslApiSupport.nowText());
                 spec.setCreatedMailStatus("");
@@ -326,8 +328,10 @@ public class QslConsoleActionService {
         spec.setCardTime(QslApiSupport.utcTime());
         spec.setCardRemarks("");
         spec.setCardSent(Boolean.FALSE);
+        spec.setCardIssued(Boolean.FALSE);
         spec.setCardReceived(Boolean.FALSE);
         spec.setReceiptConfirmed(Boolean.FALSE);
+        spec.setCardIssuedAt("");
         spec.setSentAt("");
         spec.setReceivedAt("");
         spec.setCreatedMailStatus("");

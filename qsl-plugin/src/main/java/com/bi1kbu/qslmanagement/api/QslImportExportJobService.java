@@ -422,8 +422,10 @@ public class QslImportExportJobService {
                     spec.setCardTime(value(row, "cardTime"));
                     spec.setCardRemarks(value(row, "cardRemarks"));
                     spec.setCardSent(parseBoolean(value(row, "cardSent")));
+                    spec.setCardIssued(parseBoolean(value(row, "cardIssued")));
                     spec.setCardReceived(parseBoolean(value(row, "cardReceived")));
                     spec.setReceiptConfirmed(parseBoolean(value(row, "receiptConfirmed")));
+                    spec.setCardIssuedAt(value(row, "cardIssuedAt"));
                     spec.setSentAt(value(row, "sentAt"));
                     spec.setReceivedAt(value(row, "receivedAt"));
                     spec.setCreatedMailStatus(value(row, "createdMailStatus"));
@@ -720,8 +722,10 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getCardTime()),
                         spec == null ? "" : nullToEmpty(spec.getCardRemarks()),
                         spec == null ? "false" : boolToText(spec.getCardSent()),
+                        spec == null ? "false" : boolToText(spec.getCardIssued()),
                         spec == null ? "false" : boolToText(spec.getCardReceived()),
                         spec == null ? "false" : boolToText(spec.getReceiptConfirmed()),
+                        spec == null ? "" : nullToEmpty(spec.getCardIssuedAt()),
                         spec == null ? "" : nullToEmpty(spec.getSentAt()),
                         spec == null ? "" : nullToEmpty(spec.getReceivedAt()),
                         spec == null ? "" : nullToEmpty(spec.getCreatedMailStatus()),
@@ -747,8 +751,10 @@ public class QslImportExportJobService {
                     "cardTime",
                     "cardRemarks",
                     "cardSent",
+                    "cardIssued",
                     "cardReceived",
                     "receiptConfirmed",
+                    "cardIssuedAt",
                     "sentAt",
                     "receivedAt",
                     "createdMailStatus",

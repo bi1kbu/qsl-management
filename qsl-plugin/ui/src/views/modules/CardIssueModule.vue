@@ -1,0 +1,490 @@
+<script setup lang="ts">
+import { VButton, VCard } from '@halo-dev/components'
+import { computed, onMounted, ref } from 'vue'
+import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import { listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
+
+interface CardRecordSpec {
+  callSign: string
+  cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  cardVersion: string
+  qsoRecordName: string
+  cardDate: string
+  cardTime: string
+  cardRemarks: string
+  cardSent: boolean
+  cardIssued: boolean
+  cardReceived: boolean
+  receiptConfirmed: boolean
+  cardIssuedAt: string
+  sentAt: string
+  receivedAt: string
+  createdMailStatus: string
+  createdMailSentAt: string
+  createdMailLastError: string
+  sentMailStatus: string
+  sentMailSentAt: string
+  sentMailLastError: string
+  receivedMailStatus: string
+  receivedMailSentAt: string
+  receivedMailLastError: string
+  mailTargetEmail: string
+}
+
+interface CardRecordStatus {
+  flowStatus: string
+}
+
+interface AddressBookSpec {
+  callSign: string
+  name: string
+  telephone: string
+  postalCode: string
+  address: string
+  email: string
+  addressRemarks: string
+}
+
+interface QsoRecordSpec {
+  date: string
+  time: string
+  timezone: string
+  freq: string
+  myRigMode: string
+  myRig: string
+  callSign: string
+  qth: string
+  remarks: string
+}
+
+interface CardIssueCardRow {
+  id: string
+  metadataVersion?: number | null
+  spec: CardRecordSpec
+  status: CardRecordStatus
+  callSign: string
+  cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  cardVersion: string
+  cardDate: string
+  cardTime: string
+  qsoRecordName: string
+  cardSent: boolean
+  cardIssued: boolean
+  cardReceived: boolean
+  receiptConfirmed: boolean
+  cardIssuedAt: string
+  sentAt: string
+  receivedAt: string
+  cardRemarks: string
+  mailTargetEmail: string
+}
+
+interface CardIssueAddressRow {
+  id: string
+  callSign: string
+  name: string
+  telephone: string
+  postalCode: string
+  address: string
+  email: string
+  remarks: string
+}
+
+interface CardIssueQsoRow {
+  id: string
+  callSign: string
+  date: string
+  time: string
+  timezone: string
+  freq: string
+  mode: string
+  myRig: string
+  qth: string
+  remarks: string
+}
+
+const cardRecordPlural = 'card-records'
+const addressBookPlural = 'address-book-entries'
+const qsoRecordPlural = 'qso-records'
+
+const loading = ref(false)
+const issuing = ref(false)
+const feedback = ref('')
+const callSignInput = ref('')
+const searchedCallSign = ref('')
+const cardRows = ref<CardIssueCardRow[]>([])
+const addressRows = ref<CardIssueAddressRow[]>([])
+const qsoRows = ref<CardIssueQsoRow[]>([])
+
+const normalizedKeyword = computed(() => searchedCallSign.value.trim().toUpperCase())
+const hasKeyword = computed(() => normalizedKeyword.value.length > 0)
+
+const matchedCardRows = computed(() => {
+  if (!hasKeyword.value) {
+    return []
+  }
+  return cardRows.value.filter((item) => {
+    return item.callSign.toUpperCase().includes(normalizedKeyword.value) && !item.cardIssued
+  })
+})
+
+const matchedAddressRows = computed(() => {
+  if (!hasKeyword.value) {
+    return []
+  }
+  return addressRows.value.filter((item) => item.callSign.toUpperCase().includes(normalizedKeyword.value))
+})
+
+const matchedQsoRows = computed(() => {
+  if (!hasKeyword.value) {
+    return []
+  }
+  const qsoIdSet = new Set(
+    matchedCardRows.value
+      .map((item) => item.qsoRecordName.trim())
+      .filter((item) => item.length > 0),
+  )
+  if (!qsoIdSet.size) {
+    return []
+  }
+  return qsoRows.value.filter((item) => qsoIdSet.has(item.id))
+})
+
+const nowText = (): string => {
+  return new Date().toLocaleString('zh-CN', {
+    hour12: false,
+  })
+}
+
+const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec => {
+  return {
+    callSign: spec?.callSign ?? '',
+    cardType: spec?.cardType ?? 'QSO',
+    cardVersion: spec?.cardVersion ?? '',
+    qsoRecordName: spec?.qsoRecordName ?? '',
+    cardDate: spec?.cardDate ?? '',
+    cardTime: spec?.cardTime ?? '',
+    cardRemarks: spec?.cardRemarks ?? '',
+    cardSent: Boolean(spec?.cardSent),
+    cardIssued: Boolean(spec?.cardIssued),
+    cardReceived: Boolean(spec?.cardReceived),
+    receiptConfirmed: Boolean(spec?.receiptConfirmed),
+    cardIssuedAt: spec?.cardIssuedAt ?? '',
+    sentAt: spec?.sentAt ?? '',
+    receivedAt: spec?.receivedAt ?? '',
+    createdMailStatus: spec?.createdMailStatus ?? '',
+    createdMailSentAt: spec?.createdMailSentAt ?? '',
+    createdMailLastError: spec?.createdMailLastError ?? '',
+    sentMailStatus: spec?.sentMailStatus ?? '',
+    sentMailSentAt: spec?.sentMailSentAt ?? '',
+    sentMailLastError: spec?.sentMailLastError ?? '',
+    receivedMailStatus: spec?.receivedMailStatus ?? '',
+    receivedMailSentAt: spec?.receivedMailSentAt ?? '',
+    receivedMailLastError: spec?.receivedMailLastError ?? '',
+    mailTargetEmail: spec?.mailTargetEmail ?? '',
+  }
+}
+
+const normalizeCardRecordStatus = (status?: Partial<CardRecordStatus>): CardRecordStatus => {
+  return {
+    flowStatus: status?.flowStatus ?? '',
+  }
+}
+
+const toCardRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): CardIssueCardRow => {
+  const spec = normalizeCardRecordSpec(extension.spec)
+  const status = normalizeCardRecordStatus(extension.status)
+  return {
+    id: extension.metadata.name,
+    metadataVersion: extension.metadata.version,
+    spec,
+    status,
+    callSign: spec.callSign,
+    cardType: spec.cardType,
+    cardVersion: spec.cardVersion,
+    cardDate: spec.cardDate,
+    cardTime: spec.cardTime,
+    qsoRecordName: spec.qsoRecordName,
+    cardSent: spec.cardSent,
+    cardIssued: spec.cardIssued,
+    cardReceived: spec.cardReceived,
+    receiptConfirmed: spec.receiptConfirmed,
+    cardIssuedAt: spec.cardIssuedAt,
+    sentAt: spec.sentAt,
+    receivedAt: spec.receivedAt,
+    cardRemarks: spec.cardRemarks,
+    mailTargetEmail: spec.mailTargetEmail,
+  }
+}
+
+const toAddressRow = (extension: QslExtension<AddressBookSpec>): CardIssueAddressRow => {
+  return {
+    id: extension.metadata.name,
+    callSign: extension.spec?.callSign ?? '',
+    name: extension.spec?.name ?? '',
+    telephone: extension.spec?.telephone ?? '',
+    postalCode: extension.spec?.postalCode ?? '',
+    address: extension.spec?.address ?? '',
+    email: extension.spec?.email ?? '',
+    remarks: extension.spec?.addressRemarks ?? '',
+  }
+}
+
+const toQsoRow = (extension: QslExtension<QsoRecordSpec>): CardIssueQsoRow => {
+  return {
+    id: extension.metadata.name,
+    callSign: extension.spec?.callSign ?? '',
+    date: extension.spec?.date ?? '',
+    time: extension.spec?.time ?? '',
+    timezone: extension.spec?.timezone ?? 'UTC',
+    freq: extension.spec?.freq ?? '',
+    mode: extension.spec?.myRigMode ?? '',
+    myRig: extension.spec?.myRig ?? '',
+    qth: extension.spec?.qth ?? '',
+    remarks: extension.spec?.remarks ?? '',
+  }
+}
+
+const loadSourceData = async () => {
+  loading.value = true
+  try {
+    const [cards, addresses, qsos] = await Promise.all([
+      listExtensions<CardRecordSpec, CardRecordStatus>(cardRecordPlural),
+      listExtensions<AddressBookSpec>(addressBookPlural),
+      listExtensions<QsoRecordSpec>(qsoRecordPlural),
+    ])
+    cardRows.value = cards.map((item) => toCardRow(item))
+    addressRows.value = addresses.map((item) => toAddressRow(item))
+    qsoRows.value = qsos.map((item) => toQsoRow(item))
+    if (!hasKeyword.value) {
+      feedback.value = ''
+    } else {
+      feedback.value = `查询完成：未制卡卡片 ${matchedCardRows.value.length} 条，关联QSO ${matchedQsoRows.value.length} 条，地址 ${matchedAddressRows.value.length} 条。`
+    }
+  } catch (error) {
+    feedback.value = `加载制卡签发数据失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    loading.value = false
+  }
+}
+
+const applySearch = async () => {
+  searchedCallSign.value = callSignInput.value.trim().toUpperCase()
+  if (!searchedCallSign.value) {
+    feedback.value = '请输入呼号后再查询。'
+    return
+  }
+  await loadSourceData()
+}
+
+const clearSearch = () => {
+  callSignInput.value = ''
+  searchedCallSign.value = ''
+  feedback.value = ''
+}
+
+const confirmCardIssue = async () => {
+  if (!hasKeyword.value) {
+    feedback.value = '请先输入呼号并查询。'
+    return
+  }
+
+  if (!matchedCardRows.value.length) {
+    feedback.value = '当前呼号下无待制卡记录。'
+    return
+  }
+
+  const targetRows = [...matchedCardRows.value]
+  issuing.value = true
+  try {
+    for (const row of targetRows) {
+      const nextSpec: CardRecordSpec = {
+        ...row.spec,
+        cardIssued: true,
+        cardIssuedAt: nowText(),
+      }
+      const nextStatus: CardRecordStatus = {
+        ...row.status,
+        flowStatus: '已制卡',
+      }
+
+      await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, row.id, {
+        apiVersion: qslApiVersion,
+        kind: 'CardRecord',
+        metadata: {
+          name: row.id,
+          version: row.metadataVersion,
+        },
+        spec: nextSpec,
+        status: nextStatus,
+      })
+
+      await appendQslAuditLog({
+        action: '确认制卡',
+        resourceType: 'card-record',
+        resourceName: row.id,
+        detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}`,
+      })
+    }
+
+    await loadSourceData()
+    feedback.value = `已确认制卡 ${targetRows.length} 条记录。`
+  } catch (error) {
+    feedback.value = `确认制卡失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    issuing.value = false
+  }
+}
+
+onMounted(loadSourceData)
+</script>
+
+<template>
+  <div class="qsl-block">
+    <VCard title="制卡签发">
+      <div class="qsl-form-grid">
+        <label class="qsl-field">
+          <span class="qsl-field__label">呼号（Call_Sign）</span>
+          <div class="qsl-input-shell">
+            <input
+              v-model.trim="callSignInput"
+              type="text"
+              placeholder="输入呼号后查询卡片信息与收件地址"
+              @keyup.enter="applySearch"
+            />
+          </div>
+        </label>
+      </div>
+
+      <div class="qsl-actions">
+        <VButton type="secondary" :disabled="loading || issuing" @click="applySearch">查询</VButton>
+        <VButton :disabled="loading || issuing" @click="clearSearch">清空</VButton>
+        <VButton :disabled="loading || issuing || !hasKeyword || !matchedCardRows.length" @click="confirmCardIssue">
+          确认制卡
+        </VButton>
+        <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
+      </div>
+    </VCard>
+
+    <VCard title="卡片信息">
+      <div class="qsl-table-wrap">
+        <table class="qsl-table">
+          <thead>
+            <tr>
+              <th>卡片编号</th>
+              <th>呼号</th>
+              <th>卡片类型</th>
+              <th>卡片版本</th>
+              <th>关联QSO</th>
+              <th>日期</th>
+              <th>时间</th>
+              <th>发卡</th>
+              <th>收卡</th>
+              <th>签收</th>
+              <th>目标邮箱</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in matchedCardRows" :key="item.id">
+              <td>{{ item.id }}</td>
+              <td>{{ item.callSign || '-' }}</td>
+              <td>{{ item.cardType || '-' }}</td>
+              <td>{{ item.cardVersion || '-' }}</td>
+              <td>{{ item.qsoRecordName || '-' }}</td>
+              <td>{{ item.cardDate || '-' }}</td>
+              <td>{{ item.cardTime || '-' }}</td>
+              <td>{{ item.cardSent ? '是' : '否' }}</td>
+              <td>{{ item.cardReceived ? '是' : '否' }}</td>
+              <td>{{ item.receiptConfirmed ? '是' : '否' }}</td>
+              <td>{{ item.mailTargetEmail || '-' }}</td>
+            </tr>
+            <tr v-if="!hasKeyword">
+              <td colspan="11" class="qsl-table-empty">请输入呼号进行查询。</td>
+            </tr>
+            <tr v-else-if="!matchedCardRows.length">
+              <td colspan="11" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </VCard>
+
+    <VCard title="关联QSO信息">
+      <div class="qsl-table-wrap">
+        <table class="qsl-table">
+          <thead>
+            <tr>
+              <th>QSO编号</th>
+              <th>呼号</th>
+              <th>日期</th>
+              <th>时间</th>
+              <th>时区</th>
+              <th>频率</th>
+              <th>模式</th>
+              <th>本台设备</th>
+              <th>位置</th>
+              <th>备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in matchedQsoRows" :key="item.id">
+              <td>{{ item.id }}</td>
+              <td>{{ item.callSign || '-' }}</td>
+              <td>{{ item.date || '-' }}</td>
+              <td>{{ item.time || '-' }}</td>
+              <td>{{ item.timezone || '-' }}</td>
+              <td>{{ item.freq || '-' }}</td>
+              <td>{{ item.mode || '-' }}</td>
+              <td>{{ item.myRig || '-' }}</td>
+              <td>{{ item.qth || '-' }}</td>
+              <td>{{ item.remarks || '-' }}</td>
+            </tr>
+            <tr v-if="!hasKeyword">
+              <td colspan="10" class="qsl-table-empty">请输入呼号进行查询。</td>
+            </tr>
+            <tr v-else-if="!matchedQsoRows.length">
+              <td colspan="10" class="qsl-table-empty">未找到关联QSO记录。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </VCard>
+
+    <VCard title="收件地址">
+      <div class="qsl-table-wrap">
+        <table class="qsl-table">
+          <thead>
+            <tr>
+              <th>地址编号</th>
+              <th>呼号</th>
+              <th>姓名</th>
+              <th>电话</th>
+              <th>邮编</th>
+              <th>收件地址</th>
+              <th>邮箱</th>
+              <th>备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in matchedAddressRows" :key="item.id">
+              <td>{{ item.id }}</td>
+              <td>{{ item.callSign || '-' }}</td>
+              <td>{{ item.name || '-' }}</td>
+              <td>{{ item.telephone || '-' }}</td>
+              <td>{{ item.postalCode || '-' }}</td>
+              <td>{{ item.address || '-' }}</td>
+              <td>{{ item.email || '-' }}</td>
+              <td>{{ item.remarks || '-' }}</td>
+            </tr>
+            <tr v-if="!hasKeyword">
+              <td colspan="8" class="qsl-table-empty">请输入呼号进行查询。</td>
+            </tr>
+            <tr v-else-if="!matchedAddressRows.length">
+              <td colspan="8" class="qsl-table-empty">未找到对应收件地址。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </VCard>
+  </div>
+</template>

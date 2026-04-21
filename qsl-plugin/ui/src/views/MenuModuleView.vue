@@ -5,6 +5,7 @@ import QslModuleFrame from '../components/qsl/QslModuleFrame.vue'
 import AddressManagementModule from './modules/AddressManagementModule.vue'
 import AuditLogModule from './modules/AuditLogModule.vue'
 import BureauManagementModule from './modules/BureauManagementModule.vue'
+import CardIssueModule from './modules/CardIssueModule.vue'
 import CardQueryModule from './modules/CardQueryModule.vue'
 import CardRecordModule from './modules/CardRecordModule.vue'
 import DefaultModulePlaceholder from './modules/DefaultModulePlaceholder.vue'
@@ -49,6 +50,8 @@ const renderer = computed<ModuleRenderer>(() => {
       return { component: QsoRecordModule }
     case 'card-record':
       return { component: CardRecordModule }
+    case 'card-issue':
+      return { component: CardIssueModule }
     case 'mail-send-confirm':
       return { component: MailSendConfirmModule }
     case 'mail-receive-confirm':

@@ -17,8 +17,10 @@ interface CardRecordSpec {
   cardTime: string
   cardRemarks: string
   cardSent: boolean
+  cardIssued: boolean
   cardReceived: boolean
   receiptConfirmed: boolean
+  cardIssuedAt: string
   sentAt: string
   receivedAt: string
   createdMailStatus: string
@@ -208,8 +210,10 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     cardTime: spec?.cardTime ?? '',
     cardRemarks: spec?.cardRemarks ?? '',
     cardSent: Boolean(spec?.cardSent),
+    cardIssued: Boolean(spec?.cardIssued),
     cardReceived: Boolean(spec?.cardReceived),
     receiptConfirmed: Boolean(spec?.receiptConfirmed),
+    cardIssuedAt: spec?.cardIssuedAt ?? '',
     sentAt: spec?.sentAt ?? '',
     receivedAt: spec?.receivedAt ?? '',
     createdMailStatus: spec?.createdMailStatus ?? '',
