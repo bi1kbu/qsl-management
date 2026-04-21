@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { Toast, VButton, VCard } from '@halo-dev/components'
+import { Toast, VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
   createResourceName,
+  getExtensionOrNull,
   listExtensions,
   qslApiVersion,
   updateExtension,
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
+import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import { buildQsoResourceName } from '../../utils/resource-name'
@@ -23,6 +26,8 @@ interface QsoRecordSpec {
   myRigMode: string
   myRigAnt: string
   myRigPwr: string
+  myQth: string
+  operator: string
   callSign: string
   rig: string
   ant: string
@@ -45,6 +50,8 @@ interface QsoRecordItem {
   myRig: string
   myRigAnt: string
   myRigPwr: string
+  myQth: string
+  operator: string
   rig: string
   ant: string
   pwr: string
@@ -68,6 +75,10 @@ interface EquipmentCatalogSpec {
   remarks: string
 }
 
+interface StationProfileSpec {
+  myName: string
+}
+
 type OpponentCatalogType = 'RIG' | 'ANT' | 'PWR'
 
 const form = reactive({
@@ -80,6 +91,8 @@ const form = reactive({
   mode: '',
   myRigAnt: '',
   myRigPwr: '',
+  myQth: '',
+  operator: '',
   callSign: '',
   rig: '',
   ant: '',
@@ -98,20 +111,19 @@ const feedback = ref('')
 const timerId = ref<number | null>(null)
 const loading = ref(false)
 const saving = ref(false)
+const activeFunctionTab = ref<'basic' | 'batch'>('basic')
+const syncHistoryQuery = ref(false)
+const historyKeyword = ref('')
+const historyKeywordInput = ref('')
 const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
-const batchEditEnabled = ref(false)
 const batchUpdating = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
-
-const batchEditForm = reactive({
-  mode: '',
-  freq: '',
-  qth: '',
-  remarks: '',
-})
+const batchEditField = ref('')
+const batchEditValue = ref('')
+const stationProfileMyName = ref('')
 
 const historyColumns = [
   { key: 'resourceName', label: '通联记录编号' },
@@ -128,6 +140,8 @@ const resourceKind = 'QsoRecord'
 const stationEquipmentPlural = 'station-equipments'
 const equipmentCatalogPlural = 'equipment-catalog-entries'
 const equipmentCatalogKind = 'EquipmentCatalogEntry'
+const stationProfilePlural = 'station-profiles'
+const stationProfileName = 'qsl-station-profile-default'
 
 const myRigOptions = computed(() => {
   return stationEquipments.value
@@ -160,6 +174,20 @@ const historyModeOptions = computed(() => {
   return Array.from(modeSet)
 })
 
+const batchEditFields = computed(() => {
+  return [
+    {
+      value: 'mode',
+      label: '模式',
+      inputType: 'select',
+      options: historyModeOptions.value.map((item) => ({ label: item, value: item })),
+    },
+    { value: 'freq', label: '频率', placeholder: '例如 7.050' },
+    { value: 'qth', label: '位置', placeholder: '例如 广州' },
+    { value: 'remarks', label: '备注', inputType: 'textarea', placeholder: '输入备注' },
+  ] as const
+})
+
 const myRigAntOptions = computed(() => {
   return selectedStationRig.value?.antennas?.filter((item) => item.trim().length > 0) ?? []
 })
@@ -189,12 +217,19 @@ const pwrSuggestionOptions = computed(() => {
 const isEditing = computed(() => Boolean(editingResourceName.value))
 
 const filteredHistory = computed(() => {
-  const callSign = form.callSign.trim().toUpperCase()
+  const callSign = historyKeyword.value.trim().toUpperCase()
   if (!callSign) {
     return records.value
   }
 
   return records.value.filter((item) => item.callSign.toUpperCase().includes(callSign))
+})
+
+const allFilteredSelected = computed(() => {
+  if (!filteredHistory.value.length) {
+    return false
+  }
+  return filteredHistory.value.every((item) => selectedHistoryNames.value.includes(item.resourceName))
 })
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
@@ -292,6 +327,39 @@ watch(pageSize, () => {
   currentPage.value = 1
 })
 
+const applyHistorySearch = () => {
+  historyKeyword.value = historyKeywordInput.value.trim().toUpperCase()
+  currentPage.value = 1
+}
+
+const syncHistoryKeywordFromForm = () => {
+  if (!syncHistoryQuery.value) {
+    return
+  }
+  const keyword = form.callSign.trim().toUpperCase()
+  historyKeyword.value = keyword
+  historyKeywordInput.value = keyword
+  currentPage.value = 1
+}
+
+watch(
+  () => form.callSign,
+  () => {
+    syncHistoryKeywordFromForm()
+  },
+)
+
+watch(syncHistoryQuery, (enabled) => {
+  if (!enabled) {
+    return
+  }
+  syncHistoryKeywordFromForm()
+})
+
+watch(historyKeyword, (value) => {
+  historyKeywordInput.value = value
+})
+
 const toInputTime = (value: string): string => {
   const normalized = value.trim()
   if (/^\d{4}$/.test(normalized)) {
@@ -373,6 +441,8 @@ const toRecordItem = (extension: QslExtension<QsoRecordSpec>): QsoRecordItem => 
     myRig: extension.spec?.myRig ?? '',
     myRigAnt: extension.spec?.myRigAnt ?? '',
     myRigPwr: extension.spec?.myRigPwr ?? '',
+    myQth: extension.spec?.myQth ?? '',
+    operator: extension.spec?.operator ?? '',
     rig: extension.spec?.rig ?? '',
     ant: extension.spec?.ant ?? '',
     pwr: extension.spec?.pwr ?? '',
@@ -404,6 +474,11 @@ const loadEquipmentCatalog = async () => {
     .filter((spec): spec is EquipmentCatalogSpec => Boolean(spec?.type && spec?.value?.trim()))
 }
 
+const loadStationProfile = async () => {
+  const extension = await getExtensionOrNull<StationProfileSpec>(stationProfilePlural, stationProfileName)
+  stationProfileMyName.value = extension?.spec?.myName?.trim() ?? ''
+}
+
 const loadRecords = async (options: { silent?: boolean; skipLoading?: boolean } = {}) => {
   if (!options.skipLoading) {
     loading.value = true
@@ -426,7 +501,12 @@ const loadRecords = async (options: { silent?: boolean; skipLoading?: boolean } 
 const loadPageData = async () => {
   loading.value = true
   try {
-    await Promise.all([loadStationEquipments(), loadEquipmentCatalog(), loadRecords({ skipLoading: true })])
+    await Promise.all([
+      loadStationEquipments(),
+      loadEquipmentCatalog(),
+      loadStationProfile(),
+      loadRecords({ skipLoading: true }),
+    ])
 
     if (!form.myRig && myRigOptions.value.length > 0) {
       form.myRig = myRigOptions.value[0]
@@ -439,6 +519,8 @@ const loadPageData = async () => {
 }
 
 const buildSpecFromForm = (): QsoRecordSpec => {
+  const fallbackOperator = stationProfileMyName.value.trim()
+  const operator = form.operator.trim() || fallbackOperator
   return {
     date: form.date,
     time: toStorageTime(form.time),
@@ -448,6 +530,8 @@ const buildSpecFromForm = (): QsoRecordSpec => {
     myRigMode: form.mode.trim(),
     myRigAnt: form.myRigAnt.trim(),
     myRigPwr: form.myRigPwr.trim(),
+    myQth: form.myQth.trim(),
+    operator,
     callSign: form.callSign.trim().toUpperCase(),
     rig: form.rig.trim(),
     ant: form.ant.trim(),
@@ -469,6 +553,8 @@ const fillFormFromRecord = (item: QsoRecordItem) => {
   form.mode = item.mode
   form.myRigAnt = item.myRigAnt
   form.myRigPwr = item.myRigPwr
+  form.myQth = item.myQth
+  form.operator = item.operator
   form.callSign = item.callSign
   form.rig = item.rig
   form.ant = item.ant
@@ -485,6 +571,8 @@ const resetForm = () => {
   form.mode = ''
   form.myRigAnt = ''
   form.myRigPwr = ''
+  form.myQth = ''
+  form.operator = ''
   form.callSign = ''
   form.rig = ''
   form.ant = ''
@@ -520,19 +608,32 @@ const clearHistorySelection = () => {
   selectedHistoryNames.value = []
 }
 
+const toggleAllFilteredHistorySelection = () => {
+  if (allFilteredSelected.value) {
+    const filteredNameSet = new Set(filteredHistory.value.map((item) => item.resourceName))
+    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !filteredNameSet.has(name))
+    return
+  }
+
+  const merged = new Set(selectedHistoryNames.value)
+  filteredHistory.value.forEach((item) => merged.add(item.resourceName))
+  selectedHistoryNames.value = Array.from(merged)
+}
+
 const applyHistoryBatchEdit = async () => {
   if (!selectedHistoryNames.value.length) {
     feedback.value = '请先选择要批量编辑的历史记录。'
     return
   }
 
-  if (
-    !batchEditForm.mode.trim() &&
-    !batchEditForm.freq.trim() &&
-    !batchEditForm.qth.trim() &&
-    !batchEditForm.remarks.trim()
-  ) {
-    feedback.value = '请至少填写一项批量编辑字段。'
+  if (!batchEditField.value) {
+    feedback.value = '请先选择要修改的字段。'
+    return
+  }
+
+  const nextValue = batchEditValue.value.trim()
+  if (!nextValue) {
+    feedback.value = '请填写要修改后的字段值。'
     return
   }
 
@@ -544,19 +645,21 @@ const applyHistoryBatchEdit = async () => {
         date: item.date,
         time: item.time,
         timezone: item.timezone,
-        freq: batchEditForm.freq.trim() || item.freq,
+        freq: batchEditField.value === 'freq' ? nextValue : item.freq,
         myRig: item.myRig,
-        myRigMode: batchEditForm.mode.trim() || item.mode,
+        myRigMode: batchEditField.value === 'mode' ? nextValue : item.mode,
         myRigAnt: item.myRigAnt,
         myRigPwr: item.myRigPwr,
+        myQth: item.myQth,
+        operator: item.operator,
         callSign: item.callSign,
         rig: item.rig,
         ant: item.ant,
         pwr: item.pwr,
-        qth: batchEditForm.qth.trim() || item.qth,
+        qth: batchEditField.value === 'qth' ? nextValue : item.qth,
         rstSent: item.rstSent,
         rstRcvd: item.rstRcvd,
-        remarks: batchEditForm.remarks.trim() || item.remarks,
+        remarks: batchEditField.value === 'remarks' ? nextValue : item.remarks,
       }
 
       await updateExtension<QsoRecordSpec>(resourcePlural, item.resourceName, {
@@ -574,22 +677,15 @@ const applyHistoryBatchEdit = async () => {
       action: '批量编辑通联记录',
       resourceType: 'qso-record',
       resourceName: `count=${targets.length}`,
-      detail: `批量修改字段：${[
-        batchEditForm.mode.trim() ? '模式' : '',
-        batchEditForm.freq.trim() ? '频率' : '',
-        batchEditForm.qth.trim() ? '位置' : '',
-        batchEditForm.remarks.trim() ? '备注' : '',
-      ]
-        .filter(Boolean)
-        .join('、')}`,
+      detail: `批量修改字段：${
+        batchEditFields.value.find((item) => item.value === batchEditField.value)?.label ?? batchEditField.value
+      }，值：${nextValue}`,
     })
 
     await loadRecords({ silent: true })
     clearHistorySelection()
-    batchEditForm.mode = ''
-    batchEditForm.freq = ''
-    batchEditForm.qth = ''
-    batchEditForm.remarks = ''
+    batchEditField.value = ''
+    batchEditValue.value = ''
     feedback.value = ''
     Toast.success(`已批量编辑 ${targets.length} 条通联记录。`)
   } catch (error) {
@@ -697,13 +793,21 @@ onMounted(() => {
 
 <template>
   <div class="qsl-block">
-    <VCard :title="isEditing ? '通联记录编辑' : '通联记录录入'">
-      <template #actions>
-        <VButton size="sm" type="secondary" :disabled="loading || saving" @click="saveRecord">{{
-          isEditing ? '保存编辑' : '保存通联记录'
-        }}</VButton>
+    <VCard>
+      <template #header>
+        <div class="qsl-function-tabs">
+          <VTabs v-model:activeId="activeFunctionTab">
+            <VTabItem id="basic" label="基本功能">
+              <div class="qsl-tab-panel-placeholder" />
+            </VTabItem>
+            <VTabItem id="batch" label="批量编辑">
+              <div class="qsl-tab-panel-placeholder" />
+            </VTabItem>
+          </VTabs>
+        </div>
       </template>
 
+      <template v-if="activeFunctionTab === 'basic'">
       <div class="qsl-record-section">
         <p class="qsl-record-section__title">第一部分：本台基本信息</p>
         <div class="qsl-form-grid">
@@ -783,6 +887,20 @@ onMounted(() => {
                 <option value="">请选择功率</option>
                 <option v-for="item in myRigPwrOptions" :key="item" :value="item">{{ item }}</option>
               </select>
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">本台QTH（My_QTH）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.myQth" type="text" placeholder="输入本台位置" />
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">操作员（Operator）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.operator" type="text" placeholder="留空默认使用通信地址 My_Name" />
             </div>
           </label>
         </div>
@@ -870,65 +988,52 @@ onMounted(() => {
         <VButton v-if="isEditing" :disabled="loading || saving" @click="cancelEditRecord">取消编辑</VButton>
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
+      </template>
+
+      <template v-else>
+        <div class="qsl-actions">
+          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+        </div>
+        <QslBatchFieldEditor
+          :fields="batchEditFields"
+          :selected-field="batchEditField"
+          :field-value="batchEditValue"
+          :selected-count="selectedHistoryCount"
+          :disabled="batchUpdating"
+          confirm-text="确认修改"
+          @update:selected-field="(value) => (batchEditField = value)"
+          @update:field-value="(value) => (batchEditValue = value)"
+          @confirm="applyHistoryBatchEdit"
+        />
+        <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
+      </template>
     </VCard>
 
     <VCard>
+      <QslBusinessRecordHeader
+        title="通联日志清单"
+        :keyword="historyKeywordInput"
+        :all-selected="allFilteredSelected"
+        :has-rows="filteredHistory.length > 0"
+        :sync-enabled="syncHistoryQuery"
+        placeholder="按呼号筛选"
+        @update:keyword="(value) => (historyKeywordInput = value)"
+        @search="applyHistorySearch"
+        @toggle-all="toggleAllFilteredHistorySelection"
+        @update:sync-enabled="(value) => (syncHistoryQuery = value)"
+      />
       <QslExpandableHistoryTable
         title="历史记录"
         :rows="pagedFilteredHistory"
         :columns="historyColumns"
         row-key-field="resourceName"
         :selected-keys="selectedHistoryNames"
-        :batch-edit-enabled="batchEditEnabled"
+        :batch-edit-enabled="false"
+        :show-batch-toggle="false"
+        :show-toolbar="false"
         empty-text="暂无历史记录。"
         @update:selected-keys="(value) => (selectedHistoryNames = value)"
-        @update:batch-edit-enabled="(value) => (batchEditEnabled = value)"
       >
-        <template #batch-actions>
-          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
-          <VButton
-            size="sm"
-            type="secondary"
-            :disabled="batchUpdating || !selectedHistoryCount"
-            @click="applyHistoryBatchEdit"
-          >
-            批量编辑已选记录
-          </VButton>
-        </template>
-
-        <template #batch-form>
-          <label class="qsl-field">
-            <span class="qsl-field__label">批量模式（留空不改）</span>
-            <div class="qsl-input-shell">
-              <select v-model="batchEditForm.mode">
-                <option value="">不修改</option>
-                <option v-for="item in historyModeOptions" :key="item" :value="item">{{ item }}</option>
-              </select>
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">批量频率（留空不改）</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="batchEditForm.freq" type="text" placeholder="例如 7.050" />
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">批量位置（留空不改）</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="batchEditForm.qth" type="text" placeholder="例如 广州" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">批量备注（留空不改）</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="batchEditForm.remarks" rows="2" placeholder="填写后将覆盖已选记录备注" />
-            </div>
-          </label>
-        </template>
-
         <template #cell-freq="{ row }">
           {{ toHistoryItem(row).freq || '未填频率' }}
         </template>
@@ -953,6 +1058,12 @@ onMounted(() => {
               <tr>
                 <th>本台功率</th>
                 <td>{{ toHistoryItem(row).myRigPwr || '未填' }}</td>
+                <th>本台QTH</th>
+                <td>{{ toHistoryItem(row).myQth || '未填' }}</td>
+              </tr>
+              <tr>
+                <th>操作员</th>
+                <td>{{ toHistoryItem(row).operator || '未填' }}</td>
                 <th>对方设备</th>
                 <td>{{ toHistoryItem(row).rig || '未填' }}</td>
               </tr>
@@ -989,6 +1100,14 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
+.qsl-function-tabs {
+  margin-bottom: 10px;
+}
+
+.qsl-tab-panel-placeholder {
+  display: none;
+}
+
 .qsl-record-section {
   margin-top: 12px;
   padding-top: 12px;

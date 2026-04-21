@@ -101,51 +101,65 @@ onMounted(loadSystemSettings)
   <div class="qsl-block">
     <VCard title="系统参数">
       <div class="qsl-form">
-        <label class="qsl-field">
-          <span class="qsl-field__label">游客每分钟查询次数</span>
-          <div class="qsl-input-shell">
-            <input
-              v-model.number="systemSettingsForm.guestQueryPerMinute"
-              type="number"
-              min="1"
-              step="1"
-              placeholder="请输入正整数"
-            />
-          </div>
-          <small class="qsl-field__tip">用于限制单 IP 每分钟通过前台卡片访问后端接口的频率。</small>
-        </label>
+        <section class="qsl-setting-section">
+          <header class="qsl-setting-section__header">
+            <h3>基础参数</h3>
+            <p>控制系统访问频率与换卡审核策略。</p>
+          </header>
 
-        <div class="qsl-switch-row">
-          <div>
-            <p class="qsl-switch-row__title">换卡是否需要审核</p>
-            <p class="qsl-switch-row__desc">开启后，前台换卡申请需要管理员审批。</p>
-          </div>
-          <VSwitch v-model="systemSettingsForm.requiresExchangeReview" />
-        </div>
+          <label class="qsl-field">
+            <span class="qsl-field__label">游客每分钟查询次数</span>
+            <div class="qsl-input-shell">
+              <input
+                v-model.number="systemSettingsForm.guestQueryPerMinute"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="请输入正整数"
+              />
+            </div>
+            <small class="qsl-field__tip">用于限制单 IP 每分钟通过前台卡片访问后端接口的频率。</small>
+          </label>
 
-        <div class="qsl-switch-row">
-          <div>
-            <p class="qsl-switch-row__title">制卡后自动发送邮件</p>
-            <p class="qsl-switch-row__desc">开启后，在卡片记录页面新增记录时会自动尝试发送制卡通知邮件。</p>
+          <div class="qsl-switch-row">
+            <div>
+              <p class="qsl-switch-row__title">换卡是否需要审核</p>
+              <p class="qsl-switch-row__desc">开启后，前台换卡申请需要管理员审批。</p>
+            </div>
+            <VSwitch v-model="systemSettingsForm.requiresExchangeReview" />
           </div>
-          <VSwitch v-model="systemSettingsForm.autoNotifyOnCardCreated" />
-        </div>
+        </section>
 
-        <div class="qsl-switch-row">
-          <div>
-            <p class="qsl-switch-row__title">发卡后自动发送邮件</p>
-            <p class="qsl-switch-row__desc">开启后，发信确认成功会自动尝试发送发卡通知邮件。</p>
-          </div>
-          <VSwitch v-model="systemSettingsForm.autoNotifyOnCardSent" />
-        </div>
+        <section class="qsl-setting-section">
+          <header class="qsl-setting-section__header">
+            <h3>邮件通知策略</h3>
+            <p>控制制卡、发卡、收卡三个业务场景的自动邮件发送。</p>
+          </header>
 
-        <div class="qsl-switch-row">
-          <div>
-            <p class="qsl-switch-row__title">收卡后自动发送邮件</p>
-            <p class="qsl-switch-row__desc">开启后，收信确认成功会自动尝试发送收卡通知邮件。</p>
+          <div class="qsl-switch-row">
+            <div>
+              <p class="qsl-switch-row__title">制卡后自动发送邮件</p>
+              <p class="qsl-switch-row__desc">开启后，在卡片记录页面新增记录时会自动尝试发送制卡通知邮件。</p>
+            </div>
+            <VSwitch v-model="systemSettingsForm.autoNotifyOnCardCreated" />
           </div>
-          <VSwitch v-model="systemSettingsForm.autoNotifyOnCardReceived" />
-        </div>
+
+          <div class="qsl-switch-row">
+            <div>
+              <p class="qsl-switch-row__title">发卡后自动发送邮件</p>
+              <p class="qsl-switch-row__desc">开启后，发信确认成功会自动尝试发送发卡通知邮件。</p>
+            </div>
+            <VSwitch v-model="systemSettingsForm.autoNotifyOnCardSent" />
+          </div>
+
+          <div class="qsl-switch-row">
+            <div>
+              <p class="qsl-switch-row__title">收卡后自动发送邮件</p>
+              <p class="qsl-switch-row__desc">开启后，收信确认成功会自动尝试发送收卡通知邮件。</p>
+            </div>
+            <VSwitch v-model="systemSettingsForm.autoNotifyOnCardReceived" />
+          </div>
+        </section>
 
         <div class="qsl-actions">
           <VButton type="secondary" :disabled="loading || saving" @click="saveSystemSettings">保存参数</VButton>
@@ -155,3 +169,34 @@ onMounted(loadSystemSettings)
     </VCard>
   </div>
 </template>
+
+<style scoped lang="scss">
+.qsl-setting-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 14px 16px;
+}
+
+.qsl-setting-section + .qsl-setting-section {
+  margin-top: 14px;
+}
+
+.qsl-setting-section__header {
+  margin-bottom: 12px;
+}
+
+.qsl-setting-section__header h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  color: #111827;
+}
+
+.qsl-setting-section__header p {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 18px;
+}
+</style>

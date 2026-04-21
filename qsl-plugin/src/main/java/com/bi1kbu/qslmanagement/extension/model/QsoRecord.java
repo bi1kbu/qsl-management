@@ -26,6 +26,8 @@ public class QsoRecord extends QslBaseExtension<QsoRecord.QsoRecordSpec, QsoReco
         private String myRigMode;
         private String myRigAnt;
         private String myRigPwr;
+        private String myQth;
+        private String operator;
         private String callSign;
         private String rig;
         private String ant;
@@ -42,4 +44,3 @@ public class QsoRecord extends QslBaseExtension<QsoRecord.QsoRecordSpec, QsoReco
         private String source;
     }
 }
-

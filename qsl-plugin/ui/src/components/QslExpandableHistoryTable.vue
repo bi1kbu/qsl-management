@@ -16,11 +16,13 @@ const props = withDefaults(
     batchEditEnabled: boolean
     emptyText?: string
     showBatchToggle?: boolean
+    showToolbar?: boolean
   }>(),
   {
     rowKeyField: 'id',
     emptyText: '暂无数据。',
     showBatchToggle: true,
+    showToolbar: true,
   },
 )
 
@@ -120,7 +122,7 @@ const formatCellValue = (value: unknown): string => {
 </script>
 
 <template>
-  <div class="qsl-history-toolbar">
+  <div v-if="showToolbar" class="qsl-history-toolbar">
     <label class="qsl-checkbox qsl-history-toolbar__title">
       <input :checked="allRowsSelected" type="checkbox" :disabled="!rows.length" @change="toggleAllRowsSelection" />
       <span>{{ title }}</span>

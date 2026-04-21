@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { VButton, VCard, VTag } from '@halo-dev/components'
+import { VButton, VCard, VTabItem, VTabs, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import { batchSendNotificationMail, confirmMailSend, sendNotificationMail } from '../../api/qsl-console-api'
 import { listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
+import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
+import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
 interface CardRecordSpec {
@@ -51,14 +53,20 @@ const loading = ref(false)
 const pendingRowName = ref('')
 const feedback = ref('')
 const historyKeyword = ref('')
+const historyKeywordInput = ref('')
+const syncHistoryQuery = ref(false)
+const functionCallSign = ref('')
 const selectedHistoryNames = ref<string[]>([])
 const editingResourceName = ref('')
 const savingEdit = ref(false)
 const batchUpdating = ref(false)
 const batchSendingSentMail = ref(false)
+const activeTab = ref<'confirm' | 'batch'>('confirm')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
+const batchEditField = ref('')
+const batchEditValue = ref('')
 
 const editForm = reactive({
   callSign: '',
@@ -68,12 +76,6 @@ const editForm = reactive({
   cardRemarks: '',
   sentState: 'UNSENT' as 'SENT' | 'UNSENT',
   sentAt: '',
-})
-
-const batchEditForm = reactive({
-  cardType: '',
-  cardRemarks: '',
-  sentState: '' as '' | 'SENT' | 'UNSENT',
 })
 
 const resourcePlural = 'card-records'
@@ -102,6 +104,30 @@ const allFilteredSelected = computed(() => {
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
 const isEditing = computed(() => Boolean(editingResourceName.value))
+const isConfirmTab = computed(() => activeTab.value === 'confirm')
+const isBatchTab = computed(() => activeTab.value === 'batch')
+const batchEditFields = [
+  {
+    value: 'cardType',
+    label: '卡片类型',
+    inputType: 'select',
+    options: [
+      { label: 'QSO', value: 'QSO' },
+      { label: 'SWL', value: 'SWL' },
+      { label: 'EYEBALL', value: 'EYEBALL' },
+    ],
+  },
+  {
+    value: 'sentState',
+    label: '发信状态',
+    inputType: 'select',
+    options: [
+      { label: '已发信', value: 'SENT' },
+      { label: '未发信', value: 'UNSENT' },
+    ],
+  },
+  { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
+] as const
 const totalPages = computed(() => {
   if (!filteredRows.value.length) {
     return 1
@@ -133,6 +159,39 @@ watch(filteredRows, () => {
 
 watch(pageSize, () => {
   currentPage.value = 1
+})
+
+const applyHistorySearch = () => {
+  historyKeyword.value = historyKeywordInput.value.trim().toUpperCase()
+  currentPage.value = 1
+}
+
+const syncHistoryKeywordFromFunction = () => {
+  if (!syncHistoryQuery.value) {
+    return
+  }
+  const keyword = functionCallSign.value.trim().toUpperCase()
+  historyKeyword.value = keyword
+  historyKeywordInput.value = keyword
+  currentPage.value = 1
+}
+
+watch(
+  () => functionCallSign.value,
+  () => {
+    syncHistoryKeywordFromFunction()
+  },
+)
+
+watch(syncHistoryQuery, (enabled) => {
+  if (!enabled) {
+    return
+  }
+  syncHistoryKeywordFromFunction()
+})
+
+watch(historyKeyword, (value) => {
+  historyKeywordInput.value = value
 })
 
 const nowText = (): string => {
@@ -349,8 +408,14 @@ const applyHistoryBatchEdit = async () => {
     return
   }
 
-  if (!batchEditForm.cardType && !batchEditForm.cardRemarks.trim() && !batchEditForm.sentState) {
-    feedback.value = '请至少填写一项批量编辑字段。'
+  if (!batchEditField.value) {
+    feedback.value = '请先选择要修改的字段。'
+    return
+  }
+
+  const nextValue = batchEditValue.value.trim()
+  if (!nextValue) {
+    feedback.value = '请填写要修改后的字段值。'
     return
   }
 
@@ -360,18 +425,20 @@ const applyHistoryBatchEdit = async () => {
 
     for (const item of targets) {
       const nextSent =
-        batchEditForm.sentState === 'SENT' ? true : batchEditForm.sentState === 'UNSENT' ? false : item.spec.cardSent
+        batchEditField.value === 'sentState'
+          ? nextValue === 'SENT'
+          : item.spec.cardSent
       const nextSentAt =
-        batchEditForm.sentState === 'SENT'
-          ? item.spec.sentAt || nowText()
-          : batchEditForm.sentState === 'UNSENT'
-            ? ''
-            : item.spec.sentAt
+        batchEditField.value === 'sentState'
+          ? nextValue === 'SENT'
+            ? item.spec.sentAt || nowText()
+            : ''
+          : item.spec.sentAt
 
       const nextSpec: CardRecordSpec = {
         ...item.spec,
-        cardType: (batchEditForm.cardType as CardRecordSpec['cardType']) || item.spec.cardType,
-        cardRemarks: batchEditForm.cardRemarks.trim() || item.spec.cardRemarks,
+        cardType: batchEditField.value === 'cardType' ? (nextValue as CardRecordSpec['cardType']) : item.spec.cardType,
+        cardRemarks: batchEditField.value === 'cardRemarks' ? nextValue : item.spec.cardRemarks,
         cardSent: nextSent,
         sentAt: nextSentAt,
       }
@@ -391,20 +458,15 @@ const applyHistoryBatchEdit = async () => {
       action: '批量编辑发信确认记录',
       resourceType: 'card-record',
       resourceName: `count=${targets.length}`,
-      detail: `${[
-        batchEditForm.cardType ? '卡片类型' : '',
-        batchEditForm.cardRemarks.trim() ? '卡片备注' : '',
-        batchEditForm.sentState ? '发信状态' : '',
-      ]
-        .filter(Boolean)
-        .join('、')}`,
+      detail: `批量修改字段：${
+        batchEditFields.find((item) => item.value === batchEditField.value)?.label ?? batchEditField.value
+      }，值：${nextValue}`,
     })
 
     await loadRows({ silent: true })
     clearHistorySelection()
-    batchEditForm.cardType = ''
-    batchEditForm.cardRemarks = ''
-    batchEditForm.sentState = ''
+    batchEditField.value = ''
+    batchEditValue.value = ''
     feedback.value = `已批量编辑 ${targets.length} 条发信确认记录。`
   } catch (error) {
     feedback.value = `批量编辑发信确认记录失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -459,27 +521,30 @@ onMounted(() => {
 
 <template>
   <div class="qsl-block">
-    <VCard title="发信确认清单">
-      <div class="qsl-form-inline">
-        <div class="qsl-input-shell">
-          <input v-model.trim="historyKeyword" type="text" placeholder="按呼号、卡片ID、类型筛选" />
+    <VCard>
+      <template #header>
+        <div class="qsl-send-confirm-tabs">
+          <VTabs v-model:activeId="activeTab">
+            <VTabItem id="confirm" label="发信确认">
+              <div class="qsl-send-confirm-tab-panel" />
+            </VTabItem>
+            <VTabItem id="batch" label="批量编辑">
+              <div class="qsl-send-confirm-tab-panel" />
+            </VTabItem>
+          </VTabs>
         </div>
-        <VButton :disabled="loading || pendingRowName !== ''" @click="loadRows">刷新清单</VButton>
+      </template>
+
+      <div v-if="isConfirmTab" class="qsl-form-inline">
+        <label class="qsl-field">
+          <span class="qsl-field__label">呼号（Call_Sign）</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="functionCallSign" type="text" placeholder="用于同步查询" />
+          </div>
+        </label>
       </div>
 
-      <div class="qsl-actions">
-        <VButton size="sm" :disabled="!filteredRows.length" @click="toggleAllFilteredHistorySelection">{{
-          allFilteredSelected ? '取消全选当前列表' : '全选当前列表'
-        }}</VButton>
-        <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
-        <VButton
-          size="sm"
-          type="secondary"
-          :disabled="batchUpdating || !selectedHistoryCount"
-          @click="applyHistoryBatchEdit"
-        >
-          批量编辑已选记录
-        </VButton>
+      <div v-if="isConfirmTab" class="qsl-actions">
         <VButton
           size="sm"
           type="secondary"
@@ -491,39 +556,23 @@ onMounted(() => {
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
       </div>
 
-      <div class="qsl-form-grid">
-        <label class="qsl-field">
-          <span class="qsl-field__label">批量卡片类型（留空不改）</span>
-          <div class="qsl-input-shell">
-            <select v-model="batchEditForm.cardType">
-              <option value="">不修改</option>
-              <option value="QSO">QSO</option>
-              <option value="SWL">SWL</option>
-              <option value="EYEBALL">EYEBALL</option>
-            </select>
-          </div>
-        </label>
-
-        <label class="qsl-field">
-          <span class="qsl-field__label">批量发信状态（留空不改）</span>
-          <div class="qsl-input-shell">
-            <select v-model="batchEditForm.sentState">
-              <option value="">不修改</option>
-              <option value="SENT">已发信</option>
-              <option value="UNSENT">未发信</option>
-            </select>
-          </div>
-        </label>
-
-        <label class="qsl-field qsl-field--full">
-          <span class="qsl-field__label">批量卡片备注（留空不改）</span>
-          <div class="qsl-input-shell qsl-input-shell--textarea">
-            <textarea v-model.trim="batchEditForm.cardRemarks" rows="2" placeholder="填写后将覆盖已选记录备注" />
-          </div>
-        </label>
+      <div v-if="isBatchTab" class="qsl-actions">
+        <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
       </div>
+      <QslBatchFieldEditor
+        v-if="isBatchTab"
+        :fields="batchEditFields"
+        :selected-field="batchEditField"
+        :field-value="batchEditValue"
+        :selected-count="selectedHistoryCount"
+        :disabled="batchUpdating"
+        confirm-text="确认修改"
+        @update:selected-field="(value) => (batchEditField = value)"
+        @update:field-value="(value) => (batchEditValue = value)"
+        @confirm="applyHistoryBatchEdit"
+      />
 
-      <VCard v-if="isEditing" title="单条编辑">
+      <VCard v-if="isEditing && !isBatchTab" title="单条编辑">
         <div class="qsl-form-grid">
           <label class="qsl-field">
             <span class="qsl-field__label">对方呼号</span>
@@ -587,6 +636,26 @@ onMounted(() => {
           <VButton :disabled="savingEdit" @click="cancelEdit">取消编辑</VButton>
         </div>
       </VCard>
+    </VCard>
+
+    <VCard>
+      <QslBusinessRecordHeader
+        title="发信确认清单"
+        :keyword="historyKeywordInput"
+        :all-selected="allFilteredSelected"
+        :has-rows="filteredRows.length > 0"
+        :sync-enabled="syncHistoryQuery"
+        placeholder="按呼号筛选"
+        @update:keyword="(value) => (historyKeywordInput = value)"
+        @search="applyHistorySearch"
+        @toggle-all="toggleAllFilteredHistorySelection"
+        @update:sync-enabled="(value) => (syncHistoryQuery = value)"
+      />
+
+      <div class="qsl-actions">
+        <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+        <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
+      </div>
 
       <div class="qsl-table-wrap">
         <table class="qsl-table">
@@ -606,13 +675,12 @@ onMounted(() => {
           <tbody>
             <tr v-for="row in pagedRows" :key="row.resourceName">
               <td>
-                <label class="qsl-checkbox">
+                <label class="qsl-checkbox qsl-select-only">
                   <input
                     :checked="isHistorySelected(row.resourceName)"
                     type="checkbox"
                     @change="toggleHistorySelection(row.resourceName)"
                   />
-                  <span>选择</span>
                 </label>
               </td>
               <td>{{ row.resourceName }}</td>
@@ -671,13 +739,29 @@ onMounted(() => {
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
       />
-
-      <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
+      <div class="qsl-actions">
+        <VButton size="sm" :disabled="loading || pendingRowName !== ''" @click="loadRows">刷新清单</VButton>
+      </div>
     </VCard>
+
+    <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
   </div>
 </template>
 
 <style scoped lang="scss">
+.qsl-send-confirm-tabs {
+  margin-bottom: 12px;
+}
+
+.qsl-send-confirm-tab-panel {
+  display: none;
+}
+
+.qsl-select-only {
+  display: inline-flex;
+  align-items: center;
+}
+
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;

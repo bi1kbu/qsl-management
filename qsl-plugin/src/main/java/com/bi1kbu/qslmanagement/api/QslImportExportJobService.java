@@ -398,6 +398,8 @@ public class QslImportExportJobService {
                     spec.setMyRigMode(value(row, "myRigMode"));
                     spec.setMyRigAnt(value(row, "myRigAnt"));
                     spec.setMyRigPwr(value(row, "myRigPwr"));
+                    spec.setMyQth(value(row, "myQth"));
+                    spec.setOperator(value(row, "operator"));
                     spec.setRig(value(row, "rig"));
                     spec.setAnt(value(row, "ant"));
                     spec.setPwr(value(row, "pwr"));
@@ -672,6 +674,8 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getMyRigMode()),
                         spec == null ? "" : nullToEmpty(spec.getMyRigAnt()),
                         spec == null ? "" : nullToEmpty(spec.getMyRigPwr()),
+                        spec == null ? "" : nullToEmpty(spec.getMyQth()),
+                        spec == null ? "" : nullToEmpty(spec.getOperator()),
                         spec == null ? "" : nullToEmpty(spec.getRig()),
                         spec == null ? "" : nullToEmpty(spec.getAnt()),
                         spec == null ? "" : nullToEmpty(spec.getPwr()),
@@ -693,6 +697,8 @@ public class QslImportExportJobService {
                     "myRigMode",
                     "myRigAnt",
                     "myRigPwr",
+                    "myQth",
+                    "operator",
                     "rig",
                     "ant",
                     "pwr",

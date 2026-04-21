@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { VButton, VCard, VTag } from '@halo-dev/components'
+import { VButton, VCard, VTabItem, VTabs, VTag } from '@halo-dev/components'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
@@ -11,13 +11,15 @@ import {
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import { batchSendNotificationMail, sendNotificationMail } from '../../api/qsl-console-api'
+import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
+import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import { buildCardResourceName } from '../../utils/resource-name'
 
 interface CardRecordSpec {
   callSign: string
-  cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  cardType: CardType
   cardVersion: string
   qsoRecordName: string
   cardDate: string
@@ -45,7 +47,7 @@ interface CardRecordItem {
   metadataVersion?: number | null
   spec: CardRecordSpec
   callSign: string
-  cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  cardType: CardType
   cardVersion: string
   qsoRecordName: string
   cardDate: string
@@ -86,9 +88,11 @@ interface SystemSettingSpec {
   autoNotifyOnCardCreated: boolean
 }
 
+type CardType = 'QSO' | 'SWL' | 'EYEBALL'
+
 const form = reactive({
   callSign: '',
-  cardType: 'QSO' as 'QSO' | 'SWL' | 'EYEBALL',
+  cardType: 'QSO' as CardType,
   cardVersion: '',
   qsoRecordName: '',
   cardDate: '',
@@ -105,10 +109,11 @@ const loading = ref(false)
 const saving = ref(false)
 const qsoPanelVisible = ref(false)
 const qsoFilter = ref('')
+const activeFunctionTab = ref<CardType | 'batch'>('QSO')
 const historyKeyword = ref('')
+const historyKeywordInput = ref('')
 const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
-const batchEditEnabled = ref(false)
 const batchUpdating = ref(false)
 const batchSendingCreatedMail = ref(false)
 const syncHistoryQuery = ref(false)
@@ -117,13 +122,9 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const autoNotifyOnCardCreated = ref(false)
+const batchEditField = ref('')
+const batchEditValue = ref('')
 let realtimeTimer: ReturnType<typeof setInterval> | null = null
-
-const batchEditForm = reactive({
-  cardType: '',
-  cardVersion: '',
-  cardRemarks: '',
-})
 
 const historyColumns = [
   { key: 'resourceName', label: '卡片记录编号' },
@@ -151,6 +152,29 @@ const selectedQso = computed(() => {
 const showQsoSelector = computed(() => form.cardType !== 'EYEBALL')
 const dateTimeRequired = computed(() => form.cardType === 'EYEBALL')
 const lockCardDateTime = computed(() => selectedQso.value !== null)
+const isBatchTab = computed(() => activeFunctionTab.value === 'batch')
+const batchEditFields = computed(() => {
+  return [
+    {
+      value: 'cardType',
+      label: '卡片类型',
+      inputType: 'select',
+      options: [
+        { label: 'QSO', value: 'QSO' },
+        { label: 'SWL', value: 'SWL' },
+        { label: 'EYEBALL', value: 'EYEBALL' },
+      ],
+    },
+    {
+      value: 'cardVersion',
+      label: '卡片版本',
+      inputType: cardVersionOptions.value.length > 0 ? 'select' : 'text',
+      options: cardVersionOptions.value.map((item) => ({ label: item, value: item })),
+      placeholder: '请输入卡片版本',
+    },
+    { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
+  ] as const
+})
 
 const filteredQsoRecords = computed(() => {
   const keyword = qsoFilter.value.trim().toUpperCase()
@@ -179,6 +203,12 @@ const filteredRecords = computed(() => {
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
 const isEditing = computed(() => Boolean(editingResourceName.value))
+const allFilteredSelected = computed(() => {
+  if (!filteredRecords.value.length) {
+    return false
+  }
+  return filteredRecords.value.every((item) => selectedHistoryNames.value.includes(item.resourceName))
+})
 const totalPages = computed(() => {
   if (!filteredRecords.value.length) {
     return 1
@@ -231,7 +261,14 @@ const syncHistoryKeywordFromCallSign = () => {
   if (!syncHistoryQuery.value) {
     return
   }
-  historyKeyword.value = form.callSign.trim().toUpperCase()
+  const keyword = form.callSign.trim().toUpperCase()
+  historyKeyword.value = keyword
+  historyKeywordInput.value = keyword
+  currentPage.value = 1
+}
+
+const applyHistorySearch = () => {
+  historyKeyword.value = historyKeywordInput.value.trim().toUpperCase()
   currentPage.value = 1
 }
 
@@ -283,6 +320,17 @@ watch(syncHistoryQuery, (enabled) => {
     return
   }
   syncHistoryKeywordFromCallSign()
+})
+
+watch(activeFunctionTab, (tab) => {
+  if (tab === 'batch') {
+    return
+  }
+  form.cardType = tab
+})
+
+watch(historyKeyword, (value) => {
+  historyKeywordInput.value = value
 })
 
 watch(realtimeEnabled, (enabled) => {
@@ -486,6 +534,7 @@ watch(
 const startEditRecord = (item: CardRecordItem) => {
   editingResourceName.value = item.resourceName
   fillFormFromRecord(item)
+  activeFunctionTab.value = item.cardType
   feedback.value = `正在编辑卡片记录：${item.resourceName}`
 }
 
@@ -499,6 +548,18 @@ const clearHistorySelection = () => {
   selectedHistoryNames.value = []
 }
 
+const toggleAllFilteredHistorySelection = () => {
+  if (allFilteredSelected.value) {
+    const filteredNameSet = new Set(filteredRecords.value.map((item) => item.resourceName))
+    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !filteredNameSet.has(name))
+    return
+  }
+
+  const merged = new Set(selectedHistoryNames.value)
+  filteredRecords.value.forEach((item) => merged.add(item.resourceName))
+  selectedHistoryNames.value = Array.from(merged)
+}
+
 const toHistoryItem = (row: Record<string, unknown>): CardRecordItem => {
   return row as unknown as CardRecordItem
 }
@@ -509,8 +570,14 @@ const applyHistoryBatchEdit = async () => {
     return
   }
 
-  if (!batchEditForm.cardType && !batchEditForm.cardVersion.trim() && !batchEditForm.cardRemarks.trim()) {
-    feedback.value = '请至少填写一项批量编辑字段。'
+  if (!batchEditField.value) {
+    feedback.value = '请先选择要修改的字段。'
+    return
+  }
+
+  const nextValue = batchEditValue.value.trim()
+  if (!nextValue) {
+    feedback.value = '请填写要修改后的字段值。'
     return
   }
 
@@ -521,9 +588,9 @@ const applyHistoryBatchEdit = async () => {
     for (const item of targets) {
       const nextSpec: CardRecordSpec = {
         ...item.spec,
-        cardType: (batchEditForm.cardType as CardRecordSpec['cardType']) || item.spec.cardType,
-        cardVersion: batchEditForm.cardVersion.trim() || item.spec.cardVersion,
-        cardRemarks: batchEditForm.cardRemarks.trim() || item.spec.cardRemarks,
+        cardType: batchEditField.value === 'cardType' ? (nextValue as CardRecordSpec['cardType']) : item.spec.cardType,
+        cardVersion: batchEditField.value === 'cardVersion' ? nextValue : item.spec.cardVersion,
+        cardRemarks: batchEditField.value === 'cardRemarks' ? nextValue : item.spec.cardRemarks,
       }
 
       await updateExtension<CardRecordSpec>(resourcePlural, item.resourceName, {
@@ -541,20 +608,15 @@ const applyHistoryBatchEdit = async () => {
       action: '批量编辑卡片记录',
       resourceType: 'card-record',
       resourceName: `count=${targets.length}`,
-      detail: `${[
-        batchEditForm.cardType ? '卡片类型' : '',
-        batchEditForm.cardVersion.trim() ? '卡片版本' : '',
-        batchEditForm.cardRemarks.trim() ? '卡片备注' : '',
-      ]
-        .filter(Boolean)
-        .join('、')}`,
+      detail: `批量修改字段：${
+        batchEditFields.value.find((item) => item.value === batchEditField.value)?.label ?? batchEditField.value
+      }，值：${nextValue}`,
     })
 
     await loadCardRecords({ silent: true })
     clearHistorySelection()
-    batchEditForm.cardType = ''
-    batchEditForm.cardVersion = ''
-    batchEditForm.cardRemarks = ''
+    batchEditField.value = ''
+    batchEditValue.value = ''
     feedback.value = `已批量编辑 ${targets.length} 条卡片记录。`
   } catch (error) {
     feedback.value = `批量编辑卡片记录失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -743,85 +805,122 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="qsl-block">
-    <VCard :title="isEditing ? '卡片记录编辑' : '卡片记录录入'">
-      <div class="qsl-form-grid">
-        <label class="qsl-field">
-          <span class="qsl-field__label">对方呼号（Call_Sign）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="form.callSign" type="text" placeholder="例如：BI1ABC" />
-          </div>
-        </label>
+    <VCard>
+      <template #header>
+        <div class="qsl-function-tabs">
+          <VTabs v-model:activeId="activeFunctionTab">
+            <VTabItem id="QSO" label="QSO">
+              <div class="qsl-card-type-tab-panel" />
+            </VTabItem>
+            <VTabItem id="SWL" label="SWL">
+              <div class="qsl-card-type-tab-panel" />
+            </VTabItem>
+            <VTabItem id="EYEBALL" label="EYEBALL">
+              <div class="qsl-card-type-tab-panel" />
+            </VTabItem>
+            <VTabItem id="batch" label="批量编辑">
+              <div class="qsl-card-type-tab-panel" />
+            </VTabItem>
+          </VTabs>
+        </div>
+      </template>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">卡片类型（Card_Type）</span>
-          <div class="qsl-input-shell">
-            <select v-model="form.cardType">
-              <option value="QSO">QSO</option>
-              <option value="SWL">SWL</option>
-              <option value="EYEBALL">EYEBALL</option>
-            </select>
-          </div>
-        </label>
-
-        <label class="qsl-field">
-          <span class="qsl-field__label">卡片版本（Card_Version）</span>
-          <div class="qsl-input-shell">
-            <select v-model="form.cardVersion">
-              <option value="">请选择卡片版本</option>
-              <option v-for="item in cardVersionOptions" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </div>
-          <small class="qsl-field__tip" v-if="!cardVersionOptions.length">暂无可用卡片版本，请先到“本台卡片”中配置。</small>
-        </label>
-
-        <label v-if="showQsoSelector" class="qsl-field qsl-field--full">
-          <span class="qsl-field__label">关联记录 QSO_ID</span>
-          <div class="qsl-form-inline">
+      <template v-if="!isBatchTab">
+        <div class="qsl-form-grid">
+          <label class="qsl-field">
+            <span class="qsl-field__label">对方呼号（Call_Sign）</span>
             <div class="qsl-input-shell">
-              <input :value="form.qsoRecordName" type="text" placeholder="可选，点击右侧按钮选择" readonly />
+              <input v-model.trim="form.callSign" type="text" placeholder="例如：BI1ABC" />
             </div>
-            <VButton size="sm" type="secondary" :disabled="loading" @click="openQsoSelector">选择QSO</VButton>
-            <VButton size="sm" :disabled="loading || !form.qsoRecordName" @click="clearSelectedQso">清空</VButton>
-          </div>
-          <small class="qsl-field__tip" v-if="selectedQso">
-            已关联：{{ selectedQso.id }}（{{ selectedQso.callSign }} {{ selectedQso.date }} {{ selectedQso.time }}）
-          </small>
-        </label>
+          </label>
 
-        <label v-if="dateTimeRequired" class="qsl-field">
-          <span class="qsl-field__label">卡片创建日期（Card_DATE）</span>
-          <div class="qsl-input-shell">
-            <input v-model="form.cardDate" type="date" :disabled="lockCardDateTime" />
-          </div>
-        </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">卡片版本（Card_Version）</span>
+            <div class="qsl-input-shell">
+              <select v-model="form.cardVersion">
+                <option value="">请选择卡片版本</option>
+                <option v-for="item in cardVersionOptions" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
+            <small class="qsl-field__tip" v-if="!cardVersionOptions.length">暂无可用卡片版本，请先到“本台卡片”中配置。</small>
+          </label>
 
-        <label v-if="dateTimeRequired" class="qsl-field">
-          <span class="qsl-field__label">卡片创建时间（Card_TIME）</span>
-          <div class="qsl-input-shell">
-            <input v-model="form.cardTime" type="text" maxlength="4" placeholder="HHmm" :disabled="lockCardDateTime" />
-          </div>
-        </label>
+          <label v-if="showQsoSelector" class="qsl-field qsl-field--full">
+            <span class="qsl-field__label">关联记录 QSO_ID</span>
+            <div class="qsl-form-inline">
+              <div class="qsl-input-shell">
+                <input :value="form.qsoRecordName" type="text" placeholder="可选，点击右侧按钮选择" readonly />
+              </div>
+              <VButton size="sm" type="secondary" :disabled="loading" @click="openQsoSelector">选择QSO</VButton>
+              <VButton size="sm" :disabled="loading || !form.qsoRecordName" @click="clearSelectedQso">清空</VButton>
+            </div>
+            <small class="qsl-field__tip" v-if="selectedQso">
+              已关联：{{ selectedQso.id }}（{{ selectedQso.callSign }} {{ selectedQso.date }} {{ selectedQso.time }}）
+            </small>
+          </label>
 
-        <label v-if="dateTimeRequired" class="qsl-checkbox">
-          <input v-model="realtimeEnabled" type="checkbox" />
-          <span>实时</span>
-        </label>
+          <label v-if="dateTimeRequired" class="qsl-field">
+            <span class="qsl-field__label">卡片创建日期（Card_DATE）</span>
+            <div class="qsl-input-shell">
+              <input v-model="form.cardDate" type="date" :disabled="lockCardDateTime" />
+            </div>
+          </label>
 
-        <label class="qsl-field qsl-field--full">
-          <span class="qsl-field__label">卡片备注（Card_Remarks）</span>
-          <div class="qsl-input-shell qsl-input-shell--textarea">
-            <textarea v-model.trim="form.cardRemarks" rows="3" placeholder="输入卡片备注" />
-          </div>
-        </label>
-      </div>
+          <label v-if="dateTimeRequired" class="qsl-field">
+            <span class="qsl-field__label">卡片创建时间（Card_TIME）</span>
+            <div class="qsl-input-shell">
+              <input v-model="form.cardTime" type="text" maxlength="4" placeholder="HHmm" :disabled="lockCardDateTime" />
+            </div>
+          </label>
 
-      <div class="qsl-actions">
-        <VButton type="secondary" :disabled="loading || saving" @click="saveCardRecord">{{
-          isEditing ? '保存编辑' : '保存卡片记录'
-        }}</VButton>
-        <VButton v-if="isEditing" :disabled="loading || saving" @click="cancelEditRecord">取消编辑</VButton>
-        <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
-      </div>
+          <label v-if="dateTimeRequired" class="qsl-checkbox">
+            <input v-model="realtimeEnabled" type="checkbox" />
+            <span>实时</span>
+          </label>
+
+          <label class="qsl-field qsl-field--full">
+            <span class="qsl-field__label">卡片备注（Card_Remarks）</span>
+            <div class="qsl-input-shell qsl-input-shell--textarea">
+              <textarea v-model.trim="form.cardRemarks" rows="3" placeholder="输入卡片备注" />
+            </div>
+          </label>
+        </div>
+
+        <div class="qsl-actions">
+          <VButton type="secondary" :disabled="loading || saving" @click="saveCardRecord">{{
+            isEditing ? '保存编辑' : '保存卡片记录'
+          }}</VButton>
+          <VButton v-if="isEditing" :disabled="loading || saving" @click="cancelEditRecord">取消编辑</VButton>
+          <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="qsl-actions">
+          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+          <VButton
+            size="sm"
+            type="secondary"
+            :disabled="batchSendingCreatedMail || !selectedHistoryCount"
+            @click="batchSendCreatedMail"
+          >
+            批量发送制卡邮件
+          </VButton>
+        </div>
+        <QslBatchFieldEditor
+          :fields="batchEditFields"
+          :selected-field="batchEditField"
+          :field-value="batchEditValue"
+          :selected-count="selectedHistoryCount"
+          :disabled="batchUpdating"
+          confirm-text="确认修改"
+          @update:selected-field="(value) => (batchEditField = value)"
+          @update:field-value="(value) => (batchEditValue = value)"
+          @confirm="applyHistoryBatchEdit"
+        />
+      </template>
+
+      <p v-if="feedback && isBatchTab" class="qsl-feedback">{{ feedback }}</p>
     </VCard>
 
     <VCard v-if="qsoPanelVisible" title="选择关联 QSO 记录">
@@ -863,19 +962,19 @@ onBeforeUnmount(() => {
       </div>
     </VCard>
 
-    <VCard title="卡片记录清单">
-      <template #actions>
-        <label class="qsl-checkbox">
-          <input v-model="syncHistoryQuery" type="checkbox" />
-          <span>同步查询</span>
-        </label>
-      </template>
-
-      <div class="qsl-form-inline">
-        <div class="qsl-input-shell">
-          <input v-model.trim="historyKeyword" type="text" placeholder="按呼号、卡片ID、版本筛选" />
-        </div>
-      </div>
+    <VCard>
+      <QslBusinessRecordHeader
+        title="卡片记录清单"
+        :keyword="historyKeywordInput"
+        :all-selected="allFilteredSelected"
+        :has-rows="filteredRecords.length > 0"
+        :sync-enabled="syncHistoryQuery"
+        placeholder="按呼号筛选"
+        @update:keyword="(value) => (historyKeywordInput = value)"
+        @search="applyHistorySearch"
+        @toggle-all="toggleAllFilteredHistorySelection"
+        @update:sync-enabled="(value) => (syncHistoryQuery = value)"
+      />
 
       <QslExpandableHistoryTable
         title="卡片记录清单"
@@ -883,59 +982,12 @@ onBeforeUnmount(() => {
         :columns="historyColumns"
         row-key-field="resourceName"
         :selected-keys="selectedHistoryNames"
-        :batch-edit-enabled="batchEditEnabled"
+        :batch-edit-enabled="false"
+        :show-batch-toggle="false"
+        :show-toolbar="false"
         empty-text="暂无卡片记录。"
         @update:selected-keys="(value) => (selectedHistoryNames = value)"
-        @update:batch-edit-enabled="(value) => (batchEditEnabled = value)"
       >
-        <template #batch-actions>
-          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
-          <VButton
-            size="sm"
-            type="secondary"
-            :disabled="batchUpdating || !selectedHistoryCount"
-            @click="applyHistoryBatchEdit"
-          >
-            批量编辑已选记录
-          </VButton>
-          <VButton
-            size="sm"
-            type="secondary"
-            :disabled="batchSendingCreatedMail || !selectedHistoryCount"
-            @click="batchSendCreatedMail"
-          >
-            批量发送制卡邮件
-          </VButton>
-        </template>
-
-        <template #batch-form>
-          <label class="qsl-field">
-            <span class="qsl-field__label">批量卡片类型（留空不改）</span>
-            <div class="qsl-input-shell">
-              <select v-model="batchEditForm.cardType">
-                <option value="">不修改</option>
-                <option value="QSO">QSO</option>
-                <option value="SWL">SWL</option>
-                <option value="EYEBALL">EYEBALL</option>
-              </select>
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">批量卡片版本（留空不改）</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="batchEditForm.cardVersion" type="text" placeholder="例如 V2" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">批量卡片备注（留空不改）</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="batchEditForm.cardRemarks" rows="2" placeholder="填写后将覆盖已选记录备注" />
-            </div>
-          </label>
-        </template>
-
         <template #cell-cardDate="{ row }">
           {{ toHistoryItem(row).cardDate || '-' }}
         </template>
@@ -1013,6 +1065,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped lang="scss">
+.qsl-function-tabs {
+  margin-bottom: 10px;
+}
+
+.qsl-card-type-tab-panel {
+  display: none;
+}
+
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;

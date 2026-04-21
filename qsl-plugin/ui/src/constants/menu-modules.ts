@@ -81,7 +81,7 @@ export const qslMenuModules: QslMenuModule[] = [
   },
   {
     key: 'qso-record',
-    title: '通联记录',
+    title: '通联日志',
     group: '业务',
     priority: 10,
     viewPermission: toViewPermission('qso-record'),
@@ -91,7 +91,7 @@ export const qslMenuModules: QslMenuModule[] = [
   },
   {
     key: 'card-record',
-    title: '卡片记录',
+    title: '创建卡片',
     group: '业务',
     priority: 20,
     viewPermission: toViewPermission('card-record'),
