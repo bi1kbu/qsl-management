@@ -1,16 +1,23 @@
 .qsl-page {
   min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .qsl-page__content {
   margin: 16px;
   display: grid;
   gap: 16px;
+  min-width: 0;
 }
 
 .qsl-grid {
   display: grid;
   gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .qsl-grid--meta,
@@ -21,6 +28,16 @@
 .qsl-block {
   display: grid;
   gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.qsl-page__content > *,
+.qsl-grid > *,
+.qsl-block > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .qsl-meta-list {
@@ -532,6 +549,8 @@
 
 .qsl-table-wrap {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
 }
 

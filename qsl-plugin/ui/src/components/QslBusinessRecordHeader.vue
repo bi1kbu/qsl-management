@@ -75,14 +75,18 @@ const submitSearch = () => {
 <style scoped lang="scss">
 .qsl-business-record-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .qsl-business-record-header__left {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -98,16 +102,38 @@ const submitSearch = () => {
 }
 
 .qsl-business-record-header__search {
+  flex: 1 1 220px;
   min-width: 220px;
   max-width: 320px;
 }
 
 .qsl-business-record-header__sync {
+  margin-left: auto;
   white-space: nowrap;
 }
 
 .qsl-select-only {
   display: inline-flex;
   align-items: center;
+}
+
+@media (max-width: 768px) {
+  .qsl-business-record-header {
+    align-items: flex-start;
+  }
+
+  .qsl-business-record-header__left {
+    width: 100%;
+  }
+
+  .qsl-business-record-header__search {
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .qsl-business-record-header__sync {
+    margin-left: 0;
+  }
 }
 </style>
