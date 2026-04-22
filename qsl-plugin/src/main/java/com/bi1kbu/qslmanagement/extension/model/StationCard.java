@@ -21,6 +21,8 @@ public class StationCard extends QslBaseExtension<StationCard.StationCardSpec, S
         private String cardVersion;
         private String imageUrl;
         private String imageMediaType;
+        private Integer inventoryTotal;
+        private Integer sortOrder;
         private String remarks;
     }
 
@@ -29,4 +31,3 @@ public class StationCard extends QslBaseExtension<StationCard.StationCardSpec, S
         private Boolean active;
     }
 }
-
