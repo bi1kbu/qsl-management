@@ -1,5 +1,6 @@
 import { definePlugin } from '@halo-dev/ui-shared'
 import { qslMenuModules } from './constants/menu-modules'
+import { createQslEditorExtensions } from './extensions/qsl-shortcode-editor-extension'
 import './styles/qsl-module-framework.scss'
 
 const qslTopLevelGroups = [
@@ -81,5 +82,7 @@ const routes = [
 export default definePlugin({
   components: {},
   routes,
-  extensionPoints: {},
+  extensionPoints: {
+    'default:editor:extension:create': () => createQslEditorExtensions(),
+  },
 })

@@ -20,6 +20,7 @@
   "dependencies": {
     "@halo-dev/api-client": "^2.23.0",
     "@halo-dev/components": "^2.23.0",
+    "@halo-dev/richtext-editor": "^2.23.0",
     "@halo-dev/ui-shared": "^2.23.0",
     "axios": "^1.13.5",
     "canvas-confetti": "^1.9.3",

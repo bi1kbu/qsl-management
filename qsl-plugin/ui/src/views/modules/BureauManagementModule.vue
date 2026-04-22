@@ -6,6 +6,7 @@ import {
   deleteExtension,
   listExtensions,
   qslApiVersion,
+  updateExtension,
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
@@ -22,6 +23,7 @@ interface BureauSpec {
 
 interface BureauItem {
   id: string
+  version?: number | null
   bureauName: string
   telephone: string
   postalCode: string
@@ -44,6 +46,7 @@ const submitting = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
+const editingId = ref('')
 
 const resourcePlural = 'bureau-entries'
 const resourceKind = 'BureauEntry'
@@ -51,6 +54,7 @@ const resourceKind = 'BureauEntry'
 const toRow = (extension: QslExtension<BureauSpec>): BureauItem => {
   return {
     id: extension.metadata.name,
+    version: extension.metadata.version,
     bureauName: extension.spec?.bureauName ?? '',
     telephone: extension.spec?.telephone ?? '',
     postalCode: extension.spec?.postalCode ?? '',
@@ -78,6 +82,17 @@ const resetForm = () => {
   form.postalCode = ''
   form.address = ''
   form.remarks = ''
+  editingId.value = ''
+}
+
+const startEdit = (row: BureauItem) => {
+  editingId.value = row.id
+  form.bureauName = row.bureauName
+  form.telephone = row.telephone
+  form.postalCode = row.postalCode
+  form.address = row.address
+  form.remarks = row.remarks
+  feedback.value = `正在编辑卡片局：${row.bureauName}`
 }
 
 const addBureau = async () => {
@@ -123,6 +138,70 @@ const addBureau = async () => {
   } finally {
     submitting.value = false
   }
+}
+
+const updateBureau = async () => {
+  if (!editingId.value) {
+    feedback.value = '未选择要编辑的卡片局。'
+    return
+  }
+
+  if (!form.bureauName.trim()) {
+    feedback.value = '卡片局名称不能为空。'
+    return
+  }
+
+  if (!form.address.trim()) {
+    feedback.value = '收件地址不能为空。'
+    return
+  }
+
+  const target = rows.value.find((row) => row.id === editingId.value)
+  if (!target) {
+    feedback.value = '未找到要编辑的卡片局记录。'
+    return
+  }
+
+  submitting.value = true
+  const bureauName = form.bureauName.trim().toUpperCase()
+  try {
+    const updated = await updateExtension<BureauSpec>(resourcePlural, editingId.value, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: editingId.value,
+        version: target.version,
+      },
+      spec: {
+        bureauName,
+        telephone: form.telephone.trim(),
+        postalCode: form.postalCode.trim(),
+        address: form.address.trim(),
+        addressRemarks: form.remarks.trim(),
+      },
+    })
+    await appendQslAuditLog({
+      action: '更新卡片局记录',
+      resourceType: 'bureau-entry',
+      resourceName: updated.metadata.name,
+      detail: `卡片局：${target.bureauName} -> ${bureauName}`,
+    })
+    await loadRows()
+    feedback.value = `已更新卡片局：${bureauName}`
+    resetForm()
+  } catch (error) {
+    feedback.value = `更新卡片局失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    submitting.value = false
+  }
+}
+
+const submitBureau = async () => {
+  if (editingId.value) {
+    await updateBureau()
+    return
+  }
+  await addBureau()
 }
 
 const removeBureau = async (id: string) => {
@@ -214,7 +293,10 @@ onMounted(loadRows)
       </div>
 
       <div class="qsl-actions">
-        <VButton type="secondary" :disabled="loading || submitting" @click="addBureau">新增卡片局</VButton>
+        <VButton type="secondary" :disabled="loading || submitting" @click="submitBureau">
+          {{ editingId ? '保存修改' : '新增卡片局' }}
+        </VButton>
+        <VButton v-if="editingId" :disabled="loading || submitting" @click="resetForm">取消编辑</VButton>
         <VButton :disabled="loading || submitting" @click="loadRows">刷新</VButton>
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
@@ -241,6 +323,7 @@ onMounted(loadRows)
               <td>{{ row.address || '-' }}</td>
               <td>{{ row.remarks || '-' }}</td>
               <td>
+                <VButton size="xs" :disabled="loading || submitting" @click="startEdit(row)">编辑</VButton>
                 <VButton size="xs" type="danger" :disabled="loading || submitting" @click="removeBureau(row.id)">删除</VButton>
               </td>
             </tr>
