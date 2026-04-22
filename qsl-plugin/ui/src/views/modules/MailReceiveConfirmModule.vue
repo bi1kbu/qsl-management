@@ -70,35 +70,26 @@ const historyKeyword = ref('')
 const historyKeywordInput = ref('')
 const syncHistoryQuery = ref(false)
 const selectedHistoryNames = ref<string[]>([])
-const editingResourceName = ref('')
-const savingEdit = ref(false)
 const batchUpdating = ref(false)
 const batchSendingReceivedMail = ref(false)
 const pendingMailRowName = ref('')
+const pendingReceiveRowName = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const batchEditField = ref('')
 const batchEditValue = ref('')
 
-const editForm = reactive({
-  callSign: '',
-  cardType: 'QSO' as 'QSO' | 'SWL' | 'EYEBALL',
-  cardReceivedState: 'RECEIVED' as 'RECEIVED' | 'UNRECEIVED',
-  receiptConfirmedState: 'CONFIRMED' as 'CONFIRMED' | 'UNCONFIRMED',
-  receiptRemarks: '',
-  receivedAt: '',
-})
-
 const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
 
 const filteredResults = computed(() => {
+  const actionableResults = results.value.filter((item) => !item.spec.cardReceived || item.spec.receivedMailStatus !== 'SENT')
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
-    return results.value
+    return actionableResults
   }
-  return results.value.filter((item) => {
+  return actionableResults.filter((item) => {
     return (
       item.callSign.toUpperCase().includes(keyword) ||
       item.resourceName.toUpperCase().includes(keyword) ||
@@ -115,7 +106,6 @@ const allFilteredSelected = computed(() => {
 })
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
-const isEditing = computed(() => Boolean(editingResourceName.value))
 const isBasicTab = computed(() => activeFunctionTab.value === 'basic')
 const isBatchTab = computed(() => activeFunctionTab.value === 'batch')
 const batchEditFields = [
@@ -163,10 +153,6 @@ const pagedFilteredResults = computed(() => {
 watch(results, () => {
   const nameSet = new Set(results.value.map((item) => item.resourceName))
   selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => nameSet.has(name))
-
-  if (editingResourceName.value && !nameSet.has(editingResourceName.value)) {
-    editingResourceName.value = ''
-  }
 })
 
 watch(filteredResults, () => {
@@ -219,6 +205,16 @@ const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', {
     hour12: false,
   })
+}
+
+const resolveMailStatusText = (status: string): string => {
+  if (status === 'SENT') {
+    return '已发送'
+  }
+  if (status === 'FAILED') {
+    return '发送失败'
+  }
+  return ''
 }
 
 const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec => {
@@ -283,7 +279,6 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
   try {
     const extensions = await listExtensions<CardRecordSpec, CardRecordStatus>(resourcePlural)
     results.value = extensions
-      .filter((extension) => Boolean(extension.spec?.cardReceived))
       .map((extension) => toReceiveResult(extension))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
@@ -291,7 +286,7 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
       feedback.value = ''
     }
     if (!options.silent && !results.value.length) {
-      feedback.value = '暂无收信确认记录（仅展示已收卡片）。'
+      feedback.value = '暂无可收信确认记录。'
     }
   } catch (error) {
     feedback.value = `加载收信确认清单失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -334,77 +329,29 @@ const submitReceive = async () => {
   }
 }
 
-const startEditResult = (item: ReceiveResult) => {
-  editingResourceName.value = item.resourceName
-  editForm.callSign = item.spec.callSign
-  editForm.cardType = item.spec.cardType
-  editForm.cardReceivedState = item.spec.cardReceived ? 'RECEIVED' : 'UNRECEIVED'
-  editForm.receiptConfirmedState = item.spec.receiptConfirmed ? 'CONFIRMED' : 'UNCONFIRMED'
-  editForm.receiptRemarks = item.spec.cardRemarks
-  editForm.receivedAt = item.spec.receivedAt
-  feedback.value = `正在编辑收信记录：${item.resourceName}`
-}
-
-const cancelEdit = () => {
-  editingResourceName.value = ''
-  editForm.callSign = ''
-  editForm.cardType = 'QSO'
-  editForm.cardReceivedState = 'RECEIVED'
-  editForm.receiptConfirmedState = 'CONFIRMED'
-  editForm.receiptRemarks = ''
-  editForm.receivedAt = ''
-  feedback.value = '已取消编辑模式。'
-}
-
-const saveEdit = async () => {
-  const target = results.value.find((item) => item.resourceName === editingResourceName.value)
-  if (!target) {
-    feedback.value = '未找到待编辑记录，请刷新后重试。'
+const confirmReceiveForRow = async (item: ReceiveResult) => {
+  if (item.spec.cardReceived) {
     return
   }
-
-  if (!editForm.callSign.trim()) {
-    feedback.value = '对方呼号不能为空。'
-    return
-  }
-
-  savingEdit.value = true
+  pendingReceiveRowName.value = item.resourceName
   try {
-    const nextReceived = editForm.cardReceivedState === 'RECEIVED'
-    const nextSpec: CardRecordSpec = {
-      ...target.spec,
-      callSign: editForm.callSign.trim().toUpperCase(),
-      cardType: editForm.cardType,
-      cardRemarks: editForm.receiptRemarks.trim(),
-      cardReceived: nextReceived,
-      receiptConfirmed: editForm.receiptConfirmedState === 'CONFIRMED',
-      receivedAt: nextReceived ? editForm.receivedAt.trim() || target.spec.receivedAt || nowText() : '',
-    }
-
-    await updateExtension<CardRecordSpec>(resourcePlural, target.resourceName, {
-      apiVersion: qslApiVersion,
-      kind: resourceKind,
-      metadata: {
-        name: target.resourceName,
-        version: target.metadataVersion,
-      },
-      spec: nextSpec,
+    const result = await confirmMailReceive({
+      callSign: item.callSign,
+      cardType: item.cardType,
+      receiptRemarks: '',
     })
-
     await appendQslAuditLog({
-      action: '编辑收信确认记录',
+      action: '确认收卡',
       resourceType: 'card-record',
-      resourceName: target.resourceName,
-      detail: `${nextSpec.callSign} ${nextSpec.cardType}`,
+      resourceName: result.cardRecordName || item.resourceName,
+      detail: `${item.callSign} ${item.cardType}`,
     })
-
     await loadResults({ silent: true })
-    cancelEdit()
-    feedback.value = `收信确认记录已更新（${nowText()}）。`
+    feedback.value = `已确认收卡：${item.callSign}`
   } catch (error) {
-    feedback.value = `编辑收信确认记录失败：${error instanceof Error ? error.message : '未知错误'}`
+    feedback.value = `确认收卡失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
-    savingEdit.value = false
+    pendingReceiveRowName.value = ''
   }
 }
 
@@ -644,111 +591,66 @@ onMounted(() => {
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
       </div>
 
-      <VCard v-if="isEditing && isBasicTab" title="单条编辑">
-        <div class="qsl-form-grid">
-          <label class="qsl-field">
-            <span class="qsl-field__label">对方呼号</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.callSign" type="text" placeholder="例如 BI1ABC" />
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">卡片类型</span>
-            <div class="qsl-input-shell">
-              <select v-model="editForm.cardType">
-                <option value="QSO">QSO</option>
-                <option value="SWL">SWL</option>
-                <option value="EYEBALL">EYEBALL</option>
-              </select>
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">收卡状态</span>
-            <div class="qsl-input-shell">
-              <select v-model="editForm.cardReceivedState">
-                <option value="RECEIVED">已收卡</option>
-                <option value="UNRECEIVED">未收卡</option>
-              </select>
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">签收状态</span>
-            <div class="qsl-input-shell">
-              <select v-model="editForm.receiptConfirmedState">
-                <option value="CONFIRMED">已签收</option>
-                <option value="UNCONFIRMED">未签收</option>
-              </select>
-            </div>
-          </label>
-
-          <label class="qsl-field" v-if="editForm.cardReceivedState === 'RECEIVED'">
-            <span class="qsl-field__label">收卡时间（可选）</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.receivedAt" type="text" placeholder="留空自动使用当前时间" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">签收备注</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.receiptRemarks" rows="2" placeholder="输入备注" />
-            </div>
-          </label>
-        </div>
-
-        <div class="qsl-actions">
-          <VButton type="secondary" :disabled="savingEdit" @click="saveEdit">保存编辑</VButton>
-          <VButton :disabled="savingEdit" @click="cancelEdit">取消编辑</VButton>
-        </div>
-      </VCard>
-
-      <ul v-if="pagedFilteredResults.length" class="qsl-list">
-        <li v-for="item in pagedFilteredResults" :key="item.resourceName" class="qsl-list__item qsl-list__item--column">
-          <div class="qsl-inline-meta">
-            <label class="qsl-checkbox qsl-select-only">
-              <input
-                :checked="isHistorySelected(item.resourceName)"
-                type="checkbox"
-                @change="toggleHistorySelection(item.resourceName)"
-              />
-            </label>
-            <VTag>{{ item.callSign }}</VTag>
-            <span>{{ item.cardType }}</span>
-            <span>{{ item.createdAt }}</span>
-            <VButton size="xs" type="secondary" @click="startEditResult(item)">编辑</VButton>
-            <VButton
-              size="xs"
-              type="secondary"
-              :disabled="pendingMailRowName === item.resourceName || item.spec.receivedMailStatus === 'SENT'"
-              @click="sendReceivedMailForRow(item)"
-            >
-              发送收卡邮件
-            </VButton>
-            <VTag
-              :theme="
-                item.spec.receivedMailStatus === 'SENT'
-                  ? 'secondary'
-                  : item.spec.receivedMailStatus === 'FAILED'
-                    ? 'danger'
-                    : 'default'
-              "
-            >
-              {{ item.spec.receivedMailStatus || '未发送' }}
-            </VTag>
-          </div>
-          <p class="qsl-muted">动作：{{ item.action }}，记录ID：{{ item.resourceName }}</p>
-          <p class="qsl-muted">结果：{{ item.message }}</p>
-          <p class="qsl-muted">
-            收卡：{{ item.spec.cardReceived ? '是' : '否' }}，签收：{{ item.spec.receiptConfirmed ? '是' : '否' }}，发卡：{{
-              item.spec.cardSent ? '是' : '否'
-            }}
-          </p>
-        </li>
-      </ul>
-      <p v-else class="qsl-muted">暂无收信确认记录（仅展示已收卡片）。</p>
+      <div class="qsl-table-wrap">
+        <table class="qsl-table">
+          <thead>
+            <tr>
+              <th>卡片ID</th>
+              <th>对方呼号</th>
+              <th>卡片类型</th>
+              <th>收卡状态</th>
+              <th>发卡状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in pagedFilteredResults" :key="item.resourceName">
+              <td>{{ item.resourceName }}</td>
+              <td>{{ item.callSign || '-' }}</td>
+              <td>{{ item.cardType }}</td>
+              <td>
+                <VTag :theme="item.spec.cardReceived ? 'secondary' : 'default'">{{ item.spec.cardReceived ? '是' : '否' }}</VTag>
+              </td>
+              <td>
+                <VTag :theme="item.spec.cardSent ? 'secondary' : 'default'">{{ item.spec.cardSent ? '是' : '否' }}</VTag>
+              </td>
+              <td>
+                <div class="qsl-actions qsl-actions--tight">
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="item.spec.cardReceived || pendingReceiveRowName === item.resourceName || submitting"
+                    @click="confirmReceiveForRow(item)"
+                  >
+                    确认收卡
+                  </VButton>
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="
+                      pendingMailRowName === item.resourceName ||
+                      item.spec.receivedMailStatus === 'SENT' ||
+                      !item.spec.cardReceived
+                    "
+                    @click="sendReceivedMailForRow(item)"
+                  >
+                    发送收卡回执
+                  </VButton>
+                  <VTag
+                    v-if="item.spec.receivedMailStatus === 'SENT' || item.spec.receivedMailStatus === 'FAILED'"
+                    :theme="item.spec.receivedMailStatus === 'SENT' ? 'secondary' : 'danger'"
+                  >
+                    {{ resolveMailStatusText(item.spec.receivedMailStatus) }}
+                  </VTag>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!pagedFilteredResults.length">
+              <td colspan="6" class="qsl-table-empty">暂无收信确认记录。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <QslPaginationBar
         :total="filteredResults.length"
         :current-page="currentPage"
@@ -772,5 +674,10 @@ onMounted(() => {
 .qsl-select-only {
   display: inline-flex;
   align-items: center;
+}
+
+.qsl-table-empty {
+  text-align: center;
+  color: #6b7280;
 }
 </style>

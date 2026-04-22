@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { VButton, VCard, VTabItem, VTabs, VTag } from '@halo-dev/components'
+import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
@@ -10,7 +10,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import { batchSendNotificationMail, sendNotificationMail } from '../../api/qsl-console-api'
+import { sendNotificationMail } from '../../api/qsl-console-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
@@ -117,7 +117,6 @@ const historyKeywordInput = ref('')
 const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
 const batchUpdating = ref(false)
-const batchSendingCreatedMail = ref(false)
 const syncHistoryQuery = ref(false)
 const realtimeEnabled = ref(false)
 const currentPage = ref(1)
@@ -174,6 +173,7 @@ const batchEditFields = computed(() => {
       options: cardVersionOptions.value.map((item) => ({ label: item, value: item })),
       placeholder: '请输入卡片版本',
     },
+    { value: 'cardDate', label: '卡片日期', inputType: 'date' },
     { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
   ] as const
 })
@@ -594,6 +594,7 @@ const applyHistoryBatchEdit = async () => {
         ...item.spec,
         cardType: batchEditField.value === 'cardType' ? (nextValue as CardRecordSpec['cardType']) : item.spec.cardType,
         cardVersion: batchEditField.value === 'cardVersion' ? nextValue : item.spec.cardVersion,
+        cardDate: batchEditField.value === 'cardDate' ? nextValue : item.spec.cardDate,
         cardRemarks: batchEditField.value === 'cardRemarks' ? nextValue : item.spec.cardRemarks,
       }
 
@@ -626,45 +627,6 @@ const applyHistoryBatchEdit = async () => {
     feedback.value = `批量编辑卡片记录失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     batchUpdating.value = false
-  }
-}
-
-const sendCreatedMailForItem = async (item: CardRecordItem, source = '卡片记录-单条发送') => {
-  loading.value = true
-  try {
-    const result = await sendNotificationMail({
-      cardRecordName: item.resourceName,
-      scene: 'created',
-      source,
-    })
-    await loadCardRecords({ silent: true, skipLoading: true })
-    feedback.value = `制卡邮件${result.status === 'SENT' ? '发送成功' : '未发送'}：${result.message}`
-  } catch (error) {
-    feedback.value = `发送制卡邮件失败：${error instanceof Error ? error.message : '未知错误'}`
-  } finally {
-    loading.value = false
-  }
-}
-
-const batchSendCreatedMail = async () => {
-  if (!selectedHistoryNames.value.length) {
-    feedback.value = '请先选择要批量发送邮件的卡片记录。'
-    return
-  }
-
-  batchSendingCreatedMail.value = true
-  try {
-    const result = await batchSendNotificationMail({
-      cardRecordNames: selectedHistoryNames.value,
-      scene: 'created',
-      source: '卡片记录-批量发送',
-    })
-    await loadCardRecords({ silent: true, skipLoading: true })
-    feedback.value = `批量发送完成：成功 ${result.sentCount}，跳过 ${result.skippedCount}，失败 ${result.failedCount}。`
-  } catch (error) {
-    feedback.value = `批量发送制卡邮件失败：${error instanceof Error ? error.message : '未知错误'}`
-  } finally {
-    batchSendingCreatedMail.value = false
   }
 }
 
@@ -904,14 +866,6 @@ onBeforeUnmount(() => {
       <template v-else>
         <div class="qsl-actions">
           <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
-          <VButton
-            size="sm"
-            type="secondary"
-            :disabled="batchSendingCreatedMail || !selectedHistoryCount"
-            @click="batchSendCreatedMail"
-          >
-            批量发送制卡邮件
-          </VButton>
         </div>
         <QslBatchFieldEditor
           :fields="batchEditFields"
@@ -1008,25 +962,6 @@ onBeforeUnmount(() => {
 
         <template #row-actions="{ row }">
           <VButton size="xs" @click="startEditRecord(toHistoryItem(row))">编辑</VButton>
-          <VButton
-            size="xs"
-            type="secondary"
-            :disabled="toHistoryItem(row).spec.createdMailStatus === 'SENT' || loading"
-            @click="sendCreatedMailForItem(toHistoryItem(row))"
-          >
-            发送制卡邮件
-          </VButton>
-          <VTag
-            :theme="
-              toHistoryItem(row).spec.createdMailStatus === 'SENT'
-                ? 'secondary'
-                : toHistoryItem(row).spec.createdMailStatus === 'FAILED'
-                  ? 'danger'
-                  : 'default'
-            "
-          >
-            {{ toHistoryItem(row).spec.createdMailStatus || '未发送' }}
-          </VTag>
         </template>
 
         <template #detail="{ row }">

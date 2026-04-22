@@ -10,7 +10,7 @@ interface BatchFieldOptionItem {
 interface BatchFieldOption {
   value: string
   label: string
-  inputType?: 'text' | 'textarea' | 'select'
+  inputType?: 'text' | 'textarea' | 'select' | 'date'
   placeholder?: string
   options?: readonly BatchFieldOptionItem[]
 }
@@ -143,7 +143,7 @@ const onConfirm = () => {
         <div v-else class="qsl-input-shell">
           <input
             :value="localFieldValue"
-            type="text"
+            :type="selectedFieldOption.inputType === 'date' ? 'date' : 'text'"
             :placeholder="selectedFieldOption.placeholder || '请输入字段值'"
             @input="updateFieldValue(($event.target as HTMLInputElement).value)"
           />

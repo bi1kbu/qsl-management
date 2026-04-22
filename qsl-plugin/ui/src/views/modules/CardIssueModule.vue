@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { VButton, VCard } from '@halo-dev/components'
+import { VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onMounted, ref } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import { sendNotificationMail } from '../../api/qsl-console-api'
 import { listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
 
 interface CardRecordSpec {
@@ -109,6 +110,8 @@ const qsoRecordPlural = 'qso-records'
 
 const loading = ref(false)
 const issuing = ref(false)
+const pendingIssueRowName = ref('')
+const pendingIssueMailRowName = ref('')
 const feedback = ref('')
 const callSignInput = ref('')
 const searchedCallSign = ref('')
@@ -150,10 +153,24 @@ const matchedQsoRows = computed(() => {
   return qsoRows.value.filter((item) => qsoIdSet.has(item.id))
 })
 
+const pendingIssueCardRows = computed(() => {
+  return cardRows.value.filter((item) => !item.cardIssued || item.spec.createdMailStatus !== 'SENT')
+})
+
 const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', {
     hour12: false,
   })
+}
+
+const resolveMailStatusText = (status: string): string => {
+  if (status === 'SENT') {
+    return '已发送'
+  }
+  if (status === 'FAILED') {
+    return '发送失败'
+  }
+  return ''
 }
 
 const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec => {
@@ -336,6 +353,66 @@ const confirmCardIssue = async () => {
   }
 }
 
+const confirmCardIssueForRow = async (row: CardIssueCardRow) => {
+  if (row.cardIssued) {
+    return
+  }
+  pendingIssueRowName.value = row.id
+  try {
+    const nextSpec: CardRecordSpec = {
+      ...row.spec,
+      cardIssued: true,
+      cardIssuedAt: nowText(),
+    }
+    const nextStatus: CardRecordStatus = {
+      ...row.status,
+      flowStatus: '已制卡',
+    }
+    await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, row.id, {
+      apiVersion: qslApiVersion,
+      kind: 'CardRecord',
+      metadata: {
+        name: row.id,
+        version: row.metadataVersion,
+      },
+      spec: nextSpec,
+      status: nextStatus,
+    })
+    await appendQslAuditLog({
+      action: '确认制卡',
+      resourceType: 'card-record',
+      resourceName: row.id,
+      detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}`,
+    })
+    await loadSourceData()
+    feedback.value = `已确认制卡：${row.id}`
+  } catch (error) {
+    feedback.value = `确认制卡失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    pendingIssueRowName.value = ''
+  }
+}
+
+const sendCreatedMailForRow = async (row: CardIssueCardRow) => {
+  if (!row.cardIssued) {
+    return
+  }
+  pendingIssueMailRowName.value = row.id
+  try {
+    const result = await sendNotificationMail({
+      cardRecordName: row.id,
+      scene: 'created',
+      source: '制卡签发-单条发送',
+    })
+    await loadSourceData()
+    feedback.value = `制卡邮件${result.status === 'SENT' ? '发送成功' : '发送失败'}：${row.id}`
+  } catch (error) {
+    feedback.value = `发送制卡邮件失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    pendingIssueMailRowName.value = ''
+  }
+}
+
 onMounted(loadSourceData)
 </script>
 
@@ -481,6 +558,74 @@ onMounted(loadSourceData)
             </tr>
             <tr v-else-if="!matchedAddressRows.length">
               <td colspan="8" class="qsl-table-empty">未找到对应收件地址。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </VCard>
+
+    <VCard title="待制卡">
+      <div class="qsl-table-wrap">
+        <table class="qsl-table">
+          <thead>
+            <tr>
+              <th>卡片记录编号</th>
+              <th>呼号</th>
+              <th>卡片类型</th>
+              <th>日期</th>
+              <th>时间</th>
+              <th>卡片版本</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in pendingIssueCardRows" :key="item.id">
+              <td>{{ item.id }}</td>
+              <td>{{ item.callSign || '-' }}</td>
+              <td>{{ item.cardType || '-' }}</td>
+              <td>{{ item.cardDate || '-' }}</td>
+              <td>{{ item.cardTime || '-' }}</td>
+              <td>{{ item.cardVersion || '-' }}</td>
+              <td>
+                <div class="qsl-actions qsl-actions--tight">
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="
+                      item.cardIssued ||
+                      pendingIssueRowName === item.id ||
+                      pendingIssueMailRowName === item.id ||
+                      loading
+                    "
+                    @click="confirmCardIssueForRow(item)"
+                  >
+                    确认制卡
+                  </VButton>
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="
+                      !item.cardIssued ||
+                      item.spec.createdMailStatus === 'SENT' ||
+                      pendingIssueMailRowName === item.id ||
+                      pendingIssueRowName === item.id ||
+                      loading
+                    "
+                    @click="sendCreatedMailForRow(item)"
+                  >
+                    发送制卡邮件
+                  </VButton>
+                  <VTag
+                    v-if="item.spec.createdMailStatus === 'SENT' || item.spec.createdMailStatus === 'FAILED'"
+                    :theme="item.spec.createdMailStatus === 'SENT' ? 'secondary' : 'danger'"
+                  >
+                    {{ resolveMailStatusText(item.spec.createdMailStatus) }}
+                  </VTag>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!pendingIssueCardRows.length">
+              <td colspan="7" class="qsl-table-empty">暂无待制卡记录。</td>
             </tr>
           </tbody>
         </table>

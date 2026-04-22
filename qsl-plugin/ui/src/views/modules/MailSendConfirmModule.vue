@@ -84,11 +84,12 @@ const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
 
 const filteredRows = computed(() => {
+  const pendingRows = rows.value.filter((row) => !row.sent || row.spec.sentMailStatus !== 'SENT')
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
-    return rows.value
+    return pendingRows
   }
-  return rows.value.filter((row) => {
+  return pendingRows.filter((row) => {
     return (
       row.callSign.toUpperCase().includes(keyword) ||
       row.resourceName.toUpperCase().includes(keyword) ||
@@ -198,6 +199,16 @@ watch(historyKeyword, (value) => {
 
 const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', { hour12: false })
+}
+
+const resolveMailStatusText = (status: string): string => {
+  if (status === 'SENT') {
+    return '已发送'
+  }
+  if (status === 'FAILED') {
+    return '发送失败'
+  }
+  return ''
 }
 
 const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec => {
@@ -644,7 +655,7 @@ onMounted(() => {
 
     <VCard>
       <QslBusinessRecordHeader
-        title="发信确认清单"
+        title="待发出"
         :keyword="historyKeywordInput"
         :all-selected="allFilteredSelected"
         :has-rows="filteredRows.length > 0"
@@ -669,7 +680,6 @@ onMounted(() => {
               <th>卡片ID</th>
               <th>对方呼号</th>
               <th>卡片类型</th>
-              <th>卡片创建日期</th>
               <th>卡片打印日期</th>
               <th>信封打印日期</th>
               <th>卡片备注</th>
@@ -690,7 +700,6 @@ onMounted(() => {
               <td>{{ row.resourceName }}</td>
               <td>{{ row.callSign }}</td>
               <td>{{ row.cardType }}</td>
-              <td>{{ row.cardDate }}</td>
               <td>{{ row.cardPrintAt }}</td>
               <td>{{ row.envelopePrintAt }}</td>
               <td>{{ row.cardRemarks || '无' }}</td>
@@ -698,39 +707,36 @@ onMounted(() => {
                 <div class="qsl-actions qsl-actions--tight">
                   <VButton size="xs" type="secondary" @click="startEditRow(row)">编辑</VButton>
                   <VButton
-                    v-if="!row.sent"
                     size="xs"
                     type="secondary"
-                    :disabled="pendingRowName === row.resourceName || loading"
+                    :disabled="row.sent || pendingRowName === row.resourceName || loading"
                     @click="markAsSent(row)"
                   >
                     确认发信
                   </VButton>
-                  <VTag v-else theme="secondary">已发卡（{{ row.sentAt }}）</VTag>
                   <VButton
                     size="xs"
                     type="secondary"
-                    :disabled="pendingRowName === row.resourceName || row.spec.sentMailStatus === 'SENT'"
+                    :disabled="
+                      pendingRowName === row.resourceName ||
+                      row.spec.sentMailStatus === 'SENT' ||
+                      !row.sent
+                    "
                     @click="sendSentMailForRow(row)"
                   >
                     发送发卡邮件
                   </VButton>
                   <VTag
-                    :theme="
-                      row.spec.sentMailStatus === 'SENT'
-                        ? 'secondary'
-                        : row.spec.sentMailStatus === 'FAILED'
-                          ? 'danger'
-                          : 'default'
-                    "
+                    v-if="row.spec.sentMailStatus === 'SENT' || row.spec.sentMailStatus === 'FAILED'"
+                    :theme="row.spec.sentMailStatus === 'SENT' ? 'secondary' : 'danger'"
                   >
-                    {{ row.spec.sentMailStatus || '未发送' }}
+                    {{ resolveMailStatusText(row.spec.sentMailStatus) }}
                   </VTag>
                 </div>
               </td>
             </tr>
             <tr v-if="!pagedRows.length">
-              <td colspan="9" class="qsl-table-empty">暂无数据。</td>
+              <td colspan="8" class="qsl-table-empty">暂无待发出数据。</td>
             </tr>
           </tbody>
         </table>

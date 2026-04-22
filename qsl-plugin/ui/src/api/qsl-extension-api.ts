@@ -38,13 +38,38 @@ export const isNotFoundError = (error: unknown): boolean => {
 }
 
 const containsNotFoundMessage = (error: unknown): boolean => {
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'string'
-        ? error
-        : ''
-  return message.includes('was not found') || message.includes('资源不存在') || message.includes('404')
+  const candidates: string[] = []
+
+  if (error instanceof Error && error.message) {
+    candidates.push(error.message)
+  }
+
+  if (typeof error === 'string') {
+    candidates.push(error)
+  }
+
+  if (isAxiosError(error)) {
+    const data = error.response?.data as any
+    if (typeof data === 'string') {
+      candidates.push(data)
+    } else if (data && typeof data === 'object') {
+      if (typeof data.message === 'string') {
+        candidates.push(data.message)
+      }
+      if (typeof data.detail === 'string') {
+        candidates.push(data.detail)
+      }
+      if (typeof data.title === 'string') {
+        candidates.push(data.title)
+      }
+      if (typeof data.error === 'string') {
+        candidates.push(data.error)
+      }
+    }
+  }
+
+  const mergedText = candidates.join(' ').toLowerCase()
+  return mergedText.includes('was not found') || mergedText.includes('资源不存在') || mergedText.includes('404')
 }
 
 export const createResourceName = (prefix: string): string => {

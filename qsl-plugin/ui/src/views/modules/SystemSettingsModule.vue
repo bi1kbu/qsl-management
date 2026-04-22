@@ -42,6 +42,25 @@ const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
   systemSettingsForm.autoNotifyOnCardReceived = Boolean(extension.spec?.autoNotifyOnCardReceived)
 }
 
+const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
+  return {
+    guestQueryPerMinute: 30,
+    requiresExchangeReview: true,
+    autoNotifyOnCardCreated: false,
+    autoNotifyOnCardSent: false,
+    autoNotifyOnCardReceived: false,
+  }
+}
+
+const ensureDefaultSystemSetting = async () => {
+  await upsertSingleton<SystemSettingSpec>({
+    plural: resourcePlural,
+    kind: resourceKind,
+    name: resourceName,
+    spec: createDefaultSystemSettingSpec(),
+  })
+}
+
 const loadSystemSettings = async () => {
   loading.value = true
   feedback.value = ''
@@ -52,6 +71,15 @@ const loadSystemSettings = async () => {
       feedback.value = ''
       return
     }
+    await ensureDefaultSystemSetting()
+    fillForm({
+      apiVersion: '',
+      kind: resourceKind,
+      metadata: {
+        name: resourceName,
+      },
+      spec: createDefaultSystemSettingSpec(),
+    })
     feedback.value = ''
   } catch (error) {
     feedback.value = `加载系统参数失败：${error instanceof Error ? error.message : '未知错误'}`
