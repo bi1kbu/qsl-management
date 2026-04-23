@@ -391,6 +391,17 @@ const markAsSent = async (row: SendConfirmItem) => {
   }
 }
 
+const selectRowForQuery = (row: SendConfirmItem) => {
+  const keyword = row.callSign.trim().toUpperCase()
+  if (!keyword) {
+    return
+  }
+  functionCallSign.value = keyword
+  historyKeyword.value = keyword
+  historyKeywordInput.value = keyword
+  currentPage.value = 1
+}
+
 const isHistorySelected = (resourceName: string): boolean => {
   return selectedHistoryNames.value.includes(resourceName)
 }
@@ -689,12 +700,13 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in pagedRows" :key="row.resourceName">
+            <tr v-for="row in pagedRows" :key="row.resourceName" class="qsl-row-clickable" @click="selectRowForQuery(row)">
               <td>
                 <label class="qsl-checkbox qsl-select-only">
                   <input
                     :checked="isHistorySelected(row.resourceName)"
                     type="checkbox"
+                    @click.stop
                     @change="toggleHistorySelection(row.resourceName)"
                   />
                 </label>
@@ -707,12 +719,12 @@ onMounted(() => {
               <td>{{ row.cardRemarks || '无' }}</td>
               <td>
                 <div class="qsl-actions qsl-actions--tight">
-                  <VButton size="xs" type="secondary" @click="startEditRow(row)">编辑</VButton>
+                  <VButton size="xs" type="secondary" @click.stop="startEditRow(row)">编辑</VButton>
                   <VButton
                     size="xs"
                     type="secondary"
                     :disabled="row.sent || pendingRowName === row.resourceName || loading"
-                    @click="markAsSent(row)"
+                    @click.stop="markAsSent(row)"
                   >
                     确认发信
                   </VButton>
@@ -724,7 +736,7 @@ onMounted(() => {
                       row.spec.sentMailStatus === 'SENT' ||
                       !row.sent
                     "
-                    @click="sendSentMailForRow(row)"
+                    @click.stop="sendSentMailForRow(row)"
                   >
                     发送发卡邮件
                   </VButton>
@@ -777,5 +789,9 @@ onMounted(() => {
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;
+}
+
+.qsl-row-clickable {
+  cursor: pointer;
 }
 </style>

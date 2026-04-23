@@ -380,6 +380,15 @@ const clearSearch = () => {
   feedback.value = ''
 }
 
+const selectPendingIssueRow = async (row: CardIssueCardRow) => {
+  const callSign = row.callSign.trim().toUpperCase()
+  if (!callSign) {
+    return
+  }
+  callSignInput.value = callSign
+  await applySearch()
+}
+
 const isAddressSelected = (id: string): boolean => {
   return selectedAddressId.value === id
 }
@@ -730,7 +739,7 @@ onMounted(loadSourceData)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in pendingIssueCardRows" :key="item.id">
+            <tr v-for="item in pendingIssueCardRows" :key="item.id" class="qsl-row-clickable" @click="selectPendingIssueRow(item)">
               <td>{{ item.id }}</td>
               <td>{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType || '-' }}</td>
@@ -748,7 +757,7 @@ onMounted(loadSourceData)
                       pendingIssueMailRowName === item.id ||
                       loading
                     "
-                    @click="confirmCardIssueForRow(item)"
+                    @click.stop="confirmCardIssueForRow(item)"
                   >
                     确认制卡
                   </VButton>
@@ -762,7 +771,7 @@ onMounted(loadSourceData)
                       pendingIssueRowName === item.id ||
                       loading
                     "
-                    @click="sendCreatedMailForRow(item)"
+                    @click.stop="sendCreatedMailForRow(item)"
                   >
                     发送制卡邮件
                   </VButton>
@@ -798,5 +807,9 @@ onMounted(loadSourceData)
 
 .qsl-table-row--active {
   background: #eef2ff;
+}
+
+.qsl-row-clickable {
+  cursor: pointer;
 }
 </style>

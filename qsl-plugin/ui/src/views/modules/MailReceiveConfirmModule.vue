@@ -357,6 +357,17 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
   }
 }
 
+const selectRowForQuery = (item: ReceiveResult) => {
+  const keyword = item.callSign.trim().toUpperCase()
+  if (!keyword) {
+    return
+  }
+  form.callSign = keyword
+  historyKeyword.value = keyword
+  historyKeywordInput.value = keyword
+  currentPage.value = 1
+}
+
 const isHistorySelected = (resourceName: string): boolean => {
   return selectedHistoryNames.value.includes(resourceName)
 }
@@ -606,7 +617,12 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in pagedFilteredResults" :key="item.resourceName">
+            <tr
+              v-for="item in pagedFilteredResults"
+              :key="item.resourceName"
+              class="qsl-row-clickable"
+              @click="selectRowForQuery(item)"
+            >
               <td>{{ item.resourceName }}</td>
               <td>{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType }}</td>
@@ -622,7 +638,7 @@ onMounted(() => {
                     size="xs"
                     type="secondary"
                     :disabled="item.spec.cardReceived || pendingReceiveRowName === item.resourceName || submitting"
-                    @click="confirmReceiveForRow(item)"
+                    @click.stop="confirmReceiveForRow(item)"
                   >
                     确认收卡
                   </VButton>
@@ -634,7 +650,7 @@ onMounted(() => {
                       item.spec.receivedMailStatus === 'SENT' ||
                       !item.spec.cardReceived
                     "
-                    @click="sendReceivedMailForRow(item)"
+                    @click.stop="sendReceivedMailForRow(item)"
                   >
                     发送收卡回执
                   </VButton>
@@ -681,5 +697,9 @@ onMounted(() => {
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;
+}
+
+.qsl-row-clickable {
+  cursor: pointer;
 }
 </style>
