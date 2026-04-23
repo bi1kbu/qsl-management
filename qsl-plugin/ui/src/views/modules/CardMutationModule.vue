@@ -3,6 +3,7 @@ import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
+  deleteExtension,
   getExtensionOrNull,
   listExtensions,
   qslApiVersion,
@@ -102,6 +103,7 @@ const addressOptions = ref<AddressOptionItem[]>([])
 
 const loading = ref(false)
 const savingEdit = ref(false)
+const deletingRowName = ref('')
 const batchUpdating = ref(false)
 const feedback = ref('')
 
@@ -712,6 +714,54 @@ const saveEdit = async () => {
   }
 }
 
+const withTimeout = async <T>(task: Promise<T>, timeoutMs = 15000): Promise<T> => {
+  return await Promise.race([
+    task,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error('请求超时，请稍后重试。')), timeoutMs)
+    }),
+  ])
+}
+
+const removeRow = async (item: CardMutationItem) => {
+  const firstConfirmed = window.confirm(`确认删除卡片 ${item.resourceName} 吗？`)
+  if (!firstConfirmed) {
+    feedback.value = `已取消删除：${item.resourceName}`
+    return
+  }
+
+  const secondConfirmed = window.confirm(`二次确认：删除后卡片ID ${item.resourceName} 将作废且不可复用，是否继续？`)
+  if (!secondConfirmed) {
+    feedback.value = `已取消删除：${item.resourceName}`
+    return
+  }
+
+  deletingRowName.value = item.resourceName
+  feedback.value = `正在删除卡片：${item.resourceName}`
+  try {
+    await withTimeout(deleteExtension(resourcePlural, item.resourceName))
+    await appendQslAuditLog({
+      action: '卡片异动-删除卡片',
+      resourceType: 'card-record',
+      resourceName: item.resourceName,
+      detail: `删除卡片记录：呼号=${item.callSign}，类型=${item.cardType}`,
+    })
+    rows.value = rows.value.filter((row) => row.resourceName !== item.resourceName)
+    if (editingResourceName.value === item.resourceName) {
+      editingResourceName.value = ''
+      resetEditForm()
+    }
+    await loadRows({ silent: true })
+    feedback.value = `已删除卡片：${item.resourceName}`
+  } catch (error) {
+    const message = `删除卡片失败：${error instanceof Error ? error.message : '未知错误'}`
+    feedback.value = message
+    window.alert(message)
+  } finally {
+    deletingRowName.value = ''
+  }
+}
+
 const applyBatchField = (
   spec: CardRecordSpec,
   status: CardRecordStatus,
@@ -1180,6 +1230,14 @@ onMounted(() => {
 
         <template #row-actions="{ row }">
           <VButton size="xs" type="secondary" @click="startEditRow(toHistoryItem(row))">编辑</VButton>
+          <button
+            type="button"
+            class="qsl-row-delete-button"
+            :disabled="deletingRowName === toHistoryItem(row).resourceName || savingEdit || batchUpdating || loading"
+            @click.stop.prevent="removeRow(toHistoryItem(row))"
+          >
+            删除
+          </button>
         </template>
 
         <template #detail="{ row }">
@@ -1244,6 +1302,8 @@ onMounted(() => {
         </template>
       </QslExpandableHistoryTable>
 
+      <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
+
       <QslPaginationBar
         :total="filteredRows.length"
         :current-page="currentPage"
@@ -1300,5 +1360,22 @@ onMounted(() => {
 
 .qsl-history-detail-table td {
   color: #111827;
+}
+
+.qsl-row-delete-button {
+  appearance: none;
+  border: 1px solid #ef4444;
+  background: #fff;
+  color: #dc2626;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 20px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.qsl-row-delete-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

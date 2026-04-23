@@ -191,7 +191,7 @@ metadata:
 rules:
   - apiGroups: [ "qsl-management.halo.run" ]
     resources: [ "card-records" ]
-    verbs: [ "get", "list", "update", "patch" ]
+    verbs: [ "get", "list", "update", "patch", "delete" ]
   - apiGroups: [ "qsl-management.halo.run" ]
     resources: [ "qso-records", "address-book-entries" ]
     verbs: [ "get", "list" ]

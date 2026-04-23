@@ -701,13 +701,13 @@ onMounted(() => {
           </thead>
           <tbody>
             <tr v-for="row in pagedRows" :key="row.resourceName" class="qsl-row-clickable" @click="selectRowForQuery(row)">
-              <td>
+              <td @click.stop>
                 <label class="qsl-checkbox qsl-select-only">
                   <input
                     :checked="isHistorySelected(row.resourceName)"
                     type="checkbox"
                     @click.stop
-                    @change="toggleHistorySelection(row.resourceName)"
+                    @change.stop="toggleHistorySelection(row.resourceName)"
                   />
                 </label>
               </td>

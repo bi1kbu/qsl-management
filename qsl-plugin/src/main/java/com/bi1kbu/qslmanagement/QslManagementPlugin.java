@@ -57,6 +57,7 @@ public class QslManagementPlugin extends BasePlugin {
                 spec.setAutoNotifyOnCardCreated(Boolean.FALSE);
                 spec.setAutoNotifyOnCardSent(Boolean.FALSE);
                 spec.setAutoNotifyOnCardReceived(Boolean.FALSE);
+                spec.setCardRecordSequence(1000);
                 systemSetting.setSpec(spec);
                 return client.create(systemSetting)
                     .then()

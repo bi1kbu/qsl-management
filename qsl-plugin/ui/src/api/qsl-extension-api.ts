@@ -10,6 +10,7 @@ export interface QslMetadata {
   labels?: Record<string, string>
   annotations?: Record<string, string>
   creationTimestamp?: string
+  deletionTimestamp?: string
 }
 
 export interface QslExtension<TSpec, TStatus = Record<string, unknown>> {
@@ -87,7 +88,8 @@ export async function listExtensions<TSpec, TStatus = Record<string, unknown>>(
       sort: ['metadata.creationTimestamp,desc'],
     },
   })
-  return Array.isArray(response.data?.items) ? response.data.items : []
+  const items = Array.isArray(response.data?.items) ? response.data.items : []
+  return items.filter((item) => !item.metadata?.deletionTimestamp)
 }
 
 export async function getExtensionOrNull<TSpec, TStatus = Record<string, unknown>>(

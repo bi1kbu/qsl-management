@@ -3,6 +3,7 @@ package com.bi1kbu.qslmanagement.api;
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
+import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.data.domain.Sort;
@@ -21,6 +22,8 @@ public class QslConsoleActionService {
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("metadata.creationTimestamp"));
     private static final Pattern QSO_NAME_PATTERN = Pattern.compile("^QSO(\\d+)$");
     private static final Pattern CARD_NAME_PATTERN = Pattern.compile("^C(\\d+)$");
+    private static final String SYSTEM_SETTING_NAME = "qsl-system-setting-default";
+    private static final int CARD_SEQUENCE_START = 1000;
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
@@ -383,7 +386,49 @@ public class QslConsoleActionService {
     }
 
     private Mono<String> nextCardRecordName() {
-        return nextNumericResourceName(CardRecord.class, CARD_NAME_PATTERN, "C", 1000);
+        return reserveNextCardSequence()
+            .map(next -> "C" + next);
+    }
+
+    private Mono<Integer> reserveNextCardSequence() {
+        return client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .map(item -> item.getMetadata() == null ? "" : item.getMetadata().getName())
+            .map(name -> extractSequence(name, CARD_NAME_PATTERN))
+            .reduce(CARD_SEQUENCE_START, Math::max)
+            .flatMap(existingMax -> fetchOrCreateSystemSetting()
+                .flatMap(systemSetting -> {
+                    var spec = systemSetting.getSpec() == null
+                        ? createDefaultSystemSettingSpec()
+                        : systemSetting.getSpec();
+                    var current = spec.getCardRecordSequence() == null
+                        ? CARD_SEQUENCE_START
+                        : spec.getCardRecordSequence();
+                    var next = Math.max(current, existingMax) + 1;
+                    spec.setCardRecordSequence(next);
+                    systemSetting.setSpec(spec);
+                    return client.update(systemSetting).thenReturn(next);
+                }));
+    }
+
+    private Mono<SystemSetting> fetchOrCreateSystemSetting() {
+        return client.fetch(SystemSetting.class, SYSTEM_SETTING_NAME)
+            .switchIfEmpty(Mono.defer(() -> {
+                var systemSetting = new SystemSetting();
+                systemSetting.setMetadata(QslApiSupport.createMetadata(SYSTEM_SETTING_NAME));
+                systemSetting.setSpec(createDefaultSystemSettingSpec());
+                return client.create(systemSetting);
+            }));
+    }
+
+    private SystemSetting.SystemSettingSpec createDefaultSystemSettingSpec() {
+        var spec = new SystemSetting.SystemSettingSpec();
+        spec.setGuestQueryPerMinute(30);
+        spec.setRequiresExchangeReview(Boolean.TRUE);
+        spec.setAutoNotifyOnCardCreated(Boolean.FALSE);
+        spec.setAutoNotifyOnCardSent(Boolean.FALSE);
+        spec.setAutoNotifyOnCardReceived(Boolean.FALSE);
+        spec.setCardRecordSequence(CARD_SEQUENCE_START);
+        return spec;
     }
 
     private <E extends Extension> Mono<String> nextNumericResourceName(

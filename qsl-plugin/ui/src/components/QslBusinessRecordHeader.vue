@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { VButton } from '@halo-dev/components'
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -11,21 +11,28 @@ const props = withDefaults(
     syncEnabled: boolean
     placeholder?: string
     showSync?: boolean
+    showReset?: boolean
+    resetText?: string
   }>(),
   {
     placeholder: '按呼号筛选',
     showSync: true,
+    showReset: false,
+    resetText: '重置',
   },
 )
 
 const emit = defineEmits<{
   (event: 'update:keyword', value: string): void
   (event: 'search'): void
+  (event: 'reset-search'): void
   (event: 'toggle-all'): void
-  (event: 'update:syncEnabled', value: boolean): void
+  (event: 'update:sync-enabled', value: boolean): void
 }>()
 
 const inputKeyword = ref(props.keyword)
+const localSyncEnabled = ref(props.syncEnabled)
+const syncInputRef = ref<HTMLInputElement>()
 
 watch(
   () => props.keyword,
@@ -36,9 +43,34 @@ watch(
   },
 )
 
+watch(
+  () => props.syncEnabled,
+  (value) => {
+    localSyncEnabled.value = value
+  },
+)
+
 const submitSearch = () => {
   emit('update:keyword', inputKeyword.value)
   emit('search')
+}
+
+const updateSyncEnabled = (value: boolean) => {
+  localSyncEnabled.value = value
+  emit('update:sync-enabled', value)
+}
+
+const resetSearch = () => {
+  inputKeyword.value = ''
+  localSyncEnabled.value = false
+  emit('update:keyword', '')
+  updateSyncEnabled(false)
+  emit('reset-search')
+  void nextTick(() => {
+    if (syncInputRef.value) {
+      syncInputRef.value.checked = false
+    }
+  })
 }
 </script>
 
@@ -59,13 +91,15 @@ const submitSearch = () => {
         />
       </div>
       <VButton size="sm" type="secondary" @click="submitSearch">搜索</VButton>
+      <VButton v-if="showReset" size="sm" @click="resetSearch">{{ resetText }}</VButton>
     </div>
 
     <label v-if="showSync" class="qsl-checkbox qsl-business-record-header__sync">
       <input
-        :checked="syncEnabled"
+        ref="syncInputRef"
+        :checked="localSyncEnabled"
         type="checkbox"
-        @change="emit('update:syncEnabled', ($event.target as HTMLInputElement).checked)"
+        @change="updateSyncEnabled(($event.target as HTMLInputElement).checked)"
       />
       <span>同步查询</span>
     </label>

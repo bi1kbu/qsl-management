@@ -6,6 +6,7 @@ import {
   getExtensionOrNull,
   listExtensions,
   qslApiVersion,
+  upsertSingleton,
   updateExtension,
   type QslExtension,
 } from '../../api/qsl-extension-api'
@@ -15,7 +16,6 @@ import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
-import { buildCardResourceName } from '../../utils/resource-name'
 
 interface CardRecordSpec {
   callSign: string
@@ -90,6 +90,7 @@ interface StationCardSpec {
 
 interface SystemSettingSpec {
   autoNotifyOnCardCreated: boolean
+  cardRecordSequence: number
 }
 
 type CardType = 'QSO' | 'SWL' | 'EYEBALL'
@@ -362,6 +363,54 @@ const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', {
     hour12: false,
   })
+}
+
+const CARD_SEQUENCE_START = 1000
+
+const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
+  return {
+    autoNotifyOnCardCreated: false,
+    cardRecordSequence: CARD_SEQUENCE_START,
+  }
+}
+
+const extractCardSequence = (resourceName: string): number => {
+  const matched = resourceName.trim().toUpperCase().match(/^C(\d+)$/)
+  if (!matched) {
+    return -1
+  }
+  const numericPart = Number.parseInt(matched[1] ?? '', 10)
+  return Number.isNaN(numericPart) ? -1 : numericPart
+}
+
+const getMaxCardSequence = (): number => {
+  return records.value.reduce((max, item) => {
+    return Math.max(max, extractCardSequence(item.resourceName))
+  }, CARD_SEQUENCE_START)
+}
+
+const allocateCardResourceName = async (): Promise<string> => {
+  const currentExtension = await getExtensionOrNull<SystemSettingSpec>(systemSettingPlural, systemSettingName)
+  const baseSpec = {
+    ...createDefaultSystemSettingSpec(),
+    ...(currentExtension?.spec ?? {}),
+  }
+  const currentSequence = Number.isInteger(baseSpec.cardRecordSequence)
+    ? baseSpec.cardRecordSequence
+    : CARD_SEQUENCE_START
+  const nextSequence = Math.max(currentSequence, getMaxCardSequence()) + 1
+
+  await upsertSingleton<SystemSettingSpec>({
+    plural: systemSettingPlural,
+    kind: 'SystemSetting',
+    name: systemSettingName,
+    spec: {
+      ...baseSpec,
+      cardRecordSequence: nextSequence,
+    },
+  })
+
+  return `C${nextSequence}`
 }
 
 const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec => {
@@ -707,11 +756,12 @@ const saveCardRecord = async () => {
       return
     }
 
+    const nextCardResourceName = await allocateCardResourceName()
     const created = await createExtension<CardRecordSpec>(resourcePlural, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
-        name: buildCardResourceName(records.value.map((item) => item.resourceName)),
+        name: nextCardResourceName,
       },
       spec: {
         callSign: form.callSign.trim().toUpperCase(),

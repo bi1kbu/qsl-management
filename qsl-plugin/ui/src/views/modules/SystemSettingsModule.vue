@@ -10,6 +10,7 @@ const systemSettingsForm = reactive({
   autoNotifyOnCardCreated: false,
   autoNotifyOnCardSent: false,
   autoNotifyOnCardReceived: false,
+  cardRecordSequence: 1000,
 })
 
 const feedback = ref('')
@@ -22,6 +23,7 @@ interface SystemSettingSpec {
   autoNotifyOnCardCreated: boolean
   autoNotifyOnCardSent: boolean
   autoNotifyOnCardReceived: boolean
+  cardRecordSequence: number
 }
 
 const resourceName = 'qsl-system-setting-default'
@@ -40,6 +42,7 @@ const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
   systemSettingsForm.autoNotifyOnCardCreated = Boolean(extension.spec?.autoNotifyOnCardCreated)
   systemSettingsForm.autoNotifyOnCardSent = Boolean(extension.spec?.autoNotifyOnCardSent)
   systemSettingsForm.autoNotifyOnCardReceived = Boolean(extension.spec?.autoNotifyOnCardReceived)
+  systemSettingsForm.cardRecordSequence = extension.spec?.cardRecordSequence ?? 1000
 }
 
 const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
@@ -49,6 +52,7 @@ const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
     autoNotifyOnCardCreated: false,
     autoNotifyOnCardSent: false,
     autoNotifyOnCardReceived: false,
+    cardRecordSequence: 1000,
   }
 }
 
@@ -106,6 +110,7 @@ const saveSystemSettings = async () => {
         autoNotifyOnCardCreated: systemSettingsForm.autoNotifyOnCardCreated,
         autoNotifyOnCardSent: systemSettingsForm.autoNotifyOnCardSent,
         autoNotifyOnCardReceived: systemSettingsForm.autoNotifyOnCardReceived,
+        cardRecordSequence: systemSettingsForm.cardRecordSequence,
       },
     })
     await appendQslAuditLog({

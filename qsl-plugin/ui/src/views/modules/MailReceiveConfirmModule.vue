@@ -174,6 +174,13 @@ const applyHistorySearch = () => {
   currentPage.value = 1
 }
 
+const resetHistorySearch = () => {
+  historyKeyword.value = ''
+  historyKeywordInput.value = ''
+  syncHistoryQuery.value = false
+  currentPage.value = 1
+}
+
 const syncHistoryKeywordFromForm = () => {
   if (!syncHistoryQuery.value) {
     return
@@ -322,7 +329,6 @@ const submitReceive = async () => {
     await loadResults({ silent: true })
     feedback.value = `收信确认完成：${result.callSign || callSign}`
     form.callSign = ''
-    form.cardType = 'QSO'
     form.receiptRemarks = ''
   } catch (error) {
     feedback.value = `收信确认失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -592,9 +598,11 @@ onMounted(() => {
         :all-selected="allFilteredSelected"
         :has-rows="filteredResults.length > 0"
         :sync-enabled="syncHistoryQuery"
+        :show-reset="true"
         placeholder="按呼号筛选"
         @update:keyword="(value) => (historyKeywordInput = value)"
         @search="applyHistorySearch"
+        @reset-search="resetHistorySearch"
         @toggle-all="toggleAllFilteredHistorySelection"
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
@@ -608,6 +616,7 @@ onMounted(() => {
         <table class="qsl-table">
           <thead>
             <tr>
+              <th>选择</th>
               <th>卡片ID</th>
               <th>对方呼号</th>
               <th>卡片类型</th>
@@ -623,6 +632,16 @@ onMounted(() => {
               class="qsl-row-clickable"
               @click="selectRowForQuery(item)"
             >
+              <td @click.stop>
+                <label class="qsl-checkbox qsl-select-only">
+                  <input
+                    :checked="isHistorySelected(item.resourceName)"
+                    type="checkbox"
+                    @click.stop
+                    @change.stop="toggleHistorySelection(item.resourceName)"
+                  />
+                </label>
+              </td>
               <td>{{ item.resourceName }}</td>
               <td>{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType }}</td>
@@ -664,7 +683,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!pagedFilteredResults.length">
-              <td colspan="6" class="qsl-table-empty">暂无收信确认记录。</td>
+              <td colspan="7" class="qsl-table-empty">暂无收信确认记录。</td>
             </tr>
           </tbody>
         </table>
