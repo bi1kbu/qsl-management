@@ -6,6 +6,7 @@ import AddressManagementModule from './modules/AddressManagementModule.vue'
 import AuditLogModule from './modules/AuditLogModule.vue'
 import BureauManagementModule from './modules/BureauManagementModule.vue'
 import CardIssueModule from './modules/CardIssueModule.vue'
+import CardMutationModule from './modules/CardMutationModule.vue'
 import CardQueryModule from './modules/CardQueryModule.vue'
 import CardRecordModule from './modules/CardRecordModule.vue'
 import DefaultModulePlaceholder from './modules/DefaultModulePlaceholder.vue'
@@ -52,6 +53,8 @@ const renderer = computed<ModuleRenderer>(() => {
       return { component: CardRecordModule }
     case 'card-issue':
       return { component: CardIssueModule }
+    case 'card-mutation':
+      return { component: CardMutationModule }
     case 'mail-send-confirm':
       return { component: MailSendConfirmModule }
     case 'mail-receive-confirm':

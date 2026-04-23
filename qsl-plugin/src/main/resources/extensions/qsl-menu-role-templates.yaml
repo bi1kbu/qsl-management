@@ -164,6 +164,41 @@ rules:
 apiVersion: v1alpha1
 kind: Role
 metadata:
+  name: qsl-management-card-mutation-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "卡片异动（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-mutation:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view","qsl-management-qso-record-view","qsl-management-address-bureau-view"]'
+rules:
+  - apiGroups: [ "qsl-management.halo.run" ]
+    resources: [ "card-records", "qso-records", "address-book-entries" ]
+    verbs: [ "get", "list" ]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-card-mutation-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "卡片异动（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-mutation:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-card-mutation-view","qsl-management-card-record-edit","qsl-management-qso-record-view","qsl-management-address-bureau-view"]'
+rules:
+  - apiGroups: [ "qsl-management.halo.run" ]
+    resources: [ "card-records" ]
+    verbs: [ "get", "list", "update", "patch" ]
+  - apiGroups: [ "qsl-management.halo.run" ]
+    resources: [ "qso-records", "address-book-entries" ]
+    verbs: [ "get", "list" ]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
   name: qsl-management-mail-send-confirm-view
   labels:
     halo.run/role-template: "true"

@@ -18,6 +18,7 @@ interface CardRecordSpec {
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
   cardVersion: string
   qsoRecordName: string
+  addressEntryName: string
   cardDate: string
   cardTime: string
   cardRemarks: string
@@ -223,6 +224,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     cardType: spec?.cardType ?? 'QSO',
     cardVersion: spec?.cardVersion ?? '',
     qsoRecordName: spec?.qsoRecordName ?? '',
+    addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
     cardRemarks: spec?.cardRemarks ?? '',

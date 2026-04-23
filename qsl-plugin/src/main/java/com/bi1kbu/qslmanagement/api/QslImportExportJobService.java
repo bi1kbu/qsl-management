@@ -418,6 +418,7 @@ public class QslImportExportJobService {
                     spec.setCardType(defaultIfBlank(value(row, "cardType"), "QSO"));
                     spec.setCardVersion(value(row, "cardVersion"));
                     spec.setQsoRecordName(value(row, "qsoRecordName"));
+                    spec.setAddressEntryName(value(row, "addressEntryName"));
                     spec.setCardDate(value(row, "cardDate"));
                     spec.setCardTime(value(row, "cardTime"));
                     spec.setCardRemarks(value(row, "cardRemarks"));
@@ -718,6 +719,7 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getCardType()),
                         spec == null ? "" : nullToEmpty(spec.getCardVersion()),
                         spec == null ? "" : nullToEmpty(spec.getQsoRecordName()),
+                        spec == null ? "" : nullToEmpty(spec.getAddressEntryName()),
                         spec == null ? "" : nullToEmpty(spec.getCardDate()),
                         spec == null ? "" : nullToEmpty(spec.getCardTime()),
                         spec == null ? "" : nullToEmpty(spec.getCardRemarks()),
@@ -747,6 +749,7 @@ public class QslImportExportJobService {
                     "cardType",
                     "cardVersion",
                     "qsoRecordName",
+                    "addressEntryName",
                     "cardDate",
                     "cardTime",
                     "cardRemarks",

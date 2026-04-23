@@ -10,6 +10,7 @@ interface CardRecordSpec {
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
   cardVersion: string
   qsoRecordName: string
+  addressEntryName: string
   cardDate: string
   cardTime: string
   cardRemarks: string
@@ -46,6 +47,14 @@ interface AddressBookSpec {
   addressRemarks: string
 }
 
+interface BureauSpec {
+  bureauName: string
+  telephone: string
+  postalCode: string
+  address: string
+  addressRemarks: string
+}
+
 interface QsoRecordSpec {
   date: string
   time: string
@@ -69,6 +78,7 @@ interface CardIssueCardRow {
   cardDate: string
   cardTime: string
   qsoRecordName: string
+  addressEntryName: string
   cardSent: boolean
   cardIssued: boolean
   cardReceived: boolean
@@ -80,9 +90,13 @@ interface CardIssueCardRow {
   mailTargetEmail: string
 }
 
+type AddressSourceType = 'ADDRESS' | 'BURO'
+
 interface CardIssueAddressRow {
   id: string
+  sourceType: AddressSourceType
   callSign: string
+  bureauName: string
   name: string
   telephone: string
   postalCode: string
@@ -106,6 +120,7 @@ interface CardIssueQsoRow {
 
 const cardRecordPlural = 'card-records'
 const addressBookPlural = 'address-book-entries'
+const bureauPlural = 'bureau-entries'
 const qsoRecordPlural = 'qso-records'
 
 const loading = ref(false)
@@ -114,13 +129,37 @@ const pendingIssueRowName = ref('')
 const pendingIssueMailRowName = ref('')
 const feedback = ref('')
 const callSignInput = ref('')
+const addressLookupInput = ref('')
 const searchedCallSign = ref('')
+const selectedAddressId = ref('')
+const selectedAddressEmail = ref('')
 const cardRows = ref<CardIssueCardRow[]>([])
 const addressRows = ref<CardIssueAddressRow[]>([])
+const bureauRows = ref<CardIssueAddressRow[]>([])
 const qsoRows = ref<CardIssueQsoRow[]>([])
 
 const normalizedKeyword = computed(() => searchedCallSign.value.trim().toUpperCase())
 const hasKeyword = computed(() => normalizedKeyword.value.length > 0)
+
+const normalizedAddressLookupKeyword = computed(() => addressLookupInput.value.trim().toUpperCase())
+const effectiveAddressKeyword = computed(() => {
+  if (normalizedAddressLookupKeyword.value) {
+    return normalizedAddressLookupKeyword.value
+  }
+  return normalizedKeyword.value
+})
+const hasAddressKeyword = computed(() => effectiveAddressKeyword.value.length > 0)
+
+const allAddressRows = computed(() => {
+  return [...addressRows.value, ...bureauRows.value]
+})
+
+const selectedAddressRow = computed(() => {
+  if (!selectedAddressId.value) {
+    return null
+  }
+  return allAddressRows.value.find((item) => item.id === selectedAddressId.value) ?? null
+})
 
 const matchedCardRows = computed(() => {
   if (!hasKeyword.value) {
@@ -132,10 +171,17 @@ const matchedCardRows = computed(() => {
 })
 
 const matchedAddressRows = computed(() => {
-  if (!hasKeyword.value) {
+  if (!hasAddressKeyword.value) {
     return []
   }
-  return addressRows.value.filter((item) => item.callSign.toUpperCase().includes(normalizedKeyword.value))
+
+  const keyword = effectiveAddressKeyword.value
+  return allAddressRows.value.filter((item) => {
+    const searchText = [item.id, item.callSign, item.bureauName, item.name, item.address, item.telephone]
+      .join(' ')
+      .toUpperCase()
+    return searchText.includes(keyword)
+  })
 })
 
 const matchedQsoRows = computed(() => {
@@ -179,6 +225,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     cardType: spec?.cardType ?? 'QSO',
     cardVersion: spec?.cardVersion ?? '',
     qsoRecordName: spec?.qsoRecordName ?? '',
+    addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
     cardRemarks: spec?.cardRemarks ?? '',
@@ -222,6 +269,7 @@ const toCardRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): C
     cardDate: spec.cardDate,
     cardTime: spec.cardTime,
     qsoRecordName: spec.qsoRecordName,
+    addressEntryName: spec.addressEntryName,
     cardSent: spec.cardSent,
     cardIssued: spec.cardIssued,
     cardReceived: spec.cardReceived,
@@ -237,12 +285,29 @@ const toCardRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): C
 const toAddressRow = (extension: QslExtension<AddressBookSpec>): CardIssueAddressRow => {
   return {
     id: extension.metadata.name,
+    sourceType: 'ADDRESS',
     callSign: extension.spec?.callSign ?? '',
+    bureauName: '',
     name: extension.spec?.name ?? '',
     telephone: extension.spec?.telephone ?? '',
     postalCode: extension.spec?.postalCode ?? '',
     address: extension.spec?.address ?? '',
     email: extension.spec?.email ?? '',
+    remarks: extension.spec?.addressRemarks ?? '',
+  }
+}
+
+const toBureauRow = (extension: QslExtension<BureauSpec>): CardIssueAddressRow => {
+  return {
+    id: extension.metadata.name,
+    sourceType: 'BURO',
+    callSign: '',
+    bureauName: extension.spec?.bureauName ?? '',
+    name: extension.spec?.bureauName ?? '',
+    telephone: extension.spec?.telephone ?? '',
+    postalCode: extension.spec?.postalCode ?? '',
+    address: extension.spec?.address ?? '',
+    email: '',
     remarks: extension.spec?.addressRemarks ?? '',
   }
 }
@@ -265,18 +330,27 @@ const toQsoRow = (extension: QslExtension<QsoRecordSpec>): CardIssueQsoRow => {
 const loadSourceData = async () => {
   loading.value = true
   try {
-    const [cards, addresses, qsos] = await Promise.all([
+    const [cards, addresses, bureaus, qsos] = await Promise.all([
       listExtensions<CardRecordSpec, CardRecordStatus>(cardRecordPlural),
       listExtensions<AddressBookSpec>(addressBookPlural),
+      listExtensions<BureauSpec>(bureauPlural),
       listExtensions<QsoRecordSpec>(qsoRecordPlural),
     ])
     cardRows.value = cards.map((item) => toCardRow(item))
     addressRows.value = addresses.map((item) => toAddressRow(item))
+    bureauRows.value = bureaus.map((item) => toBureauRow(item))
     qsoRows.value = qsos.map((item) => toQsoRow(item))
-    if (!hasKeyword.value) {
+
+    const selectedExists = allAddressRows.value.some((item) => item.id === selectedAddressId.value)
+    if (!selectedExists) {
+      selectedAddressId.value = ''
+      selectedAddressEmail.value = ''
+    }
+
+    if (!hasKeyword.value && !hasAddressKeyword.value) {
       feedback.value = ''
     } else {
-      feedback.value = `查询完成：未制卡卡片 ${matchedCardRows.value.length} 条，关联QSO ${matchedQsoRows.value.length} 条，地址 ${matchedAddressRows.value.length} 条。`
+      feedback.value = `查询完成：未制卡卡片 ${matchedCardRows.value.length} 条，关联QSO ${matchedQsoRows.value.length} 条，地址候选 ${matchedAddressRows.value.length} 条。`
     }
   } catch (error) {
     feedback.value = `加载制卡签发数据失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -291,13 +365,49 @@ const applySearch = async () => {
     feedback.value = '请输入呼号后再查询。'
     return
   }
+  if (!addressLookupInput.value.trim()) {
+    addressLookupInput.value = searchedCallSign.value
+  }
   await loadSourceData()
 }
 
 const clearSearch = () => {
   callSignInput.value = ''
   searchedCallSign.value = ''
+  addressLookupInput.value = ''
+  selectedAddressId.value = ''
+  selectedAddressEmail.value = ''
   feedback.value = ''
+}
+
+const isAddressSelected = (id: string): boolean => {
+  return selectedAddressId.value === id
+}
+
+const selectAddressRow = (row: CardIssueAddressRow) => {
+  selectedAddressId.value = row.id
+  selectedAddressEmail.value = row.sourceType === 'ADDRESS' ? row.email.trim() : ''
+  feedback.value = `已选定地址：${row.id}`
+}
+
+const clearSelectedAddress = () => {
+  selectedAddressId.value = ''
+  selectedAddressEmail.value = ''
+  feedback.value = '已清空选定地址。'
+}
+
+const resolveAddressBinding = (spec: CardRecordSpec): Pick<CardRecordSpec, 'addressEntryName' | 'mailTargetEmail'> => {
+  if (!selectedAddressId.value) {
+    return {
+      addressEntryName: spec.addressEntryName,
+      mailTargetEmail: spec.mailTargetEmail,
+    }
+  }
+
+  return {
+    addressEntryName: selectedAddressId.value,
+    mailTargetEmail: selectedAddressEmail.value,
+  }
 }
 
 const confirmCardIssue = async () => {
@@ -315,8 +425,10 @@ const confirmCardIssue = async () => {
   issuing.value = true
   try {
     for (const row of targetRows) {
+      const binding = resolveAddressBinding(row.spec)
       const nextSpec: CardRecordSpec = {
         ...row.spec,
+        ...binding,
         cardIssued: true,
         cardIssuedAt: nowText(),
       }
@@ -340,7 +452,7 @@ const confirmCardIssue = async () => {
         action: '确认制卡',
         resourceType: 'card-record',
         resourceName: row.id,
-        detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}`,
+        detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}，地址编号：${nextSpec.addressEntryName || '-'}`,
       })
     }
 
@@ -359,8 +471,10 @@ const confirmCardIssueForRow = async (row: CardIssueCardRow) => {
   }
   pendingIssueRowName.value = row.id
   try {
+    const binding = resolveAddressBinding(row.spec)
     const nextSpec: CardRecordSpec = {
       ...row.spec,
+      ...binding,
       cardIssued: true,
       cardIssuedAt: nowText(),
     }
@@ -382,7 +496,7 @@ const confirmCardIssueForRow = async (row: CardIssueCardRow) => {
       action: '确认制卡',
       resourceType: 'card-record',
       resourceName: row.id,
-      detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}`,
+      detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}，地址编号：${nextSpec.addressEntryName || '-'}`,
     })
     await loadSourceData()
     feedback.value = `已确认制卡：${row.id}`
@@ -426,7 +540,19 @@ onMounted(loadSourceData)
             <input
               v-model.trim="callSignInput"
               type="text"
-              placeholder="输入呼号后查询卡片信息与收件地址"
+              placeholder="输入呼号后查询卡片信息"
+              @keyup.enter="applySearch"
+            />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">地址查询（呼号/卡片局）</span>
+          <div class="qsl-input-shell">
+            <input
+              v-model.trim="addressLookupInput"
+              type="text"
+              placeholder="输入呼号或卡片局检索地址"
               @keyup.enter="applySearch"
             />
           </div>
@@ -439,6 +565,12 @@ onMounted(loadSourceData)
         <VButton :disabled="loading || issuing || !hasKeyword || !matchedCardRows.length" @click="confirmCardIssue">
           确认制卡
         </VButton>
+        <VButton :disabled="loading || issuing || !selectedAddressId" @click="clearSelectedAddress">清空已选地址</VButton>
+        <span v-if="selectedAddressRow" class="qsl-selected-address">
+          已选地址：{{ selectedAddressRow.id }}
+          <template v-if="selectedAddressRow.sourceType === 'ADDRESS'">（{{ selectedAddressRow.callSign || '-' }}）</template>
+          <template v-else>（{{ selectedAddressRow.bureauName || '-' }}）</template>
+        </span>
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
     </VCard>
@@ -459,6 +591,7 @@ onMounted(loadSourceData)
               <th>收卡</th>
               <th>签收</th>
               <th>目标邮箱</th>
+              <th>绑定地址编号</th>
             </tr>
           </thead>
           <tbody>
@@ -474,12 +607,13 @@ onMounted(loadSourceData)
               <td>{{ item.cardReceived ? '是' : '否' }}</td>
               <td>{{ item.receiptConfirmed ? '是' : '否' }}</td>
               <td>{{ item.mailTargetEmail || '-' }}</td>
+              <td>{{ item.addressEntryName || '-' }}</td>
             </tr>
             <tr v-if="!hasKeyword">
-              <td colspan="11" class="qsl-table-empty">请输入呼号进行查询。</td>
+              <td colspan="12" class="qsl-table-empty">请输入呼号进行查询。</td>
             </tr>
             <tr v-else-if="!matchedCardRows.length">
-              <td colspan="11" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
+              <td colspan="12" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
             </tr>
           </tbody>
         </table>
@@ -532,32 +666,49 @@ onMounted(loadSourceData)
         <table class="qsl-table">
           <thead>
             <tr>
+              <th>来源</th>
               <th>地址编号</th>
-              <th>呼号</th>
+              <th>呼号/卡片局</th>
               <th>姓名</th>
               <th>电话</th>
               <th>邮编</th>
               <th>收件地址</th>
               <th>邮箱</th>
               <th>备注</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in matchedAddressRows" :key="item.id">
+            <tr
+              v-for="item in matchedAddressRows"
+              :key="item.id"
+              :class="{ 'qsl-table-row--active': isAddressSelected(item.id) }"
+            >
+              <td>{{ item.sourceType === 'ADDRESS' ? '地址簿' : '卡片局' }}</td>
               <td>{{ item.id }}</td>
-              <td>{{ item.callSign || '-' }}</td>
+              <td>{{ item.sourceType === 'ADDRESS' ? item.callSign || '-' : item.bureauName || '-' }}</td>
               <td>{{ item.name || '-' }}</td>
               <td>{{ item.telephone || '-' }}</td>
               <td>{{ item.postalCode || '-' }}</td>
               <td>{{ item.address || '-' }}</td>
               <td>{{ item.email || '-' }}</td>
               <td>{{ item.remarks || '-' }}</td>
+              <td>
+                <VButton
+                  size="xs"
+                  type="secondary"
+                  :disabled="loading || issuing || isAddressSelected(item.id)"
+                  @click="selectAddressRow(item)"
+                >
+                  {{ isAddressSelected(item.id) ? '已选定' : '选定地址' }}
+                </VButton>
+              </td>
             </tr>
-            <tr v-if="!hasKeyword">
-              <td colspan="8" class="qsl-table-empty">请输入呼号进行查询。</td>
+            <tr v-if="!hasAddressKeyword">
+              <td colspan="10" class="qsl-table-empty">请输入呼号或卡片局进行地址查询。</td>
             </tr>
             <tr v-else-if="!matchedAddressRows.length">
-              <td colspan="8" class="qsl-table-empty">未找到对应收件地址。</td>
+              <td colspan="10" class="qsl-table-empty">未找到对应收件地址。</td>
             </tr>
           </tbody>
         </table>
@@ -633,3 +784,19 @@ onMounted(loadSourceData)
     </VCard>
   </div>
 </template>
+
+<style scoped lang="scss">
+.qsl-table-empty {
+  text-align: center;
+  color: #6b7280;
+}
+
+.qsl-selected-address {
+  font-size: 13px;
+  color: #374151;
+}
+
+.qsl-table-row--active {
+  background: #eef2ff;
+}
+</style>

@@ -22,6 +22,7 @@ interface CardRecordSpec {
   cardType: CardType
   cardVersion: string
   qsoRecordName: string
+  addressEntryName: string
   cardDate: string
   cardTime: string
   cardRemarks: string
@@ -52,6 +53,7 @@ interface CardRecordItem {
   cardType: CardType
   cardVersion: string
   qsoRecordName: string
+  addressEntryName: string
   cardDate: string
   cardTime: string
   cardRemarks: string
@@ -97,6 +99,7 @@ const form = reactive({
   cardType: 'QSO' as CardType,
   cardVersion: '',
   qsoRecordName: '',
+  addressEntryName: '',
   cardDate: '',
   cardTime: '',
   cardRemarks: '',
@@ -367,6 +370,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     cardType: spec?.cardType ?? 'QSO',
     cardVersion: spec?.cardVersion ?? '',
     qsoRecordName: spec?.qsoRecordName ?? '',
+    addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
     cardRemarks: spec?.cardRemarks ?? '',
@@ -400,6 +404,7 @@ const toRecordItem = (extension: QslExtension<CardRecordSpec>): CardRecordItem =
     cardType: spec.cardType,
     cardVersion: spec.cardVersion,
     qsoRecordName: spec.qsoRecordName,
+    addressEntryName: spec.addressEntryName,
     cardDate: spec.cardDate,
     cardTime: spec.cardTime,
     cardRemarks: spec.cardRemarks,
@@ -482,6 +487,7 @@ const resetForm = () => {
   form.cardType = 'QSO'
   form.cardVersion = cardVersionOptions.value[0] ?? ''
   form.qsoRecordName = ''
+  form.addressEntryName = ''
   form.cardDate = ''
   form.cardTime = ''
   form.cardRemarks = ''
@@ -492,6 +498,7 @@ const fillFormFromRecord = (item: CardRecordItem) => {
   form.cardType = item.cardType
   form.cardVersion = item.cardVersion
   form.qsoRecordName = item.qsoRecordName
+  form.addressEntryName = item.addressEntryName
   form.cardDate = item.cardDate
   form.cardTime = item.cardTime
   form.cardRemarks = item.cardRemarks
@@ -670,6 +677,7 @@ const saveCardRecord = async () => {
         cardType: form.cardType,
         cardVersion: form.cardVersion.trim(),
         qsoRecordName,
+        addressEntryName: form.addressEntryName.trim(),
         cardDate,
         cardTime,
         cardRemarks: form.cardRemarks.trim(),
@@ -710,6 +718,7 @@ const saveCardRecord = async () => {
         cardType: form.cardType,
         cardVersion: form.cardVersion.trim(),
         qsoRecordName,
+        addressEntryName: form.addressEntryName.trim(),
         cardDate,
         cardTime,
         cardRemarks: form.cardRemarks.trim(),

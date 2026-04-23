@@ -271,6 +271,7 @@ public class QslConsoleActionService {
                 spec.setCardType(cardType);
                 spec.setCardVersion("自动生成");
                 spec.setQsoRecordName(qsoRecordName);
+                spec.setAddressEntryName("");
                 spec.setCardDate(QslApiSupport.utcDate());
                 spec.setCardTime(QslApiSupport.utcTime());
                 spec.setCardRemarks(remarks);
@@ -324,6 +325,7 @@ public class QslConsoleActionService {
         spec.setCardType("QSO");
         spec.setCardVersion("");
         spec.setQsoRecordName("");
+        spec.setAddressEntryName("");
         spec.setCardDate(QslApiSupport.utcDate());
         spec.setCardTime(QslApiSupport.utcTime());
         spec.setCardRemarks("");

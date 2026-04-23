@@ -29,6 +29,7 @@ interface AddressBookSpec {
 interface AddressItem {
   id: string
   version?: number | null
+  createdAt?: string
   callSign: string
   name: string
   telephone: string
@@ -36,6 +37,10 @@ interface AddressItem {
   address: string
   email: string
   remarks: string
+}
+
+interface CardRecordSpec {
+  addressEntryName: string
 }
 
 const form = reactive({
@@ -53,6 +58,7 @@ const feedback = ref('')
 const loading = ref(false)
 const submitting = ref(false)
 const batchUpdating = ref(false)
+const reindexing = ref(false)
 const editingId = ref('')
 const activeFunctionTab = ref<'basic' | 'batch'>('basic')
 
@@ -69,6 +75,8 @@ const pageSizeOptions: number[] = [20, 30, 50, 100]
 
 const resourcePlural = 'address-book-entries'
 const resourceKind = 'AddressBookEntry'
+const cardRecordPlural = 'card-records'
+const cardRecordKind = 'CardRecord'
 
 const historyColumns = [
   { key: 'id', label: '地址编号' },
@@ -94,6 +102,7 @@ const toRow = (extension: QslExtension<AddressBookSpec>): AddressItem => {
   return {
     id: extension.metadata.name,
     version: extension.metadata.version,
+    createdAt: extension.metadata.creationTimestamp ?? '',
     callSign: extension.spec?.callSign ?? '',
     name: extension.spec?.name ?? '',
     telephone: extension.spec?.telephone ?? '',
@@ -106,7 +115,7 @@ const toRow = (extension: QslExtension<AddressBookSpec>): AddressItem => {
 
 const toSpec = (row: AddressItem): AddressBookSpec => {
   return {
-    callSign: row.callSign,
+    callSign: row.callSign.trim().toUpperCase(),
     name: row.name,
     telephone: row.telephone,
     postalCode: row.postalCode,
@@ -114,6 +123,34 @@ const toSpec = (row: AddressItem): AddressBookSpec => {
     email: row.email,
     addressRemarks: row.remarks,
   }
+}
+
+const normalizeCallSign = (value: string): string => {
+  return value.trim().toUpperCase()
+}
+
+const parseAddressSequence = (resourceName: string, callSign: string): number => {
+  const pattern = new RegExp(`^${callSign}-(\\d+)$`)
+  const matched = resourceName.trim().toUpperCase().match(pattern)
+  if (!matched) {
+    return Number.POSITIVE_INFINITY
+  }
+  const numeric = Number.parseInt(matched[1] ?? '', 10)
+  return Number.isFinite(numeric) ? numeric : Number.POSITIVE_INFINITY
+}
+
+const compareAddressOrder = (a: AddressItem, b: AddressItem, callSign: string): number => {
+  const seqA = parseAddressSequence(a.id, callSign)
+  const seqB = parseAddressSequence(b.id, callSign)
+  if (seqA !== seqB) {
+    return seqA - seqB
+  }
+  const tsA = a.createdAt ?? ''
+  const tsB = b.createdAt ?? ''
+  if (tsA !== tsB) {
+    return tsA.localeCompare(tsB)
+  }
+  return a.id.localeCompare(b.id)
 }
 
 const filteredRows = computed(() => {
@@ -266,7 +303,7 @@ const addAddress = async () => {
   }
 
   submitting.value = true
-  const callSign = form.callSign.trim().toUpperCase()
+  const callSign = normalizeCallSign(form.callSign)
   const nextResourceName = buildAddressResourceName(rows.value.map((item) => item.id), callSign)
   if (!nextResourceName) {
     feedback.value = '呼号不能为空。'
@@ -326,7 +363,7 @@ const updateAddressRecord = async () => {
   }
 
   submitting.value = true
-  const callSign = form.callSign.trim().toUpperCase()
+  const callSign = normalizeCallSign(form.callSign)
   try {
     const updated = await updateExtension<AddressBookSpec>(resourcePlural, editingId.value, {
       apiVersion: qslApiVersion,
@@ -388,6 +425,109 @@ const removeAddress = async (id: string) => {
     feedback.value = `删除地址失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     submitting.value = false
+  }
+}
+
+const reindexAddressIds = async () => {
+  if (!rows.value.length) {
+    feedback.value = '暂无地址记录，无需重排。'
+    return
+  }
+
+  reindexing.value = true
+  try {
+    const latestRows = (await listExtensions<AddressBookSpec>(resourcePlural)).map((item) => ({
+      ...toRow(item),
+      callSign: normalizeCallSign(item.spec?.callSign ?? ''),
+    }))
+
+    const grouped = new Map<string, AddressItem[]>()
+    for (const item of latestRows) {
+      if (!item.callSign) {
+        continue
+      }
+      if (!grouped.has(item.callSign)) {
+        grouped.set(item.callSign, [])
+      }
+      grouped.get(item.callSign)?.push(item)
+    }
+
+    const renameMap = new Map<string, string>()
+    for (const [callSign, items] of grouped.entries()) {
+      const ordered = [...items].sort((a, b) => compareAddressOrder(a, b, callSign))
+      ordered.forEach((item, index) => {
+        const nextName = `${callSign}-${index + 1}`
+        if (item.id !== nextName) {
+          renameMap.set(item.id, nextName)
+        }
+      })
+    }
+
+    if (!renameMap.size) {
+      feedback.value = '地址编号已符合“每个呼号独立编号”的规则。'
+      return
+    }
+
+    const unchangedNames = new Set(latestRows.map((item) => item.id).filter((id) => !renameMap.has(id)))
+    const targetNames = Array.from(renameMap.values())
+    const duplicateTargets = targetNames.filter((name, index) => targetNames.indexOf(name) !== index)
+    const conflictingTargets = targetNames.filter((name) => unchangedNames.has(name))
+    if (duplicateTargets.length || conflictingTargets.length) {
+      feedback.value = `地址编号重排失败：存在编号冲突（重复 ${duplicateTargets.length}，占用 ${conflictingTargets.length}）。`
+      return
+    }
+
+    const renameEntries = Array.from(renameMap.entries())
+    for (const [oldName, newName] of renameEntries) {
+      const source = latestRows.find((item) => item.id === oldName)
+      if (!source) {
+        continue
+      }
+      await createExtension<AddressBookSpec>(resourcePlural, {
+        apiVersion: qslApiVersion,
+        kind: resourceKind,
+        metadata: { name: newName },
+        spec: toSpec(source),
+      })
+    }
+
+    const cardRecords = await listExtensions<CardRecordSpec>(cardRecordPlural)
+    for (const record of cardRecords) {
+      const currentBinding = record.spec?.addressEntryName?.trim() ?? ''
+      if (!currentBinding || !renameMap.has(currentBinding)) {
+        continue
+      }
+      await updateExtension<CardRecordSpec>(cardRecordPlural, record.metadata.name, {
+        apiVersion: qslApiVersion,
+        kind: cardRecordKind,
+        metadata: {
+          name: record.metadata.name,
+          version: record.metadata.version,
+        },
+        spec: {
+          ...(record.spec ?? { addressEntryName: '' }),
+          addressEntryName: renameMap.get(currentBinding) ?? '',
+        },
+      })
+    }
+
+    for (const [oldName] of renameEntries) {
+      await deleteExtension(resourcePlural, oldName)
+    }
+
+    await appendQslAuditLog({
+      action: '按呼号重排地址编号',
+      resourceType: 'address-book-entry',
+      resourceName: `count=${renameEntries.length}`,
+      detail: `已重排 ${renameEntries.length} 条地址编号，并同步更新卡片绑定引用。`,
+    })
+
+    await loadRows({ silent: true })
+    feedback.value = `地址编号重排完成：共调整 ${renameEntries.length} 条。`
+  } catch (error) {
+    feedback.value = `地址编号重排失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    reindexing.value = false
   }
 }
 
@@ -568,6 +708,7 @@ onMounted(() => {
             {{ editingId ? '保存修改' : '新增地址' }}
           </VButton>
           <VButton v-if="editingId" :disabled="loading || submitting" @click="resetForm">取消编辑</VButton>
+          <VButton :disabled="loading || submitting || reindexing" @click="reindexAddressIds">按呼号重排编号</VButton>
           <VButton :disabled="loading || submitting" @click="loadRows">刷新</VButton>
           <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
         </div>

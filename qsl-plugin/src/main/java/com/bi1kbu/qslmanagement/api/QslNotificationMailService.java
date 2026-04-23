@@ -367,6 +367,7 @@ public class QslNotificationMailService {
         spec.setCardType("QSO");
         spec.setCardVersion("");
         spec.setQsoRecordName("");
+        spec.setAddressEntryName("");
         spec.setCardDate("");
         spec.setCardTime("");
         spec.setCardRemarks("");

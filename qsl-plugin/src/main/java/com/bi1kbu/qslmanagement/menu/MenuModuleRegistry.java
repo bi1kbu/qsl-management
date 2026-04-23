@@ -38,6 +38,12 @@ public class MenuModuleRegistry {
             List.of(view("card-record"), view("qso-record"))
         ),
         module(
+            "card-mutation",
+            "卡片异动",
+            List.of(view("card-record"), view("qso-record"), view("address-bureau")),
+            List.of(view("card-mutation"), edit("card-record"), view("qso-record"), view("address-bureau"))
+        ),
+        module(
             "card-issue",
             "制卡签发",
             List.of(view("card-record"), view("address-bureau")),

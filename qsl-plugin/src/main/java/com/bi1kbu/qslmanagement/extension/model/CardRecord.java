@@ -22,6 +22,7 @@ public class CardRecord extends QslBaseExtension<CardRecord.CardRecordSpec, Card
         private String cardType;
         private String cardVersion;
         private String qsoRecordName;
+        private String addressEntryName;
         private String cardDate;
         private String cardTime;
         private String cardRemarks;
