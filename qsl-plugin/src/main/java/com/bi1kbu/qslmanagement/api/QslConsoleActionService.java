@@ -280,6 +280,7 @@ public class QslConsoleActionService {
                 spec.setCardRemarks(remarks);
                 spec.setCardSent(sent);
                 spec.setCardIssued(Boolean.FALSE);
+                spec.setEnvelopePrinted(Boolean.FALSE);
                 spec.setCardReceived(Boolean.TRUE);
                 spec.setReceiptConfirmed(Boolean.FALSE);
                 spec.setCardIssuedAt("");
@@ -334,6 +335,7 @@ public class QslConsoleActionService {
         spec.setCardRemarks("");
         spec.setCardSent(Boolean.FALSE);
         spec.setCardIssued(Boolean.FALSE);
+        spec.setEnvelopePrinted(Boolean.FALSE);
         spec.setCardReceived(Boolean.FALSE);
         spec.setReceiptConfirmed(Boolean.FALSE);
         spec.setCardIssuedAt("");

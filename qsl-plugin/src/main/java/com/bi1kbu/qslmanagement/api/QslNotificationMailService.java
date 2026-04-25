@@ -373,6 +373,7 @@ public class QslNotificationMailService {
         spec.setCardRemarks("");
         spec.setCardSent(Boolean.FALSE);
         spec.setCardIssued(Boolean.FALSE);
+        spec.setEnvelopePrinted(Boolean.FALSE);
         spec.setCardReceived(Boolean.FALSE);
         spec.setReceiptConfirmed(Boolean.FALSE);
         spec.setCardIssuedAt("");

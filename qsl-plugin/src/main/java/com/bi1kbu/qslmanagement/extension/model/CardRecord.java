@@ -28,6 +28,7 @@ public class CardRecord extends QslBaseExtension<CardRecord.CardRecordSpec, Card
         private String cardRemarks;
         private Boolean cardSent;
         private Boolean cardIssued;
+        private Boolean envelopePrinted;
         private Boolean cardReceived;
         private Boolean receiptConfirmed;
         private String cardIssuedAt;

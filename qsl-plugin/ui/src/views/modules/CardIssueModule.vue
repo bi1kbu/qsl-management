@@ -16,6 +16,7 @@ interface CardRecordSpec {
   cardRemarks: string
   cardSent: boolean
   cardIssued: boolean
+  envelopePrinted: boolean
   cardReceived: boolean
   receiptConfirmed: boolean
   cardIssuedAt: string
@@ -81,6 +82,7 @@ interface CardIssueCardRow {
   addressEntryName: string
   cardSent: boolean
   cardIssued: boolean
+  envelopePrinted: boolean
   cardReceived: boolean
   receiptConfirmed: boolean
   cardIssuedAt: string
@@ -126,6 +128,7 @@ const qsoRecordPlural = 'qso-records'
 const loading = ref(false)
 const issuing = ref(false)
 const pendingIssueRowName = ref('')
+const pendingEnvelopeRowName = ref('')
 const pendingIssueMailRowName = ref('')
 const feedback = ref('')
 const callSignInput = ref('')
@@ -200,7 +203,7 @@ const matchedQsoRows = computed(() => {
 })
 
 const pendingIssueCardRows = computed(() => {
-  return cardRows.value.filter((item) => !item.cardIssued || item.spec.createdMailStatus !== 'SENT')
+  return cardRows.value.filter((item) => !item.cardIssued || !item.envelopePrinted || item.spec.createdMailStatus !== 'SENT')
 })
 
 const nowText = (): string => {
@@ -231,6 +234,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     cardRemarks: spec?.cardRemarks ?? '',
     cardSent: Boolean(spec?.cardSent),
     cardIssued: Boolean(spec?.cardIssued),
+    envelopePrinted: Boolean(spec?.envelopePrinted),
     cardReceived: Boolean(spec?.cardReceived),
     receiptConfirmed: Boolean(spec?.receiptConfirmed),
     cardIssuedAt: spec?.cardIssuedAt ?? '',
@@ -272,6 +276,7 @@ const toCardRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): C
     addressEntryName: spec.addressEntryName,
     cardSent: spec.cardSent,
     cardIssued: spec.cardIssued,
+    envelopePrinted: spec.envelopePrinted,
     cardReceived: spec.cardReceived,
     receiptConfirmed: spec.receiptConfirmed,
     cardIssuedAt: spec.cardIssuedAt,
@@ -516,8 +521,49 @@ const confirmCardIssueForRow = async (row: CardIssueCardRow) => {
   }
 }
 
+const confirmEnvelopePrintedForRow = async (row: CardIssueCardRow) => {
+  if (!row.cardIssued || row.envelopePrinted) {
+    return
+  }
+  pendingEnvelopeRowName.value = row.id
+  try {
+    const binding = resolveAddressBinding(row.spec)
+    const nextSpec: CardRecordSpec = {
+      ...row.spec,
+      ...binding,
+      envelopePrinted: true,
+    }
+    const nextStatus: CardRecordStatus = {
+      ...row.status,
+      flowStatus: '已打包',
+    }
+    await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, row.id, {
+      apiVersion: qslApiVersion,
+      kind: 'CardRecord',
+      metadata: {
+        name: row.id,
+        version: row.metadataVersion,
+      },
+      spec: nextSpec,
+      status: nextStatus,
+    })
+    await appendQslAuditLog({
+      action: '确认打包',
+      resourceType: 'card-record',
+      resourceName: row.id,
+      detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}，地址编号：${nextSpec.addressEntryName || '-'}`,
+    })
+    await loadSourceData()
+    feedback.value = `已确认打包：${row.id}`
+  } catch (error) {
+    feedback.value = `确认打包失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    pendingEnvelopeRowName.value = ''
+  }
+}
+
 const sendCreatedMailForRow = async (row: CardIssueCardRow) => {
-  if (!row.cardIssued) {
+  if (!row.cardIssued || !row.envelopePrinted) {
     return
   }
   pendingIssueMailRowName.value = row.id
@@ -739,14 +785,14 @@ onMounted(loadSourceData)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in pendingIssueCardRows" :key="item.id" class="qsl-row-clickable" @click="selectPendingIssueRow(item)">
+            <tr v-for="item in pendingIssueCardRows" :key="item.id">
               <td>{{ item.id }}</td>
-              <td>{{ item.callSign || '-' }}</td>
+              <td class="qsl-row-clickable" @click="selectPendingIssueRow(item)">{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType || '-' }}</td>
               <td>{{ item.cardDate || '-' }}</td>
               <td>{{ item.cardTime || '-' }}</td>
               <td>{{ item.cardVersion || '-' }}</td>
-              <td>
+              <td @click.stop>
                 <div class="qsl-actions qsl-actions--tight">
                   <VButton
                     size="xs"
@@ -754,10 +800,11 @@ onMounted(loadSourceData)
                     :disabled="
                       item.cardIssued ||
                       pendingIssueRowName === item.id ||
+                      pendingEnvelopeRowName === item.id ||
                       pendingIssueMailRowName === item.id ||
                       loading
                     "
-                    @click.stop="confirmCardIssueForRow(item)"
+                    @click="confirmCardIssueForRow(item)"
                   >
                     确认制卡
                   </VButton>
@@ -766,12 +813,29 @@ onMounted(loadSourceData)
                     type="secondary"
                     :disabled="
                       !item.cardIssued ||
+                      item.envelopePrinted ||
+                      pendingEnvelopeRowName === item.id ||
+                      pendingIssueRowName === item.id ||
+                      pendingIssueMailRowName === item.id ||
+                      loading
+                    "
+                    @click="confirmEnvelopePrintedForRow(item)"
+                  >
+                    确认打包
+                  </VButton>
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="
+                      !item.cardIssued ||
+                      !item.envelopePrinted ||
                       item.spec.createdMailStatus === 'SENT' ||
                       pendingIssueMailRowName === item.id ||
                       pendingIssueRowName === item.id ||
+                      pendingEnvelopeRowName === item.id ||
                       loading
                     "
-                    @click.stop="sendCreatedMailForRow(item)"
+                    @click="sendCreatedMailForRow(item)"
                   >
                     发送制卡邮件
                   </VButton>

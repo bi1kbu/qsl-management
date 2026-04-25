@@ -424,6 +424,7 @@ public class QslImportExportJobService {
                     spec.setCardRemarks(value(row, "cardRemarks"));
                     spec.setCardSent(parseBoolean(value(row, "cardSent")));
                     spec.setCardIssued(parseBoolean(value(row, "cardIssued")));
+                    spec.setEnvelopePrinted(parseBoolean(value(row, "envelopePrinted")));
                     spec.setCardReceived(parseBoolean(value(row, "cardReceived")));
                     spec.setReceiptConfirmed(parseBoolean(value(row, "receiptConfirmed")));
                     spec.setCardIssuedAt(value(row, "cardIssuedAt"));
@@ -725,6 +726,7 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getCardRemarks()),
                         spec == null ? "false" : boolToText(spec.getCardSent()),
                         spec == null ? "false" : boolToText(spec.getCardIssued()),
+                        spec == null ? "false" : boolToText(spec.getEnvelopePrinted()),
                         spec == null ? "false" : boolToText(spec.getCardReceived()),
                         spec == null ? "false" : boolToText(spec.getReceiptConfirmed()),
                         spec == null ? "" : nullToEmpty(spec.getCardIssuedAt()),
@@ -755,6 +757,7 @@ public class QslImportExportJobService {
                     "cardRemarks",
                     "cardSent",
                     "cardIssued",
+                    "envelopePrinted",
                     "cardReceived",
                     "receiptConfirmed",
                     "cardIssuedAt",

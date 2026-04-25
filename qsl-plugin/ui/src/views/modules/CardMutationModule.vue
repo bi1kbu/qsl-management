@@ -29,6 +29,7 @@ interface CardRecordSpec {
   cardRemarks: string
   cardSent: boolean
   cardIssued: boolean
+  envelopePrinted: boolean
   cardReceived: boolean
   receiptConfirmed: boolean
   cardIssuedAt: string
@@ -133,6 +134,7 @@ const editForm = reactive({
   cardRemarks: '',
   flowStatus: '',
   cardIssued: false,
+  envelopePrinted: false,
   cardSent: false,
   cardReceived: false,
   receiptConfirmed: false,
@@ -292,6 +294,15 @@ const batchEditFields = computed(() => {
       ],
     },
     {
+      value: 'envelopePrintedState',
+      label: '打包状态',
+      inputType: 'select',
+      options: [
+        { label: '是', value: 'TRUE' },
+        { label: '否', value: 'FALSE' },
+      ],
+    },
+    {
       value: 'cardReceivedState',
       label: '收卡状态',
       inputType: 'select',
@@ -413,6 +424,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     cardRemarks: spec?.cardRemarks ?? '',
     cardSent: Boolean(spec?.cardSent),
     cardIssued: Boolean(spec?.cardIssued),
+    envelopePrinted: Boolean(spec?.envelopePrinted),
     cardReceived: Boolean(spec?.cardReceived),
     receiptConfirmed: Boolean(spec?.receiptConfirmed),
     cardIssuedAt: spec?.cardIssuedAt ?? '',
@@ -542,6 +554,7 @@ const resetEditForm = () => {
   editForm.cardRemarks = ''
   editForm.flowStatus = ''
   editForm.cardIssued = false
+  editForm.envelopePrinted = false
   editForm.cardSent = false
   editForm.cardReceived = false
   editForm.receiptConfirmed = false
@@ -575,6 +588,7 @@ const startEditRow = (item: CardMutationItem) => {
   editForm.cardRemarks = item.spec.cardRemarks
   editForm.flowStatus = item.status.flowStatus
   editForm.cardIssued = item.spec.cardIssued
+  editForm.envelopePrinted = item.spec.envelopePrinted
   editForm.cardSent = item.spec.cardSent
   editForm.cardReceived = item.spec.cardReceived
   editForm.receiptConfirmed = item.spec.receiptConfirmed
@@ -640,6 +654,7 @@ const buildSpecFromEditForm = (current: CardRecordSpec): CardRecordSpec => {
     cardTime: editForm.cardTime.trim(),
     cardRemarks: editForm.cardRemarks.trim(),
     cardIssued: editForm.cardIssued,
+    envelopePrinted: editForm.envelopePrinted,
     cardSent: editForm.cardSent,
     cardReceived: editForm.cardReceived,
     receiptConfirmed: editForm.receiptConfirmed,
@@ -804,6 +819,9 @@ const applyBatchField = (
       break
     case 'cardSentState':
       nextSpec.cardSent = value === 'TRUE'
+      break
+    case 'envelopePrintedState':
+      nextSpec.envelopePrinted = value === 'TRUE'
       break
     case 'cardReceivedState':
       nextSpec.cardReceived = value === 'TRUE'
@@ -1051,6 +1069,11 @@ onMounted(() => {
           </label>
 
           <label class="qsl-checkbox">
+            <input v-model="editForm.envelopePrinted" type="checkbox" />
+            <span>打包状态</span>
+          </label>
+
+          <label class="qsl-checkbox">
             <input v-model="editForm.cardSent" type="checkbox" />
             <span>发卡状态</span>
           </label>
@@ -1252,50 +1275,54 @@ onMounted(() => {
               <tr>
                 <th>制卡状态</th>
                 <td>{{ toHistoryItem(row).spec.cardIssued ? '是' : '否' }}</td>
+                <th>打包状态</th>
+                <td>{{ toHistoryItem(row).spec.envelopePrinted ? '是' : '否' }}</td>
+              </tr>
+              <tr>
                 <th>发卡状态</th>
                 <td>{{ toHistoryItem(row).spec.cardSent ? '是' : '否' }}</td>
-              </tr>
-              <tr>
                 <th>收卡状态</th>
                 <td>{{ toHistoryItem(row).spec.cardReceived ? '是' : '否' }}</td>
+              </tr>
+              <tr>
                 <th>签收状态</th>
                 <td>{{ toHistoryItem(row).spec.receiptConfirmed ? '是' : '否' }}</td>
-              </tr>
-              <tr>
                 <th>流程状态</th>
                 <td>{{ toHistoryItem(row).status.flowStatus || '-' }}</td>
+              </tr>
+              <tr>
                 <th>目标邮箱</th>
                 <td>{{ toHistoryItem(row).spec.mailTargetEmail || '-' }}</td>
-              </tr>
-              <tr>
                 <th>制卡时间</th>
                 <td>{{ toHistoryItem(row).spec.cardIssuedAt || '-' }}</td>
+              </tr>
+              <tr>
                 <th>发卡时间</th>
                 <td>{{ toHistoryItem(row).spec.sentAt || '-' }}</td>
-              </tr>
-              <tr>
                 <th>收卡时间</th>
                 <td>{{ toHistoryItem(row).spec.receivedAt || '-' }}</td>
+              </tr>
+              <tr>
                 <th>制卡邮件状态</th>
                 <td>{{ toHistoryItem(row).spec.createdMailStatus || '-' }}</td>
-              </tr>
-              <tr>
                 <th>制卡邮件时间</th>
                 <td>{{ toHistoryItem(row).spec.createdMailSentAt || '-' }}</td>
+              </tr>
+              <tr>
                 <th>发卡邮件状态</th>
                 <td>{{ toHistoryItem(row).spec.sentMailStatus || '-' }}</td>
-              </tr>
-              <tr>
                 <th>发卡邮件时间</th>
                 <td>{{ toHistoryItem(row).spec.sentMailSentAt || '-' }}</td>
-                <th>收卡邮件状态</th>
-                <td>{{ toHistoryItem(row).spec.receivedMailStatus || '-' }}</td>
               </tr>
               <tr>
+                <th>收卡邮件状态</th>
+                <td>{{ toHistoryItem(row).spec.receivedMailStatus || '-' }}</td>
                 <th>收卡邮件时间</th>
                 <td>{{ toHistoryItem(row).spec.receivedMailSentAt || '-' }}</td>
+              </tr>
+              <tr>
                 <th>卡片备注</th>
-                <td>{{ toHistoryItem(row).spec.cardRemarks || '-' }}</td>
+                <td colspan="3">{{ toHistoryItem(row).spec.cardRemarks || '-' }}</td>
               </tr>
             </tbody>
           </table>

@@ -25,6 +25,7 @@ interface CardRecordSpec {
   cardReceived: boolean
   cardSent: boolean
   cardIssued: boolean
+  envelopePrinted: boolean
   receiptConfirmed: boolean
   cardIssuedAt: string
   sentAt: string
@@ -238,6 +239,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     cardReceived: Boolean(spec?.cardReceived),
     cardSent: Boolean(spec?.cardSent),
     cardIssued: Boolean(spec?.cardIssued),
+    envelopePrinted: Boolean(spec?.envelopePrinted),
     receiptConfirmed: Boolean(spec?.receiptConfirmed),
     cardIssuedAt: spec?.cardIssuedAt ?? '',
     sentAt: spec?.sentAt ?? '',
@@ -626,12 +628,7 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="item in pagedFilteredResults"
-              :key="item.resourceName"
-              class="qsl-row-clickable"
-              @click="selectRowForQuery(item)"
-            >
+            <tr v-for="item in pagedFilteredResults" :key="item.resourceName">
               <td @click.stop>
                 <label class="qsl-checkbox qsl-select-only">
                   <input
@@ -643,7 +640,7 @@ onMounted(() => {
                 </label>
               </td>
               <td>{{ item.resourceName }}</td>
-              <td>{{ item.callSign || '-' }}</td>
+              <td class="qsl-row-clickable" @click="selectRowForQuery(item)">{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType }}</td>
               <td>
                 <VTag :theme="item.spec.cardReceived ? 'secondary' : 'default'">{{ item.spec.cardReceived ? '是' : '否' }}</VTag>
@@ -657,7 +654,7 @@ onMounted(() => {
                     size="xs"
                     type="secondary"
                     :disabled="item.spec.cardReceived || pendingReceiveRowName === item.resourceName || submitting"
-                    @click.stop="confirmReceiveForRow(item)"
+                    @click="confirmReceiveForRow(item)"
                   >
                     确认收卡
                   </VButton>
@@ -669,7 +666,7 @@ onMounted(() => {
                       item.spec.receivedMailStatus === 'SENT' ||
                       !item.spec.cardReceived
                     "
-                    @click.stop="sendReceivedMailForRow(item)"
+                    @click="sendReceivedMailForRow(item)"
                   >
                     发送收卡回执
                   </VButton>

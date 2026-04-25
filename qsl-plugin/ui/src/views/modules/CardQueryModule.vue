@@ -13,6 +13,7 @@ interface CardRecordSpec {
   cardTime: string
   cardRemarks: string
   cardIssued: boolean
+  envelopePrinted: boolean
   cardSent: boolean
   receiptConfirmed: boolean
   cardReceived: boolean
@@ -26,6 +27,7 @@ interface CardQueryItem {
   cardDate: string
   cardTime: string
   cardIssued: boolean
+  envelopePrinted: boolean
   cardSent: boolean
   receiptConfirmed: boolean
   cardReceived: boolean
@@ -79,6 +81,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>): CardQueryItem => {
     cardDate: extension.spec?.cardDate ?? '',
     cardTime: extension.spec?.cardTime ?? '',
     cardIssued: Boolean(extension.spec?.cardIssued),
+    envelopePrinted: Boolean(extension.spec?.envelopePrinted),
     cardSent: Boolean(extension.spec?.cardSent),
     receiptConfirmed: Boolean(extension.spec?.receiptConfirmed),
     cardReceived: Boolean(extension.spec?.cardReceived),
@@ -435,6 +438,7 @@ onMounted(loadRows)
               <th>版本</th>
               <th>日期时间</th>
               <th>制卡</th>
+              <th>打包</th>
               <th>已发</th>
               <th>签收</th>
               <th>已收</th>
@@ -461,6 +465,11 @@ onMounted(loadRows)
                   <VTag :theme="item.cardIssued ? 'secondary' : 'default'">{{ item.cardIssued ? '是' : '否' }}</VTag>
                 </td>
                 <td>
+                  <VTag :theme="item.envelopePrinted ? 'secondary' : 'default'">{{
+                    item.envelopePrinted ? '是' : '否'
+                  }}</VTag>
+                </td>
+                <td>
                   <VTag :theme="item.cardSent ? 'secondary' : 'default'">{{ item.cardSent ? '是' : '否' }}</VTag>
                 </td>
                 <td>
@@ -476,7 +485,7 @@ onMounted(loadRows)
                 </td>
               </tr>
               <tr v-if="expandedId === item.id" class="qsl-table-detail-row">
-                <td colspan="10">
+                <td colspan="11">
                   <div class="qsl-detail-grid">
                     <p><strong>卡片ID：</strong>{{ item.id }}</p>
                     <p><strong>呼号：</strong>{{ item.callSign || '-' }}</p>
@@ -485,6 +494,7 @@ onMounted(loadRows)
                     <p><strong>卡片日期：</strong>{{ item.cardDate || '-' }}</p>
                     <p><strong>卡片时间：</strong>{{ item.cardTime || '-' }}</p>
                     <p><strong>制卡：</strong>{{ item.cardIssued ? '是' : '否' }}</p>
+                    <p><strong>打包：</strong>{{ item.envelopePrinted ? '是' : '否' }}</p>
                     <p><strong>已发：</strong>{{ item.cardSent ? '是' : '否' }}</p>
                     <p><strong>签收：</strong>{{ item.receiptConfirmed ? '是' : '否' }}</p>
                     <p><strong>已收：</strong>{{ item.cardReceived ? '是' : '否' }}</p>
@@ -494,7 +504,7 @@ onMounted(loadRows)
               </tr>
             </template>
             <tr v-if="!pagedRows.length">
-              <td colspan="10" class="qsl-table-empty">暂无数据。</td>
+              <td colspan="11" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>

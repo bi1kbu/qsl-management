@@ -19,6 +19,7 @@ interface CardRecordSpec {
   cardRemarks: string
   cardSent: boolean
   cardIssued: boolean
+  envelopePrinted: boolean
   cardReceived: boolean
   receiptConfirmed: boolean
   cardIssuedAt: string
@@ -224,6 +225,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     cardRemarks: spec?.cardRemarks ?? '',
     cardSent: Boolean(spec?.cardSent),
     cardIssued: Boolean(spec?.cardIssued),
+    envelopePrinted: Boolean(spec?.envelopePrinted),
     cardReceived: Boolean(spec?.cardReceived),
     receiptConfirmed: Boolean(spec?.receiptConfirmed),
     cardIssuedAt: spec?.cardIssuedAt ?? '',
@@ -245,7 +247,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
 const toRow = (extension: QslExtension<CardRecordSpec>): SendConfirmItem => {
   const spec = normalizeCardRecordSpec(extension.spec)
   const cardPrintAt = spec.cardDate && spec.cardTime ? `${spec.cardDate} ${spec.cardTime}` : '未制卡'
-  const envelopePrintAt = spec.sentAt ? spec.sentAt : '未打印'
+  const envelopePrintAt = spec.envelopePrinted ? '已打包' : '未打包'
 
   return {
     resourceName: extension.metadata.name,
@@ -694,13 +696,13 @@ onMounted(() => {
               <th>对方呼号</th>
               <th>卡片类型</th>
               <th>卡片打印日期</th>
-              <th>信封打印日期</th>
+              <th>打包</th>
               <th>卡片备注</th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in pagedRows" :key="row.resourceName" class="qsl-row-clickable" @click="selectRowForQuery(row)">
+            <tr v-for="row in pagedRows" :key="row.resourceName">
               <td @click.stop>
                 <label class="qsl-checkbox qsl-select-only">
                   <input
@@ -712,19 +714,19 @@ onMounted(() => {
                 </label>
               </td>
               <td>{{ row.resourceName }}</td>
-              <td>{{ row.callSign }}</td>
+              <td class="qsl-row-clickable" @click="selectRowForQuery(row)">{{ row.callSign }}</td>
               <td>{{ row.cardType }}</td>
               <td>{{ row.cardPrintAt }}</td>
               <td>{{ row.envelopePrintAt }}</td>
               <td>{{ row.cardRemarks || '无' }}</td>
               <td>
                 <div class="qsl-actions qsl-actions--tight">
-                  <VButton size="xs" type="secondary" @click.stop="startEditRow(row)">编辑</VButton>
+                  <VButton size="xs" type="secondary" @click="startEditRow(row)">编辑</VButton>
                   <VButton
                     size="xs"
                     type="secondary"
                     :disabled="row.sent || pendingRowName === row.resourceName || loading"
-                    @click.stop="markAsSent(row)"
+                    @click="markAsSent(row)"
                   >
                     确认发信
                   </VButton>
@@ -736,7 +738,7 @@ onMounted(() => {
                       row.spec.sentMailStatus === 'SENT' ||
                       !row.sent
                     "
-                    @click.stop="sendSentMailForRow(row)"
+                    @click="sendSentMailForRow(row)"
                   >
                     发送发卡邮件
                   </VButton>

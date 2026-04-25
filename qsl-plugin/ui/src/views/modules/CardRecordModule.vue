@@ -28,6 +28,7 @@ interface CardRecordSpec {
   cardRemarks: string
   cardSent: boolean
   cardIssued: boolean
+  envelopePrinted: boolean
   cardReceived: boolean
   receiptConfirmed: boolean
   cardIssuedAt: string
@@ -425,6 +426,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     cardRemarks: spec?.cardRemarks ?? '',
     cardSent: Boolean(spec?.cardSent),
     cardIssued: Boolean(spec?.cardIssued),
+    envelopePrinted: Boolean(spec?.envelopePrinted),
     cardReceived: Boolean(spec?.cardReceived),
     receiptConfirmed: Boolean(spec?.receiptConfirmed),
     cardIssuedAt: spec?.cardIssuedAt ?? '',
@@ -730,6 +732,7 @@ const saveCardRecord = async () => {
         cardDate,
         cardTime,
         cardRemarks: form.cardRemarks.trim(),
+        envelopePrinted: target.spec.envelopePrinted,
       }
 
       await updateExtension<CardRecordSpec>(resourcePlural, target.resourceName, {
@@ -774,6 +777,7 @@ const saveCardRecord = async () => {
         cardRemarks: form.cardRemarks.trim(),
         cardSent: false,
         cardIssued: false,
+        envelopePrinted: false,
         cardReceived: false,
         receiptConfirmed: false,
         cardIssuedAt: '',
