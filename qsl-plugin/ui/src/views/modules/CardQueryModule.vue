@@ -2,8 +2,10 @@
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
+import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
+import { summarizeCardRemark, type CardRemarkFields } from '../../utils/card-remark'
 
 interface CardRecordSpec {
   callSign: string
@@ -11,6 +13,10 @@ interface CardRecordSpec {
   cardVersion: string
   cardDate: string
   cardTime: string
+  createdRemarks: string
+  sentRemarks: string
+  receivedRemarks: string
+  publicReceiptRemarks: string
   cardRemarks: string
   cardIssued: boolean
   envelopePrinted: boolean
@@ -31,7 +37,8 @@ interface CardQueryItem {
   cardSent: boolean
   receiptConfirmed: boolean
   cardReceived: boolean
-  remarks: string
+  remarkFields: CardRemarkFields
+  remarksText: string
 }
 
 const rows = ref<CardQueryItem[]>([])
@@ -85,7 +92,23 @@ const toRow = (extension: QslExtension<CardRecordSpec>): CardQueryItem => {
     cardSent: Boolean(extension.spec?.cardSent),
     receiptConfirmed: Boolean(extension.spec?.receiptConfirmed),
     cardReceived: Boolean(extension.spec?.cardReceived),
-    remarks: extension.spec?.cardRemarks ?? '',
+    remarkFields: {
+      createdRemarks: extension.spec?.createdRemarks ?? '',
+      sentRemarks: extension.spec?.sentRemarks ?? '',
+      receivedRemarks: extension.spec?.receivedRemarks ?? '',
+      publicReceiptRemarks: extension.spec?.publicReceiptRemarks ?? '',
+      cardRemarks: extension.spec?.cardRemarks ?? '',
+    },
+    remarksText: [
+      extension.spec?.createdRemarks ?? '',
+      extension.spec?.sentRemarks ?? '',
+      extension.spec?.receivedRemarks ?? '',
+      extension.spec?.publicReceiptRemarks ?? '',
+      extension.spec?.cardRemarks ?? '',
+    ]
+      .map((item) => item.trim())
+      .filter((item) => Boolean(item))
+      .join('\n'),
   }
 }
 
@@ -109,7 +132,7 @@ const filteredRows = computed(() => {
 
     const keywordOk =
       !keyword ||
-      [item.id, item.callSign, item.cardType, item.cardVersion, item.cardDate, item.cardTime, item.remarks]
+      [item.id, item.callSign, item.cardType, item.cardVersion, item.cardDate, item.cardTime, item.remarksText]
         .join(' ')
         .toUpperCase()
         .includes(keyword)
@@ -117,7 +140,7 @@ const filteredRows = computed(() => {
     const typeOk = !filters.cardType || item.cardType === filters.cardType
     const fromOk = !filters.dateFrom || (item.cardDate && item.cardDate >= filters.dateFrom)
     const toOk = !filters.dateTo || (item.cardDate && item.cardDate <= filters.dateTo)
-    const remarksOk = !filters.onlyWithRemarks || Boolean(item.remarks.trim())
+    const remarksOk = !filters.onlyWithRemarks || Boolean(item.remarksText.trim())
 
     let sentOk = true
     if (filters.sentStatus === '已发') {
@@ -213,13 +236,7 @@ const activeFilterTags = computed(() => {
   return tags
 })
 
-const summarizeRemarks = (value: string) => {
-  const normalized = value.trim()
-  if (!normalized) {
-    return '无'
-  }
-  return normalized.length > 18 ? `${normalized.slice(0, 18)}...` : normalized
-}
+const summarizeRemarks = (value: CardRemarkFields) => summarizeCardRemark(value)
 
 const toggleDetail = (id: string) => {
   expandedId.value = expandedId.value === id ? '' : id
@@ -481,7 +498,7 @@ onMounted(loadRows)
                   <VTag :theme="item.cardReceived ? 'secondary' : 'default'">{{ item.cardReceived ? '是' : '否' }}</VTag>
                 </td>
                 <td>
-                  {{ summarizeRemarks(item.remarks) }}
+                  {{ summarizeRemarks(item.remarkFields) }}
                 </td>
               </tr>
               <tr v-if="expandedId === item.id" class="qsl-table-detail-row">
@@ -498,7 +515,10 @@ onMounted(loadRows)
                     <p><strong>已发：</strong>{{ item.cardSent ? '是' : '否' }}</p>
                     <p><strong>签收：</strong>{{ item.receiptConfirmed ? '是' : '否' }}</p>
                     <p><strong>已收：</strong>{{ item.cardReceived ? '是' : '否' }}</p>
-                    <p class="qsl-detail-full"><strong>备注：</strong>{{ item.remarks || '无' }}</p>
+                    <div class="qsl-detail-full">
+                      <strong>备注：</strong>
+                      <QslCardRemarkEntries :remark-fields="item.remarkFields" empty-text="无" />
+                    </div>
                   </div>
                 </td>
               </tr>

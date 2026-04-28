@@ -7,11 +7,13 @@ import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
+import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.plugin.PluginContext;
@@ -32,6 +34,7 @@ class QslManagementPluginTest {
     void contextLoads() {
         when(client.fetch(eq(SystemSetting.class), anyString())).thenReturn(Mono.empty());
         when(client.fetch(eq(StationProfile.class), anyString())).thenReturn(Mono.empty());
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty());
         when(client.create(any())).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         plugin.start();
         plugin.stop();

@@ -179,13 +179,9 @@ public class QslPublicApiService {
                         "QSL-422-0001", "卡片和呼号不匹配"));
                 }
                 cardRecord.getSpec().setReceiptConfirmed(Boolean.TRUE);
-                cardRecord.getSpec().setCardReceived(Boolean.TRUE);
-                cardRecord.getSpec().setReceivedAt(QslApiSupport.nowText());
-                cardRecord.getSpec().setCardRemarks(QslApiSupport.appendRemark(
-                    cardRecord.getSpec().getCardRemarks(),
-                    command.remarks() == null || command.remarks().isBlank()
-                        ? ""
-                        : "公开签收备注：" + command.remarks().trim()
+                cardRecord.getSpec().setPublicReceiptRemarks(QslApiSupport.appendRemark(
+                    cardRecord.getSpec().getPublicReceiptRemarks(),
+                    command.remarks() == null ? "" : command.remarks().trim()
                 ));
                 return client.update(cardRecord);
             })

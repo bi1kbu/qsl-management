@@ -12,6 +12,7 @@ import {
 } from '../../api/qsl-extension-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
+import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
@@ -26,6 +27,10 @@ interface CardRecordSpec {
   addressEntryName: string
   cardDate: string
   cardTime: string
+  createdRemarks: string
+  sentRemarks: string
+  receivedRemarks: string
+  publicReceiptRemarks: string
   cardRemarks: string
   cardSent: boolean
   cardIssued: boolean
@@ -131,6 +136,10 @@ const editForm = reactive({
   addressEntryName: '',
   cardDate: '',
   cardTime: '',
+  createdRemarks: '',
+  sentRemarks: '',
+  receivedRemarks: '',
+  publicReceiptRemarks: '',
   cardRemarks: '',
   flowStatus: '',
   cardIssued: false,
@@ -273,6 +282,10 @@ const batchEditFields = computed(() => {
     },
     { value: 'cardDate', label: '卡片日期', inputType: 'date' },
     { value: 'cardTime', label: '卡片时间', inputType: 'text', placeholder: 'HHmm' },
+    { value: 'createdRemarks', label: '制卡备注', inputType: 'textarea', placeholder: '输入备注' },
+    { value: 'sentRemarks', label: '发卡备注', inputType: 'textarea', placeholder: '输入备注' },
+    { value: 'receivedRemarks', label: '收卡确认备注', inputType: 'textarea', placeholder: '输入备注' },
+    { value: 'publicReceiptRemarks', label: '公开签收备注', inputType: 'textarea', placeholder: '输入备注' },
     { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
     { value: 'flowStatus', label: '流程状态', inputType: 'text', placeholder: '例如：已发信' },
     {
@@ -421,6 +434,10 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
+    createdRemarks: spec?.createdRemarks ?? '',
+    sentRemarks: spec?.sentRemarks ?? '',
+    receivedRemarks: spec?.receivedRemarks ?? '',
+    publicReceiptRemarks: spec?.publicReceiptRemarks ?? '',
     cardRemarks: spec?.cardRemarks ?? '',
     cardSent: Boolean(spec?.cardSent),
     cardIssued: Boolean(spec?.cardIssued),
@@ -551,6 +568,10 @@ const resetEditForm = () => {
   editForm.addressEntryName = ''
   editForm.cardDate = ''
   editForm.cardTime = ''
+  editForm.createdRemarks = ''
+  editForm.sentRemarks = ''
+  editForm.receivedRemarks = ''
+  editForm.publicReceiptRemarks = ''
   editForm.cardRemarks = ''
   editForm.flowStatus = ''
   editForm.cardIssued = false
@@ -585,6 +606,10 @@ const startEditRow = (item: CardMutationItem) => {
   editForm.addressEntryName = item.spec.addressEntryName
   editForm.cardDate = item.spec.cardDate
   editForm.cardTime = item.spec.cardTime
+  editForm.createdRemarks = item.spec.createdRemarks
+  editForm.sentRemarks = item.spec.sentRemarks
+  editForm.receivedRemarks = item.spec.receivedRemarks
+  editForm.publicReceiptRemarks = item.spec.publicReceiptRemarks
   editForm.cardRemarks = item.spec.cardRemarks
   editForm.flowStatus = item.status.flowStatus
   editForm.cardIssued = item.spec.cardIssued
@@ -652,6 +677,10 @@ const buildSpecFromEditForm = (current: CardRecordSpec): CardRecordSpec => {
     addressEntryName: editForm.addressEntryName.trim(),
     cardDate: editForm.cardDate,
     cardTime: editForm.cardTime.trim(),
+    createdRemarks: editForm.createdRemarks.trim(),
+    sentRemarks: editForm.sentRemarks.trim(),
+    receivedRemarks: editForm.receivedRemarks.trim(),
+    publicReceiptRemarks: editForm.publicReceiptRemarks.trim(),
     cardRemarks: editForm.cardRemarks.trim(),
     cardIssued: editForm.cardIssued,
     envelopePrinted: editForm.envelopePrinted,
@@ -807,6 +836,18 @@ const applyBatchField = (
       break
     case 'cardTime':
       nextSpec.cardTime = value.trim()
+      break
+    case 'createdRemarks':
+      nextSpec.createdRemarks = value.trim()
+      break
+    case 'sentRemarks':
+      nextSpec.sentRemarks = value.trim()
+      break
+    case 'receivedRemarks':
+      nextSpec.receivedRemarks = value.trim()
+      break
+    case 'publicReceiptRemarks':
+      nextSpec.publicReceiptRemarks = value.trim()
       break
     case 'cardRemarks':
       nextSpec.cardRemarks = value.trim()
@@ -1186,9 +1227,37 @@ onMounted(() => {
           </label>
 
           <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">卡片备注</span>
+            <span class="qsl-field__label">制卡备注</span>
             <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.cardRemarks" rows="3" placeholder="输入备注" />
+              <textarea v-model.trim="editForm.createdRemarks" rows="2" placeholder="输入制卡备注" />
+            </div>
+          </label>
+
+          <label class="qsl-field qsl-field--full">
+            <span class="qsl-field__label">发卡备注</span>
+            <div class="qsl-input-shell qsl-input-shell--textarea">
+              <textarea v-model.trim="editForm.sentRemarks" rows="2" placeholder="输入发卡备注" />
+            </div>
+          </label>
+
+          <label class="qsl-field qsl-field--full">
+            <span class="qsl-field__label">收卡确认备注</span>
+            <div class="qsl-input-shell qsl-input-shell--textarea">
+              <textarea v-model.trim="editForm.receivedRemarks" rows="2" placeholder="输入收卡确认备注" />
+            </div>
+          </label>
+
+          <label class="qsl-field qsl-field--full">
+            <span class="qsl-field__label">公开签收备注</span>
+            <div class="qsl-input-shell qsl-input-shell--textarea">
+              <textarea v-model.trim="editForm.publicReceiptRemarks" rows="2" placeholder="输入公开签收备注" />
+            </div>
+          </label>
+
+          <label class="qsl-field qsl-field--full">
+            <span class="qsl-field__label">卡片备注（打印）</span>
+            <div class="qsl-input-shell qsl-input-shell--textarea">
+              <textarea v-model.trim="editForm.cardRemarks" rows="2" placeholder="输入卡片备注" />
             </div>
           </label>
         </div>
@@ -1322,7 +1391,18 @@ onMounted(() => {
               </tr>
               <tr>
                 <th>卡片备注</th>
-                <td colspan="3">{{ toHistoryItem(row).spec.cardRemarks || '-' }}</td>
+                <td colspan="3">
+                  <QslCardRemarkEntries
+                    :remark-fields="{
+                      cardRemarks: toHistoryItem(row).spec.cardRemarks,
+                      createdRemarks: toHistoryItem(row).spec.createdRemarks,
+                      sentRemarks: toHistoryItem(row).spec.sentRemarks,
+                      receivedRemarks: toHistoryItem(row).spec.receivedRemarks,
+                      publicReceiptRemarks: toHistoryItem(row).spec.publicReceiptRemarks,
+                    }"
+                    empty-text="无"
+                  />
+                </td>
               </tr>
             </tbody>
           </table>

@@ -277,7 +277,11 @@ public class QslConsoleActionService {
                 spec.setAddressEntryName("");
                 spec.setCardDate(QslApiSupport.utcDate());
                 spec.setCardTime(QslApiSupport.utcTime());
-                spec.setCardRemarks(remarks);
+                spec.setCreatedRemarks(remarks);
+                spec.setSentRemarks("");
+                spec.setReceivedRemarks("");
+                spec.setPublicReceiptRemarks("");
+                spec.setCardRemarks("");
                 spec.setCardSent(sent);
                 spec.setCardIssued(Boolean.FALSE);
                 spec.setEnvelopePrinted(Boolean.FALSE);
@@ -309,7 +313,7 @@ public class QslConsoleActionService {
     private Mono<CardRecord> updateReceivedCardRecord(CardRecord cardRecord, String receiptRemarks) {
         var spec = ensureCardRecordSpec(cardRecord);
         spec.setCardReceived(Boolean.TRUE);
-        spec.setCardRemarks(QslApiSupport.appendRemark(spec.getCardRemarks(), mapReceiptRemark(receiptRemarks)));
+        spec.setReceivedRemarks(QslApiSupport.appendRemark(spec.getReceivedRemarks(), mapReceiptRemark(receiptRemarks)));
         spec.setReceivedAt(QslApiSupport.nowText());
 
         var status = cardRecord.getStatus() == null
@@ -332,6 +336,10 @@ public class QslConsoleActionService {
         spec.setAddressEntryName("");
         spec.setCardDate(QslApiSupport.utcDate());
         spec.setCardTime(QslApiSupport.utcTime());
+        spec.setCreatedRemarks("");
+        spec.setSentRemarks("");
+        spec.setReceivedRemarks("");
+        spec.setPublicReceiptRemarks("");
         spec.setCardRemarks("");
         spec.setCardSent(Boolean.FALSE);
         spec.setCardIssued(Boolean.FALSE);
@@ -359,7 +367,7 @@ public class QslConsoleActionService {
         if (receiptRemarks == null || receiptRemarks.isBlank()) {
             return "";
         }
-        return "签收备注：" + receiptRemarks.trim();
+        return receiptRemarks.trim();
     }
 
     private String safeOperator(String operator) {

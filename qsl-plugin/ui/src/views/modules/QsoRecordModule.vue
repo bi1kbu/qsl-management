@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
   createResourceName,
+  deleteExtension,
   getExtensionOrNull,
   listExtensions,
   qslApiVersion,
@@ -118,12 +119,14 @@ const historyKeywordInput = ref('')
 const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
 const batchUpdating = ref(false)
+const batchDeleting = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const batchEditField = ref('')
 const batchEditValue = ref('')
 const stationProfileMyName = ref('')
+const deletingResourceName = ref('')
 
 const historyColumns = [
   { key: 'resourceName', label: '通联记录编号' },
@@ -695,6 +698,111 @@ const applyHistoryBatchEdit = async () => {
   }
 }
 
+const removeRecord = async (item: QsoRecordItem) => {
+  const firstConfirmed = window.confirm(`确认删除通联记录 ${item.resourceName} 吗？`)
+  if (!firstConfirmed) {
+    feedback.value = `已取消删除：${item.resourceName}`
+    return
+  }
+
+  const secondConfirmed = window.confirm(`二次确认：删除后通联记录编号 ${item.resourceName} 将作废且不可复用，是否继续？`)
+  if (!secondConfirmed) {
+    feedback.value = `已取消删除：${item.resourceName}`
+    return
+  }
+
+  deletingResourceName.value = item.resourceName
+  try {
+    await deleteExtension(resourcePlural, item.resourceName)
+
+    await appendQslAuditLog({
+      action: '删除通联记录',
+      resourceType: 'qso-record',
+      resourceName: item.resourceName,
+      detail: `呼号=${item.callSign}，日期=${item.date}，时间=${item.time}`,
+    })
+
+    await loadRecords({ silent: true })
+    if (editingResourceName.value === item.resourceName) {
+      cancelEditRecord()
+    }
+    feedback.value = ''
+    Toast.success(`已删除通联记录：${item.resourceName}`)
+  } catch (error) {
+    feedback.value = `删除通联记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    deletingResourceName.value = ''
+  }
+}
+
+const removeSelectedRecords = async () => {
+  if (!selectedHistoryNames.value.length) {
+    feedback.value = '请先选择要删除的通联记录。'
+    return
+  }
+
+  const targets = records.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
+  if (!targets.length) {
+    feedback.value = '未找到可删除的通联记录，请刷新后重试。'
+    return
+  }
+
+  const firstConfirmed = window.confirm(`确认批量删除 ${targets.length} 条通联记录吗？`)
+  if (!firstConfirmed) {
+    feedback.value = '已取消批量删除。'
+    return
+  }
+
+  const secondConfirmed = window.confirm('二次确认：删除后通联记录编号将作废且不可复用，是否继续？')
+  if (!secondConfirmed) {
+    feedback.value = '已取消批量删除。'
+    return
+  }
+
+  batchDeleting.value = true
+  try {
+    const successNames: string[] = []
+    const failedItems: string[] = []
+
+    for (const item of targets) {
+      try {
+        await deleteExtension(resourcePlural, item.resourceName)
+        successNames.push(item.resourceName)
+      } catch {
+        failedItems.push(item.resourceName)
+      }
+    }
+
+    if (successNames.length > 0) {
+      await appendQslAuditLog({
+        action: '批量删除通联记录',
+        resourceType: 'qso-record',
+        resourceName: `count=${successNames.length}`,
+        detail: `删除记录：${successNames.join(', ')}`,
+      })
+    }
+
+    await loadRecords({ silent: true })
+    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !successNames.includes(name))
+
+    if (editingResourceName.value && successNames.includes(editingResourceName.value)) {
+      cancelEditRecord()
+    }
+
+    if (failedItems.length > 0) {
+      feedback.value = `批量删除完成：成功 ${successNames.length}，失败 ${failedItems.length}。失败项：${failedItems.join(', ')}`
+      return
+    }
+
+    feedback.value = ''
+    Toast.success(`已批量删除 ${successNames.length} 条通联记录。`)
+  } catch (error) {
+    feedback.value = `批量删除通联记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    batchDeleting.value = false
+  }
+}
+
 const saveRecord = async () => {
   if (!form.callSign.trim()) {
     feedback.value = '对方呼号不能为空。'
@@ -992,7 +1100,15 @@ onMounted(() => {
 
       <template v-else>
         <div class="qsl-actions">
-          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+          <VButton size="sm" :disabled="!selectedHistoryCount || batchDeleting" @click="clearHistorySelection">清空选择</VButton>
+          <VButton
+            size="sm"
+            type="danger"
+            :disabled="!selectedHistoryCount || batchUpdating || batchDeleting || loading || saving"
+            @click="removeSelectedRecords"
+          >
+            批量删除
+          </VButton>
         </div>
         <QslBatchFieldEditor
           :fields="batchEditFields"
@@ -1044,6 +1160,20 @@ onMounted(() => {
 
         <template #row-actions="{ row }">
           <VButton size="xs" type="secondary" @click="startEditRecord(toHistoryItem(row))">编辑</VButton>
+          <VButton
+            size="xs"
+            type="danger"
+            :disabled="
+              loading ||
+              saving ||
+              batchUpdating ||
+              batchDeleting ||
+              deletingResourceName === toHistoryItem(row).resourceName
+            "
+            @click="removeRecord(toHistoryItem(row))"
+          >
+            删除
+          </VButton>
         </template>
 
         <template #detail="{ row }">

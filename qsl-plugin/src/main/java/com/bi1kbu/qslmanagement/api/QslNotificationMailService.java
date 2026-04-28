@@ -318,11 +318,25 @@ public class QslNotificationMailService {
             .attribute("cardDate", StringUtils.defaultString(spec.getCardDate()))
             .attribute("cardTime", StringUtils.defaultString(spec.getCardTime()))
             .attribute("cardRecordName", cardRecordName)
-            .attribute("remarks", StringUtils.defaultString(spec.getCardRemarks()))
+            .attribute("remarks", resolveSceneRemarks(scene, spec))
             .attribute("targetEmail", targetEmail)
             .attribute("triggerAt", sentAt)
             .attribute("operator", safeOperator(operator))
         );
+    }
+
+    private String resolveSceneRemarks(MailScene scene, CardRecord.CardRecordSpec spec) {
+        return switch (scene) {
+            case CARD_CREATED -> {
+                var createdRemarks = StringUtils.defaultString(spec.getCreatedRemarks());
+                if (StringUtils.isNotBlank(createdRemarks)) {
+                    yield createdRemarks;
+                }
+                yield StringUtils.defaultString(spec.getCardRemarks());
+            }
+            case CARD_SENT -> StringUtils.defaultString(spec.getSentRemarks());
+            case CARD_RECEIVED -> StringUtils.defaultString(spec.getReceivedRemarks());
+        };
     }
 
     private Mono<Void> subscribeTarget(String targetEmail, MailScene scene) {
@@ -370,6 +384,10 @@ public class QslNotificationMailService {
         spec.setAddressEntryName("");
         spec.setCardDate("");
         spec.setCardTime("");
+        spec.setCreatedRemarks("");
+        spec.setSentRemarks("");
+        spec.setReceivedRemarks("");
+        spec.setPublicReceiptRemarks("");
         spec.setCardRemarks("");
         spec.setCardSent(Boolean.FALSE);
         spec.setCardIssued(Boolean.FALSE);

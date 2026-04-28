@@ -6,6 +6,7 @@ import { batchSendNotificationMail, confirmMailSend, sendNotificationMail } from
 import { listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
+import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
 interface CardRecordSpec {
@@ -16,6 +17,10 @@ interface CardRecordSpec {
   addressEntryName: string
   cardDate: string
   cardTime: string
+  createdRemarks: string
+  sentRemarks: string
+  receivedRemarks: string
+  publicReceiptRemarks: string
   cardRemarks: string
   cardSent: boolean
   cardIssued: boolean
@@ -47,7 +52,7 @@ interface SendConfirmItem {
   cardTime: string
   cardPrintAt: string
   envelopePrintAt: string
-  cardRemarks: string
+  sentRemarks: string
   sent: boolean
   sentAt: string
 }
@@ -77,7 +82,7 @@ const editForm = reactive({
   cardType: 'QSO' as 'QSO' | 'SWL' | 'EYEBALL',
   cardDate: '',
   cardTime: '',
-  cardRemarks: '',
+  sentRemarks: '',
   sentState: 'UNSENT' as 'SENT' | 'UNSENT',
   sentAt: '',
 })
@@ -131,7 +136,7 @@ const batchEditFields = [
       { label: '未发信', value: 'UNSENT' },
     ],
   },
-  { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
+  { value: 'sentRemarks', label: '发卡备注', inputType: 'textarea', placeholder: '输入备注' },
 ] as const
 const totalPages = computed(() => {
   if (!filteredRows.value.length) {
@@ -222,6 +227,10 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
+    createdRemarks: spec?.createdRemarks ?? '',
+    sentRemarks: spec?.sentRemarks ?? '',
+    receivedRemarks: spec?.receivedRemarks ?? '',
+    publicReceiptRemarks: spec?.publicReceiptRemarks ?? '',
     cardRemarks: spec?.cardRemarks ?? '',
     cardSent: Boolean(spec?.cardSent),
     cardIssued: Boolean(spec?.cardIssued),
@@ -259,7 +268,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>): SendConfirmItem => {
     cardTime: spec.cardTime,
     cardPrintAt,
     envelopePrintAt,
-    cardRemarks: spec.cardRemarks || '',
+    sentRemarks: spec.sentRemarks || '',
     sent: Boolean(spec.cardSent),
     sentAt: spec.sentAt || '',
   }
@@ -289,7 +298,7 @@ const startEditRow = (row: SendConfirmItem) => {
   editForm.cardType = row.spec.cardType
   editForm.cardDate = row.spec.cardDate
   editForm.cardTime = row.spec.cardTime
-  editForm.cardRemarks = row.spec.cardRemarks
+  editForm.sentRemarks = row.spec.sentRemarks
   editForm.sentState = row.spec.cardSent ? 'SENT' : 'UNSENT'
   editForm.sentAt = row.spec.sentAt
   feedback.value = `正在编辑发信记录：${row.resourceName}`
@@ -301,7 +310,7 @@ const cancelEdit = () => {
   editForm.cardType = 'QSO'
   editForm.cardDate = ''
   editForm.cardTime = ''
-  editForm.cardRemarks = ''
+  editForm.sentRemarks = ''
   editForm.sentState = 'UNSENT'
   editForm.sentAt = ''
   feedback.value = '已取消编辑模式。'
@@ -332,7 +341,7 @@ const saveEdit = async () => {
       cardType: editForm.cardType,
       cardDate: editForm.cardDate,
       cardTime: editForm.cardTime,
-      cardRemarks: editForm.cardRemarks.trim(),
+      sentRemarks: editForm.sentRemarks.trim(),
       cardSent: editForm.sentState === 'SENT',
       sentAt:
         editForm.sentState === 'SENT'
@@ -468,7 +477,7 @@ const applyHistoryBatchEdit = async () => {
       const nextSpec: CardRecordSpec = {
         ...item.spec,
         cardType: batchEditField.value === 'cardType' ? (nextValue as CardRecordSpec['cardType']) : item.spec.cardType,
-        cardRemarks: batchEditField.value === 'cardRemarks' ? nextValue : item.spec.cardRemarks,
+        sentRemarks: batchEditField.value === 'sentRemarks' ? nextValue : item.spec.sentRemarks,
         cardSent: nextSent,
         sentAt: nextSentAt,
       }
@@ -517,6 +526,46 @@ const sendSentMailForRow = async (row: SendConfirmItem, source = '发信确认-�
     feedback.value = `发卡邮件${result.status === 'SENT' ? '发送成功' : '未发送'}：${result.message}`
   } catch (error) {
     feedback.value = `发送发卡邮件失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    pendingRowName.value = ''
+  }
+}
+
+const markSentMailAsSentForRow = async (row: SendConfirmItem) => {
+  if (!row.sent || row.spec.sentMailStatus === 'SENT') {
+    return
+  }
+
+  pendingRowName.value = row.resourceName
+  try {
+    const nextSpec: CardRecordSpec = {
+      ...row.spec,
+      sentMailStatus: 'SENT',
+      sentMailSentAt: nowText(),
+      sentMailLastError: '',
+    }
+
+    await updateExtension<CardRecordSpec>(resourcePlural, row.resourceName, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: row.resourceName,
+        version: row.metadataVersion,
+      },
+      spec: nextSpec,
+    })
+
+    await appendQslAuditLog({
+      action: '发卡邮件标记已发',
+      resourceType: 'card-record',
+      resourceName: row.resourceName,
+      detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}，模式：不发邮件`,
+    })
+
+    await loadRows({ silent: true })
+    feedback.value = `已标记发卡邮件为已发送：${row.resourceName}`
+  } catch (error) {
+    feedback.value = `标记发卡邮件已发送失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     pendingRowName.value = ''
   }
@@ -654,9 +703,9 @@ onMounted(() => {
           </label>
 
           <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">卡片备注</span>
+            <span class="qsl-field__label">发卡备注</span>
             <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.cardRemarks" rows="2" placeholder="输入备注" />
+              <textarea v-model.trim="editForm.sentRemarks" rows="2" placeholder="输入发卡备注" />
             </div>
           </label>
         </div>
@@ -718,7 +767,19 @@ onMounted(() => {
               <td>{{ row.cardType }}</td>
               <td>{{ row.cardPrintAt }}</td>
               <td>{{ row.envelopePrintAt }}</td>
-              <td>{{ row.cardRemarks || '无' }}</td>
+              <td>
+                <QslCardRemarkEntries
+                  :remark-fields="{
+                    cardRemarks: row.spec.cardRemarks,
+                    createdRemarks: row.spec.createdRemarks,
+                    sentRemarks: row.spec.sentRemarks,
+                    receivedRemarks: row.spec.receivedRemarks,
+                    publicReceiptRemarks: row.spec.publicReceiptRemarks,
+                  }"
+                  :compact="true"
+                  empty-text="无"
+                />
+              </td>
               <td>
                 <div class="qsl-actions qsl-actions--tight">
                   <VButton size="xs" type="secondary" @click="startEditRow(row)">编辑</VButton>
@@ -741,6 +802,18 @@ onMounted(() => {
                     @click="sendSentMailForRow(row)"
                   >
                     发送发卡邮件
+                  </VButton>
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="
+                      pendingRowName === row.resourceName ||
+                      row.spec.sentMailStatus === 'SENT' ||
+                      !row.sent
+                    "
+                    @click="markSentMailAsSentForRow(row)"
+                  >
+                    不发邮件
                   </VButton>
                   <VTag
                     v-if="row.spec.sentMailStatus === 'SENT' || row.spec.sentMailStatus === 'FAILED'"

@@ -421,6 +421,10 @@ public class QslImportExportJobService {
                     spec.setAddressEntryName(value(row, "addressEntryName"));
                     spec.setCardDate(value(row, "cardDate"));
                     spec.setCardTime(value(row, "cardTime"));
+                    spec.setCreatedRemarks(value(row, "createdRemarks"));
+                    spec.setSentRemarks(value(row, "sentRemarks"));
+                    spec.setReceivedRemarks(value(row, "receivedRemarks"));
+                    spec.setPublicReceiptRemarks(value(row, "publicReceiptRemarks"));
                     spec.setCardRemarks(value(row, "cardRemarks"));
                     spec.setCardSent(parseBoolean(value(row, "cardSent")));
                     spec.setCardIssued(parseBoolean(value(row, "cardIssued")));
@@ -723,6 +727,10 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getAddressEntryName()),
                         spec == null ? "" : nullToEmpty(spec.getCardDate()),
                         spec == null ? "" : nullToEmpty(spec.getCardTime()),
+                        spec == null ? "" : nullToEmpty(spec.getCreatedRemarks()),
+                        spec == null ? "" : nullToEmpty(spec.getSentRemarks()),
+                        spec == null ? "" : nullToEmpty(spec.getReceivedRemarks()),
+                        spec == null ? "" : nullToEmpty(spec.getPublicReceiptRemarks()),
                         spec == null ? "" : nullToEmpty(spec.getCardRemarks()),
                         spec == null ? "false" : boolToText(spec.getCardSent()),
                         spec == null ? "false" : boolToText(spec.getCardIssued()),
@@ -754,6 +762,10 @@ public class QslImportExportJobService {
                     "addressEntryName",
                     "cardDate",
                     "cardTime",
+                    "createdRemarks",
+                    "sentRemarks",
+                    "receivedRemarks",
+                    "publicReceiptRemarks",
                     "cardRemarks",
                     "cardSent",
                     "cardIssued",

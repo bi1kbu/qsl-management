@@ -14,6 +14,7 @@ import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import { sendNotificationMail } from '../../api/qsl-console-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
+import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
@@ -25,6 +26,10 @@ interface CardRecordSpec {
   addressEntryName: string
   cardDate: string
   cardTime: string
+  createdRemarks: string
+  sentRemarks: string
+  receivedRemarks: string
+  publicReceiptRemarks: string
   cardRemarks: string
   cardSent: boolean
   cardIssued: boolean
@@ -423,6 +428,10 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
+    createdRemarks: spec?.createdRemarks ?? '',
+    sentRemarks: spec?.sentRemarks ?? '',
+    receivedRemarks: spec?.receivedRemarks ?? '',
+    publicReceiptRemarks: spec?.publicReceiptRemarks ?? '',
     cardRemarks: spec?.cardRemarks ?? '',
     cardSent: Boolean(spec?.cardSent),
     cardIssued: Boolean(spec?.cardIssued),
@@ -534,8 +543,9 @@ const loadPageData = async () => {
 }
 
 const resetForm = () => {
+  const defaultCardType = activeFunctionTab.value === 'batch' ? form.cardType : activeFunctionTab.value
   form.callSign = ''
-  form.cardType = 'QSO'
+  form.cardType = defaultCardType
   form.cardVersion = cardVersionOptions.value[0] ?? ''
   form.qsoRecordName = ''
   form.addressEntryName = ''
@@ -774,6 +784,10 @@ const saveCardRecord = async () => {
         addressEntryName: form.addressEntryName.trim(),
         cardDate,
         cardTime,
+        createdRemarks: '',
+        sentRemarks: '',
+        receivedRemarks: '',
+        publicReceiptRemarks: '',
         cardRemarks: form.cardRemarks.trim(),
         cardSent: false,
         cardIssued: false,
@@ -1034,7 +1048,18 @@ onBeforeUnmount(() => {
                 <th>关联QSO</th>
                 <td>{{ toHistoryItem(row).qsoRecordName || '无' }}</td>
                 <th>卡片备注</th>
-                <td>{{ toHistoryItem(row).cardRemarks || '无' }}</td>
+                <td>
+                  <QslCardRemarkEntries
+                    :remark-fields="{
+                      cardRemarks: toHistoryItem(row).spec.cardRemarks,
+                      createdRemarks: toHistoryItem(row).spec.createdRemarks,
+                      sentRemarks: toHistoryItem(row).spec.sentRemarks,
+                      receivedRemarks: toHistoryItem(row).spec.receivedRemarks,
+                      publicReceiptRemarks: toHistoryItem(row).spec.publicReceiptRemarks,
+                    }"
+                    empty-text="无"
+                  />
+                </td>
               </tr>
               <tr>
                 <th>发卡状态</th>
