@@ -793,6 +793,7 @@ onMounted(() => {
         <table class="qsl-table">
           <thead>
             <tr>
+              <th>序号</th>
               <th>呼号</th>
               <th>待绑定卡片数</th>
               <th>涉及卡片</th>
@@ -801,7 +802,8 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in filteredPendingBindings" :key="item.callSign">
+            <tr v-for="(item, index) in filteredPendingBindings" :key="item.callSign">
+              <td>{{ index + 1 }}</td>
               <td>{{ item.callSign }}</td>
               <td>{{ item.unboundCount }}</td>
               <td>{{ item.cardIdsText }}</td>
@@ -822,7 +824,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!filteredPendingBindings.length">
-              <td colspan="5" class="qsl-table-empty">当前没有待绑定地址的呼号。</td>
+              <td colspan="6" class="qsl-table-empty">当前没有待绑定地址的呼号。</td>
             </tr>
           </tbody>
         </table>
