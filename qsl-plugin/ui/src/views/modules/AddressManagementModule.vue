@@ -10,9 +10,6 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
-import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
-import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import { buildAddressResourceName } from '../../utils/resource-name'
 
@@ -40,7 +37,17 @@ interface AddressItem {
 }
 
 interface CardRecordSpec {
+  callSign: string
   addressEntryName: string
+  [key: string]: unknown
+}
+
+interface PendingBindingItem {
+  callSign: string
+  unboundCount: number
+  cardIds: string[]
+  cardIdsText: string
+  matchedAddressId: string
 }
 
 const form = reactive({
@@ -54,20 +61,17 @@ const form = reactive({
 })
 
 const rows = ref<AddressItem[]>([])
+const pendingBindings = ref<PendingBindingItem[]>([])
 const feedback = ref('')
 const loading = ref(false)
 const submitting = ref(false)
-const batchUpdating = ref(false)
 const reindexing = ref(false)
 const editingId = ref('')
-const activeFunctionTab = ref<'basic' | 'batch'>('basic')
+const activeFunctionTab = ref<'basic' | 'list'>('basic')
 
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
-const syncHistoryQuery = ref(false)
-const selectedHistoryIds = ref<string[]>([])
-const batchEditField = ref('')
-const batchEditValue = ref('')
+const pendingKeywordInput = ref('')
 
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -77,53 +81,6 @@ const resourcePlural = 'address-book-entries'
 const resourceKind = 'AddressBookEntry'
 const cardRecordPlural = 'card-records'
 const cardRecordKind = 'CardRecord'
-
-const historyColumns = [
-  { key: 'id', label: '地址编号' },
-  { key: 'callSign', label: '呼号' },
-  { key: 'name', label: '姓名' },
-  { key: 'telephone', label: '电话' },
-  { key: 'postalCode', label: '邮编' },
-  { key: 'address', label: '地址' },
-  { key: 'email', label: '邮箱' },
-]
-
-const batchEditFields = [
-  { value: 'callSign', label: '呼号', inputType: 'text', placeholder: '例如 BI1ABC' },
-  { value: 'name', label: '姓名', inputType: 'text', placeholder: '输入姓名' },
-  { value: 'telephone', label: '电话', inputType: 'text', placeholder: '输入电话' },
-  { value: 'postalCode', label: '邮编', inputType: 'text', placeholder: '输入邮编' },
-  { value: 'address', label: '收件地址', inputType: 'textarea', placeholder: '输入收件地址' },
-  { value: 'email', label: '电子邮件', inputType: 'text', placeholder: '输入电子邮箱' },
-  { value: 'remarks', label: '地址备注', inputType: 'textarea', placeholder: '输入地址备注' },
-] as const
-
-const toRow = (extension: QslExtension<AddressBookSpec>): AddressItem => {
-  return {
-    id: extension.metadata.name,
-    version: extension.metadata.version,
-    createdAt: extension.metadata.creationTimestamp ?? '',
-    callSign: extension.spec?.callSign ?? '',
-    name: extension.spec?.name ?? '',
-    telephone: extension.spec?.telephone ?? '',
-    postalCode: extension.spec?.postalCode ?? '',
-    address: extension.spec?.address ?? '',
-    email: extension.spec?.email ?? '',
-    remarks: extension.spec?.addressRemarks ?? '',
-  }
-}
-
-const toSpec = (row: AddressItem): AddressBookSpec => {
-  return {
-    callSign: row.callSign.trim().toUpperCase(),
-    name: row.name,
-    telephone: row.telephone,
-    postalCode: row.postalCode,
-    address: row.address,
-    email: row.email,
-    addressRemarks: row.remarks,
-  }
-}
 
 const normalizeCallSign = (value: string): string => {
   return value.trim().toUpperCase()
@@ -153,6 +110,33 @@ const compareAddressOrder = (a: AddressItem, b: AddressItem, callSign: string): 
   return a.id.localeCompare(b.id)
 }
 
+const toRow = (extension: QslExtension<AddressBookSpec>): AddressItem => {
+  return {
+    id: extension.metadata.name,
+    version: extension.metadata.version,
+    createdAt: extension.metadata.creationTimestamp ?? '',
+    callSign: extension.spec?.callSign ?? '',
+    name: extension.spec?.name ?? '',
+    telephone: extension.spec?.telephone ?? '',
+    postalCode: extension.spec?.postalCode ?? '',
+    address: extension.spec?.address ?? '',
+    email: extension.spec?.email ?? '',
+    remarks: extension.spec?.addressRemarks ?? '',
+  }
+}
+
+const toSpec = (row: AddressItem): AddressBookSpec => {
+  return {
+    callSign: row.callSign.trim().toUpperCase(),
+    name: row.name,
+    telephone: row.telephone,
+    postalCode: row.postalCode,
+    address: row.address,
+    email: row.email,
+    addressRemarks: row.remarks,
+  }
+}
+
 const filteredRows = computed(() => {
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
@@ -169,12 +153,18 @@ const filteredRows = computed(() => {
   })
 })
 
-const selectedHistoryCount = computed(() => selectedHistoryIds.value.length)
-const allFilteredSelected = computed(() => {
-  if (!filteredRows.value.length) {
-    return false
+const filteredPendingBindings = computed(() => {
+  const keyword = pendingKeywordInput.value.trim().toUpperCase()
+  if (!keyword) {
+    return pendingBindings.value
   }
-  return filteredRows.value.every((item) => selectedHistoryIds.value.includes(item.id))
+  return pendingBindings.value.filter((item) => {
+    return (
+      item.callSign.includes(keyword)
+      || item.cardIdsText.toUpperCase().includes(keyword)
+      || item.matchedAddressId.toUpperCase().includes(keyword)
+    )
+  })
 })
 
 const totalPages = computed(() => {
@@ -187,15 +177,6 @@ const totalPages = computed(() => {
 const pagedFilteredRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredRows.value.slice(start, start + pageSize.value)
-})
-
-watch(rows, () => {
-  const idSet = new Set(rows.value.map((item) => item.id))
-  selectedHistoryIds.value = selectedHistoryIds.value.filter((id) => idSet.has(id))
-
-  if (editingId.value && !idSet.has(editingId.value)) {
-    editingId.value = ''
-  }
 })
 
 watch(filteredRows, () => {
@@ -215,40 +196,77 @@ watch(historyKeyword, (value) => {
   historyKeywordInput.value = value
 })
 
-const syncHistoryKeywordFromCallSign = () => {
-  if (!syncHistoryQuery.value) {
-    return
-  }
-  const keyword = form.callSign.trim().toUpperCase()
-  historyKeyword.value = keyword
-  historyKeywordInput.value = keyword
-  currentPage.value = 1
-}
-
-watch(
-  () => form.callSign,
-  () => {
-    syncHistoryKeywordFromCallSign()
-  },
-)
-
-watch(syncHistoryQuery, (enabled) => {
-  if (!enabled) {
-    return
-  }
-  syncHistoryKeywordFromCallSign()
-})
-
 const applyHistorySearch = () => {
   historyKeyword.value = historyKeywordInput.value.trim().toUpperCase()
   currentPage.value = 1
 }
 
+const resetHistorySearch = () => {
+  historyKeyword.value = ''
+  historyKeywordInput.value = ''
+  currentPage.value = 1
+}
+
+const findMatchedAddressId = (callSign: string, addressRows: AddressItem[]): string => {
+  const matchedRows = addressRows
+    .filter((item) => normalizeCallSign(item.callSign) === callSign)
+    .sort((a, b) => compareAddressOrder(a, b, callSign))
+  if (!matchedRows.length) {
+    return ''
+  }
+  return matchedRows[0]?.id ?? ''
+}
+
+const buildPendingBindings = (
+  cardExtensions: QslExtension<CardRecordSpec>[],
+  addressRows: AddressItem[],
+): PendingBindingItem[] => {
+  const grouped = new Map<string, { count: number; cardIds: string[] }>()
+
+  cardExtensions.forEach((item) => {
+    const callSign = normalizeCallSign(item.spec?.callSign ?? '')
+    const addressEntryName = (item.spec?.addressEntryName ?? '').trim()
+    if (!callSign || addressEntryName) {
+      return
+    }
+
+    const current = grouped.get(callSign) ?? { count: 0, cardIds: [] }
+    current.count += 1
+    current.cardIds.push(item.metadata.name)
+    grouped.set(callSign, current)
+  })
+
+  return Array.from(grouped.entries())
+    .map(([callSign, value]) => {
+      const sortedCardIds = value.cardIds.sort((a, b) => a.localeCompare(b))
+      const displayCardIds = sortedCardIds.slice(0, 5)
+      const cardIdsText = displayCardIds.join('、') + (sortedCardIds.length > 5 ? ` 等${sortedCardIds.length}条` : '')
+      return {
+        callSign,
+        unboundCount: value.count,
+        cardIds: sortedCardIds,
+        cardIdsText,
+        matchedAddressId: findMatchedAddressId(callSign, addressRows),
+      }
+    })
+    .sort((a, b) => {
+      if (b.unboundCount !== a.unboundCount) {
+        return b.unboundCount - a.unboundCount
+      }
+      return a.callSign.localeCompare(b.callSign)
+    })
+}
+
 const loadRows = async (options: { silent?: boolean } = {}) => {
   loading.value = true
   try {
-    const extensions = await listExtensions<AddressBookSpec>(resourcePlural)
-    rows.value = extensions.map((extension) => toRow(extension))
+    const [addressExtensions, cardExtensions] = await Promise.all([
+      listExtensions<AddressBookSpec>(resourcePlural),
+      listExtensions<CardRecordSpec>(cardRecordPlural),
+    ])
+    const nextRows = addressExtensions.map((extension) => toRow(extension))
+    rows.value = nextRows
+    pendingBindings.value = buildPendingBindings(cardExtensions, nextRows)
     if (!options.silent) {
       feedback.value = ''
     }
@@ -294,7 +312,73 @@ const startEdit = (item: AddressItem) => {
   form.email = item.email
   form.remarks = item.remarks
   activeFunctionTab.value = 'basic'
-  feedback.value = `正在编辑地址：${item.callSign}`
+  feedback.value = `正在编辑地址：${item.id}`
+}
+
+const usePendingCallSign = (item: PendingBindingItem) => {
+  resetForm()
+  form.callSign = item.callSign
+  activeFunctionTab.value = 'basic'
+  feedback.value = `已填入呼号：${item.callSign}`
+}
+
+const bindAddressForCallSign = async (callSign: string, addressEntryName: string): Promise<number> => {
+  const normalizedCallSign = normalizeCallSign(callSign)
+  const normalizedAddressEntryName = addressEntryName.trim()
+  if (!normalizedCallSign || !normalizedAddressEntryName) {
+    return 0
+  }
+
+  const cardExtensions = await listExtensions<CardRecordSpec>(cardRecordPlural)
+  let updatedCount = 0
+  for (const record of cardExtensions) {
+    const recordCallSign = normalizeCallSign(record.spec?.callSign ?? '')
+    const currentBinding = (record.spec?.addressEntryName ?? '').trim()
+    if (recordCallSign !== normalizedCallSign || currentBinding) {
+      continue
+    }
+
+    await updateExtension<CardRecordSpec>(cardRecordPlural, record.metadata.name, {
+      apiVersion: qslApiVersion,
+      kind: cardRecordKind,
+      metadata: {
+        name: record.metadata.name,
+        version: record.metadata.version,
+      },
+      spec: {
+        ...(record.spec ?? { callSign: '', addressEntryName: '' }),
+        addressEntryName: normalizedAddressEntryName,
+      },
+    })
+    updatedCount += 1
+  }
+  return updatedCount
+}
+
+const bindExistingAddress = async (item: PendingBindingItem) => {
+  if (!item.matchedAddressId) {
+    feedback.value = `呼号 ${item.callSign} 暂无可用地址，请先新增地址。`
+    return
+  }
+
+  submitting.value = true
+  try {
+    const updatedCount = await bindAddressForCallSign(item.callSign, item.matchedAddressId)
+    await appendQslAuditLog({
+      action: '绑定现有地址',
+      resourceType: 'address-book-entry',
+      resourceName: item.matchedAddressId,
+      detail: `呼号：${item.callSign}，绑定卡片数：${updatedCount}`,
+    })
+    await loadRows({ silent: true })
+    feedback.value = updatedCount > 0
+      ? `已为 ${item.callSign} 绑定地址 ${item.matchedAddressId}（${updatedCount} 条）。`
+      : `呼号 ${item.callSign} 当前无待绑定卡片。`
+  } catch (error) {
+    feedback.value = `绑定现有地址失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    submitting.value = false
+  }
 }
 
 const addAddress = async () => {
@@ -336,8 +420,20 @@ const addAddress = async () => {
       detail: `呼号：${callSign}`,
     })
 
+    const autoBoundCount = await bindAddressForCallSign(callSign, created.metadata.name)
+    if (autoBoundCount > 0) {
+      await appendQslAuditLog({
+        action: '新增地址自动绑定',
+        resourceType: 'address-book-entry',
+        resourceName: created.metadata.name,
+        detail: `呼号：${callSign}，自动绑定卡片数：${autoBoundCount}`,
+      })
+    }
+
     await loadRows({ silent: true })
-    feedback.value = `已新增地址：${callSign}`
+    feedback.value = autoBoundCount > 0
+      ? `已新增地址：${created.metadata.name}，并自动绑定 ${autoBoundCount} 条卡片。`
+      : `已新增地址：${created.metadata.name}`
     resetForm()
   } catch (error) {
     feedback.value = `新增地址失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -391,7 +487,7 @@ const updateAddressRecord = async () => {
     })
 
     await loadRows({ silent: true })
-    feedback.value = `已更新地址：${callSign}`
+    feedback.value = `已更新地址：${updated.metadata.name}`
     resetForm()
   } catch (error) {
     feedback.value = `更新地址失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -409,6 +505,10 @@ const submitAddress = async () => {
 }
 
 const removeAddress = async (id: string) => {
+  if (!window.confirm(`确认删除地址 ${id} 吗？`)) {
+    return
+  }
+
   submitting.value = true
   try {
     const target = rows.value.find((item) => item.id === id)
@@ -505,7 +605,7 @@ const reindexAddressIds = async () => {
           version: record.metadata.version,
         },
         spec: {
-          ...(record.spec ?? { addressEntryName: '' }),
+          ...(record.spec ?? { callSign: '', addressEntryName: '' }),
           addressEntryName: renameMap.get(currentBinding) ?? '',
         },
       })
@@ -531,98 +631,6 @@ const reindexAddressIds = async () => {
   }
 }
 
-const clearHistorySelection = () => {
-  selectedHistoryIds.value = []
-}
-
-const toggleAllFilteredHistorySelection = () => {
-  if (allFilteredSelected.value) {
-    const filteredIdSet = new Set(filteredRows.value.map((item) => item.id))
-    selectedHistoryIds.value = selectedHistoryIds.value.filter((id) => !filteredIdSet.has(id))
-    return
-  }
-
-  const merged = new Set(selectedHistoryIds.value)
-  filteredRows.value.forEach((item) => merged.add(item.id))
-  selectedHistoryIds.value = Array.from(merged)
-}
-
-const toHistoryItem = (row: Record<string, unknown>): AddressItem => {
-  return row as unknown as AddressItem
-}
-
-const applyBatchEdit = async () => {
-  if (!selectedHistoryIds.value.length) {
-    feedback.value = '请先选择要批量编辑的地址记录。'
-    return
-  }
-
-  if (!batchEditField.value) {
-    feedback.value = '请先选择要修改的字段。'
-    return
-  }
-
-  const nextRawValue = batchEditValue.value.trim()
-  if (!nextRawValue) {
-    feedback.value = '请填写修改后的字段值。'
-    return
-  }
-
-  batchUpdating.value = true
-  try {
-    const targets = rows.value.filter((item) => selectedHistoryIds.value.includes(item.id))
-    const normalizedValue = batchEditField.value === 'callSign' ? nextRawValue.toUpperCase() : nextRawValue
-
-    for (const item of targets) {
-      const nextSpec = toSpec(item)
-      if (batchEditField.value === 'callSign') {
-        nextSpec.callSign = normalizedValue
-      } else if (batchEditField.value === 'name') {
-        nextSpec.name = normalizedValue
-      } else if (batchEditField.value === 'telephone') {
-        nextSpec.telephone = normalizedValue
-      } else if (batchEditField.value === 'postalCode') {
-        nextSpec.postalCode = normalizedValue
-      } else if (batchEditField.value === 'address') {
-        nextSpec.address = normalizedValue
-      } else if (batchEditField.value === 'email') {
-        nextSpec.email = normalizedValue
-      } else if (batchEditField.value === 'remarks') {
-        nextSpec.addressRemarks = normalizedValue
-      }
-
-      await updateExtension<AddressBookSpec>(resourcePlural, item.id, {
-        apiVersion: qslApiVersion,
-        kind: resourceKind,
-        metadata: {
-          name: item.id,
-          version: item.version,
-        },
-        spec: nextSpec,
-      })
-    }
-
-    await appendQslAuditLog({
-      action: '批量编辑地址记录',
-      resourceType: 'address-book-entry',
-      resourceName: `count=${targets.length}`,
-      detail: `字段：${
-        batchEditFields.find((item) => item.value === batchEditField.value)?.label ?? batchEditField.value
-      }，值：${normalizedValue}`,
-    })
-
-    await loadRows({ silent: true })
-    clearHistorySelection()
-    batchEditField.value = ''
-    batchEditValue.value = ''
-    feedback.value = `已批量编辑 ${targets.length} 条地址记录。`
-  } catch (error) {
-    feedback.value = `批量编辑地址记录失败：${error instanceof Error ? error.message : '未知错误'}`
-  } finally {
-    batchUpdating.value = false
-  }
-}
-
 onMounted(() => {
   loadRows()
 })
@@ -637,7 +645,7 @@ onMounted(() => {
             <VTabItem id="basic" label="基础操作">
               <div class="qsl-tab-panel-placeholder" />
             </VTabItem>
-            <VTabItem id="batch" label="批量编辑">
+            <VTabItem id="list" label="地址列表">
               <div class="qsl-tab-panel-placeholder" />
             </VTabItem>
           </VTabs>
@@ -715,82 +723,110 @@ onMounted(() => {
       </template>
 
       <template v-else>
-        <div class="qsl-actions">
-          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+        <div class="qsl-form-inline qsl-list-toolbar">
+          <div class="qsl-input-shell qsl-list-toolbar__search">
+            <input v-model.trim="historyKeywordInput" type="text" placeholder="按呼号或地址编号筛选" @keyup.enter="applyHistorySearch" />
+          </div>
+          <VButton size="sm" type="secondary" :disabled="loading || submitting" @click="applyHistorySearch">搜索</VButton>
+          <VButton size="sm" :disabled="loading || submitting" @click="resetHistorySearch">重置</VButton>
+          <VButton size="sm" :disabled="loading || submitting" @click="loadRows">刷新</VButton>
         </div>
-        <QslBatchFieldEditor
-          :fields="batchEditFields"
-          :selected-field="batchEditField"
-          :field-value="batchEditValue"
-          :selected-count="selectedHistoryCount"
-          :disabled="batchUpdating"
-          confirm-text="确认修改"
-          @update:selected-field="(value) => (batchEditField = value)"
-          @update:field-value="(value) => (batchEditValue = value)"
-          @confirm="applyBatchEdit"
-        />
-        <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
-      </template>
-    </VCard>
 
-    <VCard>
-      <QslBusinessRecordHeader
-        title="地址列表"
-        :keyword="historyKeywordInput"
-        :all-selected="allFilteredSelected"
-        :has-rows="filteredRows.length > 0"
-        :sync-enabled="syncHistoryQuery"
-        placeholder="按呼号或地址编号筛选"
-        @update:keyword="(value) => (historyKeywordInput = value)"
-        @search="applyHistorySearch"
-        @toggle-all="toggleAllFilteredHistorySelection"
-        @update:sync-enabled="(value) => (syncHistoryQuery = value)"
-      />
-
-      <QslExpandableHistoryTable
-        title="地址列表"
-        :rows="pagedFilteredRows"
-        :columns="historyColumns"
-        row-key-field="id"
-        :selected-keys="selectedHistoryIds"
-        :batch-edit-enabled="false"
-        :show-batch-toggle="false"
-        :show-toolbar="false"
-        empty-text="暂无地址记录。"
-        @update:selected-keys="(value) => (selectedHistoryIds = value)"
-      >
-        <template #row-actions="{ row }">
-          <VButton size="xs" :disabled="loading || submitting" @click="startEdit(toHistoryItem(row))">编辑</VButton>
-          <VButton
-            size="xs"
-            type="danger"
-            :disabled="loading || submitting"
-            @click="removeAddress(toHistoryItem(row).id)"
-          >
-            删除
-          </VButton>
-        </template>
-
-        <template #detail="{ row }">
-          <table class="qsl-history-detail-table">
-            <tbody>
+        <div class="qsl-table-wrap">
+          <table class="qsl-table">
+            <thead>
               <tr>
+                <th>地址编号</th>
+                <th>呼号</th>
+                <th>姓名</th>
+                <th>电话</th>
+                <th>邮编</th>
+                <th>地址</th>
+                <th>邮箱</th>
                 <th>地址备注</th>
-                <td>{{ toHistoryItem(row).remarks || '无' }}</td>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in pagedFilteredRows" :key="item.id">
+                <td>{{ item.id }}</td>
+                <td>{{ item.callSign || '-' }}</td>
+                <td>{{ item.name || '-' }}</td>
+                <td>{{ item.telephone || '-' }}</td>
+                <td>{{ item.postalCode || '-' }}</td>
+                <td>{{ item.address || '-' }}</td>
+                <td>{{ item.email || '-' }}</td>
+                <td>{{ item.remarks || '-' }}</td>
+                <td>
+                  <div class="qsl-actions qsl-actions--tight">
+                    <VButton size="xs" :disabled="loading || submitting" @click="startEdit(item)">编辑</VButton>
+                    <VButton size="xs" type="danger" :disabled="loading || submitting" @click="removeAddress(item.id)">删除</VButton>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="!pagedFilteredRows.length">
+                <td colspan="9" class="qsl-table-empty">暂无地址记录。</td>
               </tr>
             </tbody>
           </table>
-        </template>
-      </QslExpandableHistoryTable>
+        </div>
 
-      <QslPaginationBar
-        :total="filteredRows.length"
-        :current-page="currentPage"
-        :page-size="pageSize"
-        :page-size-options="pageSizeOptions"
-        @update:current-page="(value) => (currentPage = value)"
-        @update:page-size="(value) => (pageSize = value)"
-      />
+        <QslPaginationBar
+          :total="filteredRows.length"
+          :current-page="currentPage"
+          :page-size="pageSize"
+          :page-size-options="pageSizeOptions"
+          @update:current-page="(value) => (currentPage = value)"
+          @update:page-size="(value) => (pageSize = value)"
+        />
+      </template>
+    </VCard>
+
+    <VCard title="待绑定地址呼号清单">
+      <div class="qsl-form-inline qsl-list-toolbar">
+        <div class="qsl-input-shell qsl-list-toolbar__search">
+          <input v-model.trim="pendingKeywordInput" type="text" placeholder="按呼号、卡片编号或建议地址筛选" />
+        </div>
+      </div>
+
+      <div class="qsl-table-wrap">
+        <table class="qsl-table">
+          <thead>
+            <tr>
+              <th>呼号</th>
+              <th>待绑定卡片数</th>
+              <th>涉及卡片</th>
+              <th>建议地址编号</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in filteredPendingBindings" :key="item.callSign">
+              <td>{{ item.callSign }}</td>
+              <td>{{ item.unboundCount }}</td>
+              <td>{{ item.cardIdsText }}</td>
+              <td>{{ item.matchedAddressId || '未配置' }}</td>
+              <td>
+                <div class="qsl-actions qsl-actions--tight">
+                  <VButton size="xs" type="secondary" :disabled="loading || submitting" @click="usePendingCallSign(item)">
+                    去新增地址
+                  </VButton>
+                  <VButton
+                    size="xs"
+                    :disabled="loading || submitting || !item.matchedAddressId"
+                    @click="bindExistingAddress(item)"
+                  >
+                    绑定现有地址
+                  </VButton>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!filteredPendingBindings.length">
+              <td colspan="5" class="qsl-table-empty">当前没有待绑定地址的呼号。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </VCard>
   </div>
 </template>
@@ -804,28 +840,16 @@ onMounted(() => {
   display: none;
 }
 
-.qsl-history-detail-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: #f9fafb;
+.qsl-list-toolbar {
+  margin-bottom: 10px;
 }
 
-.qsl-history-detail-table th,
-.qsl-history-detail-table td {
-  padding: 8px 12px;
-  border-top: 1px solid #e5e7eb;
-  font-size: 13px;
-  line-height: 20px;
-  text-align: left;
+.qsl-list-toolbar__search {
+  min-width: 280px;
 }
 
-.qsl-history-detail-table th {
-  width: 120px;
-  color: #4b5563;
-  font-weight: 500;
-}
-
-.qsl-history-detail-table td {
-  color: #111827;
+.qsl-table-empty {
+  text-align: center;
+  color: #6b7280;
 }
 </style>
