@@ -49,6 +49,7 @@ public class CardRecord extends QslBaseExtension<CardRecord.CardRecordSpec, Card
         private String receivedMailSentAt;
         private String receivedMailLastError;
         private String mailTargetEmail;
+        private String receivedRecordCodes;
     }
 
     @Data

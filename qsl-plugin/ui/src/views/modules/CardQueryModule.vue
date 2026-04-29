@@ -24,6 +24,7 @@ interface CardRecordSpec {
   cardSent: boolean
   receiptConfirmed: boolean
   cardReceived: boolean
+  receivedRecordCodes: string
 }
 
 interface CardQueryItem {
@@ -38,6 +39,7 @@ interface CardQueryItem {
   cardSent: boolean
   receiptConfirmed: boolean
   cardReceived: boolean
+  receivedRecordCodes: string
   remarkFields: CardRemarkFields
   remarksText: string
 }
@@ -93,6 +95,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>): CardQueryItem => {
     cardSent: Boolean(extension.spec?.cardSent),
     receiptConfirmed: Boolean(extension.spec?.receiptConfirmed),
     cardReceived: Boolean(extension.spec?.cardReceived),
+    receivedRecordCodes: extension.spec?.receivedRecordCodes ?? '',
     remarkFields: {
       businessRemarks: extension.spec?.businessRemarks ?? '',
       receivedRemarks: extension.spec?.receivedRemarks ?? '',
@@ -458,6 +461,7 @@ onMounted(loadRows)
               <th>已发</th>
               <th>签收</th>
               <th>已收</th>
+              <th>收卡编号</th>
               <th>备注</th>
             </tr>
           </thead>
@@ -496,12 +500,13 @@ onMounted(loadRows)
                 <td>
                   <VTag :theme="item.cardReceived ? 'secondary' : 'default'">{{ item.cardReceived ? '是' : '否' }}</VTag>
                 </td>
+                <td>{{ item.receivedRecordCodes || '-' }}</td>
                 <td>
                   {{ summarizeRemarks(item.remarkFields) }}
                 </td>
               </tr>
               <tr v-if="expandedId === item.id" class="qsl-table-detail-row">
-                <td colspan="11">
+                <td colspan="12">
                   <div class="qsl-detail-grid">
                     <p><strong>卡片ID：</strong>{{ item.id }}</p>
                     <p><strong>呼号：</strong>{{ item.callSign || '-' }}</p>
@@ -514,6 +519,7 @@ onMounted(loadRows)
                     <p><strong>已发：</strong>{{ item.cardSent ? '是' : '否' }}</p>
                     <p><strong>签收：</strong>{{ item.receiptConfirmed ? '是' : '否' }}</p>
                     <p><strong>已收：</strong>{{ item.cardReceived ? '是' : '否' }}</p>
+                    <p><strong>收卡编号：</strong>{{ item.receivedRecordCodes || '-' }}</p>
                     <div class="qsl-detail-full">
                       <strong>备注：</strong>
                       <QslCardRemarkEntries :remark-fields="item.remarkFields" empty-text="无" />
@@ -523,7 +529,7 @@ onMounted(loadRows)
               </tr>
             </template>
             <tr v-if="!pagedRows.length">
-              <td colspan="11" class="qsl-table-empty">暂无数据。</td>
+              <td colspan="12" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>

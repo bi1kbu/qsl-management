@@ -179,6 +179,16 @@ export const qslMenuModules: QslMenuModule[] = [
     editDependencies: [toViewPermission('card-query')],
   },
   {
+    key: 'receive-record-query',
+    title: '收卡记录查询',
+    group: '审计',
+    priority: 25,
+    viewPermission: toViewPermission('card-query'),
+    editPermission: toEditPermission('card-query'),
+    viewDependencies: [toViewPermission('card-record'), toViewPermission('mail-receive-confirm')],
+    editDependencies: [toViewPermission('card-query')],
+  },
+  {
     key: 'report-auditlog',
     title: '统计报表',
     group: '审计',

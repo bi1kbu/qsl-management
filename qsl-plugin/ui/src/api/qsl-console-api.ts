@@ -21,6 +21,7 @@ export interface MailReceiveConfirmResult {
   action: string
   message: string
   handledAt: string
+  receivedRecordCode: string
 }
 
 export interface ExchangeReviewResult {

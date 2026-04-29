@@ -128,6 +128,7 @@ const datasetConfigs: DatasetConfig[] = [
       'receivedMailSentAt',
       'receivedMailLastError',
       'mailTargetEmail',
+      'receivedRecordCodes',
     ],
     keywords: ['card-record', 'card', '卡片记录'],
     toRow: (item) => ({
@@ -157,6 +158,7 @@ const datasetConfigs: DatasetConfig[] = [
       receivedMailSentAt: String(item.spec?.receivedMailSentAt ?? ''),
       receivedMailLastError: String(item.spec?.receivedMailLastError ?? ''),
       mailTargetEmail: String(item.spec?.mailTargetEmail ?? ''),
+      receivedRecordCodes: String(item.spec?.receivedRecordCodes ?? ''),
     }),
     fromRow: (row) => ({
       spec: {
@@ -185,6 +187,7 @@ const datasetConfigs: DatasetConfig[] = [
         receivedMailSentAt: row.receivedMailSentAt ?? '',
         receivedMailLastError: row.receivedMailLastError ?? '',
         mailTargetEmail: row.mailTargetEmail ?? '',
+        receivedRecordCodes: row.receivedRecordCodes ?? '',
       },
     }),
   },

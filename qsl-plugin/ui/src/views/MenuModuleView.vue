@@ -17,6 +17,7 @@ import MailReceiveConfirmModule from './modules/MailReceiveConfirmModule.vue'
 import MailSendConfirmModule from './modules/MailSendConfirmModule.vue'
 import OverviewDashboardModule from './modules/OverviewDashboardModule.vue'
 import QsoQueryModule from './modules/QsoQueryModule.vue'
+import ReceiveRecordQueryModule from './modules/ReceiveRecordQueryModule.vue'
 import QsoRecordModule from './modules/QsoRecordModule.vue'
 import ReportAuditlogModule from './modules/ReportAuditlogModule.vue'
 import StationCardModule from './modules/StationCardModule.vue'
@@ -65,6 +66,8 @@ const renderer = computed<ModuleRenderer>(() => {
       return { component: QsoQueryModule }
     case 'card-query':
       return { component: CardQueryModule }
+    case 'receive-record-query':
+      return { component: ReceiveRecordQueryModule }
     case 'report-auditlog':
       return { component: ReportAuditlogModule }
     case 'audit-log':

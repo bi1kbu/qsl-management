@@ -41,6 +41,7 @@ interface CardRecordSpec {
   receivedMailSentAt: string
   receivedMailLastError: string
   mailTargetEmail: string
+  receivedRecordCodes: string
 }
 
 interface SendConfirmItem {
@@ -252,6 +253,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     receivedMailSentAt: spec?.receivedMailSentAt ?? '',
     receivedMailLastError: spec?.receivedMailLastError ?? '',
     mailTargetEmail: spec?.mailTargetEmail ?? '',
+    receivedRecordCodes: spec?.receivedRecordCodes ?? '',
   }
 }
 

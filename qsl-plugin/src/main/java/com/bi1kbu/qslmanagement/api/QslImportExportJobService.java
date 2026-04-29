@@ -443,6 +443,7 @@ public class QslImportExportJobService {
                     spec.setReceivedMailSentAt(value(row, "receivedMailSentAt"));
                     spec.setReceivedMailLastError(value(row, "receivedMailLastError"));
                     spec.setMailTargetEmail(value(row, "mailTargetEmail"));
+                    spec.setReceivedRecordCodes(value(row, "receivedRecordCodes"));
                     record.setSpec(spec);
                 }
             );
@@ -747,7 +748,8 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getReceivedMailStatus()),
                         spec == null ? "" : nullToEmpty(spec.getReceivedMailSentAt()),
                         spec == null ? "" : nullToEmpty(spec.getReceivedMailLastError()),
-                        spec == null ? "" : nullToEmpty(spec.getMailTargetEmail())
+                        spec == null ? "" : nullToEmpty(spec.getMailTargetEmail()),
+                        spec == null ? "" : nullToEmpty(spec.getReceivedRecordCodes())
                     );
                 })
                 .collectList()
@@ -781,7 +783,8 @@ public class QslImportExportJobService {
                     "receivedMailStatus",
                     "receivedMailSentAt",
                     "receivedMailLastError",
-                    "mailTargetEmail"
+                    "mailTargetEmail",
+                    "receivedRecordCodes"
                 ), rows));
             case "exchange-request-review" -> client.listAll(ExchangeRequest.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {

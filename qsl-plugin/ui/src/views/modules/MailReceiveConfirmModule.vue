@@ -44,6 +44,7 @@ interface CardRecordSpec {
   receivedMailSentAt: string
   receivedMailLastError: string
   mailTargetEmail: string
+  receivedRecordCodes: string
 }
 
 interface CardRecordStatus {
@@ -221,6 +222,9 @@ const nowText = (): string => {
 }
 
 const resolveMailStatusText = (status: string): string => {
+  if (status === 'PENDING') {
+    return '待发送'
+  }
   if (status === 'SENT') {
     return '已发送'
   }
@@ -262,6 +266,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     receivedMailSentAt: spec?.receivedMailSentAt ?? '',
     receivedMailLastError: spec?.receivedMailLastError ?? '',
     mailTargetEmail: spec?.mailTargetEmail ?? '',
+    receivedRecordCodes: spec?.receivedRecordCodes ?? '',
   }
 }
 
@@ -337,7 +342,7 @@ const submitReceive = async () => {
     })
 
     await loadResults({ silent: true })
-    feedback.value = `收信确认完成：${result.callSign || callSign}`
+    feedback.value = `收信确认完成：${result.callSign || callSign}（收卡编号：${result.receivedRecordCode || '-'}）`
     form.callSign = ''
     form.receiptRemarks = ''
   } catch (error) {
@@ -365,7 +370,7 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
       detail: `${item.callSign} ${item.cardType}`,
     })
     await loadResults({ silent: true })
-    feedback.value = `已确认收卡：${item.callSign}`
+    feedback.value = `已确认收卡：${item.callSign}（收卡编号：${result.receivedRecordCode || '-'}）`
   } catch (error) {
     feedback.value = `确认收卡失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -538,6 +543,46 @@ const markReceivedMailAsSentForRow = async (item: ReceiveResult) => {
   }
 }
 
+const closeReceiveForRow = async (item: ReceiveResult) => {
+  if (!item.spec.cardReceived || item.spec.receivedMailStatus === 'SENT') {
+    return
+  }
+
+  pendingReceiveRowName.value = item.resourceName
+  try {
+    const nextSpec: CardRecordSpec = {
+      ...item.spec,
+      receivedMailStatus: 'PENDING',
+      receivedMailSentAt: '',
+      receivedMailLastError: '',
+    }
+
+    await updateExtension<CardRecordSpec>(resourcePlural, item.resourceName, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: item.resourceName,
+        version: item.metadataVersion,
+      },
+      spec: nextSpec,
+    })
+
+    await appendQslAuditLog({
+      action: '结束收卡',
+      resourceType: 'card-record',
+      resourceName: item.resourceName,
+      detail: `呼号：${item.callSign || '-'}，卡片类型：${item.cardType || '-'}，已进入收卡回执待发送状态。`,
+    })
+
+    await loadResults({ silent: true })
+    feedback.value = `已结束收卡：${item.callSign || item.resourceName}`
+  } catch (error) {
+    feedback.value = `结束收卡失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    pendingReceiveRowName.value = ''
+  }
+}
+
 const batchSendReceivedMail = async () => {
   if (!selectedHistoryNames.value.length) {
     feedback.value = '请先选择要批量发送邮件的记录。'
@@ -546,8 +591,18 @@ const batchSendReceivedMail = async () => {
 
   batchSendingReceivedMail.value = true
   try {
+    const selectedRows = results.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
+    const eligibleNames = selectedRows
+      .filter((item) => item.spec.cardReceived && ['PENDING', 'FAILED'].includes(item.spec.receivedMailStatus || ''))
+      .map((item) => item.resourceName)
+
+    if (!eligibleNames.length) {
+      feedback.value = '所选记录未处于可发送状态，请先点击“结束收卡”。'
+      return
+    }
+
     const result = await batchSendNotificationMail({
-      cardRecordNames: selectedHistoryNames.value,
+      cardRecordNames: eligibleNames,
       scene: 'received',
       source: '收信确认-批量发送',
     })
@@ -672,6 +727,7 @@ onMounted(() => {
               <th>卡片类型</th>
               <th>收卡状态</th>
               <th>发卡状态</th>
+              <th>收卡编号</th>
               <th>收卡确认备注</th>
               <th>操作</th>
             </tr>
@@ -697,13 +753,14 @@ onMounted(() => {
               <td>
                 <VTag :theme="item.spec.cardSent ? 'secondary' : 'default'">{{ item.spec.cardSent ? '是' : '否' }}</VTag>
               </td>
+              <td>{{ item.spec.receivedRecordCodes || '-' }}</td>
               <td>{{ item.spec.receivedRemarks || '-' }}</td>
               <td>
                 <div class="qsl-actions qsl-actions--tight">
                   <VButton
                     size="xs"
                     type="secondary"
-                    :disabled="item.spec.cardReceived || pendingReceiveRowName === item.resourceName || submitting"
+                    :disabled="pendingReceiveRowName === item.resourceName || submitting"
                     @click="confirmReceiveForRow(item)"
                   >
                     确认收卡
@@ -712,9 +769,24 @@ onMounted(() => {
                     size="xs"
                     type="secondary"
                     :disabled="
+                      pendingReceiveRowName === item.resourceName ||
+                      pendingMailRowName === item.resourceName ||
+                      !item.spec.cardReceived ||
+                      item.spec.receivedMailStatus === 'SENT' ||
+                      item.spec.receivedMailStatus === 'PENDING'
+                    "
+                    @click="closeReceiveForRow(item)"
+                  >
+                    结束收卡
+                  </VButton>
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="
                       pendingMailRowName === item.resourceName ||
                       item.spec.receivedMailStatus === 'SENT' ||
-                      !item.spec.cardReceived
+                      !item.spec.cardReceived ||
+                      (item.spec.receivedMailStatus !== 'PENDING' && item.spec.receivedMailStatus !== 'FAILED')
                     "
                     @click="sendReceivedMailForRow(item)"
                   >
@@ -726,15 +798,22 @@ onMounted(() => {
                     :disabled="
                       pendingMailRowName === item.resourceName ||
                       item.spec.receivedMailStatus === 'SENT' ||
-                      !item.spec.cardReceived
+                      !item.spec.cardReceived ||
+                      (item.spec.receivedMailStatus !== 'PENDING' && item.spec.receivedMailStatus !== 'FAILED')
                     "
                     @click="markReceivedMailAsSentForRow(item)"
                   >
                     不发邮件
                   </VButton>
                   <VTag
-                    v-if="item.spec.receivedMailStatus === 'SENT' || item.spec.receivedMailStatus === 'FAILED'"
-                    :theme="item.spec.receivedMailStatus === 'SENT' ? 'secondary' : 'danger'"
+                    v-if="['PENDING', 'SENT', 'FAILED'].includes(item.spec.receivedMailStatus || '')"
+                    :theme="
+                      item.spec.receivedMailStatus === 'SENT'
+                        ? 'secondary'
+                        : item.spec.receivedMailStatus === 'FAILED'
+                          ? 'danger'
+                          : 'default'
+                    "
                   >
                     {{ resolveMailStatusText(item.spec.receivedMailStatus) }}
                   </VTag>
@@ -742,7 +821,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!pagedFilteredResults.length">
-              <td colspan="8" class="qsl-table-empty">暂无收信确认记录。</td>
+              <td colspan="9" class="qsl-table-empty">暂无收信确认记录。</td>
             </tr>
           </tbody>
         </table>
