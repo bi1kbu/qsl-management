@@ -117,6 +117,8 @@ const form = reactive({
 const records = ref<CardRecordItem[]>([])
 const qsoRecords = ref<QsoRecordItem[]>([])
 const cardVersionOptions = ref<string[]>([])
+const eyeballCardVersionDraft = ref('')
+const eyeballCardVersions = ref<string[]>([])
 
 const feedback = ref('')
 const loading = ref(false)
@@ -166,6 +168,15 @@ const showQsoSelector = computed(() => form.cardType !== 'EYEBALL')
 const dateTimeRequired = computed(() => form.cardType === 'EYEBALL')
 const lockCardDateTime = computed(() => selectedQso.value !== null)
 const isBatchTab = computed(() => activeFunctionTab.value === 'batch')
+const isEyeballMode = computed(() => form.cardType === 'EYEBALL')
+const cardVersionSelectOptions = computed(() => {
+  const options = [...cardVersionOptions.value]
+  const currentValue = form.cardVersion.trim()
+  if (currentValue && !options.includes(currentValue)) {
+    options.unshift(currentValue)
+  }
+  return options
+})
 const batchEditFields = computed(() => {
   return [
     {
@@ -523,6 +534,9 @@ const loadCardVersions = async () => {
   if (!form.cardVersion && cardVersionOptions.value.length > 0) {
     form.cardVersion = cardVersionOptions.value[0]
   }
+  if (!eyeballCardVersionDraft.value && cardVersionOptions.value.length > 0) {
+    eyeballCardVersionDraft.value = cardVersionOptions.value[0]
+  }
 }
 
 const loadSystemSetting = async () => {
@@ -551,6 +565,8 @@ const resetForm = () => {
   form.callSign = ''
   form.cardType = defaultCardType
   form.cardVersion = cardVersionOptions.value[0] ?? ''
+  eyeballCardVersionDraft.value = cardVersionOptions.value[0] ?? ''
+  eyeballCardVersions.value = []
   form.qsoRecordName = ''
   form.addressEntryName = ''
   form.cardDate = ''
@@ -569,6 +585,53 @@ const fillFormFromRecord = (item: CardRecordItem) => {
   form.cardTime = item.cardTime
   form.businessRemarks = item.spec.businessRemarks
   form.cardRemarks = item.cardRemarks
+  eyeballCardVersions.value = item.cardType === 'EYEBALL' ? normalizeCardVersions(splitCardVersions(item.cardVersion)) : []
+  if (item.cardType === 'EYEBALL') {
+    eyeballCardVersionDraft.value = eyeballCardVersions.value[0] ?? form.cardVersion
+  }
+}
+
+const addEyeballCardVersion = () => {
+  const rawVersion = eyeballCardVersionDraft.value.trim()
+  if (!rawVersion) {
+    feedback.value = '请先选择或输入要添加的卡片版本。'
+    return
+  }
+  if (eyeballCardVersions.value.includes(rawVersion)) {
+    feedback.value = `卡片版本 ${rawVersion} 已添加。`
+    return
+  }
+  eyeballCardVersions.value = [...eyeballCardVersions.value, rawVersion]
+  feedback.value = `已添加卡片版本：${rawVersion}`
+}
+
+const removeEyeballCardVersion = (version: string) => {
+  eyeballCardVersions.value = eyeballCardVersions.value.filter((item) => item !== version)
+}
+
+const splitCardVersions = (value: string): string[] => {
+  return value
+    .replace(/，/g, ',')
+    .replace(/、/g, ',')
+    .replace(/；/g, ',')
+    .replace(/;/g, ',')
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+}
+
+const normalizeCardVersions = (values: string[]): string[] => {
+  const seen = new Set<string>()
+  const output: string[] = []
+  for (const value of values) {
+    const text = value.trim()
+    if (!text || seen.has(text)) {
+      continue
+    }
+    seen.add(text)
+    output.push(text)
+  }
+  return output
 }
 
 const openQsoSelector = () => {
@@ -600,6 +663,9 @@ watch(
   (cardType) => {
     if (cardType === 'EYEBALL') {
       clearSelectedQso()
+      if (!eyeballCardVersionDraft.value && cardVersionOptions.value.length > 0) {
+        eyeballCardVersionDraft.value = cardVersionOptions.value[0]
+      }
       return
     }
     if (!form.qsoRecordName.trim()) {
@@ -711,7 +777,12 @@ const saveCardRecord = async () => {
     return
   }
 
-  if (!form.cardVersion.trim()) {
+  if (isEyeballMode.value && !eyeballCardVersions.value.length) {
+    feedback.value = '请先添加至少一个卡片版本。'
+    return
+  }
+
+  if (!isEyeballMode.value && !form.cardVersion.trim()) {
     feedback.value = '请先选择卡片版本。'
     return
   }
@@ -732,6 +803,16 @@ const saveCardRecord = async () => {
 
   saving.value = true
   try {
+    const cardVersions =
+      isEyeballMode.value
+        ? normalizeCardVersions(eyeballCardVersions.value)
+        : normalizeCardVersions([form.cardVersion])
+    if (!cardVersions.length) {
+      feedback.value = '请先选择卡片版本。'
+      return
+    }
+    const persistedCardVersion = isEyeballMode.value ? cardVersions.join('、') : cardVersions[0]
+
     if (isEditing.value) {
       const target = records.value.find((item) => item.resourceName === editingResourceName.value)
       if (!target) {
@@ -743,7 +824,7 @@ const saveCardRecord = async () => {
         ...target.spec,
         callSign: form.callSign.trim().toUpperCase(),
         cardType: form.cardType,
-        cardVersion: form.cardVersion.trim(),
+        cardVersion: persistedCardVersion,
         qsoRecordName,
         addressEntryName: form.addressEntryName.trim(),
         cardDate,
@@ -778,7 +859,7 @@ const saveCardRecord = async () => {
     }
 
     const nextCardResourceName = await allocateCardResourceName()
-    const created = await createExtension<CardRecordSpec>(resourcePlural, {
+    const createdRecord = await createExtension<CardRecordSpec>(resourcePlural, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
@@ -787,7 +868,7 @@ const saveCardRecord = async () => {
       spec: {
         callSign: form.callSign.trim().toUpperCase(),
         cardType: form.cardType,
-        cardVersion: form.cardVersion.trim(),
+        cardVersion: persistedCardVersion,
         qsoRecordName,
         addressEntryName: form.addressEntryName.trim(),
         cardDate,
@@ -823,23 +904,23 @@ const saveCardRecord = async () => {
       action: '新增卡片记录',
       resourceType: 'card-record',
       resourceName: form.callSign.trim().toUpperCase(),
-      detail: `${form.cardType} ${cardDate} ${cardTime}`,
+      detail: `${form.cardType} ${cardDate} ${cardTime}，版本=${cardVersions.join('、')}，版本数量=${cardVersions.length}`,
     })
 
     await loadCardRecords({ silent: true })
     if (autoNotifyOnCardCreated.value) {
       try {
         await sendNotificationMail({
-          cardRecordName: created.metadata.name,
+          cardRecordName: createdRecord.metadata.name,
           scene: 'created',
           source: '卡片记录-自动触发',
         })
-        await loadCardRecords({ silent: true })
       } catch {
         // 自动邮件发送失败由后端状态与审计记录体现，这里不覆盖主流程结果。
       }
+      await loadCardRecords({ silent: true })
     }
-    feedback.value = '卡片记录已保存。'
+    feedback.value = `卡片记录已保存，包含 ${cardVersions.length} 个版本。`
     resetForm()
   } catch (error) {
     feedback.value = `保存卡片记录失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -889,11 +970,26 @@ onBeforeUnmount(() => {
           </label>
 
           <label class="qsl-field">
-            <span class="qsl-field__label">卡片版本（Card_Version）</span>
-            <div class="qsl-input-shell">
+            <span class="qsl-field__label">{{ isEyeballMode ? '添加卡片版本（Card_Version）' : '卡片版本（Card_Version）' }}</span>
+            <div v-if="isEyeballMode" class="qsl-input-shell qsl-input-shell--stack">
+              <div class="qsl-inline-row">
+              <select v-model="eyeballCardVersionDraft">
+                <option value="">请选择卡片版本</option>
+                  <option v-for="item in cardVersionSelectOptions" :key="item" :value="item">{{ item }}</option>
+              </select>
+                <VButton size="sm" type="secondary" :disabled="saving || loading" @click="addEyeballCardVersion">添加版本</VButton>
+              </div>
+              <div class="qsl-inline-option-list" v-if="eyeballCardVersions.length">
+                <span v-for="item in eyeballCardVersions" :key="`eyeball-version-${item}`" class="qsl-chip">
+                  {{ item }}
+                  <button type="button" class="qsl-chip__remove" @click="removeEyeballCardVersion(item)">×</button>
+                </span>
+              </div>
+            </div>
+            <div v-else class="qsl-input-shell">
               <select v-model="form.cardVersion">
                 <option value="">请选择卡片版本</option>
-                <option v-for="item in cardVersionOptions" :key="item" :value="item">{{ item }}</option>
+                <option v-for="item in cardVersionSelectOptions" :key="item" :value="item">{{ item }}</option>
               </select>
             </div>
             <small class="qsl-field__tip" v-if="!cardVersionOptions.length">暂无可用卡片版本，请先到“本台卡片”中配置。</small>
@@ -1109,6 +1205,51 @@ onBeforeUnmount(() => {
 
 .qsl-card-type-tab-panel {
   display: none;
+}
+
+.qsl-input-shell--stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qsl-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qsl-inline-row > .qsl-input-shell,
+.qsl-inline-row > select {
+  flex: 1;
+}
+
+.qsl-inline-option-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.qsl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #111827;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.qsl-chip__remove {
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .qsl-table-empty {
