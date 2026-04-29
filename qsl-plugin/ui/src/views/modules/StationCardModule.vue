@@ -20,7 +20,8 @@ interface StationCardVersion {
   imageDataUrl: string
   imageMediaType: string
   previewUrl: string
-  inventoryTotal: number
+  availableInventory: number
+  versionTotal: number
   sortOrder: number
   createdAt: string
 }
@@ -30,13 +31,15 @@ const loading = ref(false)
 const saving = ref(false)
 const newCardVersionName = ref('')
 const newCardFile = ref<File | null>(null)
-const newCardInventoryTotal = ref(0)
+const newCardAvailableInventory = ref(0)
+const newCardVersionTotal = ref(0)
 const cardFileInputRef = ref<HTMLInputElement | null>(null)
 const feedback = ref('')
 const draggingCardId = ref<number | null>(null)
 const cardUsageCounter = ref<Record<string, number>>({})
 const editingInventoryCardId = ref<number | null>(null)
-const editingInventoryValue = ref(0)
+const editingAvailableInventoryValue = ref(0)
+const editingVersionTotalValue = ref(0)
 const resourcePlural = 'station-cards'
 const resourceKind = 'StationCard'
 const cardRecordPlural = 'card-records'
@@ -45,7 +48,8 @@ interface StationCardSpec {
   cardVersion: string
   imageUrl: string
   imageMediaType: string
-  inventoryTotal: number
+  availableInventory: number
+  versionTotal: number
   sortOrder: number
   remarks: string
 }
@@ -75,7 +79,7 @@ const getUsedCount = (versionName: string): number => {
 }
 
 const getRemainingCount = (card: StationCardVersion): number => {
-  return Math.max(card.inventoryTotal - getUsedCount(card.versionName), 0)
+  return Math.max(card.availableInventory - getUsedCount(card.versionName), 0)
 }
 
 const refreshCardUsageCounter = async () => {
@@ -115,7 +119,8 @@ const toCard = (extension: QslExtension<StationCardSpec>, index: number): Statio
     imageDataUrl,
     imageMediaType: extension.spec?.imageMediaType ?? 'image/png',
     previewUrl: imageDataUrl,
-    inventoryTotal: safeInventoryTotal(extension.spec?.inventoryTotal),
+    availableInventory: safeInventoryTotal(extension.spec?.availableInventory),
+    versionTotal: safeInventoryTotal(extension.spec?.versionTotal),
     sortOrder: safeInventoryTotal(extension.spec?.sortOrder) || index + 1,
     createdAt: extension.metadata.creationTimestamp
       ? new Date(extension.metadata.creationTimestamp).toLocaleString('zh-CN', { hour12: false })
@@ -157,9 +162,15 @@ const addStationCard = async () => {
     return
   }
 
-  const inventoryTotal = safeInventoryTotal(newCardInventoryTotal.value)
-  if (!Number.isInteger(inventoryTotal) || inventoryTotal < 0) {
-    feedback.value = '库存总量必须为大于等于 0 的整数。'
+  const availableInventory = safeInventoryTotal(newCardAvailableInventory.value)
+  if (!Number.isInteger(availableInventory) || availableInventory < 0) {
+    feedback.value = '可用库存必须为大于等于 0 的整数。'
+    return
+  }
+
+  const versionTotal = safeInventoryTotal(newCardVersionTotal.value)
+  if (!Number.isInteger(versionTotal) || versionTotal < 0) {
+    feedback.value = '版本总量必须为大于等于 0 的整数。'
     return
   }
 
@@ -177,14 +188,15 @@ const addStationCard = async () => {
   try {
     const imageDataUrl = await fileToDataUrl(newCardFile.value)
     const nextId = stationCards.value.reduce((max, card) => Math.max(max, card.id), 0) + 1
-    stationCards.value.unshift({
+    stationCards.value.push({
       id: nextId,
       versionName,
       fileName: newCardFile.value.name,
       imageDataUrl,
       imageMediaType: newCardFile.value.type || 'image/png',
       previewUrl: imageDataUrl,
-      inventoryTotal,
+      availableInventory,
+      versionTotal,
       sortOrder: 1,
       createdAt: nowText(),
     })
@@ -199,7 +211,8 @@ const addStationCard = async () => {
 
   newCardVersionName.value = ''
   newCardFile.value = null
-  newCardInventoryTotal.value = 0
+  newCardAvailableInventory.value = 0
+  newCardVersionTotal.value = 0
   if (cardFileInputRef.value) {
     cardFileInputRef.value.value = ''
   }
@@ -226,7 +239,8 @@ const removeStationCard = (id: number) => {
 
 const startInventoryEdit = (card: StationCardVersion) => {
   editingInventoryCardId.value = card.id
-  editingInventoryValue.value = card.inventoryTotal
+  editingAvailableInventoryValue.value = card.availableInventory
+  editingVersionTotalValue.value = card.versionTotal
 }
 
 const cancelInventoryEdit = () => {
@@ -234,14 +248,20 @@ const cancelInventoryEdit = () => {
 }
 
 const confirmInventoryEdit = (card: StationCardVersion) => {
-  const rawValue = Number(editingInventoryValue.value)
-  if (!Number.isFinite(rawValue) || rawValue < 0 || !Number.isInteger(rawValue)) {
-    feedback.value = '库存总量必须为大于等于 0 的整数。'
+  const availableRawValue = Number(editingAvailableInventoryValue.value)
+  if (!Number.isFinite(availableRawValue) || availableRawValue < 0 || !Number.isInteger(availableRawValue)) {
+    feedback.value = '可用库存必须为大于等于 0 的整数。'
     return
   }
-  card.inventoryTotal = safeInventoryTotal(rawValue)
+  const versionTotalRawValue = Number(editingVersionTotalValue.value)
+  if (!Number.isFinite(versionTotalRawValue) || versionTotalRawValue < 0 || !Number.isInteger(versionTotalRawValue)) {
+    feedback.value = '版本总量必须为大于等于 0 的整数。'
+    return
+  }
+  card.availableInventory = safeInventoryTotal(availableRawValue)
+  card.versionTotal = safeInventoryTotal(versionTotalRawValue)
   editingInventoryCardId.value = null
-  feedback.value = `已更新版本 ${card.versionName} 的库存总量为 ${card.inventoryTotal}。请点击“保存卡片配置”完成持久化。`
+  feedback.value = `已更新版本 ${card.versionName} 的库存信息。请点击“保存卡片配置”完成持久化。`
 }
 
 const moveCardToTarget = (sourceId: number, targetId: number) => {
@@ -301,7 +321,8 @@ const saveStationCard = async () => {
           cardVersion: card.versionName,
           imageUrl: card.imageDataUrl,
           imageMediaType: card.imageMediaType,
-          inventoryTotal: card.inventoryTotal,
+          availableInventory: card.availableInventory,
+          versionTotal: card.versionTotal,
           sortOrder: card.sortOrder,
           remarks: `源文件：${card.fileName}`,
         },
@@ -366,9 +387,16 @@ onMounted(loadStationCards)
         </label>
 
         <label class="qsl-field">
-          <span class="qsl-field__label">库存总量</span>
+          <span class="qsl-field__label">可用库存</span>
           <div class="qsl-input-shell">
-            <input v-model.number="newCardInventoryTotal" type="number" min="0" step="1" placeholder="例如：200" />
+            <input v-model.number="newCardAvailableInventory" type="number" min="0" step="1" placeholder="例如：200" />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">版本总量</span>
+          <div class="qsl-input-shell">
+            <input v-model.number="newCardVersionTotal" type="number" min="0" step="1" placeholder="例如：500" />
           </div>
         </label>
 
@@ -396,32 +424,54 @@ onMounted(loadStationCards)
           <div class="qsl-card-meta">
             <p><strong>版本：</strong>{{ card.versionName }}</p>
             <p><strong>文件：</strong>{{ card.fileName }}</p>
-            <p><strong>库存总量：</strong>{{ card.inventoryTotal }}</p>
+            <p><strong>可用库存：</strong>{{ card.availableInventory }}</p>
+            <p><strong>版本总量：</strong>{{ card.versionTotal }}</p>
             <p><strong>已使用：</strong>{{ getUsedCount(card.versionName) }}</p>
             <p><strong>库存余量：</strong>{{ getRemainingCount(card) }}</p>
             <p><strong>排序：</strong>{{ card.sortOrder }}（可上下拖动）</p>
             <p><strong>创建时间：</strong>{{ card.createdAt }}</p>
           </div>
-          <div class="qsl-actions qsl-card-list__actions">
+          <div class="qsl-card-list__actions">
             <template v-if="editingInventoryCardId === card.id">
-              <div class="qsl-input-shell">
-                <input
-                  v-model.number="editingInventoryValue"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="请输入库存总量"
-                />
+              <div class="qsl-inventory-edit">
+                <p class="qsl-inventory-edit__title">编辑库存</p>
+                <label class="qsl-field qsl-field--compact">
+                  <span class="qsl-field__label">可用库存</span>
+                  <div class="qsl-input-shell">
+                    <input
+                      v-model.number="editingAvailableInventoryValue"
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="请输入可用库存"
+                    />
+                  </div>
+                </label>
+                <label class="qsl-field qsl-field--compact">
+                  <span class="qsl-field__label">版本总量</span>
+                  <div class="qsl-input-shell">
+                    <input
+                      v-model.number="editingVersionTotalValue"
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="请输入版本总量"
+                    />
+                  </div>
+                </label>
+                <div class="qsl-actions qsl-inventory-edit__actions">
+                  <VButton size="xs" :disabled="loading || saving" @click="confirmInventoryEdit(card)">确认库存</VButton>
+                  <VButton size="xs" type="secondary" :disabled="loading || saving" @click="cancelInventoryEdit">取消</VButton>
+                  <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeStationCard(card.id)">删除</VButton>
+                </div>
               </div>
-              <VButton size="xs" :disabled="loading || saving" @click="confirmInventoryEdit(card)">确认库存</VButton>
-              <VButton size="xs" type="secondary" :disabled="loading || saving" @click="cancelInventoryEdit">取消</VButton>
             </template>
             <template v-else>
-              <VButton size="xs" type="secondary" :disabled="loading || saving" @click="startInventoryEdit(card)"
-                >编辑总库存</VButton
-              >
+              <div class="qsl-card-list__button-row">
+                <VButton size="xs" type="secondary" :disabled="loading || saving" @click="startInventoryEdit(card)">编辑库存</VButton>
+                <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeStationCard(card.id)">删除</VButton>
+              </div>
             </template>
-            <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeStationCard(card.id)">删除</VButton>
           </div>
         </li>
       </ul>
@@ -430,3 +480,100 @@ onMounted(loadStationCards)
     </VCard>
   </div>
 </template>
+
+<style scoped lang="scss">
+.qsl-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qsl-card-list__item {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.qsl-card-preview {
+  width: 92px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.qsl-card-meta {
+  grid-column: 2;
+  font-size: 13px;
+  line-height: 20px;
+  color: #111827;
+  word-break: break-word;
+}
+
+.qsl-card-meta p {
+  margin: 0;
+}
+
+.qsl-card-list__actions {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  justify-self: end;
+  width: 200px;
+  margin-top: 6px;
+}
+
+.qsl-card-list__button-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.qsl-inventory-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qsl-inventory-edit__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.qsl-field--compact {
+  margin: 0;
+}
+
+.qsl-field--compact .qsl-field__label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.qsl-inventory-edit__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.qsl-card-list__button-row :deep(button),
+.qsl-inventory-edit__actions :deep(button) {
+  min-width: 72px;
+}
+
+@media (max-width: 1500px) {
+  .qsl-card-list__actions {
+    width: 170px;
+  }
+}
+</style>

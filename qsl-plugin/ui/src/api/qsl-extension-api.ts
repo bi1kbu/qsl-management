@@ -80,12 +80,16 @@ export const createResourceName = (prefix: string): string => {
 
 export async function listExtensions<TSpec, TStatus = Record<string, unknown>>(
   plural: string,
+  options?: {
+    sort?: string[]
+  },
 ): Promise<QslExtension<TSpec, TStatus>[]> {
+  const sort = options?.sort?.length ? options.sort : ['metadata.creationTimestamp,desc']
   const response = await axiosInstance.get<QslExtensionListResponse<TSpec, TStatus>>(buildUrl(plural), {
     params: {
       page: 1,
       size: 1000,
-      sort: ['metadata.creationTimestamp,desc'],
+      sort,
     },
   })
   const items = Array.isArray(response.data?.items) ? response.data.items : []

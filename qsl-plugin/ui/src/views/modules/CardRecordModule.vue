@@ -93,6 +93,8 @@ interface StationCardSpec {
   imageUrl: string
   imageMediaType: string
   remarks: string
+  sortOrder?: number
+  availableInventory?: number
 }
 
 interface SystemSettingSpec {
@@ -526,10 +528,59 @@ const loadQsoRecords = async () => {
 }
 
 const loadCardVersions = async () => {
-  const extensions = await listExtensions<StationCardSpec>(stationCardPlural)
-  cardVersionOptions.value = extensions
-    .map((extension) => extension.spec?.cardVersion?.trim() ?? '')
-    .filter((item, index, array) => item.length > 0 && array.indexOf(item) === index)
+  const [stationCardExtensions, cardRecordExtensions] = await Promise.all([
+    listExtensions<StationCardSpec>(stationCardPlural),
+    listExtensions<CardRecordSpec>(resourcePlural),
+  ])
+
+  const usedCounter: Record<string, number> = {}
+  for (const extension of cardRecordExtensions) {
+    const versions = normalizeCardVersions(splitCardVersions(extension.spec?.cardVersion ?? ''))
+    for (const version of versions) {
+      const key = version.toUpperCase()
+      usedCounter[key] = (usedCounter[key] ?? 0) + 1
+    }
+  }
+
+  const ordered = [...stationCardExtensions]
+    .sort((a, b) => {
+      const aOrder = Number(a.spec?.sortOrder ?? Number.MAX_SAFE_INTEGER)
+      const bOrder = Number(b.spec?.sortOrder ?? Number.MAX_SAFE_INTEGER)
+      if (aOrder !== bOrder) {
+        return aOrder - bOrder
+      }
+      const aCreated = a.metadata.creationTimestamp ?? ''
+      const bCreated = b.metadata.creationTimestamp ?? ''
+      return aCreated.localeCompare(bCreated)
+    })
+
+  const seen = new Set<string>()
+  cardVersionOptions.value = ordered
+    .map((extension) => {
+      const version = extension.spec?.cardVersion?.trim() ?? ''
+      const key = version.toUpperCase()
+      const availableInventory = Number(extension.spec?.availableInventory ?? 0)
+      const safeInventory = Number.isFinite(availableInventory) && availableInventory > 0 ? Math.floor(availableInventory) : 0
+      const usedCount = usedCounter[key] ?? 0
+      const remaining = safeInventory - usedCount
+      return {
+        version,
+        key,
+        remaining,
+      }
+    })
+    .filter((item) => {
+      if (item.remaining <= 0) {
+        return false
+      }
+      const key = item.key
+      if (!item.version || seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+    .map((item) => item.version)
 
   if (!form.cardVersion && cardVersionOptions.value.length > 0) {
     form.cardVersion = cardVersionOptions.value[0]
