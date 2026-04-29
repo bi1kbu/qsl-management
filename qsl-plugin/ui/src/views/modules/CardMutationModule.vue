@@ -27,6 +27,7 @@ interface CardRecordSpec {
   addressEntryName: string
   cardDate: string
   cardTime: string
+  businessRemarks: string
   createdRemarks: string
   sentRemarks: string
   receivedRemarks: string
@@ -116,7 +117,6 @@ const feedback = ref('')
 const activeTab = ref<'basic' | 'batch'>('basic')
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
-const functionCallSign = ref('')
 const syncHistoryQuery = ref(false)
 const selectedHistoryNames = ref<string[]>([])
 const editingResourceName = ref('')
@@ -136,8 +136,7 @@ const editForm = reactive({
   addressEntryName: '',
   cardDate: '',
   cardTime: '',
-  createdRemarks: '',
-  sentRemarks: '',
+  businessRemarks: '',
   receivedRemarks: '',
   publicReceiptRemarks: '',
   cardRemarks: '',
@@ -159,7 +158,6 @@ const editForm = reactive({
   receivedMailStatus: '' as MailStatus,
   receivedMailSentAt: '',
   receivedMailLastError: '',
-  mailTargetEmail: '',
 })
 
 const mailStatusOptions: OptionItem[] = [
@@ -282,8 +280,7 @@ const batchEditFields = computed(() => {
     },
     { value: 'cardDate', label: '卡片日期', inputType: 'date' },
     { value: 'cardTime', label: '卡片时间', inputType: 'text', placeholder: 'HHmm' },
-    { value: 'createdRemarks', label: '制卡备注', inputType: 'textarea', placeholder: '输入备注' },
-    { value: 'sentRemarks', label: '发卡备注', inputType: 'textarea', placeholder: '输入备注' },
+    { value: 'businessRemarks', label: '业务备注', inputType: 'textarea', placeholder: '输入备注' },
     { value: 'receivedRemarks', label: '收卡确认备注', inputType: 'textarea', placeholder: '输入备注' },
     { value: 'publicReceiptRemarks', label: '公开签收备注', inputType: 'textarea', placeholder: '输入备注' },
     { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
@@ -360,7 +357,6 @@ const batchEditFields = computed(() => {
     },
     { value: 'receivedMailSentAt', label: '收卡邮件时间', inputType: 'text', placeholder: 'yyyy-MM-dd HH:mm:ss' },
     { value: 'receivedMailLastError', label: '收卡邮件错误', inputType: 'textarea', placeholder: '输入错误信息' },
-    { value: 'mailTargetEmail', label: '目标邮箱', inputType: 'text', placeholder: '例如：a@b.com' },
   ] as const
 })
 
@@ -390,12 +386,12 @@ watch(historyKeyword, (value) => {
 })
 
 watch(
-  () => functionCallSign.value,
+  () => editForm.callSign,
   () => {
     if (!syncHistoryQuery.value) {
       return
     }
-    const keyword = functionCallSign.value.trim().toUpperCase()
+    const keyword = editForm.callSign.trim().toUpperCase()
     historyKeyword.value = keyword
     historyKeywordInput.value = keyword
     currentPage.value = 1
@@ -406,7 +402,7 @@ watch(syncHistoryQuery, (enabled) => {
   if (!enabled) {
     return
   }
-  const keyword = functionCallSign.value.trim().toUpperCase()
+  const keyword = editForm.callSign.trim().toUpperCase()
   historyKeyword.value = keyword
   historyKeywordInput.value = keyword
   currentPage.value = 1
@@ -434,6 +430,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
+    businessRemarks: spec?.businessRemarks ?? '',
     createdRemarks: spec?.createdRemarks ?? '',
     sentRemarks: spec?.sentRemarks ?? '',
     receivedRemarks: spec?.receivedRemarks ?? '',
@@ -568,8 +565,7 @@ const resetEditForm = () => {
   editForm.addressEntryName = ''
   editForm.cardDate = ''
   editForm.cardTime = ''
-  editForm.createdRemarks = ''
-  editForm.sentRemarks = ''
+  editForm.businessRemarks = ''
   editForm.receivedRemarks = ''
   editForm.publicReceiptRemarks = ''
   editForm.cardRemarks = ''
@@ -591,13 +587,11 @@ const resetEditForm = () => {
   editForm.receivedMailStatus = ''
   editForm.receivedMailSentAt = ''
   editForm.receivedMailLastError = ''
-  editForm.mailTargetEmail = ''
   addressLookupKeyword.value = ''
 }
 
 const startEditRow = (item: CardMutationItem) => {
   editingResourceName.value = item.resourceName
-  functionCallSign.value = item.callSign
   addressLookupKeyword.value = item.callSign.trim().toUpperCase()
   editForm.callSign = item.spec.callSign
   editForm.cardType = item.spec.cardType
@@ -606,8 +600,7 @@ const startEditRow = (item: CardMutationItem) => {
   editForm.addressEntryName = item.spec.addressEntryName
   editForm.cardDate = item.spec.cardDate
   editForm.cardTime = item.spec.cardTime
-  editForm.createdRemarks = item.spec.createdRemarks
-  editForm.sentRemarks = item.spec.sentRemarks
+  editForm.businessRemarks = item.spec.businessRemarks
   editForm.receivedRemarks = item.spec.receivedRemarks
   editForm.publicReceiptRemarks = item.spec.publicReceiptRemarks
   editForm.cardRemarks = item.spec.cardRemarks
@@ -629,7 +622,6 @@ const startEditRow = (item: CardMutationItem) => {
   editForm.receivedMailStatus = item.spec.receivedMailStatus
   editForm.receivedMailSentAt = item.spec.receivedMailSentAt
   editForm.receivedMailLastError = item.spec.receivedMailLastError
-  editForm.mailTargetEmail = item.spec.mailTargetEmail
   feedback.value = `正在编辑：${item.resourceName}`
 }
 
@@ -677,8 +669,7 @@ const buildSpecFromEditForm = (current: CardRecordSpec): CardRecordSpec => {
     addressEntryName: editForm.addressEntryName.trim(),
     cardDate: editForm.cardDate,
     cardTime: editForm.cardTime.trim(),
-    createdRemarks: editForm.createdRemarks.trim(),
-    sentRemarks: editForm.sentRemarks.trim(),
+    businessRemarks: editForm.businessRemarks.trim(),
     receivedRemarks: editForm.receivedRemarks.trim(),
     publicReceiptRemarks: editForm.publicReceiptRemarks.trim(),
     cardRemarks: editForm.cardRemarks.trim(),
@@ -699,7 +690,6 @@ const buildSpecFromEditForm = (current: CardRecordSpec): CardRecordSpec => {
     receivedMailStatus: editForm.receivedMailStatus,
     receivedMailSentAt: editForm.receivedMailSentAt.trim(),
     receivedMailLastError: editForm.receivedMailLastError.trim(),
-    mailTargetEmail: editForm.mailTargetEmail.trim(),
   }
 }
 
@@ -837,11 +827,8 @@ const applyBatchField = (
     case 'cardTime':
       nextSpec.cardTime = value.trim()
       break
-    case 'createdRemarks':
-      nextSpec.createdRemarks = value.trim()
-      break
-    case 'sentRemarks':
-      nextSpec.sentRemarks = value.trim()
+    case 'businessRemarks':
+      nextSpec.businessRemarks = value.trim()
       break
     case 'receivedRemarks':
       nextSpec.receivedRemarks = value.trim()
@@ -905,9 +892,6 @@ const applyBatchField = (
       break
     case 'receivedMailLastError':
       nextSpec.receivedMailLastError = value.trim()
-      break
-    case 'mailTargetEmail':
-      nextSpec.mailTargetEmail = value.trim()
       break
     default:
       break
@@ -1009,260 +993,264 @@ onMounted(() => {
       </template>
 
       <template v-if="!isBatchTab">
-        <label class="qsl-field">
-          <span class="qsl-field__label">呼号（用于同步查询）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="functionCallSign" type="text" placeholder="输入呼号可同步下方筛选" />
-          </div>
-        </label>
+        <p v-if="!isEditing" class="qsl-muted">请在下方清单点击“编辑”，加载对应卡片后进行异动修改。</p>
 
-        <label v-if="isEditing" class="qsl-field">
-          <span class="qsl-field__label">地址查找（呼号/卡片局）</span>
-          <div class="qsl-form-inline">
-            <div class="qsl-input-shell">
-              <input v-model.trim="addressLookupKeyword" type="text" placeholder="输入呼号或卡片局筛选地址编号" />
+        <template v-else>
+          <VCard title="基础信息">
+            <div class="qsl-form-grid qsl-card-mutation-form">
+              <label class="qsl-field">
+                <span class="qsl-field__label">呼号</span>
+                <div class="qsl-input-shell">
+                  <input v-model.trim="editForm.callSign" type="text" placeholder="例如：BI1KBU" />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">卡片类型</span>
+                <div class="qsl-input-shell">
+                  <select v-model="editForm.cardType">
+                    <option value="QSO">QSO</option>
+                    <option value="SWL">SWL</option>
+                    <option value="EYEBALL">EYEBALL</option>
+                  </select>
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">卡片版本</span>
+                <div class="qsl-input-shell">
+                  <input v-model.trim="editForm.cardVersion" type="text" />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">关联QSO_ID</span>
+                <div class="qsl-input-shell">
+                  <select v-model="editForm.qsoRecordName">
+                    <option value="">空</option>
+                    <option v-for="item in qsoOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                  </select>
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">卡片日期</span>
+                <div class="qsl-input-shell">
+                  <input v-model="editForm.cardDate" type="date" />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">卡片时间</span>
+                <div class="qsl-input-shell">
+                  <input v-model.trim="editForm.cardTime" type="text" maxlength="4" placeholder="HHmm" />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">业务备注</span>
+                <div class="qsl-input-shell qsl-input-shell--textarea">
+                  <textarea v-model.trim="editForm.businessRemarks" rows="2" placeholder="输入业务备注" />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">卡片备注（打印）</span>
+                <div class="qsl-input-shell qsl-input-shell--textarea">
+                  <textarea v-model.trim="editForm.cardRemarks" rows="2" placeholder="输入卡片备注" />
+                </div>
+              </label>
             </div>
-            <VButton size="sm" :disabled="!addressLookupKeyword.trim()" @click="clearAddressLookup">清空筛选</VButton>
-          </div>
-        </label>
+          </VCard>
 
-        <div v-if="isEditing" class="qsl-form-grid qsl-card-mutation-form">
-          <label class="qsl-field">
-            <span class="qsl-field__label">对方呼号</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.callSign" type="text" placeholder="例如：BI1ABC" />
+          <VCard title="地址查找与绑定">
+            <div class="qsl-form-grid qsl-card-mutation-form">
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">地址查找（呼号/卡片局）</span>
+                <div class="qsl-form-inline">
+                  <div class="qsl-input-shell">
+                    <input v-model.trim="addressLookupKeyword" type="text" placeholder="输入呼号或卡片局筛选地址编号" />
+                  </div>
+                  <VButton size="sm" :disabled="!addressLookupKeyword.trim()" @click="clearAddressLookup">清空筛选</VButton>
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">绑定地址编号</span>
+                <div class="qsl-input-shell qsl-input-shell--stack">
+                  <select v-model="editForm.addressEntryName">
+                    <option value="">空</option>
+                    <option v-for="item in selectableAddressOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                  </select>
+                  <div class="qsl-inline-option-list">
+                    <VButton
+                      v-for="item in selectableAddressOptions.slice(0, 4)"
+                      :key="`quick-${item.value}`"
+                      size="xs"
+                      :type="editForm.addressEntryName === item.value ? 'secondary' : undefined"
+                      @click="selectAddressByOption(item.value)"
+                    >
+                      {{ item.value }}
+                    </VButton>
+                  </div>
+                </div>
+              </label>
+
             </div>
-          </label>
+          </VCard>
 
-          <label class="qsl-field">
-            <span class="qsl-field__label">卡片类型</span>
-            <div class="qsl-input-shell">
-              <select v-model="editForm.cardType">
-                <option value="QSO">QSO</option>
-                <option value="SWL">SWL</option>
-                <option value="EYEBALL">EYEBALL</option>
-              </select>
+          <VCard title="制卡与打包">
+            <div class="qsl-form-grid qsl-card-mutation-form">
+              <label class="qsl-checkbox">
+                <input v-model="editForm.cardIssued" type="checkbox" />
+                <span>制卡状态</span>
+              </label>
+
+              <label class="qsl-checkbox">
+                <input v-model="editForm.envelopePrinted" type="checkbox" />
+                <span>打包状态</span>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">流程状态</span>
+                <div class="qsl-input-shell">
+                  <input v-model.trim="editForm.flowStatus" type="text" placeholder="例如：已发信" />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">制卡时间</span>
+                <div class="qsl-input-shell">
+                  <input v-model.trim="editForm.cardIssuedAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">制卡邮件状态</span>
+                <div class="qsl-input-shell">
+                  <select v-model="editForm.createdMailStatus">
+                    <option v-for="item in mailStatusOptions" :key="`created-${item.value}`" :value="item.value">{{ item.label }}</option>
+                  </select>
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">制卡邮件时间</span>
+                <div class="qsl-input-shell">
+                  <input v-model.trim="editForm.createdMailSentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">制卡邮件错误</span>
+                <div class="qsl-input-shell qsl-input-shell--textarea">
+                  <textarea v-model.trim="editForm.createdMailLastError" rows="2" placeholder="输入错误信息" />
+                </div>
+              </label>
             </div>
-          </label>
+          </VCard>
 
-          <label class="qsl-field">
-            <span class="qsl-field__label">卡片版本</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.cardVersion" type="text" />
+          <VCard title="发卡信息">
+            <div class="qsl-form-grid qsl-card-mutation-form">
+              <label class="qsl-checkbox">
+                <input v-model="editForm.cardSent" type="checkbox" />
+                <span>发卡状态</span>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">发卡时间</span>
+                <div class="qsl-input-shell">
+                  <input v-model.trim="editForm.sentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">发卡邮件状态</span>
+                <div class="qsl-input-shell">
+                  <select v-model="editForm.sentMailStatus">
+                    <option v-for="item in mailStatusOptions" :key="`sent-${item.value}`" :value="item.value">{{ item.label }}</option>
+                  </select>
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">发卡邮件时间</span>
+                <div class="qsl-input-shell">
+                  <input v-model.trim="editForm.sentMailSentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">发卡邮件错误</span>
+                <div class="qsl-input-shell qsl-input-shell--textarea">
+                  <textarea v-model.trim="editForm.sentMailLastError" rows="2" placeholder="输入错误信息" />
+                </div>
+              </label>
             </div>
-          </label>
+          </VCard>
 
-          <label class="qsl-field">
-            <span class="qsl-field__label">关联QSO_ID</span>
-            <div class="qsl-input-shell">
-              <select v-model="editForm.qsoRecordName">
-                <option value="">空</option>
-                <option v-for="item in qsoOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-              </select>
+          <VCard title="收卡信息">
+            <div class="qsl-form-grid qsl-card-mutation-form">
+              <label class="qsl-checkbox">
+                <input v-model="editForm.cardReceived" type="checkbox" />
+                <span>收卡状态</span>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">收卡时间</span>
+                <div class="qsl-input-shell">
+                  <input v-model.trim="editForm.receivedAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">收卡邮件状态</span>
+                <div class="qsl-input-shell">
+                  <select v-model="editForm.receivedMailStatus">
+                    <option v-for="item in mailStatusOptions" :key="`received-${item.value}`" :value="item.value">{{ item.label }}</option>
+                  </select>
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">收卡邮件时间</span>
+                <div class="qsl-input-shell">
+                  <input v-model.trim="editForm.receivedMailSentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">收卡确认备注</span>
+                <div class="qsl-input-shell qsl-input-shell--textarea">
+                  <textarea v-model.trim="editForm.receivedRemarks" rows="2" placeholder="输入收卡确认备注" />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">收卡邮件错误</span>
+                <div class="qsl-input-shell qsl-input-shell--textarea">
+                  <textarea v-model.trim="editForm.receivedMailLastError" rows="2" placeholder="输入错误信息" />
+                </div>
+              </label>
             </div>
-          </label>
+          </VCard>
 
-          <label class="qsl-field">
-            <span class="qsl-field__label">绑定地址编号</span>
-            <div class="qsl-input-shell qsl-input-shell--stack">
-              <select v-model="editForm.addressEntryName">
-                <option value="">空</option>
-                <option v-for="item in selectableAddressOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
-              </select>
-              <div class="qsl-inline-option-list">
-                <VButton
-                  v-for="item in selectableAddressOptions.slice(0, 4)"
-                  :key="`quick-${item.value}`"
-                  size="xs"
-                  :type="editForm.addressEntryName === item.value ? 'secondary' : undefined"
-                  @click="selectAddressByOption(item.value)"
-                >
-                  {{ item.value }}
-                </VButton>
-              </div>
+          <VCard title="签收信息">
+            <div class="qsl-form-grid qsl-card-mutation-form">
+              <label class="qsl-checkbox">
+                <input v-model="editForm.receiptConfirmed" type="checkbox" />
+                <span>签收状态</span>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">公开签收备注</span>
+                <div class="qsl-input-shell qsl-input-shell--textarea">
+                  <textarea v-model.trim="editForm.publicReceiptRemarks" rows="2" placeholder="输入公开签收备注" />
+                </div>
+              </label>
             </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">卡片日期</span>
-            <div class="qsl-input-shell">
-              <input v-model="editForm.cardDate" type="date" />
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">卡片时间</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.cardTime" type="text" maxlength="4" placeholder="HHmm" />
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">流程状态</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.flowStatus" type="text" placeholder="例如：已发信" />
-            </div>
-          </label>
-
-          <label class="qsl-checkbox">
-            <input v-model="editForm.cardIssued" type="checkbox" />
-            <span>制卡状态</span>
-          </label>
-
-          <label class="qsl-checkbox">
-            <input v-model="editForm.envelopePrinted" type="checkbox" />
-            <span>打包状态</span>
-          </label>
-
-          <label class="qsl-checkbox">
-            <input v-model="editForm.cardSent" type="checkbox" />
-            <span>发卡状态</span>
-          </label>
-
-          <label class="qsl-checkbox">
-            <input v-model="editForm.cardReceived" type="checkbox" />
-            <span>收卡状态</span>
-          </label>
-
-          <label class="qsl-checkbox">
-            <input v-model="editForm.receiptConfirmed" type="checkbox" />
-            <span>签收状态</span>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">制卡时间</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.cardIssuedAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">发卡时间</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.sentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">收卡时间</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.receivedAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">制卡邮件状态</span>
-            <div class="qsl-input-shell">
-              <select v-model="editForm.createdMailStatus">
-                <option v-for="item in mailStatusOptions" :key="`created-${item.value}`" :value="item.value">{{ item.label }}</option>
-              </select>
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">制卡邮件时间</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.createdMailSentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">制卡邮件错误</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.createdMailLastError" rows="2" placeholder="输入错误信息" />
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">发卡邮件状态</span>
-            <div class="qsl-input-shell">
-              <select v-model="editForm.sentMailStatus">
-                <option v-for="item in mailStatusOptions" :key="`sent-${item.value}`" :value="item.value">{{ item.label }}</option>
-              </select>
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">发卡邮件时间</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.sentMailSentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">发卡邮件错误</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.sentMailLastError" rows="2" placeholder="输入错误信息" />
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">收卡邮件状态</span>
-            <div class="qsl-input-shell">
-              <select v-model="editForm.receivedMailStatus">
-                <option v-for="item in mailStatusOptions" :key="`received-${item.value}`" :value="item.value">{{ item.label }}</option>
-              </select>
-            </div>
-          </label>
-
-          <label class="qsl-field">
-            <span class="qsl-field__label">收卡邮件时间</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.receivedMailSentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">收卡邮件错误</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.receivedMailLastError" rows="2" placeholder="输入错误信息" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">目标邮箱</span>
-            <div class="qsl-input-shell">
-              <input v-model.trim="editForm.mailTargetEmail" type="email" placeholder="例如：bi1kbu@qq.com" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">制卡备注</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.createdRemarks" rows="2" placeholder="输入制卡备注" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">发卡备注</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.sentRemarks" rows="2" placeholder="输入发卡备注" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">收卡确认备注</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.receivedRemarks" rows="2" placeholder="输入收卡确认备注" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">公开签收备注</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.publicReceiptRemarks" rows="2" placeholder="输入公开签收备注" />
-            </div>
-          </label>
-
-          <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">卡片备注（打印）</span>
-            <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.cardRemarks" rows="2" placeholder="输入卡片备注" />
-            </div>
-          </label>
-        </div>
-
-        <p v-else class="qsl-muted">请在下方清单点击“编辑”，加载对应卡片后进行异动修改。</p>
+          </VCard>
+        </template>
 
         <div class="qsl-actions">
           <VButton type="secondary" :disabled="!isEditing || savingEdit" @click="saveEdit">保存异动</VButton>
@@ -1360,10 +1348,8 @@ onMounted(() => {
                 <td>{{ toHistoryItem(row).status.flowStatus || '-' }}</td>
               </tr>
               <tr>
-                <th>目标邮箱</th>
-                <td>{{ toHistoryItem(row).spec.mailTargetEmail || '-' }}</td>
                 <th>制卡时间</th>
-                <td>{{ toHistoryItem(row).spec.cardIssuedAt || '-' }}</td>
+                <td colspan="3">{{ toHistoryItem(row).spec.cardIssuedAt || '-' }}</td>
               </tr>
               <tr>
                 <th>发卡时间</th>
@@ -1394,9 +1380,8 @@ onMounted(() => {
                 <td colspan="3">
                   <QslCardRemarkEntries
                     :remark-fields="{
+                      businessRemarks: toHistoryItem(row).spec.businessRemarks,
                       cardRemarks: toHistoryItem(row).spec.cardRemarks,
-                      createdRemarks: toHistoryItem(row).spec.createdRemarks,
-                      sentRemarks: toHistoryItem(row).spec.sentRemarks,
                       receivedRemarks: toHistoryItem(row).spec.receivedRemarks,
                       publicReceiptRemarks: toHistoryItem(row).spec.publicReceiptRemarks,
                     }"

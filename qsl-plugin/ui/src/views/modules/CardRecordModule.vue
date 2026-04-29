@@ -26,6 +26,7 @@ interface CardRecordSpec {
   addressEntryName: string
   cardDate: string
   cardTime: string
+  businessRemarks: string
   createdRemarks: string
   sentRemarks: string
   receivedRemarks: string
@@ -109,6 +110,7 @@ const form = reactive({
   addressEntryName: '',
   cardDate: '',
   cardTime: '',
+  businessRemarks: '',
   cardRemarks: '',
 })
 
@@ -184,6 +186,7 @@ const batchEditFields = computed(() => {
       placeholder: '请输入卡片版本',
     },
     { value: 'cardDate', label: '卡片日期', inputType: 'date' },
+    { value: 'businessRemarks', label: '业务备注', inputType: 'textarea', placeholder: '输入业务备注' },
     { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
   ] as const
 })
@@ -428,6 +431,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
+    businessRemarks: spec?.businessRemarks ?? '',
     createdRemarks: spec?.createdRemarks ?? '',
     sentRemarks: spec?.sentRemarks ?? '',
     receivedRemarks: spec?.receivedRemarks ?? '',
@@ -551,6 +555,7 @@ const resetForm = () => {
   form.addressEntryName = ''
   form.cardDate = ''
   form.cardTime = ''
+  form.businessRemarks = ''
   form.cardRemarks = ''
 }
 
@@ -562,6 +567,7 @@ const fillFormFromRecord = (item: CardRecordItem) => {
   form.addressEntryName = item.addressEntryName
   form.cardDate = item.cardDate
   form.cardTime = item.cardTime
+  form.businessRemarks = item.spec.businessRemarks
   form.cardRemarks = item.cardRemarks
 }
 
@@ -663,6 +669,7 @@ const applyHistoryBatchEdit = async () => {
         cardType: batchEditField.value === 'cardType' ? (nextValue as CardRecordSpec['cardType']) : item.spec.cardType,
         cardVersion: batchEditField.value === 'cardVersion' ? nextValue : item.spec.cardVersion,
         cardDate: batchEditField.value === 'cardDate' ? nextValue : item.spec.cardDate,
+        businessRemarks: batchEditField.value === 'businessRemarks' ? nextValue : item.spec.businessRemarks,
         cardRemarks: batchEditField.value === 'cardRemarks' ? nextValue : item.spec.cardRemarks,
       }
 
@@ -741,6 +748,7 @@ const saveCardRecord = async () => {
         addressEntryName: form.addressEntryName.trim(),
         cardDate,
         cardTime,
+        businessRemarks: form.businessRemarks.trim(),
         cardRemarks: form.cardRemarks.trim(),
         envelopePrinted: target.spec.envelopePrinted,
       }
@@ -784,6 +792,7 @@ const saveCardRecord = async () => {
         addressEntryName: form.addressEntryName.trim(),
         cardDate,
         cardTime,
+        businessRemarks: form.businessRemarks.trim(),
         createdRemarks: '',
         sentRemarks: '',
         receivedRemarks: '',
@@ -875,7 +884,7 @@ onBeforeUnmount(() => {
           <label class="qsl-field">
             <span class="qsl-field__label">对方呼号（Call_Sign）</span>
             <div class="qsl-input-shell">
-              <input v-model.trim="form.callSign" type="text" placeholder="例如：BI1ABC" />
+              <input v-model.trim="form.callSign" type="text" placeholder="例如：BI1KBU" />
             </div>
           </label>
 
@@ -921,6 +930,13 @@ onBeforeUnmount(() => {
           <label v-if="dateTimeRequired" class="qsl-checkbox">
             <input v-model="realtimeEnabled" type="checkbox" />
             <span>实时</span>
+          </label>
+
+          <label class="qsl-field qsl-field--full">
+            <span class="qsl-field__label">业务备注（Business_Remarks）</span>
+            <div class="qsl-input-shell qsl-input-shell--textarea">
+              <textarea v-model.trim="form.businessRemarks" rows="2" placeholder="输入业务备注" />
+            </div>
           </label>
 
           <label class="qsl-field qsl-field--full">
@@ -1051,11 +1067,8 @@ onBeforeUnmount(() => {
                 <td>
                   <QslCardRemarkEntries
                     :remark-fields="{
+                      businessRemarks: toHistoryItem(row).spec.businessRemarks,
                       cardRemarks: toHistoryItem(row).spec.cardRemarks,
-                      createdRemarks: toHistoryItem(row).spec.createdRemarks,
-                      sentRemarks: toHistoryItem(row).spec.sentRemarks,
-                      receivedRemarks: toHistoryItem(row).spec.receivedRemarks,
-                      publicReceiptRemarks: toHistoryItem(row).spec.publicReceiptRemarks,
                     }"
                     empty-text="无"
                   />
@@ -1072,10 +1085,6 @@ onBeforeUnmount(() => {
                 <td>{{ toHistoryItem(row).receiptConfirmed ? '是' : '否' }}</td>
                 <th>制卡邮件时间</th>
                 <td>{{ toHistoryItem(row).spec.createdMailSentAt || '未记录' }}</td>
-              </tr>
-              <tr>
-                <th>目标邮箱</th>
-                <td colspan="3">{{ toHistoryItem(row).spec.mailTargetEmail || '未匹配' }}</td>
               </tr>
             </tbody>
           </table>

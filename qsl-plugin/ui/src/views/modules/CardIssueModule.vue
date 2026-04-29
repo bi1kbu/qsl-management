@@ -13,6 +13,7 @@ interface CardRecordSpec {
   addressEntryName: string
   cardDate: string
   cardTime: string
+  businessRemarks: string
   createdRemarks: string
   sentRemarks: string
   receivedRemarks: string
@@ -92,6 +93,7 @@ interface CardIssueCardRow {
   cardIssuedAt: string
   sentAt: string
   receivedAt: string
+  businessRemarks: string
   createdRemarks: string
   sentRemarks: string
   receivedRemarks: string
@@ -240,6 +242,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
+    businessRemarks: spec?.businessRemarks ?? '',
     createdRemarks: spec?.createdRemarks ?? '',
     sentRemarks: spec?.sentRemarks ?? '',
     receivedRemarks: spec?.receivedRemarks ?? '',
@@ -295,6 +298,7 @@ const toCardRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): C
     cardIssuedAt: spec.cardIssuedAt,
     sentAt: spec.sentAt,
     receivedAt: spec.receivedAt,
+    businessRemarks: spec.businessRemarks,
     createdRemarks: spec.createdRemarks,
     sentRemarks: spec.sentRemarks,
     receivedRemarks: spec.receivedRemarks,
@@ -793,7 +797,6 @@ onMounted(loadSourceData)
               <th>发卡</th>
               <th>收卡</th>
               <th>签收</th>
-              <th>目标邮箱</th>
               <th>绑定地址编号</th>
             </tr>
           </thead>
@@ -809,14 +812,44 @@ onMounted(loadSourceData)
               <td>{{ item.cardSent ? '是' : '否' }}</td>
               <td>{{ item.cardReceived ? '是' : '否' }}</td>
               <td>{{ item.receiptConfirmed ? '是' : '否' }}</td>
-              <td>{{ item.mailTargetEmail || '-' }}</td>
               <td>{{ item.addressEntryName || '-' }}</td>
             </tr>
             <tr v-if="!hasKeyword">
-              <td colspan="12" class="qsl-table-empty">请输入呼号进行查询。</td>
+              <td colspan="11" class="qsl-table-empty">请输入呼号进行查询。</td>
             </tr>
             <tr v-else-if="!matchedCardRows.length">
-              <td colspan="12" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
+              <td colspan="11" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </VCard>
+
+    <VCard title="备注信息">
+      <div class="qsl-table-wrap">
+        <table class="qsl-table">
+          <thead>
+            <tr>
+              <th>卡片编号</th>
+              <th>呼号</th>
+              <th>卡片类型</th>
+              <th>卡片备注</th>
+              <th>业务备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in matchedCardRows" :key="`remarks-${item.id}`">
+              <td>{{ item.id }}</td>
+              <td>{{ item.callSign || '-' }}</td>
+              <td>{{ item.cardType || '-' }}</td>
+              <td>{{ item.spec.cardRemarks || '-' }}</td>
+              <td>{{ item.businessRemarks || '-' }}</td>
+            </tr>
+            <tr v-if="!hasKeyword">
+              <td colspan="5" class="qsl-table-empty">请输入呼号进行查询。</td>
+            </tr>
+            <tr v-else-if="!matchedCardRows.length">
+              <td colspan="5" class="qsl-table-empty">暂无备注信息。</td>
             </tr>
           </tbody>
         </table>
