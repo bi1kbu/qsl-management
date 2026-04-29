@@ -17,6 +17,7 @@ interface CardRecordSpec {
   addressEntryName: string
   cardDate: string
   cardTime: string
+  businessRemarks: string
   createdRemarks: string
   sentRemarks: string
   receivedRemarks: string
@@ -52,7 +53,7 @@ interface SendConfirmItem {
   cardTime: string
   cardPrintAt: string
   envelopePrintAt: string
-  sentRemarks: string
+  businessRemarks: string
   sent: boolean
   sentAt: string
 }
@@ -82,7 +83,7 @@ const editForm = reactive({
   cardType: 'QSO' as 'QSO' | 'SWL' | 'EYEBALL',
   cardDate: '',
   cardTime: '',
-  sentRemarks: '',
+  businessRemarks: '',
   sentState: 'UNSENT' as 'SENT' | 'UNSENT',
   sentAt: '',
 })
@@ -136,7 +137,7 @@ const batchEditFields = [
       { label: '未发信', value: 'UNSENT' },
     ],
   },
-  { value: 'sentRemarks', label: '发卡备注', inputType: 'textarea', placeholder: '输入备注' },
+  { value: 'businessRemarks', label: '业务备注', inputType: 'textarea', placeholder: '输入备注' },
 ] as const
 const totalPages = computed(() => {
   if (!filteredRows.value.length) {
@@ -227,6 +228,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
+    businessRemarks: spec?.businessRemarks ?? '',
     createdRemarks: spec?.createdRemarks ?? '',
     sentRemarks: spec?.sentRemarks ?? '',
     receivedRemarks: spec?.receivedRemarks ?? '',
@@ -268,7 +270,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>): SendConfirmItem => {
     cardTime: spec.cardTime,
     cardPrintAt,
     envelopePrintAt,
-    sentRemarks: spec.sentRemarks || '',
+    businessRemarks: spec.businessRemarks || '',
     sent: Boolean(spec.cardSent),
     sentAt: spec.sentAt || '',
   }
@@ -298,7 +300,7 @@ const startEditRow = (row: SendConfirmItem) => {
   editForm.cardType = row.spec.cardType
   editForm.cardDate = row.spec.cardDate
   editForm.cardTime = row.spec.cardTime
-  editForm.sentRemarks = row.spec.sentRemarks
+  editForm.businessRemarks = row.spec.businessRemarks
   editForm.sentState = row.spec.cardSent ? 'SENT' : 'UNSENT'
   editForm.sentAt = row.spec.sentAt
   feedback.value = `正在编辑发信记录：${row.resourceName}`
@@ -310,7 +312,7 @@ const cancelEdit = () => {
   editForm.cardType = 'QSO'
   editForm.cardDate = ''
   editForm.cardTime = ''
-  editForm.sentRemarks = ''
+  editForm.businessRemarks = ''
   editForm.sentState = 'UNSENT'
   editForm.sentAt = ''
   feedback.value = '已取消编辑模式。'
@@ -341,7 +343,7 @@ const saveEdit = async () => {
       cardType: editForm.cardType,
       cardDate: editForm.cardDate,
       cardTime: editForm.cardTime,
-      sentRemarks: editForm.sentRemarks.trim(),
+      businessRemarks: editForm.businessRemarks.trim(),
       cardSent: editForm.sentState === 'SENT',
       sentAt:
         editForm.sentState === 'SENT'
@@ -477,7 +479,7 @@ const applyHistoryBatchEdit = async () => {
       const nextSpec: CardRecordSpec = {
         ...item.spec,
         cardType: batchEditField.value === 'cardType' ? (nextValue as CardRecordSpec['cardType']) : item.spec.cardType,
-        sentRemarks: batchEditField.value === 'sentRemarks' ? nextValue : item.spec.sentRemarks,
+        businessRemarks: batchEditField.value === 'businessRemarks' ? nextValue : item.spec.businessRemarks,
         cardSent: nextSent,
         sentAt: nextSentAt,
       }
@@ -656,7 +658,7 @@ onMounted(() => {
           <label class="qsl-field">
             <span class="qsl-field__label">对方呼号</span>
             <div class="qsl-input-shell">
-              <input v-model.trim="editForm.callSign" type="text" placeholder="例如 BI1ABC" />
+              <input v-model.trim="editForm.callSign" type="text" placeholder="例如 BI1KBU" />
             </div>
           </label>
 
@@ -703,9 +705,9 @@ onMounted(() => {
           </label>
 
           <label class="qsl-field qsl-field--full">
-            <span class="qsl-field__label">发卡备注</span>
+            <span class="qsl-field__label">业务备注</span>
             <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.sentRemarks" rows="2" placeholder="输入发卡备注" />
+              <textarea v-model.trim="editForm.businessRemarks" rows="2" placeholder="输入业务备注" />
             </div>
           </label>
         </div>
@@ -768,16 +770,13 @@ onMounted(() => {
               <td>{{ row.cardPrintAt }}</td>
               <td>{{ row.envelopePrintAt }}</td>
               <td>
-                <QslCardRemarkEntries
-                  :remark-fields="{
-                    cardRemarks: row.spec.cardRemarks,
-                    createdRemarks: row.spec.createdRemarks,
-                    sentRemarks: row.spec.sentRemarks,
-                    receivedRemarks: row.spec.receivedRemarks,
-                    publicReceiptRemarks: row.spec.publicReceiptRemarks,
-                  }"
-                  :compact="true"
-                  empty-text="无"
+                  <QslCardRemarkEntries
+                    :remark-fields="{
+                      businessRemarks: row.spec.businessRemarks,
+                      cardRemarks: row.spec.cardRemarks,
+                    }"
+                    :compact="true"
+                    empty-text="无"
                 />
               </td>
               <td>

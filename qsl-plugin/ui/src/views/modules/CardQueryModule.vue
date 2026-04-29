@@ -13,6 +13,7 @@ interface CardRecordSpec {
   cardVersion: string
   cardDate: string
   cardTime: string
+  businessRemarks: string
   createdRemarks: string
   sentRemarks: string
   receivedRemarks: string
@@ -93,15 +94,13 @@ const toRow = (extension: QslExtension<CardRecordSpec>): CardQueryItem => {
     receiptConfirmed: Boolean(extension.spec?.receiptConfirmed),
     cardReceived: Boolean(extension.spec?.cardReceived),
     remarkFields: {
-      createdRemarks: extension.spec?.createdRemarks ?? '',
-      sentRemarks: extension.spec?.sentRemarks ?? '',
+      businessRemarks: extension.spec?.businessRemarks ?? '',
       receivedRemarks: extension.spec?.receivedRemarks ?? '',
       publicReceiptRemarks: extension.spec?.publicReceiptRemarks ?? '',
       cardRemarks: extension.spec?.cardRemarks ?? '',
     },
     remarksText: [
-      extension.spec?.createdRemarks ?? '',
-      extension.spec?.sentRemarks ?? '',
+      extension.spec?.businessRemarks ?? '',
       extension.spec?.receivedRemarks ?? '',
       extension.spec?.publicReceiptRemarks ?? '',
       extension.spec?.cardRemarks ?? '',

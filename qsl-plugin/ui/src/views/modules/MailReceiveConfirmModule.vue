@@ -672,6 +672,7 @@ onMounted(() => {
               <th>卡片类型</th>
               <th>收卡状态</th>
               <th>发卡状态</th>
+              <th>收卡确认备注</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -696,6 +697,7 @@ onMounted(() => {
               <td>
                 <VTag :theme="item.spec.cardSent ? 'secondary' : 'default'">{{ item.spec.cardSent ? '是' : '否' }}</VTag>
               </td>
+              <td>{{ item.spec.receivedRemarks || '-' }}</td>
               <td>
                 <div class="qsl-actions qsl-actions--tight">
                   <VButton
@@ -740,7 +742,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!pagedFilteredResults.length">
-              <td colspan="7" class="qsl-table-empty">暂无收信确认记录。</td>
+              <td colspan="8" class="qsl-table-empty">暂无收信确认记录。</td>
             </tr>
           </tbody>
         </table>

@@ -277,7 +277,8 @@ public class QslConsoleActionService {
                 spec.setAddressEntryName("");
                 spec.setCardDate(QslApiSupport.utcDate());
                 spec.setCardTime(QslApiSupport.utcTime());
-                spec.setCreatedRemarks(remarks);
+                spec.setBusinessRemarks(remarks);
+                spec.setCreatedRemarks("");
                 spec.setSentRemarks("");
                 spec.setReceivedRemarks("");
                 spec.setPublicReceiptRemarks("");
@@ -336,6 +337,7 @@ public class QslConsoleActionService {
         spec.setAddressEntryName("");
         spec.setCardDate(QslApiSupport.utcDate());
         spec.setCardTime(QslApiSupport.utcTime());
+        spec.setBusinessRemarks("");
         spec.setCreatedRemarks("");
         spec.setSentRemarks("");
         spec.setReceivedRemarks("");

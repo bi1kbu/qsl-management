@@ -1,15 +1,12 @@
 package com.bi1kbu.qslmanagement;
 
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
-import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.data.domain.Sort;
 import reactor.core.publisher.Mono;
-import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.plugin.BasePlugin;
 import run.halo.app.plugin.PluginContext;
@@ -20,8 +17,6 @@ public class QslManagementPlugin extends BasePlugin {
     private static final Logger LOGGER = LoggerFactory.getLogger(QslManagementPlugin.class);
     private static final String DEFAULT_SYSTEM_SETTING_NAME = "qsl-system-setting-default";
     private static final String DEFAULT_STATION_PROFILE_NAME = "qsl-station-profile-default";
-    private static final ListOptions EMPTY_OPTIONS = ListOptions.builder().build();
-    private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("metadata.creationTimestamp"));
 
     private final ReactiveExtensionClient client;
 
@@ -47,8 +42,7 @@ public class QslManagementPlugin extends BasePlugin {
 
     private Mono<Void> ensureDefaultResources() {
         return ensureDefaultSystemSetting()
-            .then(ensureDefaultStationProfile())
-            .then(migrateCardRemarksFromLegacyCreatedRemarks());
+            .then(ensureDefaultStationProfile());
     }
 
     private Mono<Void> ensureDefaultSystemSetting() {
@@ -98,43 +92,4 @@ public class QslManagementPlugin extends BasePlugin {
             && error.getMessage().contains("Duplicate name detected.");
     }
 
-    private Mono<Void> migrateCardRemarksFromLegacyCreatedRemarks() {
-        return client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
-            .filter(cardRecord -> cardRecord.getSpec() != null)
-            .filter(cardRecord -> shouldMigrateCardRemarks(cardRecord.getSpec()))
-            .concatMap(cardRecord -> {
-                var spec = cardRecord.getSpec();
-                spec.setCardRemarks(spec.getCreatedRemarks().trim());
-                spec.setCreatedRemarks("");
-                cardRecord.setSpec(spec);
-                return client.update(cardRecord).then();
-            })
-            .count()
-            .doOnNext(count -> {
-                if (count > 0) {
-                    LOGGER.info("已迁移 {} 条历史卡片备注数据（createdRemarks -> cardRemarks）。", count);
-                }
-            })
-            .then();
-    }
-
-    private boolean shouldMigrateCardRemarks(CardRecord.CardRecordSpec spec) {
-        if (spec == null) {
-            return false;
-        }
-        var cardRemarks = safeTrim(spec.getCardRemarks());
-        var createdRemarks = safeTrim(spec.getCreatedRemarks());
-        var sentRemarks = safeTrim(spec.getSentRemarks());
-        var receivedRemarks = safeTrim(spec.getReceivedRemarks());
-        var publicReceiptRemarks = safeTrim(spec.getPublicReceiptRemarks());
-        return cardRemarks.isBlank()
-            && !createdRemarks.isBlank()
-            && sentRemarks.isBlank()
-            && receivedRemarks.isBlank()
-            && publicReceiptRemarks.isBlank();
-    }
-
-    private String safeTrim(String value) {
-        return value == null ? "" : value.trim();
-    }
 }

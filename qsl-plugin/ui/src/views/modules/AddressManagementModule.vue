@@ -36,6 +36,31 @@ interface AddressItem {
   remarks: string
 }
 
+interface BureauSpec {
+  bureauName: string
+  telephone: string
+  postalCode: string
+  address: string
+  addressRemarks: string
+}
+
+interface BureauItem {
+  id: string
+  bureauName: string
+  telephone: string
+  postalCode: string
+  address: string
+  remarks: string
+}
+
+interface BindCandidateItem {
+  id: string
+  sourceType: 'ADDRESS' | 'BURO'
+  callSign: string
+  name: string
+  address: string
+}
+
 interface CardRecordSpec {
   callSign: string
   addressEntryName: string
@@ -61,6 +86,7 @@ const form = reactive({
 })
 
 const rows = ref<AddressItem[]>([])
+const bureauRows = ref<BureauItem[]>([])
 const pendingBindings = ref<PendingBindingItem[]>([])
 const feedback = ref('')
 const loading = ref(false)
@@ -72,6 +98,9 @@ const activeFunctionTab = ref<'basic' | 'list'>('basic')
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
 const pendingKeywordInput = ref('')
+const pendingBureauExpandMap = reactive<Record<string, boolean>>({})
+const pendingBureauKeywordMap = reactive<Record<string, string>>({})
+const pendingBureauSelectedMap = reactive<Record<string, string>>({})
 
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -79,6 +108,7 @@ const pageSizeOptions: number[] = [20, 30, 50, 100]
 
 const resourcePlural = 'address-book-entries'
 const resourceKind = 'AddressBookEntry'
+const bureauPlural = 'bureau-entries'
 const cardRecordPlural = 'card-records'
 const cardRecordKind = 'CardRecord'
 
@@ -134,6 +164,17 @@ const toSpec = (row: AddressItem): AddressBookSpec => {
     address: row.address,
     email: row.email,
     addressRemarks: row.remarks,
+  }
+}
+
+const toBureauRow = (extension: QslExtension<BureauSpec>): BureauItem => {
+  return {
+    id: extension.metadata.name,
+    bureauName: extension.spec?.bureauName ?? '',
+    telephone: extension.spec?.telephone ?? '',
+    postalCode: extension.spec?.postalCode ?? '',
+    address: extension.spec?.address ?? '',
+    remarks: extension.spec?.addressRemarks ?? '',
   }
 }
 
@@ -217,6 +258,82 @@ const findMatchedAddressId = (callSign: string, addressRows: AddressItem[]): str
   return matchedRows[0]?.id ?? ''
 }
 
+const getBureauAddressCandidates = (item: PendingBindingItem): BindCandidateItem[] => {
+  const keyword = (pendingBureauKeywordMap[item.callSign] ?? '').trim().toUpperCase()
+  const addressCandidates: BindCandidateItem[] = rows.value.map((row) => ({
+    id: row.id,
+    sourceType: 'ADDRESS',
+    callSign: row.callSign,
+    name: row.name,
+    address: row.address,
+  }))
+  const bureauCandidates: BindCandidateItem[] = bureauRows.value.map((row) => ({
+    id: row.id,
+    sourceType: 'BURO',
+    callSign: '',
+    name: row.bureauName,
+    address: row.address,
+  }))
+  const allCandidates = [...addressCandidates, ...bureauCandidates]
+  const matched = allCandidates.filter((row) => {
+    if (!keyword) return true
+    return (
+      row.id.toUpperCase().includes(keyword)
+      || normalizeCallSign(row.callSign).includes(keyword)
+      || row.name.toUpperCase().includes(keyword)
+      || row.address.toUpperCase().includes(keyword)
+    )
+  })
+  return matched.sort((a, b) => a.id.localeCompare(b.id))
+}
+
+const getSelectedBureauAddressForPendingItem = (item: PendingBindingItem): string => {
+  const selected = (pendingBureauSelectedMap[item.callSign] ?? '').trim()
+  if (selected) {
+    return selected
+  }
+  const keyword = (pendingBureauKeywordMap[item.callSign] ?? '').trim().toUpperCase()
+  if (keyword) {
+    const exactById = rows.value.find((row) => row.id.toUpperCase() === keyword)
+    if (exactById) {
+      return exactById.id
+    }
+  }
+  const firstCandidate = getBureauAddressCandidates(item)[0]
+  return firstCandidate?.id ?? ''
+}
+
+const syncPendingBindingState = (items: PendingBindingItem[]) => {
+  const activeCallSigns = new Set(items.map((item) => item.callSign))
+  for (const callSign of Object.keys(pendingBureauExpandMap)) {
+    if (!activeCallSigns.has(callSign)) {
+      delete pendingBureauExpandMap[callSign]
+    }
+  }
+  for (const callSign of Object.keys(pendingBureauKeywordMap)) {
+    if (!activeCallSigns.has(callSign)) {
+      delete pendingBureauKeywordMap[callSign]
+    }
+  }
+  for (const callSign of Object.keys(pendingBureauSelectedMap)) {
+    if (!activeCallSigns.has(callSign)) {
+      delete pendingBureauSelectedMap[callSign]
+    }
+  }
+
+  items.forEach((item) => {
+    if (!(item.callSign in pendingBureauExpandMap)) {
+      pendingBureauExpandMap[item.callSign] = false
+    }
+    if (!(item.callSign in pendingBureauKeywordMap)) {
+      pendingBureauKeywordMap[item.callSign] = 'BURO'
+    }
+    if (!(item.callSign in pendingBureauSelectedMap)) {
+      pendingBureauSelectedMap[item.callSign] = ''
+    }
+  })
+}
+
 const buildPendingBindings = (
   cardExtensions: QslExtension<CardRecordSpec>[],
   addressRows: AddressItem[],
@@ -260,13 +377,16 @@ const buildPendingBindings = (
 const loadRows = async (options: { silent?: boolean } = {}) => {
   loading.value = true
   try {
-    const [addressExtensions, cardExtensions] = await Promise.all([
+    const [addressExtensions, bureauExtensions, cardExtensions] = await Promise.all([
       listExtensions<AddressBookSpec>(resourcePlural),
+      listExtensions<BureauSpec>(bureauPlural),
       listExtensions<CardRecordSpec>(cardRecordPlural),
     ])
     const nextRows = addressExtensions.map((extension) => toRow(extension))
+    bureauRows.value = bureauExtensions.map((extension) => toBureauRow(extension))
     rows.value = nextRows
     pendingBindings.value = buildPendingBindings(cardExtensions, nextRows)
+    syncPendingBindingState(pendingBindings.value)
     if (!options.silent) {
       feedback.value = ''
     }
@@ -355,30 +475,53 @@ const bindAddressForCallSign = async (callSign: string, addressEntryName: string
   return updatedCount
 }
 
-const bindExistingAddress = async (item: PendingBindingItem) => {
-  if (!item.matchedAddressId) {
-    feedback.value = `呼号 ${item.callSign} 暂无可用地址，请先新增地址。`
+const bindExistingAddress = async (item: PendingBindingItem, selectedAddressId: string, actionName: string) => {
+  if (!selectedAddressId) {
+    feedback.value = `呼号 ${item.callSign} 暂无可用地址，请先新增地址或修改搜索关键字。`
     return
   }
 
   submitting.value = true
   try {
-    const updatedCount = await bindAddressForCallSign(item.callSign, item.matchedAddressId)
+    const updatedCount = await bindAddressForCallSign(item.callSign, selectedAddressId)
     await appendQslAuditLog({
-      action: '绑定现有地址',
+      action: actionName,
       resourceType: 'address-book-entry',
-      resourceName: item.matchedAddressId,
+      resourceName: selectedAddressId,
       detail: `呼号：${item.callSign}，绑定卡片数：${updatedCount}`,
     })
     await loadRows({ silent: true })
     feedback.value = updatedCount > 0
-      ? `已为 ${item.callSign} 绑定地址 ${item.matchedAddressId}（${updatedCount} 条）。`
+      ? `已为 ${item.callSign} 绑定地址 ${selectedAddressId}（${updatedCount} 条）。`
       : `呼号 ${item.callSign} 当前无待绑定卡片。`
   } catch (error) {
     feedback.value = `绑定现有地址失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     submitting.value = false
   }
+}
+
+const bindSelfAddress = async (item: PendingBindingItem) => {
+  const selfAddressId = findMatchedAddressId(item.callSign, rows.value)
+  if (!selfAddressId) {
+    feedback.value = `呼号 ${item.callSign} 未找到本人地址，请先新增地址。`
+    return
+  }
+  await bindExistingAddress(item, selfAddressId, '绑定本人地址')
+}
+
+const toggleBureauBinding = (item: PendingBindingItem) => {
+  pendingBureauExpandMap[item.callSign] = !pendingBureauExpandMap[item.callSign]
+}
+
+const saveBureauBinding = async (item: PendingBindingItem) => {
+  const selectedAddressId = getSelectedBureauAddressForPendingItem(item)
+  if (!selectedAddressId) {
+    feedback.value = `呼号 ${item.callSign} 未找到可绑定地址，请输入卡局名称、呼号或地址编号后再保存。`
+    return
+  }
+  await bindExistingAddress(item, selectedAddressId, '绑定卡局地址')
+  pendingBureauExpandMap[item.callSign] = false
 }
 
 const addAddress = async () => {
@@ -809,16 +952,35 @@ onMounted(() => {
               <td>{{ item.cardIdsText }}</td>
               <td>{{ item.matchedAddressId || '未配置' }}</td>
               <td>
-                <div class="qsl-actions qsl-actions--tight">
+                <div class="qsl-actions qsl-actions--tight qsl-pending-actions">
                   <VButton size="xs" type="secondary" :disabled="loading || submitting" @click="usePendingCallSign(item)">
-                    去新增地址
+                    新增地址
                   </VButton>
-                  <VButton
-                    size="xs"
-                    :disabled="loading || submitting || !item.matchedAddressId"
-                    @click="bindExistingAddress(item)"
-                  >
-                    绑定现有地址
+                  <VButton size="xs" :disabled="loading || submitting" @click="bindSelfAddress(item)">
+                    绑定本人地址
+                  </VButton>
+                  <VButton size="xs" type="secondary" :disabled="loading || submitting" @click="toggleBureauBinding(item)">
+                    绑定卡局地址
+                  </VButton>
+                </div>
+                <div v-if="pendingBureauExpandMap[item.callSign]" class="qsl-pending-actions qsl-pending-actions--expand">
+                  <div class="qsl-input-shell qsl-pending-actions__keyword">
+                    <input
+                      v-model.trim="pendingBureauKeywordMap[item.callSign]"
+                      type="text"
+                      placeholder="输入卡局名称、呼号或地址编号（如 BURO）"
+                    />
+                  </div>
+                  <div class="qsl-input-shell qsl-pending-actions__select-shell">
+                    <select v-model="pendingBureauSelectedMap[item.callSign]">
+                      <option value="">请选择地址</option>
+                      <option v-for="candidate in getBureauAddressCandidates(item)" :key="candidate.id" :value="candidate.id">
+                        {{ candidate.id }} ｜ {{ candidate.sourceType === 'BURO' ? '卡片局' : '地址簿' }} ｜ {{ candidate.callSign || candidate.name || '-' }}
+                      </option>
+                    </select>
+                  </div>
+                  <VButton size="xs" :disabled="loading || submitting || !getSelectedBureauAddressForPendingItem(item)" @click="saveBureauBinding(item)">
+                    保存绑定
                   </VButton>
                 </div>
               </td>
@@ -853,5 +1015,23 @@ onMounted(() => {
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;
+}
+
+.qsl-pending-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qsl-pending-actions--expand {
+  margin-top: 8px;
+}
+
+.qsl-pending-actions__keyword {
+  min-width: 180px;
+}
+
+.qsl-pending-actions__select-shell {
+  min-width: 280px;
 }
 </style>

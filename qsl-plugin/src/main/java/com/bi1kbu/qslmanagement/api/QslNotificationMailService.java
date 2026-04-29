@@ -9,14 +9,12 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.notification.Reason;
 import run.halo.app.core.extension.notification.Subscription;
-import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.notification.NotificationCenter;
 import run.halo.app.notification.NotificationReasonEmitter;
@@ -28,8 +26,6 @@ public class QslNotificationMailService {
     private static final String MAIL_STATUS_SENT = "SENT";
     private static final String MAIL_STATUS_FAILED = "FAILED";
     private static final String MAIL_STATUS_SKIPPED = "SKIPPED";
-    private static final ListOptions EMPTY_OPTIONS = ListOptions.builder().build();
-    private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("metadata.creationTimestamp"));
     private static final String SYSTEM_SETTING_NAME = "qsl-system-setting-default";
     private static final String QSL_API_VERSION = "qsl-management.halo.run/v1alpha1";
     private static final String CARD_RECORD_KIND = "CardRecord";
@@ -182,33 +178,33 @@ public class QslNotificationMailService {
             );
         }
 
-        var normalizedCallSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
-        if (StringUtils.isBlank(normalizedCallSign)) {
+        var boundAddressEntryName = StringUtils.defaultString(spec.getAddressEntryName()).trim();
+        if (StringUtils.isBlank(boundAddressEntryName)) {
             return persistStatusAndAudit(
                 cardRecord,
                 spec,
                 scene,
-                MAIL_STATUS_FAILED,
+                MAIL_STATUS_SENT,
+                QslApiSupport.nowText(),
                 "",
-                "",
-                "卡片记录缺少呼号，无法发送邮件。",
+                "卡片记录未绑定地址，按不发邮件处理。",
                 operator,
                 clientIp,
                 source
             );
         }
 
-        return resolveTargetEmail(normalizedCallSign)
+        return resolveTargetEmailByBindingAddress(boundAddressEntryName)
             .flatMap(targetEmail -> {
                 if (StringUtils.isBlank(targetEmail)) {
                     return persistStatusAndAudit(
                         cardRecord,
                         spec,
                         scene,
-                        MAIL_STATUS_FAILED,
+                        MAIL_STATUS_SENT,
+                        QslApiSupport.nowText(),
                         "",
-                        "",
-                        "地址管理中未找到可用邮箱。",
+                        "绑定地址未配置可用邮箱，按不发邮件处理。",
                         operator,
                         clientIp,
                         source
@@ -327,14 +323,8 @@ public class QslNotificationMailService {
 
     private String resolveSceneRemarks(MailScene scene, CardRecord.CardRecordSpec spec) {
         return switch (scene) {
-            case CARD_CREATED -> {
-                var createdRemarks = StringUtils.defaultString(spec.getCreatedRemarks());
-                if (StringUtils.isNotBlank(createdRemarks)) {
-                    yield createdRemarks;
-                }
-                yield StringUtils.defaultString(spec.getCardRemarks());
-            }
-            case CARD_SENT -> StringUtils.defaultString(spec.getSentRemarks());
+            case CARD_CREATED -> StringUtils.defaultString(spec.getBusinessRemarks());
+            case CARD_SENT -> StringUtils.defaultString(spec.getBusinessRemarks());
             case CARD_RECEIVED -> StringUtils.defaultString(spec.getReceivedRemarks());
         };
     }
@@ -354,15 +344,11 @@ public class QslNotificationMailService {
         return notificationCenter.subscribe(subscriber, reason).then();
     }
 
-    private Mono<String> resolveTargetEmail(String callSign) {
-        return client.listAll(AddressBookEntry.class, EMPTY_OPTIONS, DEFAULT_SORT)
-            .filter(item -> item.getSpec() != null)
-            .filter(item -> QslApiSupport.normalizeCallSign(item.getSpec().getCallSign()).equals(callSign))
-            .map(item -> item.getSpec().getEmail())
-            .map(email -> email == null ? "" : email.trim())
+    private Mono<String> resolveTargetEmailByBindingAddress(String addressEntryName) {
+        return client.fetch(AddressBookEntry.class, addressEntryName)
+            .map(entry -> entry.getSpec() == null ? "" : StringUtils.defaultString(entry.getSpec().getEmail()).trim())
             .filter(StringUtils::isNotBlank)
-            .next()
-            .defaultIfEmpty("");
+            .switchIfEmpty(Mono.just(""));
     }
 
     private Mono<SystemSetting.SystemSettingSpec> loadSystemSetting() {
@@ -384,6 +370,7 @@ public class QslNotificationMailService {
         spec.setAddressEntryName("");
         spec.setCardDate("");
         spec.setCardTime("");
+        spec.setBusinessRemarks("");
         spec.setCreatedRemarks("");
         spec.setSentRemarks("");
         spec.setReceivedRemarks("");

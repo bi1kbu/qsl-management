@@ -421,8 +421,7 @@ public class QslImportExportJobService {
                     spec.setAddressEntryName(value(row, "addressEntryName"));
                     spec.setCardDate(value(row, "cardDate"));
                     spec.setCardTime(value(row, "cardTime"));
-                    spec.setCreatedRemarks(value(row, "createdRemarks"));
-                    spec.setSentRemarks(value(row, "sentRemarks"));
+                    spec.setBusinessRemarks(value(row, "businessRemarks"));
                     spec.setReceivedRemarks(value(row, "receivedRemarks"));
                     spec.setPublicReceiptRemarks(value(row, "publicReceiptRemarks"));
                     spec.setCardRemarks(value(row, "cardRemarks"));
@@ -727,8 +726,7 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getAddressEntryName()),
                         spec == null ? "" : nullToEmpty(spec.getCardDate()),
                         spec == null ? "" : nullToEmpty(spec.getCardTime()),
-                        spec == null ? "" : nullToEmpty(spec.getCreatedRemarks()),
-                        spec == null ? "" : nullToEmpty(spec.getSentRemarks()),
+                        spec == null ? "" : nullToEmpty(spec.getBusinessRemarks()),
                         spec == null ? "" : nullToEmpty(spec.getReceivedRemarks()),
                         spec == null ? "" : nullToEmpty(spec.getPublicReceiptRemarks()),
                         spec == null ? "" : nullToEmpty(spec.getCardRemarks()),
@@ -762,8 +760,7 @@ public class QslImportExportJobService {
                     "addressEntryName",
                     "cardDate",
                     "cardTime",
-                    "createdRemarks",
-                    "sentRemarks",
+                    "businessRemarks",
                     "receivedRemarks",
                     "publicReceiptRemarks",
                     "cardRemarks",
