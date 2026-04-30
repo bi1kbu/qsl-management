@@ -215,6 +215,24 @@ const matchedQsoRows = computed(() => {
   return qsoRows.value.filter((item) => qsoIdSet.has(item.id))
 })
 
+const remarkRows = computed(() => {
+  if (!hasKeyword.value) {
+    return []
+  }
+  return queriedCardRows.value.flatMap((item) => {
+    const cardId = item.id || '-'
+    const prefix = `【${cardId}】`
+    const createdRemark = item.createdRemarks?.trim() || '-'
+    const cardRemark = item.spec.cardRemarks?.trim() || '-'
+    const businessRemark = item.businessRemarks?.trim() || '-'
+    return [
+      { type: '创建备注', content: `${prefix} ${createdRemark}` },
+      { type: '卡片备注', content: `${prefix} ${cardRemark}` },
+      { type: '业务备注', content: `${prefix} ${businessRemark}` },
+    ]
+  })
+})
+
 const pendingIssueCardRows = computed(() => {
   return cardRows.value.filter((item) => !item.cardIssued || !item.envelopePrinted || item.spec.createdMailStatus !== 'SENT')
 })
@@ -834,26 +852,20 @@ onMounted(loadSourceData)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th>卡片编号</th>
-              <th>呼号</th>
-              <th>卡片类型</th>
-              <th>卡片备注</th>
-              <th>业务备注</th>
+              <th>备注类型</th>
+              <th>备注内容</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in matchedCardRows" :key="`remarks-${item.id}`">
-              <td>{{ item.id }}</td>
-              <td>{{ item.callSign || '-' }}</td>
-              <td>{{ item.cardType || '-' }}</td>
-              <td>{{ item.spec.cardRemarks || '-' }}</td>
-              <td>{{ item.businessRemarks || '-' }}</td>
+            <tr v-for="(item, index) in remarkRows" :key="`remarks-${index}`">
+              <td>{{ item.type }}</td>
+              <td>{{ item.content }}</td>
             </tr>
             <tr v-if="!hasKeyword">
-              <td colspan="5" class="qsl-table-empty">请输入呼号进行查询。</td>
+              <td colspan="2" class="qsl-table-empty">请输入呼号进行查询。</td>
             </tr>
-            <tr v-else-if="!matchedCardRows.length">
-              <td colspan="5" class="qsl-table-empty">暂无备注信息。</td>
+            <tr v-else-if="!remarkRows.length">
+              <td colspan="2" class="qsl-table-empty">未找到对应备注信息。</td>
             </tr>
           </tbody>
         </table>
