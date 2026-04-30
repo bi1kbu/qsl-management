@@ -10,18 +10,23 @@ public class QslPostCardContentHandler implements ReactivePostContentHandler {
 
     private final QslCardEmbedContentTransformer cardTransformer;
     private final QslReceiptEmbedContentTransformer receiptTransformer;
+    private final QslExchangeEmbedContentTransformer exchangeTransformer;
 
     public QslPostCardContentHandler(
         QslCardEmbedContentTransformer cardTransformer,
-        QslReceiptEmbedContentTransformer receiptTransformer
+        QslReceiptEmbedContentTransformer receiptTransformer,
+        QslExchangeEmbedContentTransformer exchangeTransformer
     ) {
         this.cardTransformer = cardTransformer;
         this.receiptTransformer = receiptTransformer;
+        this.exchangeTransformer = exchangeTransformer;
     }
 
     @Override
     public Mono<PostContentContext> handle(@NonNull PostContentContext postContent) {
-        var transformed = receiptTransformer.transform(cardTransformer.transform(postContent.getContent()));
+        var transformed = exchangeTransformer.transform(
+            receiptTransformer.transform(cardTransformer.transform(postContent.getContent()))
+        );
         return Mono.just(PostContentContext.builder()
             .post(postContent.getPost())
             .content(transformed)

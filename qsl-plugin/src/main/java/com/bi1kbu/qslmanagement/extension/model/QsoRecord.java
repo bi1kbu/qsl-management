@@ -18,6 +18,7 @@ public class QsoRecord extends QslBaseExtension<QsoRecord.QsoRecordSpec, QsoReco
 
     @Data
     public static class QsoRecordSpec {
+        private String sceneType;
         private String date;
         private String time;
         private String timezone;

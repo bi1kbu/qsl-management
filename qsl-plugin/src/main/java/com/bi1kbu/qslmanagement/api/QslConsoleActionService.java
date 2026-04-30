@@ -87,10 +87,11 @@ public class QslConsoleActionService {
         if (!ALLOWED_CARD_TYPES.contains(cardType)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片类型不支持"));
         }
+        var sceneType = normalizeSceneType(command.sceneType(), cardType);
 
         return reserveNextReceivedRecordCode()
             .flatMap(receivedRecordCode -> client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
-                .filter(cardRecord -> matchCardRecord(cardRecord, callSign, cardType))
+                .filter(cardRecord -> matchCardRecord(cardRecord, callSign, cardType, sceneType))
                 .next()
                 .flatMap(cardRecord -> updateReceivedCardRecord(cardRecord, command.receiptRemarks(), receivedRecordCode)
                     .map(updatedCard -> new MailReceiveConfirmResult(
@@ -102,7 +103,7 @@ public class QslConsoleActionService {
                         QslApiSupport.nowText(),
                         receivedRecordCode
                     )))
-                .switchIfEmpty(createAutoReceiveResult(callSign, cardType, command.receiptRemarks(), receivedRecordCode)))
+                .switchIfEmpty(createAutoReceiveResult(callSign, cardType, sceneType, command.receiptRemarks(), receivedRecordCode)))
             .flatMap(result -> qslAuditService.appendAuditLog(
                 "确认收信",
                 "card-record",
@@ -182,12 +183,13 @@ public class QslConsoleActionService {
     private Mono<MailReceiveConfirmResult> createAutoReceiveResult(
         String callSign,
         String cardType,
+        String sceneType,
         String receiptRemarks,
         String receivedRecordCode
     ) {
         return switch (cardType) {
             case "QSO" -> createAutoQsoAndCard(callSign, "异常QSO记录，无法找到原始通信QSO",
-                cardType, false, receiptRemarks, receivedRecordCode)
+                cardType, sceneType, false, receiptRemarks, receivedRecordCode)
                 .map(card -> new MailReceiveConfirmResult(
                     card.getMetadata().getName(),
                     callSign,
@@ -198,7 +200,7 @@ public class QslConsoleActionService {
                     receivedRecordCode
                 ));
             case "SWL" -> createAutoQsoAndCard(callSign, "SWL收信，无需发卡",
-                cardType, true, receiptRemarks, receivedRecordCode)
+                cardType, sceneType, true, receiptRemarks, receivedRecordCode)
                 .map(card -> new MailReceiveConfirmResult(
                     card.getMetadata().getName(),
                     callSign,
@@ -210,6 +212,7 @@ public class QslConsoleActionService {
                 ));
             default -> createEyeballCard(callSign,
                     QslApiSupport.appendRemark("自动创建EYEBALL卡片", mapReceiptRemark(receiptRemarks)),
+                    sceneType,
                     false,
                     receivedRecordCode)
                 .map(card -> new MailReceiveConfirmResult(
@@ -224,11 +227,11 @@ public class QslConsoleActionService {
         };
     }
 
-    private Mono<CardRecord> createAutoQsoAndCard(String callSign, String qsoRemarks, String cardType, boolean cardSent,
+    private Mono<CardRecord> createAutoQsoAndCard(String callSign, String qsoRemarks, String cardType, String sceneType, boolean cardSent,
         String receiptRemarks, String receivedRecordCode) {
         return createAutoQso(callSign, qsoRemarks)
             .flatMap(qsoRecord -> createCardRecord(callSign, cardType, qsoRecord.getMetadata().getName(),
-                QslApiSupport.appendRemark(qsoRemarks, mapReceiptRemark(receiptRemarks)), cardSent, receivedRecordCode));
+                QslApiSupport.appendRemark(qsoRemarks, mapReceiptRemark(receiptRemarks)), sceneType, cardSent, receivedRecordCode));
     }
 
     private Mono<QsoRecord> createAutoQso(String callSign, String remarks) {
@@ -271,11 +274,11 @@ public class QslConsoleActionService {
             + (exchangeRequest.getSpec().getRemarks() == null || exchangeRequest.getSpec().getRemarks().isBlank()
             ? ""
             : "申请备注：" + exchangeRequest.getSpec().getRemarks());
-        return createEyeballCard(callSign, remarks, false, "");
+        return createEyeballCard(callSign, remarks, "ONLINE_EYEBALL", false, "");
     }
 
-    private Mono<CardRecord> createEyeballCard(String callSign, String remarks, boolean sent, String receivedRecordCode) {
-        return createCardRecord(callSign, "EYEBALL", "", remarks, sent, receivedRecordCode);
+    private Mono<CardRecord> createEyeballCard(String callSign, String remarks, String sceneType, boolean sent, String receivedRecordCode) {
+        return createCardRecord(callSign, "EYEBALL", "", remarks, sceneType, sent, receivedRecordCode);
     }
 
     private Mono<CardRecord> createCardRecord(
@@ -283,6 +286,7 @@ public class QslConsoleActionService {
         String cardType,
         String qsoRecordName,
         String remarks,
+        String sceneType,
         boolean sent,
         String receivedRecordCode
     ) {
@@ -294,8 +298,10 @@ public class QslConsoleActionService {
                 var spec = new CardRecord.CardRecordSpec();
                 spec.setCallSign(callSign);
                 spec.setCardType(cardType);
+                spec.setSceneType(normalizeSceneType(sceneType, cardType));
                 spec.setCardVersion("自动生成");
                 spec.setQsoRecordName(qsoRecordName);
+                spec.setOfflineActivityName("");
                 spec.setAddressEntryName("");
                 spec.setCardDate(QslApiSupport.utcDate());
                 spec.setCardTime(QslApiSupport.utcTime());
@@ -359,8 +365,10 @@ public class QslConsoleActionService {
         var spec = new CardRecord.CardRecordSpec();
         spec.setCallSign("");
         spec.setCardType("QSO");
+        spec.setSceneType("QSO");
         spec.setCardVersion("");
         spec.setQsoRecordName("");
+        spec.setOfflineActivityName("");
         spec.setAddressEntryName("");
         spec.setCardDate(QslApiSupport.utcDate());
         spec.setCardTime(QslApiSupport.utcTime());
@@ -414,13 +422,38 @@ public class QslConsoleActionService {
         return value.trim();
     }
 
-    private boolean matchCardRecord(CardRecord cardRecord, String callSign, String cardType) {
+    private String resolveSceneTypeByCardType(String cardType) {
+        if (cardType == null || cardType.isBlank()) {
+            return "QSO";
+        }
+        return switch (cardType.trim().toUpperCase()) {
+            case "SWL" -> "SWL";
+            case "EYEBALL" -> "EYEBALL";
+            default -> "QSO";
+        };
+    }
+
+    private String normalizeSceneType(String sceneType, String cardType) {
+        if (sceneType != null && !sceneType.isBlank()) {
+            var normalized = sceneType.trim().toUpperCase();
+            if ("QSO".equals(normalized) || "SWL".equals(normalized)
+                || "ONLINE_EYEBALL".equals(normalized) || "EYEBALL".equals(normalized)) {
+                return normalized;
+            }
+        }
+        return resolveSceneTypeByCardType(cardType);
+    }
+
+    private boolean matchCardRecord(CardRecord cardRecord, String callSign, String cardType, String sceneType) {
         if (cardRecord.getSpec() == null) {
             return false;
         }
         var currentCallSign = QslApiSupport.normalizeCallSign(cardRecord.getSpec().getCallSign());
         var currentCardType = QslApiSupport.normalizeCardType(cardRecord.getSpec().getCardType());
-        return currentCallSign.equals(callSign) && currentCardType.equals(cardType);
+        var currentSceneType = normalizeSceneType(cardRecord.getSpec().getSceneType(), currentCardType);
+        return currentCallSign.equals(callSign)
+            && currentCardType.equals(cardType)
+            && currentSceneType.equalsIgnoreCase(sceneType);
     }
 
     private <E extends Extension> Mono<E> fetchOr404(Class<E> extensionType, String name) {
@@ -562,6 +595,7 @@ public class QslConsoleActionService {
     public record MailReceiveConfirmCommand(
         String callSign,
         String cardType,
+        String sceneType,
         String receiptRemarks
     ) {
     }

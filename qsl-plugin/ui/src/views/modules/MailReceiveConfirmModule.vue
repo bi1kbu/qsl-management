@@ -16,9 +16,11 @@ import QslPaginationBar from '../../components/QslPaginationBar.vue'
 interface CardRecordSpec {
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   cardVersion: string
   qsoRecordName: string
   addressEntryName: string
+  offlineActivityName: string
   cardDate: string
   cardTime: string
   createdRemarks: string
@@ -51,6 +53,10 @@ interface CardRecordStatus {
   flowStatus: string
 }
 
+interface OfflineActivitySpec {
+  activityName: string
+}
+
 interface ReceiveResult {
   resourceName: string
   metadataVersion?: number | null
@@ -62,9 +68,72 @@ interface ReceiveResult {
   createdAt: string
 }
 
+type SceneType = 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+
+const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
+
+const props = withDefaults(
+  defineProps<{
+    sceneTypes?: SceneType[]
+    defaultSceneType?: SceneType
+    defaultCardType?: CardRecordSpec['cardType']
+  }>(),
+  {
+    sceneTypes: () => ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL'],
+    defaultSceneType: 'QSO',
+    defaultCardType: 'QSO',
+  },
+)
+
+const normalizeSceneType = (sceneType?: string, cardType?: string): SceneType => {
+  const upperScene = (sceneType ?? '').trim().toUpperCase()
+  if (allSceneTypes.includes(upperScene as SceneType)) {
+    return upperScene as SceneType
+  }
+
+  const upperCardType = (cardType ?? '').trim().toUpperCase()
+  if (upperCardType === 'SWL') {
+    return 'SWL'
+  }
+  if (upperCardType === 'EYEBALL') {
+    return props.sceneTypes.includes('ONLINE_EYEBALL') && !props.sceneTypes.includes('EYEBALL')
+      ? 'ONLINE_EYEBALL'
+      : 'EYEBALL'
+  }
+  return 'QSO'
+}
+
+const normalizedSceneTypes = computed<SceneType[]>(() => {
+  const deduplicated = Array.from(
+    new Set(props.sceneTypes.map((item) => normalizeSceneType(item))),
+  )
+  return deduplicated.length ? deduplicated : ['QSO']
+})
+const shouldLoadOfflineActivities = computed(() => {
+  return normalizedSceneTypes.value.includes('EYEBALL')
+})
+
+const resolveSceneTypeByCardType = (cardType: CardRecordSpec['cardType']): SceneType => {
+  if (cardType === 'QSO' && normalizedSceneTypes.value.includes('QSO')) {
+    return 'QSO'
+  }
+  if (cardType === 'SWL' && normalizedSceneTypes.value.includes('SWL')) {
+    return 'SWL'
+  }
+  if (cardType === 'EYEBALL') {
+    if (normalizedSceneTypes.value.includes('ONLINE_EYEBALL')) {
+      return 'ONLINE_EYEBALL'
+    }
+    if (normalizedSceneTypes.value.includes('EYEBALL')) {
+      return 'EYEBALL'
+    }
+  }
+  return normalizeSceneType(props.defaultSceneType, cardType)
+}
+
 const form = reactive({
   callSign: '',
-  cardType: 'QSO' as 'QSO' | 'SWL' | 'EYEBALL',
+  cardType: props.defaultCardType,
   receiptRemarks: '',
 })
 
@@ -86,23 +155,64 @@ const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const batchEditField = ref('')
 const batchEditValue = ref('')
+const activityFilter = ref('')
+const offlineActivities = ref<OfflineActivitySpec[]>([])
 
 const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
+const offlineActivityPlural = 'offline-activities'
+
+const availableCardTypes = computed<CardRecordSpec['cardType'][]>(() => {
+  const options: CardRecordSpec['cardType'][] = []
+  if (normalizedSceneTypes.value.includes('QSO')) {
+    options.push('QSO')
+  }
+  if (normalizedSceneTypes.value.includes('SWL')) {
+    options.push('SWL')
+  }
+  if (
+    normalizedSceneTypes.value.includes('EYEBALL')
+    || normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  ) {
+    options.push('EYEBALL')
+  }
+  return options.length ? options : ['QSO']
+})
 
 const filteredResults = computed(() => {
   const actionableResults = results.value.filter((item) => !item.spec.cardReceived || item.spec.receivedMailStatus !== 'SENT')
+  const filteredByActivity = activityFilter.value
+    ? actionableResults.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
+    : actionableResults
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
-    return actionableResults
+    return filteredByActivity
   }
-  return actionableResults.filter((item) => {
+  return filteredByActivity.filter((item) => {
     return (
       item.callSign.toUpperCase().includes(keyword) ||
       item.resourceName.toUpperCase().includes(keyword) ||
       item.cardType.toUpperCase().includes(keyword)
+      || (item.spec.offlineActivityName || '').toUpperCase().includes(keyword)
     )
   })
+})
+
+const activityFilterOptions = computed(() => {
+  const fromRecords = new Set<string>()
+  results.value.forEach((item) => {
+    const value = (item.spec.offlineActivityName || '').trim()
+    if (value) {
+      fromRecords.add(value)
+    }
+  })
+  offlineActivities.value.forEach((item) => {
+    const value = (item.activityName || '').trim()
+    if (value) {
+      fromRecords.add(value)
+    }
+  })
+  return Array.from(fromRecords).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 })
 
 const allFilteredSelected = computed(() => {
@@ -175,6 +285,16 @@ watch(pageSize, () => {
   currentPage.value = 1
 })
 
+watch(
+  availableCardTypes,
+  (types) => {
+    if (!types.includes(form.cardType)) {
+      form.cardType = types[0]
+    }
+  },
+  { immediate: true },
+)
+
 const applyHistorySearch = () => {
   historyKeyword.value = historyKeywordInput.value.trim().toUpperCase()
   currentPage.value = 1
@@ -183,6 +303,7 @@ const applyHistorySearch = () => {
 const resetHistorySearch = () => {
   historyKeyword.value = ''
   historyKeywordInput.value = ''
+  activityFilter.value = ''
   syncHistoryQuery.value = false
   currentPage.value = 1
 }
@@ -238,9 +359,11 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
   return {
     callSign: spec?.callSign ?? '',
     cardType: spec?.cardType ?? 'QSO',
+    sceneType: spec?.sceneType ?? 'QSO',
     cardVersion: spec?.cardVersion ?? '',
     qsoRecordName: spec?.qsoRecordName ?? '',
     addressEntryName: spec?.addressEntryName ?? '',
+    offlineActivityName: spec?.offlineActivityName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
     createdRemarks: spec?.createdRemarks ?? '',
@@ -304,6 +427,7 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
     const extensions = await listExtensions<CardRecordSpec, CardRecordStatus>(resourcePlural)
     results.value = extensions
       .map((extension) => toReceiveResult(extension))
+      .filter((item) => normalizedSceneTypes.value.includes(normalizeSceneType(item.spec.sceneType, item.spec.cardType)))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
     if (!options.silent && results.value.length) {
@@ -319,6 +443,21 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
   }
 }
 
+const loadOfflineActivities = async () => {
+  if (!shouldLoadOfflineActivities.value) {
+    offlineActivities.value = []
+    return
+  }
+  try {
+    const extensions = await listExtensions<OfflineActivitySpec>(offlineActivityPlural)
+    offlineActivities.value = extensions.map((item) => ({
+      activityName: item.spec?.activityName ?? '',
+    }))
+  } catch {
+    offlineActivities.value = []
+  }
+}
+
 const submitReceive = async () => {
   const callSign = form.callSign.trim().toUpperCase()
   if (!callSign) {
@@ -331,6 +470,7 @@ const submitReceive = async () => {
     const result: MailReceiveConfirmResult = await confirmMailReceive({
       callSign,
       cardType: form.cardType,
+      sceneType: resolveSceneTypeByCardType(form.cardType),
       receiptRemarks: form.receiptRemarks.trim(),
     })
 
@@ -361,6 +501,7 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
     const result = await confirmMailReceive({
       callSign: item.callSign,
       cardType: item.cardType,
+      sceneType: resolveSceneTypeByCardType(item.cardType),
       receiptRemarks: '',
     })
     await appendQslAuditLog({
@@ -384,6 +525,9 @@ const selectRowForQuery = (item: ReceiveResult) => {
     return
   }
   form.callSign = keyword
+  if (item.spec.offlineActivityName?.trim()) {
+    activityFilter.value = item.spec.offlineActivityName.trim()
+  }
   historyKeyword.value = keyword
   historyKeywordInput.value = keyword
   currentPage.value = 1
@@ -440,6 +584,10 @@ const applyHistoryBatchEdit = async () => {
     const targets = results.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
 
     for (const item of targets) {
+      const nextCardType =
+        batchEditField.value === 'cardType'
+          ? (nextValue as CardRecordSpec['cardType'])
+          : item.spec.cardType
       const nextReceived =
         batchEditField.value === 'cardReceivedState' ? nextValue === 'RECEIVED' : item.spec.cardReceived
       const nextConfirmed =
@@ -447,7 +595,8 @@ const applyHistoryBatchEdit = async () => {
 
       const nextSpec: CardRecordSpec = {
         ...item.spec,
-        cardType: batchEditField.value === 'cardType' ? (nextValue as CardRecordSpec['cardType']) : item.spec.cardType,
+        cardType: nextCardType,
+        sceneType: resolveSceneTypeByCardType(nextCardType),
         cardReceived: nextReceived,
         receiptConfirmed: nextConfirmed,
         receivedRemarks: batchEditField.value === 'receiptRemarks' ? nextValue : item.spec.receivedRemarks,
@@ -616,7 +765,7 @@ const batchSendReceivedMail = async () => {
 }
 
 onMounted(() => {
-  loadResults()
+  Promise.all([loadResults(), loadOfflineActivities()])
 })
 </script>
 
@@ -647,9 +796,9 @@ onMounted(() => {
             <span class="qsl-field__label">卡片类型（Card_Type）</span>
             <div class="qsl-input-shell">
               <select v-model="form.cardType">
-                <option value="QSO">QSO</option>
-                <option value="SWL">SWL</option>
-                <option value="EYEBALL">EYEBALL</option>
+                <option v-if="availableCardTypes.includes('QSO')" value="QSO">QSO</option>
+                <option v-if="availableCardTypes.includes('SWL')" value="SWL">SWL</option>
+                <option v-if="availableCardTypes.includes('EYEBALL')" value="EYEBALL">EYEBALL</option>
               </select>
             </div>
           </label>
@@ -712,6 +861,18 @@ onMounted(() => {
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
 
+      <div class="qsl-form-inline">
+        <label class="qsl-field qsl-field--inline">
+          <span class="qsl-field__label">活动筛选</span>
+          <div class="qsl-input-shell">
+            <select v-model="activityFilter">
+              <option value="">全部活动</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
+          </div>
+        </label>
+      </div>
+
       <div class="qsl-actions">
         <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
@@ -727,6 +888,7 @@ onMounted(() => {
               <th>卡片类型</th>
               <th>收卡状态</th>
               <th>发卡状态</th>
+              <th>关联活动</th>
               <th>收卡编号</th>
               <th>收卡确认备注</th>
               <th>操作</th>
@@ -753,6 +915,7 @@ onMounted(() => {
               <td>
                 <VTag :theme="item.spec.cardSent ? 'secondary' : 'default'">{{ item.spec.cardSent ? '是' : '否' }}</VTag>
               </td>
+              <td>{{ item.spec.offlineActivityName || '-' }}</td>
               <td>{{ item.spec.receivedRecordCodes || '-' }}</td>
               <td>{{ item.spec.receivedRemarks || '-' }}</td>
               <td>
@@ -821,7 +984,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!pagedFilteredResults.length">
-              <td colspan="9" class="qsl-table-empty">暂无收信确认记录。</td>
+              <td colspan="10" class="qsl-table-empty">暂无收信确认记录。</td>
             </tr>
           </tbody>
         </table>

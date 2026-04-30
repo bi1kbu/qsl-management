@@ -38,6 +38,7 @@ const datasetConfigs: DatasetConfig[] = [
     headers: [
       'id',
       'callSign',
+      'sceneType',
       'date',
       'time',
       'timezone',
@@ -46,6 +47,8 @@ const datasetConfigs: DatasetConfig[] = [
       'myRigMode',
       'myRigAnt',
       'myRigPwr',
+      'myQth',
+      'operator',
       'rig',
       'ant',
       'pwr',
@@ -58,6 +61,7 @@ const datasetConfigs: DatasetConfig[] = [
     toRow: (item) => ({
       id: item.metadata.name,
       callSign: String(item.spec?.callSign ?? ''),
+      sceneType: String(item.spec?.sceneType ?? 'QSO'),
       date: String(item.spec?.date ?? ''),
       time: String(item.spec?.time ?? ''),
       timezone: String(item.spec?.timezone ?? ''),
@@ -66,6 +70,8 @@ const datasetConfigs: DatasetConfig[] = [
       myRigMode: String(item.spec?.myRigMode ?? ''),
       myRigAnt: String(item.spec?.myRigAnt ?? ''),
       myRigPwr: String(item.spec?.myRigPwr ?? ''),
+      myQth: String(item.spec?.myQth ?? ''),
+      operator: String(item.spec?.operator ?? ''),
       rig: String(item.spec?.rig ?? ''),
       ant: String(item.spec?.ant ?? ''),
       pwr: String(item.spec?.pwr ?? ''),
@@ -77,6 +83,7 @@ const datasetConfigs: DatasetConfig[] = [
     fromRow: (row) => ({
       spec: {
         callSign: row.callSign ?? '',
+        sceneType: row.sceneType ?? 'QSO',
         date: row.date ?? '',
         time: row.time ?? '',
         timezone: row.timezone ?? 'UTC',
@@ -85,6 +92,8 @@ const datasetConfigs: DatasetConfig[] = [
         myRigMode: row.myRigMode ?? '',
         myRigAnt: row.myRigAnt ?? '',
         myRigPwr: row.myRigPwr ?? '',
+        myQth: row.myQth ?? '',
+        operator: row.operator ?? '',
         rig: row.rig ?? '',
         ant: row.ant ?? '',
         pwr: row.pwr ?? '',

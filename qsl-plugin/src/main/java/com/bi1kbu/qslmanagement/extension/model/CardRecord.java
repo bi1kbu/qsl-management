@@ -20,8 +20,10 @@ public class CardRecord extends QslBaseExtension<CardRecord.CardRecordSpec, Card
     public static class CardRecordSpec {
         private String callSign;
         private String cardType;
+        private String sceneType;
         private String cardVersion;
         private String qsoRecordName;
+        private String offlineActivityName;
         private String addressEntryName;
         private String cardDate;
         private String cardTime;

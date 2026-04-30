@@ -10,10 +10,12 @@ public class QslPublicReceiptPageRenderService {
 
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
     private static final Pattern EMBED_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
+    private static final Pattern SCENE_TYPE_PATTERN = Pattern.compile("^(QSO|SWL|ONLINE_EYEBALL|EYEBALL)?$");
 
-    public String render(String rawCallSign, String rawCardId, boolean embed, String rawEmbedId) {
+    public String render(String rawCallSign, String rawCardId, String rawSceneType, boolean embed, String rawEmbedId) {
         var callSign = normalizeCallSign(rawCallSign);
         var cardId = normalizeCardId(rawCardId);
+        var sceneType = normalizeSceneType(rawSceneType);
         var embedId = normalizeEmbedId(rawEmbedId);
 
         return BASE_TEMPLATE
@@ -22,6 +24,7 @@ public class QslPublicReceiptPageRenderService {
             .replace("__CARD_ID_HTML__", escapeHtml(cardId))
             .replace("__CALL_SIGN_JS__", escapeJs(callSign))
             .replace("__CARD_ID_JS__", escapeJs(cardId))
+            .replace("__SCENE_TYPE_JS__", escapeJs(sceneType))
             .replace("__EMBED_MODE__", Boolean.toString(embed))
             .replace("__EMBED_ID__", escapeJs(embedId));
     }
@@ -101,6 +104,17 @@ public class QslPublicReceiptPageRenderService {
         var normalized = rawEmbedId == null ? "" : rawEmbedId.trim();
         if (!EMBED_ID_PATTERN.matcher(normalized).matches()) {
             return "qsl-receipt-default";
+        }
+        return normalized;
+    }
+
+    private String normalizeSceneType(String rawSceneType) {
+        if (rawSceneType == null) {
+            return "";
+        }
+        var normalized = rawSceneType.trim().toUpperCase(Locale.ROOT);
+        if (!SCENE_TYPE_PATTERN.matcher(normalized).matches()) {
+            return "";
         }
         return normalized;
     }
@@ -343,6 +357,7 @@ public class QslPublicReceiptPageRenderService {
                 const API_BASE = "/apis/api.qsl-management.halo.run/v1alpha1";
                 const EMBED_MODE = __EMBED_MODE__;
                 const EMBED_ID = "__EMBED_ID__";
+                const SCENE_TYPE = "__SCENE_TYPE_JS__";
                 const CALL_SIGN_PATTERN = /^[A-Z0-9/-]{3,16}$/;
 
                 const page = document.getElementById("qsl-page");
@@ -471,7 +486,8 @@ public class QslPublicReceiptPageRenderService {
                       body: JSON.stringify({
                         callSign,
                         cardId,
-                        remarks
+                        remarks,
+                        sceneType: SCENE_TYPE
                       })
                     });
                     const result = await parseResponse(response);

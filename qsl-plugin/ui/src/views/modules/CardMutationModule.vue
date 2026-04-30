@@ -22,8 +22,10 @@ type MailStatus = '' | 'PENDING' | 'SENT' | 'FAILED'
 interface CardRecordSpec {
   callSign: string
   cardType: CardType
+  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   cardVersion: string
   qsoRecordName: string
+  offlineActivityName?: string
   addressEntryName: string
   cardDate: string
   cardTime: string
@@ -119,6 +121,7 @@ const activeTab = ref<'basic' | 'batch'>('basic')
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
 const syncHistoryQuery = ref(false)
+const activityFilter = ref('')
 const selectedHistoryNames = ref<string[]>([])
 const editingResourceName = ref('')
 const batchEditField = ref('')
@@ -179,6 +182,7 @@ const historyColumns = [
   { key: 'resourceName', label: '卡片ID' },
   { key: 'callSign', label: '对方呼号' },
   { key: 'cardType', label: '卡片类型' },
+  { key: 'offlineActivityName', label: '关联活动' },
   { key: 'cardVersion', label: '卡片版本' },
   { key: 'cardDate', label: '日期' },
   { key: 'cardTime', label: '时间' },
@@ -190,20 +194,35 @@ const isEditing = computed(() => Boolean(editingResourceName.value))
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
 
 const filteredRows = computed(() => {
+  const filteredByActivity = activityFilter.value
+    ? rows.value.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
+    : rows.value
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
-    return rows.value
+    return filteredByActivity
   }
-  return rows.value.filter((item) => {
+  return filteredByActivity.filter((item) => {
     return (
       item.resourceName.toUpperCase().includes(keyword) ||
       item.callSign.toUpperCase().includes(keyword) ||
       item.cardType.toUpperCase().includes(keyword) ||
       item.cardVersion.toUpperCase().includes(keyword) ||
       item.qsoRecordName.toUpperCase().includes(keyword) ||
-      item.addressEntryName.toUpperCase().includes(keyword)
+      item.addressEntryName.toUpperCase().includes(keyword) ||
+      (item.spec.offlineActivityName || '').toUpperCase().includes(keyword)
     )
   })
+})
+
+const activityFilterOptions = computed(() => {
+  const activitySet = new Set<string>()
+  rows.value.forEach((item) => {
+    const activityName = (item.spec.offlineActivityName || '').trim()
+    if (activityName) {
+      activitySet.add(activityName)
+    }
+  })
+  return Array.from(activitySet).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 })
 
 const allFilteredSelected = computed(() => {
@@ -426,8 +445,10 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
   return {
     callSign: spec?.callSign ?? '',
     cardType: spec?.cardType ?? 'QSO',
+    sceneType: spec?.sceneType ?? 'QSO',
     cardVersion: spec?.cardVersion ?? '',
     qsoRecordName: spec?.qsoRecordName ?? '',
+    offlineActivityName: spec?.offlineActivityName ?? '',
     addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
@@ -635,6 +656,20 @@ const cancelEdit = () => {
 
 const applyHistorySearch = () => {
   historyKeyword.value = historyKeywordInput.value.trim().toUpperCase()
+  currentPage.value = 1
+}
+
+const selectHistoryRowForQuery = (item: CardMutationItem) => {
+  const keyword = item.callSign.trim().toUpperCase()
+  if (!keyword) {
+    return
+  }
+  editForm.callSign = keyword
+  if (item.spec.offlineActivityName?.trim()) {
+    activityFilter.value = item.spec.offlineActivityName.trim()
+  }
+  historyKeyword.value = keyword
+  historyKeywordInput.value = keyword
   currentPage.value = 1
 }
 
@@ -1294,6 +1329,18 @@ onMounted(() => {
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
 
+      <div class="qsl-form-inline">
+        <label class="qsl-field qsl-field--inline">
+          <span class="qsl-field__label">活动筛选</span>
+          <div class="qsl-input-shell">
+            <select v-model="activityFilter">
+              <option value="">全部活动</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
+          </div>
+        </label>
+      </div>
+
       <QslExpandableHistoryTable
         title="卡片异动清单"
         :rows="pagedRows"
@@ -1306,6 +1353,16 @@ onMounted(() => {
         empty-text="暂无卡片记录。"
         @update:selected-keys="(value) => (selectedHistoryNames = value)"
       >
+        <template #cell-callSign="{ row }">
+          <span class="qsl-row-clickable" @click="selectHistoryRowForQuery(toHistoryItem(row))">
+            {{ toHistoryItem(row).callSign || '-' }}
+          </span>
+        </template>
+
+        <template #cell-offlineActivityName="{ row }">
+          {{ toHistoryItem(row).spec.offlineActivityName || '-' }}
+        </template>
+
         <template #cell-addressEntryName="{ row }">
           {{ toHistoryItem(row).addressEntryName || '-' }}
         </template>
@@ -1328,8 +1385,12 @@ onMounted(() => {
               <tr>
                 <th>关联QSO_ID</th>
                 <td>{{ toHistoryItem(row).spec.qsoRecordName || '-' }}</td>
+                <th>关联活动</th>
+                <td>{{ toHistoryItem(row).spec.offlineActivityName || '-' }}</td>
+              </tr>
+              <tr>
                 <th>绑定地址编号</th>
-                <td>{{ toHistoryItem(row).spec.addressEntryName || '-' }}</td>
+                <td colspan="3">{{ toHistoryItem(row).spec.addressEntryName || '-' }}</td>
               </tr>
               <tr>
                 <th>制卡状态</th>
@@ -1471,5 +1532,9 @@ onMounted(() => {
 .qsl-row-delete-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.qsl-row-clickable {
+  cursor: pointer;
 }
 </style>

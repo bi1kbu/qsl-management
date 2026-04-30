@@ -38,6 +38,7 @@ class QslPublicApiEndpointRouteTest {
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue("""
                 {
+                  "sceneType": "ONLINE_EYEBALL",
                   "callSign": "BG7ABC",
                   "useBureau": false
                 }
@@ -75,7 +76,8 @@ class QslPublicApiEndpointRouteTest {
                 {
                   "callSign": "BG7ABC",
                   "cardId": "card-record-001",
-                  "remarks": "已签收"
+                  "remarks": "已签收",
+                  "sceneType": "ONLINE_EYEBALL"
                 }
                 """)
             .exchange()

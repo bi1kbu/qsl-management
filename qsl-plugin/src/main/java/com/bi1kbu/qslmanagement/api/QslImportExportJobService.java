@@ -390,6 +390,7 @@ public class QslImportExportJobService {
                 (record, row) -> {
                     var spec = record.getSpec() == null ? new QsoRecord.QsoRecordSpec() : record.getSpec();
                     spec.setCallSign(value(row, "callSign"));
+                    spec.setSceneType(defaultIfBlank(value(row, "sceneType"), "QSO"));
                     spec.setDate(value(row, "date"));
                     spec.setTime(value(row, "time"));
                     spec.setTimezone(defaultIfBlank(value(row, "timezone"), "UTC"));
@@ -415,9 +416,12 @@ public class QslImportExportJobService {
                 (record, row) -> {
                     var spec = record.getSpec() == null ? new CardRecord.CardRecordSpec() : record.getSpec();
                     spec.setCallSign(value(row, "callSign"));
-                    spec.setCardType(defaultIfBlank(value(row, "cardType"), "QSO"));
+                    var cardType = defaultIfBlank(value(row, "cardType"), "QSO");
+                    spec.setCardType(cardType);
+                    spec.setSceneType(defaultIfBlank(value(row, "sceneType"), resolveSceneTypeByCardType(cardType)));
                     spec.setCardVersion(value(row, "cardVersion"));
                     spec.setQsoRecordName(value(row, "qsoRecordName"));
+                    spec.setOfflineActivityName(value(row, "offlineActivityName"));
                     spec.setAddressEntryName(value(row, "addressEntryName"));
                     spec.setCardDate(value(row, "cardDate"));
                     spec.setCardTime(value(row, "cardTime"));
@@ -674,6 +678,7 @@ public class QslImportExportJobService {
                     return csvRow(
                         record.getMetadata().getName(),
                         spec == null ? "" : nullToEmpty(spec.getCallSign()),
+                        spec == null ? "" : nullToEmpty(spec.getSceneType()),
                         spec == null ? "" : nullToEmpty(spec.getDate()),
                         spec == null ? "" : nullToEmpty(spec.getTime()),
                         spec == null ? "" : nullToEmpty(spec.getTimezone()),
@@ -697,6 +702,7 @@ public class QslImportExportJobService {
                 .map(rows -> renderCsv(dataset, List.of(
                     "id",
                     "callSign",
+                    "sceneType",
                     "date",
                     "time",
                     "timezone",
@@ -722,8 +728,10 @@ public class QslImportExportJobService {
                         record.getMetadata().getName(),
                         spec == null ? "" : nullToEmpty(spec.getCallSign()),
                         spec == null ? "" : nullToEmpty(spec.getCardType()),
+                        spec == null ? "" : nullToEmpty(spec.getSceneType()),
                         spec == null ? "" : nullToEmpty(spec.getCardVersion()),
                         spec == null ? "" : nullToEmpty(spec.getQsoRecordName()),
+                        spec == null ? "" : nullToEmpty(spec.getOfflineActivityName()),
                         spec == null ? "" : nullToEmpty(spec.getAddressEntryName()),
                         spec == null ? "" : nullToEmpty(spec.getCardDate()),
                         spec == null ? "" : nullToEmpty(spec.getCardTime()),
@@ -757,8 +765,10 @@ public class QslImportExportJobService {
                     "id",
                     "callSign",
                     "cardType",
+                    "sceneType",
                     "cardVersion",
                     "qsoRecordName",
+                    "offlineActivityName",
                     "addressEntryName",
                     "cardDate",
                     "cardTime",
@@ -1125,6 +1135,17 @@ public class QslImportExportJobService {
             return defaultValue;
         }
         return value;
+    }
+
+    private String resolveSceneTypeByCardType(String cardType) {
+        if (isBlank(cardType)) {
+            return "QSO";
+        }
+        return switch (cardType.trim().toUpperCase(Locale.ROOT)) {
+            case "SWL" -> "SWL";
+            case "EYEBALL" -> "EYEBALL";
+            default -> "QSO";
+        };
     }
 
     private Boolean parseBoolean(String value) {

@@ -8,8 +8,10 @@ import { listExtensions, qslApiVersion, updateExtension, type QslExtension } fro
 interface CardRecordSpec {
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   cardVersion: string
   qsoRecordName: string
+  offlineActivityName?: string
   addressEntryName: string
   cardDate: string
   cardTime: string
@@ -104,6 +106,48 @@ interface CardIssueCardRow {
 }
 
 type AddressSourceType = 'ADDRESS' | 'BURO'
+type SceneType = 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+
+const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
+
+const props = withDefaults(
+  defineProps<{
+    sceneTypes?: SceneType[]
+    defaultSceneType?: SceneType
+  }>(),
+  {
+    sceneTypes: () => ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL'],
+    defaultSceneType: 'QSO',
+  },
+)
+
+const normalizeSceneType = (sceneType?: string, cardType?: string): SceneType => {
+  const upperScene = (sceneType ?? '').trim().toUpperCase()
+  if (allSceneTypes.includes(upperScene as SceneType)) {
+    return upperScene as SceneType
+  }
+
+  const upperCardType = (cardType ?? '').trim().toUpperCase()
+  if (upperCardType === 'SWL') {
+    return 'SWL'
+  }
+  if (upperCardType === 'EYEBALL') {
+    return props.sceneTypes.includes('ONLINE_EYEBALL') && !props.sceneTypes.includes('EYEBALL')
+      ? 'ONLINE_EYEBALL'
+      : 'EYEBALL'
+  }
+  return 'QSO'
+}
+
+const normalizedSceneTypes = computed<SceneType[]>(() => {
+  const deduplicated = Array.from(
+    new Set(props.sceneTypes.map((item) => normalizeSceneType(item))),
+  )
+  return deduplicated.length ? deduplicated : ['QSO']
+})
+const shouldLoadOfflineActivities = computed(() => {
+  return normalizedSceneTypes.value.includes('EYEBALL')
+})
 
 interface CardIssueAddressRow {
   id: string
@@ -131,10 +175,18 @@ interface CardIssueQsoRow {
   remarks: string
 }
 
+interface OfflineActivitySpec {
+  activityName: string
+  activityLocation: string
+  activityDate: string
+  activityTime: string
+}
+
 const cardRecordPlural = 'card-records'
 const addressBookPlural = 'address-book-entries'
 const bureauPlural = 'bureau-entries'
 const qsoRecordPlural = 'qso-records'
+const offlineActivityPlural = 'offline-activities'
 
 const loading = ref(false)
 const issuing = ref(false)
@@ -152,6 +204,8 @@ const cardRows = ref<CardIssueCardRow[]>([])
 const addressRows = ref<CardIssueAddressRow[]>([])
 const bureauRows = ref<CardIssueAddressRow[]>([])
 const qsoRows = ref<CardIssueQsoRow[]>([])
+const offlineActivities = ref<Record<string, string>>({})
+const activityFilter = ref('')
 
 const normalizedKeyword = computed(() => searchedCallSign.value.trim().toUpperCase())
 const hasKeyword = computed(() => normalizedKeyword.value.length > 0)
@@ -175,7 +229,11 @@ const matchedCardRows = computed(() => {
     return []
   }
   return cardRows.value.filter((item) => {
-    return item.callSign.toUpperCase().includes(normalizedKeyword.value) && !item.cardIssued
+    const matchesCallSign = item.callSign.toUpperCase().includes(normalizedKeyword.value)
+    const matchesActivity = activityFilter.value
+      ? (item.spec.offlineActivityName || '') === activityFilter.value
+      : true
+    return matchesCallSign && matchesActivity && !item.cardIssued
   })
 })
 
@@ -183,7 +241,30 @@ const queriedCardRows = computed(() => {
   if (!hasKeyword.value) {
     return []
   }
-  return cardRows.value.filter((item) => item.callSign.toUpperCase().includes(normalizedKeyword.value))
+  return cardRows.value.filter((item) => {
+    const matchesCallSign = item.callSign.toUpperCase().includes(normalizedKeyword.value)
+    const matchesActivity = activityFilter.value
+      ? (item.spec.offlineActivityName || '') === activityFilter.value
+      : true
+    return matchesCallSign && matchesActivity
+  })
+})
+
+const activityFilterOptions = computed(() => {
+  const activitySet = new Set<string>()
+  cardRows.value.forEach((item) => {
+    const name = (item.spec.offlineActivityName || '').trim()
+    if (name) {
+      activitySet.add(name)
+    }
+  })
+  Object.keys(offlineActivities.value).forEach((name) => {
+    const normalized = name.trim()
+    if (normalized) {
+      activitySet.add(normalized)
+    }
+  })
+  return Array.from(activitySet).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 })
 
 const matchedAddressRows = computed(() => {
@@ -234,13 +315,26 @@ const remarkRows = computed(() => {
 })
 
 const pendingIssueCardRows = computed(() => {
-  return cardRows.value.filter((item) => !item.cardIssued || !item.envelopePrinted || item.spec.createdMailStatus !== 'SENT')
+  return cardRows.value.filter((item) => {
+    const matchesActivity = activityFilter.value
+      ? (item.spec.offlineActivityName || '') === activityFilter.value
+      : true
+    return matchesActivity && (!item.cardIssued || !item.envelopePrinted || item.spec.createdMailStatus !== 'SENT')
+  })
 })
 
 const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', {
     hour12: false,
   })
+}
+
+const resolveActivityText = (row: CardIssueCardRow): string => {
+  const activityName = row.spec.offlineActivityName?.trim() || ''
+  if (!activityName) {
+    return '-'
+  }
+  return offlineActivities.value[activityName] || activityName
 }
 
 const resolveMailStatusText = (status: string): string => {
@@ -257,6 +351,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
   return {
     callSign: spec?.callSign ?? '',
     cardType: spec?.cardType ?? 'QSO',
+    sceneType: spec?.sceneType ?? 'QSO',
     cardVersion: spec?.cardVersion ?? '',
     qsoRecordName: spec?.qsoRecordName ?? '',
     addressEntryName: spec?.addressEntryName ?? '',
@@ -383,10 +478,28 @@ const loadSourceData = async () => {
       listExtensions<BureauSpec>(bureauPlural),
       listExtensions<QsoRecordSpec>(qsoRecordPlural),
     ])
+    let activityExtensions: QslExtension<OfflineActivitySpec>[] = []
+    if (shouldLoadOfflineActivities.value) {
+      try {
+        activityExtensions = await listExtensions<OfflineActivitySpec>(offlineActivityPlural)
+      } catch {
+        activityExtensions = []
+      }
+    }
     cardRows.value = cards.map((item) => toCardRow(item))
+      .filter((item) => normalizedSceneTypes.value.includes(normalizeSceneType(item.spec.sceneType, item.spec.cardType)))
     addressRows.value = addresses.map((item) => toAddressRow(item))
     bureauRows.value = bureaus.map((item) => toBureauRow(item))
     qsoRows.value = qsos.map((item) => toQsoRow(item))
+    offlineActivities.value = Object.fromEntries(
+      activityExtensions.map((item) => {
+        const spec = item.spec
+        const title = [spec?.activityName ?? '', spec?.activityDate ?? '', spec?.activityTime ?? '']
+          .filter((segment) => segment.trim().length > 0)
+          .join(' ')
+        return [item.metadata.name, title || item.metadata.name]
+      }),
+    )
 
     const selectedExists = allAddressRows.value.some((item) => item.id === selectedAddressId.value)
     if (!selectedExists) {
@@ -421,6 +534,7 @@ const clearSearch = () => {
   callSignInput.value = ''
   searchedCallSign.value = ''
   addressLookupInput.value = ''
+  activityFilter.value = ''
   selectedAddressId.value = ''
   selectedAddressEmail.value = ''
   feedback.value = ''
@@ -439,6 +553,7 @@ const selectPendingIssueRow = async (row: CardIssueCardRow) => {
   callSignInput.value = callSign
   addressLookupInput.value = addressKeyword
   searchedCallSign.value = callSign
+  activityFilter.value = row.spec.offlineActivityName?.trim() || ''
   selectedAddressId.value = boundAddressRow?.id ?? ''
   selectedAddressEmail.value = boundAddressRow?.sourceType === 'ADDRESS' ? boundAddressRow.email.trim() : ''
   await loadSourceData()
@@ -786,6 +901,16 @@ onMounted(loadSourceData)
             />
           </div>
         </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">活动筛选</span>
+          <div class="qsl-input-shell">
+            <select v-model="activityFilter">
+              <option value="">全部活动</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
+          </div>
+        </label>
       </div>
 
       <div class="qsl-actions">
@@ -814,6 +939,7 @@ onMounted(loadSourceData)
               <th>卡片类型</th>
               <th>卡片版本</th>
               <th>关联QSO</th>
+              <th>关联活动</th>
               <th>日期</th>
               <th>时间</th>
               <th>发卡</th>
@@ -829,6 +955,7 @@ onMounted(loadSourceData)
               <td>{{ item.cardType || '-' }}</td>
               <td>{{ item.cardVersion || '-' }}</td>
               <td>{{ item.qsoRecordName || '-' }}</td>
+              <td>{{ resolveActivityText(item) }}</td>
               <td>{{ item.cardDate || '-' }}</td>
               <td>{{ item.cardTime || '-' }}</td>
               <td>{{ item.cardSent ? '是' : '否' }}</td>
@@ -837,10 +964,10 @@ onMounted(loadSourceData)
               <td>{{ item.addressEntryName || '-' }}</td>
             </tr>
             <tr v-if="!hasKeyword">
-              <td colspan="11" class="qsl-table-empty">请输入呼号进行查询。</td>
+              <td colspan="12" class="qsl-table-empty">请输入呼号进行查询。</td>
             </tr>
             <tr v-else-if="!matchedCardRows.length">
-              <td colspan="11" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
+              <td colspan="12" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
             </tr>
           </tbody>
         </table>
@@ -978,6 +1105,7 @@ onMounted(loadSourceData)
               <th>日期</th>
               <th>时间</th>
               <th>卡片版本</th>
+              <th>关联活动</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -989,6 +1117,7 @@ onMounted(loadSourceData)
               <td>{{ item.cardDate || '-' }}</td>
               <td>{{ item.cardTime || '-' }}</td>
               <td>{{ item.cardVersion || '-' }}</td>
+              <td>{{ resolveActivityText(item) }}</td>
               <td @click.stop>
                 <div class="qsl-actions qsl-actions--tight">
                   <VButton
@@ -1062,7 +1191,7 @@ onMounted(loadSourceData)
               </td>
             </tr>
             <tr v-if="!pendingIssueCardRows.length">
-              <td colspan="7" class="qsl-table-empty">暂无待制卡记录。</td>
+              <td colspan="8" class="qsl-table-empty">暂无待制卡记录。</td>
             </tr>
           </tbody>
         </table>

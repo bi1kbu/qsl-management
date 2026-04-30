@@ -22,6 +22,7 @@ public class QslPublicApiService {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$");
     private static final Pattern TELEPHONE_PATTERN = Pattern.compile("^[0-9+\\-\\s]{0,30}$");
     private static final Pattern POSTAL_CODE_PATTERN = Pattern.compile("^[A-Za-z0-9\\-]{0,20}$");
+    private static final List<String> ALLOWED_SCENE_TYPES = List.of("QSO", "SWL", "ONLINE_EYEBALL", "EYEBALL");
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
@@ -31,13 +32,17 @@ public class QslPublicApiService {
         this.qslAuditService = qslAuditService;
     }
 
-    public Mono<PublicQsoQueryResult> listPublicRecords(String callSign) {
+    public Mono<PublicQsoQueryResult> listPublicRecords(String callSign, String sceneType) {
         var normalizedCallSign = QslApiSupport.normalizeCallSign(callSign);
+        var normalizedSceneType = normalizeSceneType(sceneType);
         if (normalizedCallSign.isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "请提供呼号"));
         }
         if (!isValidCallSign(normalizedCallSign)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
+        }
+        if (!normalizedSceneType.isBlank() && !ALLOWED_SCENE_TYPES.contains(normalizedSceneType)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "场景类型不合法"));
         }
 
         var qsoItemsMono = client.listAll(QsoRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
@@ -56,6 +61,12 @@ public class QslPublicApiService {
         var cardItemsMono = client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
             .filter(cardRecord -> cardRecord.getSpec() != null)
             .filter(cardRecord -> normalizedCallSign.equals(QslApiSupport.normalizeCallSign(cardRecord.getSpec().getCallSign())))
+            .filter(cardRecord -> {
+                if (normalizedSceneType.isBlank()) {
+                    return true;
+                }
+                return normalizedSceneType.equals(normalizeSceneType(cardRecord.getSpec().getSceneType()));
+            })
             .map(cardRecord -> new PublicCardItem(
                 cardRecord.getMetadata().getName(),
                 normalizedCallSign,
@@ -78,11 +89,15 @@ public class QslPublicApiService {
 
     public Mono<PublicExchangeSubmitResult> submitExchangeRequest(PublicExchangeSubmitCommand command, String clientIp) {
         var callSign = QslApiSupport.normalizeCallSign(command.callSign());
+        var sceneType = normalizeSceneType(command.sceneType());
         if (callSign.isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号不能为空"));
         }
         if (!isValidCallSign(callSign)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
+        }
+        if (!sceneType.isBlank() && !("ONLINE_EYEBALL".equals(sceneType) || "EYEBALL".equals(sceneType))) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "换卡申请场景不合法"));
         }
         if (Boolean.TRUE.equals(command.useBureau()) && nullToEmpty(command.bureauName()).isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "选择卡片局模式时必须填写卡片局名称"));
@@ -113,6 +128,7 @@ public class QslPublicApiService {
         request.setMetadata(QslApiSupport.createMetadata(QslApiSupport.createResourceName("exchange-request")));
 
         var spec = new ExchangeRequest.ExchangeRequestSpec();
+        spec.setSceneType(sceneType.isBlank() ? "ONLINE_EYEBALL" : sceneType);
         spec.setCallSign(callSign);
         spec.setUseBureau(Boolean.TRUE.equals(command.useBureau()));
         spec.setBureauName(nullToEmpty(command.bureauName()));
@@ -150,11 +166,15 @@ public class QslPublicApiService {
 
     public Mono<PublicReceiptConfirmResult> confirmReceipt(PublicReceiptConfirmCommand command, String clientIp) {
         var callSign = QslApiSupport.normalizeCallSign(command.callSign());
+        var sceneType = normalizeSceneType(command.sceneType());
         if (callSign.isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号不能为空"));
         }
         if (!isValidCallSign(callSign)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
+        }
+        if (!sceneType.isBlank() && !ALLOWED_SCENE_TYPES.contains(sceneType)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "签收场景不合法"));
         }
 
         var cardId = nullToEmpty(command.cardId()).trim().toUpperCase(Locale.ROOT);
@@ -177,6 +197,11 @@ public class QslPublicApiService {
                 if (!callSign.equals(cardCallSign)) {
                     return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "QSL-422-0001", "卡片和呼号不匹配"));
+                }
+                var cardSceneType = normalizeSceneType(cardRecord.getSpec().getSceneType());
+                if (!sceneType.isBlank() && !sceneType.equals(cardSceneType)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "卡片场景和签收场景不匹配"));
                 }
                 cardRecord.getSpec().setReceiptConfirmed(Boolean.TRUE);
                 cardRecord.getSpec().setPublicReceiptRemarks(QslApiSupport.appendRemark(
@@ -240,6 +265,13 @@ public class QslPublicApiService {
         return POSTAL_CODE_PATTERN.matcher(normalized).matches();
     }
 
+    private String normalizeSceneType(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toUpperCase(Locale.ROOT);
+    }
+
     public record PublicQsoQueryResult(
         String callSign,
         List<PublicQsoItem> qsoItems,
@@ -270,6 +302,7 @@ public class QslPublicApiService {
     }
 
     public record PublicExchangeSubmitCommand(
+        String sceneType,
         String callSign,
         Boolean useBureau,
         String bureauName,
@@ -293,7 +326,8 @@ public class QslPublicApiService {
     public record PublicReceiptConfirmCommand(
         String callSign,
         String cardId,
-        String remarks
+        String remarks,
+        String sceneType
     ) {
     }
 

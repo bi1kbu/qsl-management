@@ -43,11 +43,12 @@ public class QslPublicCardPageEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> renderCardPage(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
         var callSign = request.queryParam("callSign").orElse("");
+        var sceneType = request.queryParam("sceneType").orElse("");
         var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
         var embedId = request.queryParam("embedId").orElse("");
 
         return publicRateLimitService.checkLimit("cards-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, embed, embedId)))
+            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, sceneType, embed, embedId)))
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))

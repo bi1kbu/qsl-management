@@ -16,7 +16,7 @@ class QslPublicApiServiceValidationTest {
             Mockito.mock(QslAuditService.class)
         );
 
-        var error = assertThrows(QslApiException.class, () -> service.listPublicRecords("!@#").block());
+        var error = assertThrows(QslApiException.class, () -> service.listPublicRecords("!@#", "").block());
         assertEquals("QSL-400-0001", error.getCode());
         assertEquals(400, error.getStatus().value());
     }
@@ -29,6 +29,7 @@ class QslPublicApiServiceValidationTest {
         );
 
         var command = new QslPublicApiService.PublicExchangeSubmitCommand(
+            "ONLINE_EYEBALL",
             "BG7ABC",
             Boolean.FALSE,
             "",
@@ -52,7 +53,7 @@ class QslPublicApiServiceValidationTest {
         );
 
         var tooLongRemarks = "x".repeat(501);
-        var command = new QslPublicApiService.PublicReceiptConfirmCommand("BG7ABC", "card-record-001", tooLongRemarks);
+        var command = new QslPublicApiService.PublicReceiptConfirmCommand("BG7ABC", "card-record-001", tooLongRemarks, "");
         var error = assertThrows(QslApiException.class, () -> service.confirmReceipt(command, "127.0.0.1").block());
         assertEquals("QSL-400-0001", error.getCode());
         assertEquals(400, error.getStatus().value());
@@ -65,7 +66,7 @@ class QslPublicApiServiceValidationTest {
             Mockito.mock(QslAuditService.class)
         );
 
-        var command = new QslPublicApiService.PublicReceiptConfirmCommand("BG7ABC", "", "测试");
+        var command = new QslPublicApiService.PublicReceiptConfirmCommand("BG7ABC", "", "测试", "");
         var error = assertThrows(QslApiException.class, () -> service.confirmReceipt(command, "127.0.0.1").block());
         assertEquals("QSL-400-0001", error.getCode());
         assertEquals(400, error.getStatus().value());

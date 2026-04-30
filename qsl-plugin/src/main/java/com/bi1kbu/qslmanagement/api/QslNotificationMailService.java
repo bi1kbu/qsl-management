@@ -365,8 +365,10 @@ public class QslNotificationMailService {
         var spec = new CardRecord.CardRecordSpec();
         spec.setCallSign("");
         spec.setCardType("QSO");
+        spec.setSceneType("QSO");
         spec.setCardVersion("");
         spec.setQsoRecordName("");
+        spec.setOfflineActivityName("");
         spec.setAddressEntryName("");
         spec.setCardDate("");
         spec.setCardTime("");

@@ -45,8 +45,9 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> listPublicQso(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
         var callSign = request.queryParam("callSign").orElse("");
+        var sceneType = request.queryParam("sceneType").orElse("");
         return publicRateLimitService.checkLimit("qso-public-records", clientIp)
-            .then(publicApiService.listPublicRecords(callSign))
+            .then(publicApiService.listPublicRecords(callSign, sceneType))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }
@@ -56,6 +57,7 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
         return publicRateLimitService.checkLimit("exchange-public-requests", clientIp)
             .then(request.bodyToMono(QslPublicApiService.PublicExchangeSubmitCommand.class)
                 .defaultIfEmpty(new QslPublicApiService.PublicExchangeSubmitCommand(
+                    "",
                     "",
                     Boolean.FALSE,
                     "",
@@ -73,10 +75,22 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> confirmReceipt(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        var sceneType = request.queryParam("sceneType").orElse("");
         return publicRateLimitService.checkLimit("receipt-public-confirm", clientIp)
             .then(request.bodyToMono(QslPublicApiService.PublicReceiptConfirmCommand.class)
-                .defaultIfEmpty(new QslPublicApiService.PublicReceiptConfirmCommand("", "", ""))
-                .flatMap(payload -> publicApiService.confirmReceipt(payload, clientIp)))
+                .defaultIfEmpty(new QslPublicApiService.PublicReceiptConfirmCommand("", "", "", sceneType))
+                .flatMap(payload -> {
+                    var effectivePayload = payload;
+                    if (payload.sceneType() == null || payload.sceneType().isBlank()) {
+                        effectivePayload = new QslPublicApiService.PublicReceiptConfirmCommand(
+                            payload.callSign(),
+                            payload.cardId(),
+                            payload.remarks(),
+                            sceneType
+                        );
+                    }
+                    return publicApiService.confirmReceipt(effectivePayload, clientIp);
+                }))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

@@ -1,6 +1,7 @@
 package com.bi1kbu.qslmanagement.front;
 
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -17,6 +18,9 @@ public class QslReceiptEmbedContentTransformer {
     private static final Pattern CARD_ID_ATTR_PATTERN = Pattern.compile(
         "(?i)cardId\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
     );
+    private static final Pattern SCENE_TYPE_ATTR_PATTERN = Pattern.compile(
+        "(?i)sceneType\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
+    );
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
 
     public String transform(String content) {
@@ -32,8 +36,9 @@ public class QslReceiptEmbedContentTransformer {
             var attributes = matcher.group(1);
             var callSign = extractCallSign(attributes);
             var cardId = extractCardId(attributes);
+            var sceneType = extractSceneType(attributes);
             var embedId = prefix + "-" + sequence++;
-            var replacement = buildEmbedBlock(callSign, cardId, embedId);
+            var replacement = buildEmbedBlock(callSign, cardId, sceneType, embedId);
             matcher.appendReplacement(builder, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(builder);
@@ -53,6 +58,14 @@ public class QslReceiptEmbedContentTransformer {
         return extractAttributeValue(attributes, CARD_ID_ATTR_PATTERN).trim();
     }
 
+    private String extractSceneType(String attributes) {
+        var raw = extractAttributeValue(attributes, SCENE_TYPE_ATTR_PATTERN).trim().toUpperCase(Locale.ROOT);
+        if ("QSO".equals(raw) || "SWL".equals(raw) || "ONLINE_EYEBALL".equals(raw) || "EYEBALL".equals(raw)) {
+            return raw;
+        }
+        return "";
+    }
+
     private String extractAttributeValue(String attributes, Pattern pattern) {
         if (attributes == null || attributes.isBlank()) {
             return "";
@@ -64,7 +77,7 @@ public class QslReceiptEmbedContentTransformer {
         return firstNotBlank(matcher.group(2), matcher.group(3), matcher.group(4));
     }
 
-    private String buildEmbedBlock(String callSign, String cardId, String embedId) {
+    private String buildEmbedBlock(String callSign, String cardId, String sceneType, String embedId) {
         var uriBuilder = UriComponentsBuilder
             .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/page")
             .queryParam("embed", "1")
@@ -74,6 +87,9 @@ public class QslReceiptEmbedContentTransformer {
         }
         if (!cardId.isBlank()) {
             uriBuilder.queryParam("cardId", cardId);
+        }
+        if (!sceneType.isBlank()) {
+            uriBuilder.queryParam("sceneType", sceneType);
         }
         var src = uriBuilder.build().toUriString();
 

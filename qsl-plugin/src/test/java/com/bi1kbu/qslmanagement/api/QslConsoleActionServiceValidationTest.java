@@ -22,7 +22,7 @@ class QslConsoleActionServiceValidationTest {
         );
 
         var error = assertThrows(QslApiException.class, () -> service.confirmMailReceive(
-            new QslConsoleActionService.MailReceiveConfirmCommand("  ", "QSO", ""),
+            new QslConsoleActionService.MailReceiveConfirmCommand("  ", "QSO", "", ""),
             "admin",
             "127.0.0.1"
         ).block());
@@ -40,7 +40,7 @@ class QslConsoleActionServiceValidationTest {
         );
 
         var error = assertThrows(QslApiException.class, () -> service.confirmMailReceive(
-            new QslConsoleActionService.MailReceiveConfirmCommand("BG7ABC", "INVALID", ""),
+            new QslConsoleActionService.MailReceiveConfirmCommand("BG7ABC", "INVALID", "", ""),
             "admin",
             "127.0.0.1"
         ).block());

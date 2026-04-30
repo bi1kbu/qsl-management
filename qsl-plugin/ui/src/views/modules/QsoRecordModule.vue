@@ -19,6 +19,7 @@ import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import { buildQsoResourceName } from '../../utils/resource-name'
 
 interface QsoRecordSpec {
+  sceneType: 'QSO' | 'SWL'
   date: string
   time: string
   timezone: 'UTC' | 'UTC+8'
@@ -42,6 +43,7 @@ interface QsoRecordSpec {
 interface QsoRecordItem {
   resourceName: string
   metadataVersion?: number | null
+  sceneType: 'QSO' | 'SWL'
   callSign: string
   date: string
   time: string
@@ -81,8 +83,29 @@ interface StationProfileSpec {
 }
 
 type OpponentCatalogType = 'RIG' | 'ANT' | 'PWR'
+type SceneType = 'QSO' | 'SWL'
+
+const props = withDefaults(
+  defineProps<{
+    sceneTypes?: SceneType[]
+    defaultSceneType?: SceneType
+  }>(),
+  {
+    sceneTypes: () => ['QSO', 'SWL'],
+    defaultSceneType: 'QSO',
+  },
+)
+
+const normalizeSceneType = (value?: string): SceneType => {
+  const upper = (value ?? '').trim().toUpperCase()
+  if (upper === 'SWL') {
+    return 'SWL'
+  }
+  return 'QSO'
+}
 
 const form = reactive({
+  sceneType: props.defaultSceneType as SceneType,
   date: '',
   time: '',
   timezone: 'UTC' as 'UTC' | 'UTC+8',
@@ -128,8 +151,16 @@ const batchEditValue = ref('')
 const stationProfileMyName = ref('')
 const deletingResourceName = ref('')
 
+const availableSceneTypes = computed<SceneType[]>(() => {
+  const deduplicated = Array.from(new Set(props.sceneTypes.map((item) => normalizeSceneType(item))))
+  return deduplicated.length ? deduplicated : ['QSO']
+})
+
+const isSwlMode = computed(() => form.sceneType === 'SWL')
+
 const historyColumns = [
   { key: 'resourceName', label: '通联记录编号' },
+  { key: 'sceneType', label: '类型' },
   { key: 'callSign', label: '对方呼号' },
   { key: 'date', label: '日期' },
   { key: 'time', label: '时间' },
@@ -220,12 +251,13 @@ const pwrSuggestionOptions = computed(() => {
 const isEditing = computed(() => Boolean(editingResourceName.value))
 
 const filteredHistory = computed(() => {
+  const filteredByScene = records.value.filter((item) => availableSceneTypes.value.includes(item.sceneType))
   const callSign = historyKeyword.value.trim().toUpperCase()
   if (!callSign) {
-    return records.value
+    return filteredByScene
   }
 
-  return records.value.filter((item) => item.callSign.toUpperCase().includes(callSign))
+  return filteredByScene.filter((item) => item.callSign.toUpperCase().includes(callSign))
 })
 
 const allFilteredSelected = computed(() => {
@@ -269,6 +301,21 @@ watch(
     }
     if (!form.rstRcvd.trim() || form.rstRcvd === '59' || form.rstRcvd === '599') {
       form.rstRcvd = defaultRst
+    }
+  },
+)
+
+watch(
+  () => form.sceneType,
+  (sceneType) => {
+    if (sceneType === 'SWL') {
+      form.rstSent = ''
+      form.myRigPwr = ''
+      form.pwr = ''
+      return
+    }
+    if (!form.rstSent.trim()) {
+      form.rstSent = form.mode === 'CW' ? '599' : '59'
     }
   },
 )
@@ -329,6 +376,16 @@ watch(filteredHistory, () => {
 watch(pageSize, () => {
   currentPage.value = 1
 })
+
+watch(
+  availableSceneTypes,
+  (types) => {
+    if (!types.includes(form.sceneType)) {
+      form.sceneType = types[0]
+    }
+  },
+  { immediate: true },
+)
 
 const applyHistorySearch = () => {
   historyKeyword.value = historyKeywordInput.value.trim().toUpperCase()
@@ -435,6 +492,7 @@ const toRecordItem = (extension: QslExtension<QsoRecordSpec>): QsoRecordItem => 
   return {
     resourceName: extension.metadata.name,
     metadataVersion: extension.metadata.version,
+    sceneType: normalizeSceneType(extension.spec?.sceneType),
     callSign: extension.spec?.callSign ?? '',
     date: extension.spec?.date ?? '',
     time: extension.spec?.time ?? '',
@@ -524,7 +582,9 @@ const loadPageData = async () => {
 const buildSpecFromForm = (): QsoRecordSpec => {
   const fallbackOperator = stationProfileMyName.value.trim()
   const operator = form.operator.trim() || fallbackOperator
+  const sceneType = normalizeSceneType(form.sceneType)
   return {
+    sceneType,
     date: form.date,
     time: toStorageTime(form.time),
     timezone: form.timezone,
@@ -532,21 +592,22 @@ const buildSpecFromForm = (): QsoRecordSpec => {
     myRig: form.myRig.trim(),
     myRigMode: form.mode.trim(),
     myRigAnt: form.myRigAnt.trim(),
-    myRigPwr: form.myRigPwr.trim(),
+    myRigPwr: sceneType === 'SWL' ? '' : form.myRigPwr.trim(),
     myQth: form.myQth.trim(),
     operator,
     callSign: form.callSign.trim().toUpperCase(),
     rig: form.rig.trim(),
     ant: form.ant.trim(),
-    pwr: form.pwr.trim(),
+    pwr: sceneType === 'SWL' ? '' : form.pwr.trim(),
     qth: form.qth.trim(),
-    rstSent: form.rstSent.trim(),
+    rstSent: sceneType === 'SWL' ? '' : form.rstSent.trim(),
     rstRcvd: form.rstRcvd.trim(),
     remarks: form.remarks.trim(),
   }
 }
 
 const fillFormFromRecord = (item: QsoRecordItem) => {
+  form.sceneType = normalizeSceneType(item.sceneType)
   form.date = item.date
   form.time = toInputTime(item.time)
   form.timezone = item.timezone
@@ -569,6 +630,7 @@ const fillFormFromRecord = (item: QsoRecordItem) => {
 }
 
 const resetForm = () => {
+  form.sceneType = availableSceneTypes.value[0] ?? 'QSO'
   form.freq = ''
   form.myRig = myRigOptions.value[0] ?? ''
   form.mode = ''
@@ -645,6 +707,7 @@ const applyHistoryBatchEdit = async () => {
     const targets = records.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
     for (const item of targets) {
       const nextSpec: QsoRecordSpec = {
+        sceneType: item.sceneType,
         date: item.date,
         time: item.time,
         timezone: item.timezone,
@@ -819,8 +882,10 @@ const saveRecord = async () => {
     return
   }
 
-  if (!form.mode.trim() || !form.myRigAnt.trim() || !form.myRigPwr.trim()) {
-    feedback.value = '请完整选择本台设备的模式、天线和功率。'
+  if (!form.mode.trim() || !form.myRigAnt.trim() || (!isSwlMode.value && !form.myRigPwr.trim())) {
+    feedback.value = isSwlMode.value
+      ? '请完整选择本台设备的模式和天线。'
+      : '请完整选择本台设备的模式、天线和功率。'
     return
   }
 
@@ -920,6 +985,15 @@ onMounted(() => {
         <p class="qsl-record-section__title">第一部分：本台基本信息</p>
         <div class="qsl-form-grid">
           <label class="qsl-field">
+            <span class="qsl-field__label">日志类型（Scene_Type）</span>
+            <div class="qsl-input-shell">
+              <select v-model="form.sceneType">
+                <option v-for="item in availableSceneTypes" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
+          </label>
+
+          <label class="qsl-field">
             <span class="qsl-field__label">日期（DATE）</span>
             <div class="qsl-input-shell">
               <input v-model="form.date" type="date" :disabled="form.realtime" />
@@ -988,7 +1062,7 @@ onMounted(() => {
             </div>
           </label>
 
-          <label class="qsl-field">
+          <label v-if="!isSwlMode" class="qsl-field">
             <span class="qsl-field__label">功率（My_RIG_PWR）</span>
             <div class="qsl-input-shell">
               <select v-model="form.myRigPwr" :disabled="!form.myRig">
@@ -1018,7 +1092,7 @@ onMounted(() => {
         <p class="qsl-record-section__title">第二部分：对方信息</p>
         <div class="qsl-form-grid">
           <label class="qsl-field">
-            <span class="qsl-field__label">对方呼号（Call_Sign）</span>
+            <span class="qsl-field__label">{{ isSwlMode ? '监听呼号（Call_Sign）' : '对方呼号（Call_Sign）' }}</span>
             <div class="qsl-input-shell">
               <input v-model.trim="form.callSign" type="text" placeholder="例如：JA1ABC" />
             </div>
@@ -1044,7 +1118,7 @@ onMounted(() => {
             </div>
           </label>
 
-          <label class="qsl-field">
+          <label v-if="!isSwlMode" class="qsl-field">
             <span class="qsl-field__label">功率（PWR）</span>
             <div class="qsl-input-shell">
               <input v-model.trim="form.pwr" list="qsl-opponent-pwr-options" type="text" placeholder="自动联想设备库" />
@@ -1066,7 +1140,7 @@ onMounted(() => {
       <div class="qsl-record-section">
         <p class="qsl-record-section__title">第三部分：报告</p>
         <div class="qsl-form-grid">
-          <label class="qsl-field">
+          <label v-if="!isSwlMode" class="qsl-field">
             <span class="qsl-field__label">给对方（RST_Sent）</span>
             <div class="qsl-input-shell">
               <input v-model.trim="form.rstSent" type="text" placeholder="59 或 599" />
@@ -1074,7 +1148,7 @@ onMounted(() => {
           </label>
 
           <label class="qsl-field">
-            <span class="qsl-field__label">给我方（RST_Rcvd）</span>
+            <span class="qsl-field__label">{{ isSwlMode ? '接收报告（RST_Rcvd）' : '给我方（RST_Rcvd）' }}</span>
             <div class="qsl-input-shell">
               <input v-model.trim="form.rstRcvd" type="text" placeholder="59 或 599" />
             </div>
@@ -1158,6 +1232,10 @@ onMounted(() => {
           {{ toHistoryItem(row).mode || '未填模式' }}
         </template>
 
+        <template #cell-sceneType="{ row }">
+          {{ toHistoryItem(row).sceneType === 'SWL' ? 'SWL' : 'QSO' }}
+        </template>
+
         <template #row-actions="{ row }">
           <VButton size="xs" type="secondary" @click="startEditRecord(toHistoryItem(row))">编辑</VButton>
           <VButton
@@ -1207,7 +1285,14 @@ onMounted(() => {
                 <th>位置</th>
                 <td>{{ toHistoryItem(row).qth || '未填' }}</td>
                 <th>信号报告</th>
-                <td>给对方 {{ toHistoryItem(row).rstSent || '-' }} / 给我方 {{ toHistoryItem(row).rstRcvd || '-' }}</td>
+                <td>
+                  <template v-if="toHistoryItem(row).sceneType === 'SWL'">
+                    接收 {{ toHistoryItem(row).rstRcvd || '-' }}
+                  </template>
+                  <template v-else>
+                    给对方 {{ toHistoryItem(row).rstSent || '-' }} / 给我方 {{ toHistoryItem(row).rstRcvd || '-' }}
+                  </template>
+                </td>
               </tr>
               <tr>
                 <th>备注</th>

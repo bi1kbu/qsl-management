@@ -6,10 +6,12 @@ import './styles/qsl-module-framework.scss'
 const qslTopLevelGroups = [
   { key: 'overview', title: '总览', priority: 10 },
   { key: 'settings', title: '配置', priority: 20 },
-  { key: 'business', title: '业务', priority: 30 },
-  { key: 'review', title: '审核', priority: 40 },
-  { key: 'audit', title: '审计', priority: 50 },
-  { key: 'data', title: '数据', priority: 60 },
+  { key: 'traffic-business', title: '通联业务', priority: 30 },
+  { key: 'online-exchange-business', title: '线上换卡业务', priority: 40 },
+  { key: 'offline-exchange-business', title: '线下换卡业务', priority: 50 },
+  { key: 'receive-business', title: '收卡业务', priority: 60 },
+  { key: 'audit', title: '审计', priority: 70 },
+  { key: 'data', title: '数据', priority: 80 },
 ] as const
 
 const groupedModules = qslTopLevelGroups

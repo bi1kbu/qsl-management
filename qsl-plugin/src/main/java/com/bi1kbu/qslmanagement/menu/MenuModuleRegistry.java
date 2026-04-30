@@ -51,7 +51,7 @@ public class MenuModuleRegistry {
         ),
         module(
             "mail-receive-confirm",
-            "收信确认",
+            "送达确认",
             List.of(view("card-record"), view("qso-record")),
             List.of(view("mail-receive-confirm"), view("card-record"), view("qso-record"))
         ),
@@ -63,7 +63,7 @@ public class MenuModuleRegistry {
         ),
         module(
             "exchange-request-review",
-            "换卡申请",
+            "换卡申请审核",
             List.of(view("address-bureau"), view("card-record")),
             List.of(view("exchange-request-review"), edit("card-record"))
         ),

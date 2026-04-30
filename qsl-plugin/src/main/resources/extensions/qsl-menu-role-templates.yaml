@@ -245,7 +245,7 @@ metadata:
     halo.run/role-template: "true"
   annotations:
     rbac.authorization.halo.run/module: "QSL 菜单权限"
-    rbac.authorization.halo.run/display-name: "收信确认（只读）"
+    rbac.authorization.halo.run/display-name: "送达确认（只读）"
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:mail-receive-confirm:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view","qsl-management-qso-record-view"]'
 rules:
@@ -261,7 +261,7 @@ metadata:
     halo.run/role-template: "true"
   annotations:
     rbac.authorization.halo.run/module: "QSL 菜单权限"
-    rbac.authorization.halo.run/display-name: "收信确认（编辑）"
+    rbac.authorization.halo.run/display-name: "送达确认（编辑）"
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:mail-receive-confirm:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-mail-receive-confirm-view","qsl-management-card-record-view","qsl-management-qso-record-view"]'
 rules:
@@ -283,12 +283,12 @@ metadata:
     halo.run/role-template: "true"
   annotations:
     rbac.authorization.halo.run/module: "QSL 菜单权限"
-    rbac.authorization.halo.run/display-name: "换卡申请（只读）"
+    rbac.authorization.halo.run/display-name: "换卡申请审核（只读）"
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:exchange-request-review:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-address-bureau-view","qsl-management-card-record-view"]'
 rules:
   - apiGroups: [ "qsl-management.halo.run" ]
-    resources: [ "exchange-requests" ]
+    resources: [ "exchange-requests", "offline-activities" ]
     verbs: [ "get", "list" ]
 ---
 apiVersion: v1alpha1
@@ -299,13 +299,16 @@ metadata:
     halo.run/role-template: "true"
   annotations:
     rbac.authorization.halo.run/module: "QSL 菜单权限"
-    rbac.authorization.halo.run/display-name: "换卡申请（编辑）"
+    rbac.authorization.halo.run/display-name: "换卡申请审核（编辑）"
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:exchange-request-review:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-exchange-request-review-view","qsl-management-card-record-edit"]'
 rules:
   - apiGroups: [ "qsl-management.halo.run" ]
-    resources: [ "exchange-requests" ]
+    resources: [ "exchange-requests", "offline-activities" ]
     verbs: [ "update", "patch" ]
+  - apiGroups: [ "qsl-management.halo.run" ]
+    resources: [ "offline-activities" ]
+    verbs: [ "create", "delete" ]
   - apiGroups: [ "qsl-management.halo.run" ]
     resources: [ "card-records" ]
     verbs: [ "create" ]
@@ -548,6 +551,7 @@ rules:
   - apiGroups: [ "api.qsl-management.halo.run" ]
     resources: [ "exchange-public/requests", "receipt-public/confirm" ]
     verbs: [ "create" ]
+
 
 
 

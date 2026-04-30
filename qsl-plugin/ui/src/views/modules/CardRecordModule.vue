@@ -21,8 +21,10 @@ import QslPaginationBar from '../../components/QslPaginationBar.vue'
 interface CardRecordSpec {
   callSign: string
   cardType: CardType
+  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   cardVersion: string
   qsoRecordName: string
+  offlineActivityName: string
   addressEntryName: string
   cardDate: string
   cardTime: string
@@ -103,13 +105,105 @@ interface SystemSettingSpec {
   cardRecordSequence: number
 }
 
+interface OfflineActivitySpec {
+  activityName: string
+  activityLocation: string
+  activityDate: string
+  activityTime: string
+  cardRemarks: string
+}
+
+interface OfflineActivityItem {
+  resourceName: string
+  title: string
+}
+
 type CardType = 'QSO' | 'SWL' | 'EYEBALL'
+type SceneType = 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+
+const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
+
+const props = withDefaults(
+  defineProps<{
+    sceneTypes?: SceneType[]
+    defaultSceneType?: SceneType
+  }>(),
+  {
+    sceneTypes: () => ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL'],
+    defaultSceneType: 'QSO',
+  },
+)
+
+const normalizeSceneType = (sceneType?: string, cardType?: string): SceneType => {
+  const upperScene = (sceneType ?? '').trim().toUpperCase()
+  if (allSceneTypes.includes(upperScene as SceneType)) {
+    return upperScene as SceneType
+  }
+
+  const upperCardType = (cardType ?? '').trim().toUpperCase()
+  if (upperCardType === 'SWL') {
+    return 'SWL'
+  }
+  if (upperCardType === 'EYEBALL') {
+    return props.sceneTypes.includes('ONLINE_EYEBALL') && !props.sceneTypes.includes('EYEBALL')
+      ? 'ONLINE_EYEBALL'
+      : 'EYEBALL'
+  }
+  return 'QSO'
+}
+
+const normalizedSceneTypes = computed<SceneType[]>(() => {
+  const deduplicated = Array.from(
+    new Set(props.sceneTypes.map((item) => normalizeSceneType(item))),
+  )
+  return deduplicated.length ? deduplicated : ['QSO']
+})
+
+const availableCardTypes = computed<CardType[]>(() => {
+  const options: CardType[] = []
+  if (normalizedSceneTypes.value.includes('QSO')) {
+    options.push('QSO')
+  }
+  if (normalizedSceneTypes.value.includes('SWL')) {
+    options.push('SWL')
+  }
+  if (
+    normalizedSceneTypes.value.includes('EYEBALL')
+    || normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  ) {
+    options.push('EYEBALL')
+  }
+  return options.length ? options : ['QSO']
+})
+
+const resolveDefaultCardType = (): CardType => {
+  return availableCardTypes.value[0] ?? 'QSO'
+}
+
+const resolveSceneTypeByCardType = (cardType: CardType): SceneType => {
+  if (cardType === 'QSO' && normalizedSceneTypes.value.includes('QSO')) {
+    return 'QSO'
+  }
+  if (cardType === 'SWL' && normalizedSceneTypes.value.includes('SWL')) {
+    return 'SWL'
+  }
+  if (cardType === 'EYEBALL') {
+    if (normalizedSceneTypes.value.includes('ONLINE_EYEBALL')) {
+      return 'ONLINE_EYEBALL'
+    }
+    if (normalizedSceneTypes.value.includes('EYEBALL')) {
+      return 'EYEBALL'
+    }
+  }
+  return normalizeSceneType(props.defaultSceneType, cardType)
+}
 
 const form = reactive({
   callSign: '',
-  cardType: 'QSO' as CardType,
+  cardType: resolveDefaultCardType(),
   cardVersion: '',
   qsoRecordName: '',
+  offlineActivityName: '',
   addressEntryName: '',
   cardDate: '',
   cardTime: '',
@@ -120,6 +214,7 @@ const form = reactive({
 const records = ref<CardRecordItem[]>([])
 const qsoRecords = ref<QsoRecordItem[]>([])
 const cardVersionOptions = ref<string[]>([])
+const offlineActivities = ref<OfflineActivityItem[]>([])
 const eyeballCardVersionDraft = ref('')
 const eyeballCardVersions = ref<string[]>([])
 
@@ -128,13 +223,14 @@ const loading = ref(false)
 const saving = ref(false)
 const qsoPanelVisible = ref(false)
 const qsoFilter = ref('')
-const activeFunctionTab = ref<CardType | 'batch'>('QSO')
+const activeFunctionTab = ref<CardType | 'batch'>(resolveDefaultCardType())
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
 const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
 const batchUpdating = ref(false)
 const syncHistoryQuery = ref(false)
+const activityFilter = ref('')
 const realtimeEnabled = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -159,6 +255,7 @@ const qsoRecordPlural = 'qso-records'
 const stationCardPlural = 'station-cards'
 const systemSettingPlural = 'system-settings'
 const systemSettingName = 'qsl-system-setting-default'
+const offlineActivityPlural = 'offline-activities'
 
 const selectedQso = computed(() => {
   if (!form.qsoRecordName.trim()) {
@@ -172,6 +269,19 @@ const dateTimeRequired = computed(() => form.cardType === 'EYEBALL')
 const lockCardDateTime = computed(() => selectedQso.value !== null)
 const isBatchTab = computed(() => activeFunctionTab.value === 'batch')
 const isEyeballMode = computed(() => form.cardType === 'EYEBALL')
+const showOfflineActivitySelect = computed(() => {
+  return (
+    form.cardType === 'EYEBALL'
+    && normalizedSceneTypes.value.includes('EYEBALL')
+    && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  )
+})
+const shouldLoadOfflineActivities = computed(() => {
+  return normalizedSceneTypes.value.includes('EYEBALL')
+})
+const showQsoTab = computed(() => availableCardTypes.value.includes('QSO'))
+const showSwlTab = computed(() => availableCardTypes.value.includes('SWL'))
+const showEyeballTab = computed(() => availableCardTypes.value.includes('EYEBALL'))
 const cardVersionSelectOptions = computed(() => {
   const options = [...cardVersionOptions.value]
   const currentValue = form.cardVersion.trim()
@@ -217,17 +327,35 @@ const filteredQsoRecords = computed(() => {
 })
 
 const filteredRecords = computed(() => {
+  const filteredByActivity = activityFilter.value
+    ? records.value.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
+    : records.value
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
-    return records.value
+    return filteredByActivity
   }
-  return records.value.filter((item) => {
+  return filteredByActivity.filter((item) => {
     return (
       item.callSign.toUpperCase().includes(keyword) ||
       item.resourceName.toUpperCase().includes(keyword) ||
-      item.cardVersion.toUpperCase().includes(keyword)
+      item.cardVersion.toUpperCase().includes(keyword) ||
+      (item.spec.offlineActivityName || '').toUpperCase().includes(keyword)
     )
   })
+})
+
+const activityFilterOptions = computed(() => {
+  const activitySet = new Set<string>()
+  records.value.forEach((item) => {
+    const activityName = (item.spec.offlineActivityName || '').trim()
+    if (activityName) {
+      activitySet.add(activityName)
+    }
+  })
+  offlineActivities.value.forEach((item) => {
+    activitySet.add(item.resourceName)
+  })
+  return Array.from(activitySet).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 })
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
@@ -301,6 +429,20 @@ const applyHistorySearch = () => {
   currentPage.value = 1
 }
 
+const selectHistoryRowForQuery = (item: CardRecordItem) => {
+  const keyword = item.callSign.trim().toUpperCase()
+  if (!keyword) {
+    return
+  }
+  form.callSign = keyword
+  if (item.spec.offlineActivityName?.trim()) {
+    activityFilter.value = item.spec.offlineActivityName.trim()
+  }
+  historyKeyword.value = keyword
+  historyKeywordInput.value = keyword
+  currentPage.value = 1
+}
+
 const toDateText = (date: Date): string => {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -357,6 +499,22 @@ watch(activeFunctionTab, (tab) => {
   }
   form.cardType = tab
 })
+
+watch(
+  availableCardTypes,
+  (types) => {
+    if (!types.length) {
+      return
+    }
+    if (!types.includes(form.cardType)) {
+      form.cardType = types[0]
+    }
+    if (activeFunctionTab.value !== 'batch' && !types.includes(activeFunctionTab.value)) {
+      activeFunctionTab.value = types[0]
+    }
+  },
+  { immediate: true },
+)
 
 watch(historyKeyword, (value) => {
   historyKeywordInput.value = value
@@ -440,8 +598,10 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
   return {
     callSign: spec?.callSign ?? '',
     cardType: spec?.cardType ?? 'QSO',
+    sceneType: spec?.sceneType ?? 'QSO',
     cardVersion: spec?.cardVersion ?? '',
     qsoRecordName: spec?.qsoRecordName ?? '',
+    offlineActivityName: spec?.offlineActivityName ?? '',
     addressEntryName: spec?.addressEntryName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
@@ -511,7 +671,12 @@ const loadCardRecords = async (options: { silent?: boolean; skipLoading?: boolea
   }
   try {
     const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
-    records.value = extensions.map((extension) => toRecordItem(extension))
+    records.value = extensions
+      .map((extension) => toRecordItem(extension))
+      .filter((item) => {
+        const sceneType = normalizeSceneType(item.spec.sceneType, item.spec.cardType)
+        return normalizedSceneTypes.value.includes(sceneType)
+      })
     if (!options.silent) {
       feedback.value = ''
     }
@@ -527,6 +692,28 @@ const loadCardRecords = async (options: { silent?: boolean; skipLoading?: boolea
 const loadQsoRecords = async () => {
   const extensions = await listExtensions<QsoRecordSpec>(qsoRecordPlural)
   qsoRecords.value = extensions.map((extension) => toQsoRecordItem(extension))
+}
+
+const loadOfflineActivities = async () => {
+  if (!shouldLoadOfflineActivities.value) {
+    offlineActivities.value = []
+    return
+  }
+  try {
+    const extensions = await listExtensions<OfflineActivitySpec>(offlineActivityPlural)
+    offlineActivities.value = extensions.map((extension) => {
+      const spec = extension.spec
+      const title = [spec?.activityName ?? '', spec?.activityDate ?? '', spec?.activityTime ?? '']
+        .filter((item) => item.trim().length > 0)
+        .join(' ')
+      return {
+        resourceName: extension.metadata.name,
+        title: title || extension.metadata.name,
+      }
+    })
+  } catch {
+    offlineActivities.value = []
+  }
 }
 
 const loadCardVersions = async () => {
@@ -561,18 +748,21 @@ const loadCardVersions = async () => {
     .map((extension) => {
       const version = extension.spec?.cardVersion?.trim() ?? ''
       const key = version.toUpperCase()
-      const availableInventory = Number(extension.spec?.availableInventory ?? 0)
+      const availableInventoryRaw = extension.spec?.availableInventory
+      const hasConfiguredInventory = availableInventoryRaw !== undefined && availableInventoryRaw !== null
+      const availableInventory = Number(availableInventoryRaw ?? 0)
       const safeInventory = Number.isFinite(availableInventory) && availableInventory > 0 ? Math.floor(availableInventory) : 0
       const usedCount = usedCounter[key] ?? 0
-      const remaining = safeInventory - usedCount
+      const remaining = hasConfiguredInventory ? safeInventory - usedCount : Number.POSITIVE_INFINITY
       return {
         version,
         key,
         remaining,
+        hasConfiguredInventory,
       }
     })
     .filter((item) => {
-      if (item.remaining <= 0) {
+      if (item.hasConfiguredInventory && item.remaining <= 0) {
         return false
       }
       const key = item.key
@@ -603,6 +793,7 @@ const loadPageData = async () => {
     await Promise.all([
       loadCardRecords({ skipLoading: true }),
       loadQsoRecords(),
+      loadOfflineActivities(),
       loadCardVersions(),
       loadSystemSetting(),
     ])
@@ -614,13 +805,16 @@ const loadPageData = async () => {
 }
 
 const resetForm = () => {
-  const defaultCardType = activeFunctionTab.value === 'batch' ? form.cardType : activeFunctionTab.value
+  const defaultCardType = activeFunctionTab.value === 'batch'
+    ? resolveDefaultCardType()
+    : activeFunctionTab.value
   form.callSign = ''
   form.cardType = defaultCardType
   form.cardVersion = cardVersionOptions.value[0] ?? ''
   eyeballCardVersionDraft.value = cardVersionOptions.value[0] ?? ''
   eyeballCardVersions.value = []
   form.qsoRecordName = ''
+  form.offlineActivityName = ''
   form.addressEntryName = ''
   form.cardDate = ''
   form.cardTime = ''
@@ -633,6 +827,7 @@ const fillFormFromRecord = (item: CardRecordItem) => {
   form.cardType = item.cardType
   form.cardVersion = item.cardVersion
   form.qsoRecordName = item.qsoRecordName
+  form.offlineActivityName = item.spec.offlineActivityName
   form.addressEntryName = item.addressEntryName
   form.cardDate = item.cardDate
   form.cardTime = item.cardTime
@@ -721,6 +916,7 @@ watch(
       }
       return
     }
+    form.offlineActivityName = ''
     if (!form.qsoRecordName.trim()) {
       form.cardDate = ''
       form.cardTime = ''
@@ -731,7 +927,11 @@ watch(
 const startEditRecord = (item: CardRecordItem) => {
   editingResourceName.value = item.resourceName
   fillFormFromRecord(item)
-  activeFunctionTab.value = item.cardType
+  if (availableCardTypes.value.includes(item.cardType)) {
+    activeFunctionTab.value = item.cardType
+  } else {
+    activeFunctionTab.value = resolveDefaultCardType()
+  }
   feedback.value = `正在编辑卡片记录：${item.resourceName}`
 }
 
@@ -783,9 +983,13 @@ const applyHistoryBatchEdit = async () => {
     const targets = records.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
 
     for (const item of targets) {
+      const nextCardType = batchEditField.value === 'cardType'
+        ? (nextValue as CardRecordSpec['cardType'])
+        : item.spec.cardType
       const nextSpec: CardRecordSpec = {
         ...item.spec,
-        cardType: batchEditField.value === 'cardType' ? (nextValue as CardRecordSpec['cardType']) : item.spec.cardType,
+        cardType: nextCardType,
+        sceneType: resolveSceneTypeByCardType(nextCardType),
         cardVersion: batchEditField.value === 'cardVersion' ? nextValue : item.spec.cardVersion,
         cardDate: batchEditField.value === 'cardDate' ? nextValue : item.spec.cardDate,
         businessRemarks: batchEditField.value === 'businessRemarks' ? nextValue : item.spec.businessRemarks,
@@ -846,6 +1050,7 @@ const saveCardRecord = async () => {
   }
 
   const qsoRecordName = showQsoSelector.value ? form.qsoRecordName.trim() : ''
+  const offlineActivityName = showOfflineActivitySelect.value ? form.offlineActivityName.trim() : ''
   const cardDate = lockCardDateTime.value ? selectedQso.value?.date || '' : form.cardDate
   const cardTime = lockCardDateTime.value ? selectedQso.value?.time || '' : form.cardTime
 
@@ -877,8 +1082,10 @@ const saveCardRecord = async () => {
         ...target.spec,
         callSign: form.callSign.trim().toUpperCase(),
         cardType: form.cardType,
+        sceneType: resolveSceneTypeByCardType(form.cardType),
         cardVersion: persistedCardVersion,
         qsoRecordName,
+        offlineActivityName,
         addressEntryName: form.addressEntryName.trim(),
         cardDate,
         cardTime,
@@ -921,8 +1128,10 @@ const saveCardRecord = async () => {
       spec: {
         callSign: form.callSign.trim().toUpperCase(),
         cardType: form.cardType,
+        sceneType: resolveSceneTypeByCardType(form.cardType),
         cardVersion: persistedCardVersion,
         qsoRecordName,
+        offlineActivityName,
         addressEntryName: form.addressEntryName.trim(),
         cardDate,
         cardTime,
@@ -983,7 +1192,16 @@ const saveCardRecord = async () => {
   }
 }
 
+const applySceneDefaults = () => {
+  const defaultType = resolveDefaultCardType()
+  if (activeFunctionTab.value !== 'batch') {
+    activeFunctionTab.value = defaultType
+  }
+  form.cardType = defaultType
+}
+
 onMounted(() => {
+  applySceneDefaults()
   loadPageData()
 })
 
@@ -998,13 +1216,13 @@ onBeforeUnmount(() => {
       <template #header>
         <div class="qsl-function-tabs">
           <VTabs v-model:activeId="activeFunctionTab">
-            <VTabItem id="QSO" label="QSO">
+            <VTabItem v-if="showQsoTab" id="QSO" label="QSO">
               <div class="qsl-card-type-tab-panel" />
             </VTabItem>
-            <VTabItem id="SWL" label="SWL">
+            <VTabItem v-if="showSwlTab" id="SWL" label="SWL">
               <div class="qsl-card-type-tab-panel" />
             </VTabItem>
-            <VTabItem id="EYEBALL" label="EYEBALL">
+            <VTabItem v-if="showEyeballTab" id="EYEBALL" label="EYEBALL">
               <div class="qsl-card-type-tab-panel" />
             </VTabItem>
             <VTabItem id="batch" label="批量编辑">
@@ -1061,6 +1279,18 @@ onBeforeUnmount(() => {
             <small class="qsl-field__tip" v-if="selectedQso">
               已关联：{{ selectedQso.id }}（{{ selectedQso.callSign }} {{ selectedQso.date }} {{ selectedQso.time }}）
             </small>
+          </label>
+
+          <label v-if="showOfflineActivitySelect" class="qsl-field qsl-field--full">
+            <span class="qsl-field__label">关联活动</span>
+            <div class="qsl-input-shell">
+              <select v-model="form.offlineActivityName">
+                <option value="">请选择活动</option>
+                <option v-for="item in offlineActivities" :key="item.resourceName" :value="item.resourceName">
+                  {{ item.title }}
+                </option>
+              </select>
+            </div>
           </label>
 
           <label v-if="dateTimeRequired" class="qsl-field">
@@ -1179,6 +1409,18 @@ onBeforeUnmount(() => {
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
 
+      <div class="qsl-form-inline">
+        <label class="qsl-field qsl-field--inline">
+          <span class="qsl-field__label">活动筛选</span>
+          <div class="qsl-input-shell">
+            <select v-model="activityFilter">
+              <option value="">全部活动</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
+          </div>
+        </label>
+      </div>
+
       <QslExpandableHistoryTable
         title="卡片记录清单"
         :rows="pagedFilteredRecords"
@@ -1191,6 +1433,12 @@ onBeforeUnmount(() => {
         empty-text="暂无卡片记录。"
         @update:selected-keys="(value) => (selectedHistoryNames = value)"
       >
+        <template #cell-callSign="{ row }">
+          <span class="qsl-row-clickable" @click="selectHistoryRowForQuery(toHistoryItem(row))">
+            {{ toHistoryItem(row).callSign || '-' }}
+          </span>
+        </template>
+
         <template #cell-cardDate="{ row }">
           {{ toHistoryItem(row).cardDate || '-' }}
         </template>
@@ -1213,8 +1461,12 @@ onBeforeUnmount(() => {
               <tr>
                 <th>关联QSO</th>
                 <td>{{ toHistoryItem(row).qsoRecordName || '无' }}</td>
-                <th>卡片备注</th>
-                <td>
+                <th>关联活动</th>
+                <td>{{ toHistoryItem(row).spec.offlineActivityName || '无' }}</td>
+              </tr>
+              <tr>
+                <th>备注信息</th>
+                <td colspan="3">
                   <QslCardRemarkEntries
                     :remark-fields="{
                       businessRemarks: toHistoryItem(row).spec.businessRemarks,
@@ -1309,6 +1561,10 @@ onBeforeUnmount(() => {
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;
+}
+
+.qsl-row-clickable {
+  cursor: pointer;
 }
 
 .qsl-history-detail-table {

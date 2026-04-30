@@ -16,6 +16,7 @@ import ImportExportModule from './modules/ImportExportModule.vue'
 import MailReceiveConfirmModule from './modules/MailReceiveConfirmModule.vue'
 import MailSendConfirmModule from './modules/MailSendConfirmModule.vue'
 import OverviewDashboardModule from './modules/OverviewDashboardModule.vue'
+import OfflineActivityModule from './modules/OfflineActivityModule.vue'
 import QsoQueryModule from './modules/QsoQueryModule.vue'
 import ReceiveRecordQueryModule from './modules/ReceiveRecordQueryModule.vue'
 import QsoRecordModule from './modules/QsoRecordModule.vue'
@@ -29,6 +30,8 @@ interface ModuleRenderer {
   component: Component
   props?: Record<string, unknown>
 }
+
+type SceneType = 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
 
 const props = defineProps<{
   qslModule: QslMenuModule
@@ -49,19 +52,139 @@ const renderer = computed<ModuleRenderer>(() => {
     case 'station-card':
       return { component: StationCardModule }
     case 'qso-record':
-      return { component: QsoRecordModule }
+    case 'comm-qso-record':
+      return {
+        component: QsoRecordModule,
+        props: {
+          sceneTypes: ['QSO', 'SWL'] as SceneType[],
+          defaultSceneType: 'QSO' as SceneType,
+        },
+      }
     case 'card-record':
-      return { component: CardRecordModule }
+      return {
+        component: CardRecordModule,
+        props: {
+          sceneTypes: ['QSO', 'SWL'] as SceneType[],
+          defaultSceneType: 'QSO' as SceneType,
+        },
+      }
+    case 'online-card-record':
+      return {
+        component: CardRecordModule,
+        props: {
+          sceneTypes: ['ONLINE_EYEBALL'] as SceneType[],
+          defaultSceneType: 'ONLINE_EYEBALL' as SceneType,
+        },
+      }
+    case 'offline-card-record':
+      return {
+        component: CardRecordModule,
+        props: {
+          sceneTypes: ['EYEBALL'] as SceneType[],
+          defaultSceneType: 'EYEBALL' as SceneType,
+        },
+      }
     case 'card-issue':
-      return { component: CardIssueModule }
+      return {
+        component: CardIssueModule,
+        props: {
+          sceneTypes: ['QSO', 'SWL'] as SceneType[],
+          defaultSceneType: 'QSO' as SceneType,
+        },
+      }
+    case 'online-card-issue':
+      return {
+        component: CardIssueModule,
+        props: {
+          sceneTypes: ['ONLINE_EYEBALL'] as SceneType[],
+          defaultSceneType: 'ONLINE_EYEBALL' as SceneType,
+        },
+      }
+    case 'offline-card-issue':
+      return {
+        component: CardIssueModule,
+        props: {
+          sceneTypes: ['EYEBALL'] as SceneType[],
+          defaultSceneType: 'EYEBALL' as SceneType,
+        },
+      }
     case 'card-mutation':
       return { component: CardMutationModule }
     case 'mail-send-confirm':
-      return { component: MailSendConfirmModule }
+      return {
+        component: MailSendConfirmModule,
+        props: {
+          sceneTypes: ['QSO', 'SWL'] as SceneType[],
+          defaultSceneType: 'QSO' as SceneType,
+        },
+      }
+    case 'online-mail-send-confirm':
+      return {
+        component: MailSendConfirmModule,
+        props: {
+          sceneTypes: ['ONLINE_EYEBALL'] as SceneType[],
+          defaultSceneType: 'ONLINE_EYEBALL' as SceneType,
+        },
+      }
     case 'mail-receive-confirm':
-      return { component: MailReceiveConfirmModule }
+      return {
+        component: MailReceiveConfirmModule,
+        props: {
+          sceneTypes: ['QSO', 'SWL'] as SceneType[],
+          defaultSceneType: 'QSO' as SceneType,
+          defaultCardType: 'QSO',
+        },
+      }
+    case 'online-delivery-confirm':
+      return {
+        component: MailReceiveConfirmModule,
+        props: {
+          sceneTypes: ['ONLINE_EYEBALL'] as SceneType[],
+          defaultSceneType: 'ONLINE_EYEBALL' as SceneType,
+          defaultCardType: 'EYEBALL',
+        },
+      }
+    case 'offline-delivery-confirm':
+      return {
+        component: MailReceiveConfirmModule,
+        props: {
+          sceneTypes: ['EYEBALL'] as SceneType[],
+          defaultSceneType: 'EYEBALL' as SceneType,
+          defaultCardType: 'EYEBALL',
+        },
+      }
+    case 'receive-qso':
+      return {
+        component: MailReceiveConfirmModule,
+        props: {
+          sceneTypes: ['QSO', 'SWL'] as SceneType[],
+          defaultSceneType: 'QSO' as SceneType,
+          defaultCardType: 'QSO',
+        },
+      }
+    case 'receive-online-eyeball':
+      return {
+        component: MailReceiveConfirmModule,
+        props: {
+          sceneTypes: ['ONLINE_EYEBALL'] as SceneType[],
+          defaultSceneType: 'ONLINE_EYEBALL' as SceneType,
+          defaultCardType: 'EYEBALL',
+        },
+      }
+    case 'receive-eyeball':
+      return {
+        component: MailReceiveConfirmModule,
+        props: {
+          sceneTypes: ['EYEBALL'] as SceneType[],
+          defaultSceneType: 'EYEBALL' as SceneType,
+          defaultCardType: 'EYEBALL',
+        },
+      }
     case 'exchange-request-review':
+    case 'online-exchange-request-review':
       return { component: ExchangeRequestReviewModule }
+    case 'offline-activity':
+      return { component: OfflineActivityModule }
     case 'qso-query':
       return { component: QsoQueryModule }
     case 'card-query':

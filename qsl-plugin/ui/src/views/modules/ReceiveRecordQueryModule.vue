@@ -8,6 +8,8 @@ import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 interface CardRecordSpec {
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+  offlineActivityName?: string
   receivedAt: string
   receivedRemarks: string
   cardReceived: boolean
@@ -19,6 +21,7 @@ interface ReceiveRecordRow {
   cardId: string
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  offlineActivityName: string
   receivedDate: string
   receivedTime: string
   receivedRemarks: string
@@ -36,6 +39,7 @@ const filters = reactive({
   keyword: '',
   callSign: '',
   cardType: '',
+  activityName: '',
   dateFrom: '',
   dateTo: '',
 })
@@ -99,6 +103,7 @@ const toReceiveRows = (extension: QslExtension<CardRecordSpec>): ReceiveRecordRo
     cardId: extension.metadata.name,
     callSign: spec.callSign ?? '',
     cardType: spec.cardType ?? 'QSO',
+    offlineActivityName: spec.offlineActivityName ?? '',
     receivedDate: parseDateFromCode(code),
     receivedTime: fallbackTime,
     receivedRemarks: spec.receivedRemarks ?? '',
@@ -132,10 +137,22 @@ const filteredRows = computed(() => {
         .includes(keyword)
     const callSignOk = !callSign || item.callSign.toUpperCase().includes(callSign)
     const typeOk = !filters.cardType || item.cardType === filters.cardType
+    const activityOk = !filters.activityName || item.offlineActivityName === filters.activityName
     const fromOk = !filters.dateFrom || (item.receivedDate && item.receivedDate >= filters.dateFrom)
     const toOk = !filters.dateTo || (item.receivedDate && item.receivedDate <= filters.dateTo)
-    return keywordOk && callSignOk && typeOk && fromOk && toOk
+    return keywordOk && callSignOk && typeOk && activityOk && fromOk && toOk
   })
+})
+
+const activityFilterOptions = computed(() => {
+  const activitySet = new Set<string>()
+  rows.value.forEach((item) => {
+    const activityName = item.offlineActivityName.trim()
+    if (activityName) {
+      activitySet.add(activityName)
+    }
+  })
+  return Array.from(activitySet).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 })
 
 const totalPages = computed(() => {
@@ -160,6 +177,7 @@ const resetFilters = () => {
   keywordInput.value = ''
   filters.callSign = ''
   filters.cardType = ''
+  filters.activityName = ''
   filters.dateFrom = ''
   filters.dateTo = ''
   currentPage.value = 1
@@ -221,6 +239,15 @@ onMounted(loadRows)
           </div>
         </label>
         <label class="qsl-field">
+          <span class="qsl-field__label">活动</span>
+          <div class="qsl-input-shell">
+            <select v-model="filters.activityName">
+              <option value="">全部</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
+          </div>
+        </label>
+        <label class="qsl-field">
           <span class="qsl-field__label">起始日期</span>
           <div class="qsl-input-shell">
             <input v-model="filters.dateFrom" type="date" />
@@ -242,6 +269,7 @@ onMounted(loadRows)
               <th>卡片ID</th>
               <th>呼号</th>
               <th>类型</th>
+              <th>活动</th>
               <th>收卡日期</th>
               <th>收卡时间</th>
               <th>收卡确认备注</th>
@@ -253,12 +281,13 @@ onMounted(loadRows)
               <td>{{ item.cardId }}</td>
               <td>{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType }}</td>
+              <td>{{ item.offlineActivityName || '-' }}</td>
               <td>{{ item.receivedDate || '-' }}</td>
               <td>{{ item.receivedTime || '-' }}</td>
               <td>{{ item.receivedRemarks || '-' }}</td>
             </tr>
             <tr v-if="!pagedRows.length">
-              <td colspan="7" class="qsl-table-empty">暂无收卡记录。</td>
+              <td colspan="8" class="qsl-table-empty">暂无收卡记录。</td>
             </tr>
           </tbody>
         </table>

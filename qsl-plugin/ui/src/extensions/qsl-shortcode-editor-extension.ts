@@ -12,14 +12,16 @@ import {
 import { markRaw } from 'vue'
 import RiArticleLine from '~icons/ri/article-line'
 import RiMailSendLine from '~icons/ri/mail-send-line'
+import RiExchangeLine from '~icons/ri/exchange-line'
 
-const SHORTCODE_PATTERN = /^\s*\[(qsl-card|qsl-receipt-card)([^\]]*)\]\s*$/i
+const SHORTCODE_PATTERN = /^\s*\[(qsl-card|qsl-receipt-card|qsl-exchange-card)([^\]]*)\]\s*$/i
 const CALLSIGN_ATTR_PATTERN = /callSign\s*=\s*("([^"]*)"|'([^']*)'|([^\s\]]+))/i
 const CARD_ID_ATTR_PATTERN = /cardId\s*=\s*("([^"]*)"|'([^']*)'|([^\s\]]+))/i
+const SCENE_TYPE_ATTR_PATTERN = /sceneType\s*=\s*("([^"]*)"|'([^']*)'|([^\s\]]+))/i
 const shortcodePreviewPluginKey = new PluginKey('qsl-shortcode-preview-plugin')
 
 interface ParsedShortcode {
-  type: 'qsl-card' | 'qsl-receipt-card'
+  type: 'qsl-card' | 'qsl-receipt-card' | 'qsl-exchange-card'
   title: string
   subtitle: string
 }
@@ -51,11 +53,20 @@ function parseShortcode(text: string): ParsedShortcode | null {
   const type = match[1].toLowerCase() as ParsedShortcode['type']
   const attrs = match[2] ?? ''
   const callSign = extractAttrValue(attrs, CALLSIGN_ATTR_PATTERN)
+  const sceneType = extractAttrValue(attrs, SCENE_TYPE_ATTR_PATTERN).toUpperCase()
   if (type === 'qsl-card') {
     return {
       type,
       title: 'QSL 查询卡片',
       subtitle: callSign ? `呼号：${callSign}` : '',
+    }
+  }
+  if (type === 'qsl-exchange-card') {
+    const sceneText = sceneType === 'EYEBALL' ? '线下换卡' : '线上换卡'
+    return {
+      type,
+      title: 'QSL 换卡申请卡片',
+      subtitle: `${sceneText}${callSign ? ` · 呼号：${callSign}` : ''}`,
     }
   }
   const cardId = extractAttrValue(attrs, CARD_ID_ATTR_PATTERN)
@@ -177,6 +188,28 @@ const qslShortcodeEditorExtension = Extension.create({
               action: () => insertShortcode(editor, '[qsl-receipt-card]'),
             },
           },
+          {
+            priority: 97,
+            component: markRaw(ToolboxItem),
+            props: {
+              editor,
+              icon: markRaw(RiExchangeLine),
+              title: '插入线上换卡申请卡片',
+              description: '插入线上换卡申请短码',
+              action: () => insertShortcode(editor, '[qsl-exchange-card sceneType="ONLINE_EYEBALL"]'),
+            },
+          },
+          {
+            priority: 98,
+            component: markRaw(ToolboxItem),
+            props: {
+              editor,
+              icon: markRaw(RiExchangeLine),
+              title: '插入线下换卡申请卡片',
+              description: '插入线下换卡申请短码',
+              action: () => insertShortcode(editor, '[qsl-exchange-card sceneType="EYEBALL"]'),
+            },
+          },
         ]
       },
       getCommandMenuItems() {
@@ -206,6 +239,34 @@ const qslShortcodeEditorExtension = Extension.create({
                 .focus()
                 .deleteRange(range)
                 .insertContent('[qsl-receipt-card]')
+                .run()
+              },
+          },
+          {
+            priority: 152,
+            icon: markRaw(RiExchangeLine),
+            title: '插入线上换卡申请卡片',
+            keywords: ['qsl', '线上换卡', '申请', 'exchange'],
+            command: ({ editor, range }: { editor: Editor; range: { from: number; to: number } }) => {
+              editor
+                .chain()
+                .focus()
+                .deleteRange(range)
+                .insertContent('[qsl-exchange-card sceneType="ONLINE_EYEBALL"]')
+                .run()
+            },
+          },
+          {
+            priority: 153,
+            icon: markRaw(RiExchangeLine),
+            title: '插入线下换卡申请卡片',
+            keywords: ['qsl', '线下换卡', '申请', 'exchange'],
+            command: ({ editor, range }: { editor: Editor; range: { from: number; to: number } }) => {
+              editor
+                .chain()
+                .focus()
+                .deleteRange(range)
+                .insertContent('[qsl-exchange-card sceneType="EYEBALL"]')
                 .run()
             },
           },

@@ -11,6 +11,7 @@ interface ApiResult<T> {
 export interface MailReceiveConfirmPayload {
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   receiptRemarks: string
 }
 

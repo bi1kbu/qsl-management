@@ -1,6 +1,7 @@
 package com.bi1kbu.qslmanagement.front;
 
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
+import java.util.Locale;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
@@ -9,15 +10,18 @@ public class QslPublicCardPageRenderService {
 
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
     private static final Pattern EMBED_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
+    private static final Pattern SCENE_TYPE_PATTERN = Pattern.compile("^(QSO|SWL|ONLINE_EYEBALL|EYEBALL)?$");
 
-    public String render(String rawCallSign, boolean embed, String rawEmbedId) {
+    public String render(String rawCallSign, String rawSceneType, boolean embed, String rawEmbedId) {
         var callSign = normalizeCallSign(rawCallSign);
+        var sceneType = normalizeSceneType(rawSceneType);
         var embedId = normalizeEmbedId(rawEmbedId);
 
         return BASE_TEMPLATE
             .replace("__TITLE__", embed ? "QSL 卡片查询" : "QSL 前台查询")
             .replace("__CALL_SIGN_HTML__", escapeHtml(callSign))
             .replace("__CALL_SIGN_JS__", escapeJs(callSign))
+            .replace("__SCENE_TYPE_JS__", escapeJs(sceneType))
             .replace("__EMBED_MODE__", Boolean.toString(embed))
             .replace("__EMBED_ID__", escapeJs(embedId));
     }
@@ -86,6 +90,17 @@ public class QslPublicCardPageRenderService {
         var normalized = rawEmbedId == null ? "" : rawEmbedId.trim();
         if (!EMBED_ID_PATTERN.matcher(normalized).matches()) {
             return "qsl-card-default";
+        }
+        return normalized;
+    }
+
+    private String normalizeSceneType(String rawSceneType) {
+        if (rawSceneType == null) {
+            return "";
+        }
+        var normalized = rawSceneType.trim().toUpperCase(Locale.ROOT);
+        if (!SCENE_TYPE_PATTERN.matcher(normalized).matches()) {
+            return "";
         }
         return normalized;
     }
@@ -353,7 +368,8 @@ public class QslPublicCardPageRenderService {
                 const EMBED_MODE = __EMBED_MODE__;
                 const EMBED_ID = "__EMBED_ID__";
                 const state = {
-                  callSign: "__CALL_SIGN_JS__"
+                  callSign: "__CALL_SIGN_JS__",
+                  sceneType: "__SCENE_TYPE_JS__"
                 };
 
                 const page = document.getElementById("qsl-page");
@@ -481,8 +497,13 @@ public class QslPublicCardPageRenderService {
                   }
 
                   try {
+                    const params = new URLSearchParams();
+                    params.set("callSign", callSign);
+                    if (state.sceneType) {
+                      params.set("sceneType", state.sceneType);
+                    }
                     const response = await fetch(
-                      `${API_BASE}/qso-public/records?callSign=${encodeURIComponent(callSign)}`,
+                      `${API_BASE}/qso-public/records?${params.toString()}`,
                       {
                         method: "GET",
                         credentials: "same-origin"

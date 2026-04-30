@@ -18,6 +18,7 @@ public class ExchangeRequest extends QslBaseExtension<ExchangeRequest.ExchangeRe
 
     @Data
     public static class ExchangeRequestSpec {
+        private String sceneType;
         private String callSign;
         private Boolean useBureau;
         private String bureauName;
@@ -37,4 +38,3 @@ public class ExchangeRequest extends QslBaseExtension<ExchangeRequest.ExchangeRe
         private String reviewedAt;
     }
 }
-

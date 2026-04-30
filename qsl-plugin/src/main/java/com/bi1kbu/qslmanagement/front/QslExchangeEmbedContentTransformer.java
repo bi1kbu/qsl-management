@@ -9,9 +9,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
-public class QslCardEmbedContentTransformer {
+public class QslExchangeEmbedContentTransformer {
 
-    private static final Pattern SHORTCODE_PATTERN = Pattern.compile("(?is)\\[qsl-card([^\\]]*)\\]");
+    private static final Pattern SHORTCODE_PATTERN = Pattern.compile("(?is)\\[qsl-exchange-card([^\\]]*)\\]");
     private static final Pattern CALL_SIGN_ATTR_PATTERN = Pattern.compile(
         "(?i)callSign\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
     );
@@ -21,13 +21,13 @@ public class QslCardEmbedContentTransformer {
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
 
     public String transform(String content) {
-        if (content == null || content.isBlank() || !content.contains("[qsl-card")) {
+        if (content == null || content.isBlank() || !content.contains("[qsl-exchange-card")) {
             return content;
         }
 
         var matcher = SHORTCODE_PATTERN.matcher(content);
         var builder = new StringBuilder();
-        var prefix = "qsl-card-" + UUID.randomUUID().toString().replace("-", "");
+        var prefix = "qsl-exchange-card-" + UUID.randomUUID().toString().replace("-", "");
         var sequence = 1;
         while (matcher.find()) {
             var attributes = matcher.group(1);
@@ -42,18 +42,7 @@ public class QslCardEmbedContentTransformer {
     }
 
     private String extractCallSign(String attributes) {
-        if (attributes == null || attributes.isBlank()) {
-            return "";
-        }
-        var matcher = CALL_SIGN_ATTR_PATTERN.matcher(attributes);
-        if (!matcher.find()) {
-            return "";
-        }
-        var raw = firstNotBlank(
-            matcher.group(2),
-            matcher.group(3),
-            matcher.group(4)
-        );
+        var raw = extractAttributeValue(attributes, CALL_SIGN_ATTR_PATTERN);
         var normalized = QslApiSupport.normalizeCallSign(raw);
         if (!CALL_SIGN_PATTERN.matcher(normalized).matches()) {
             return "";
@@ -62,32 +51,29 @@ public class QslCardEmbedContentTransformer {
     }
 
     private String extractSceneType(String attributes) {
+        var raw = extractAttributeValue(attributes, SCENE_TYPE_ATTR_PATTERN).trim().toUpperCase(Locale.ROOT);
+        return "EYEBALL".equals(raw) ? "EYEBALL" : "ONLINE_EYEBALL";
+    }
+
+    private String extractAttributeValue(String attributes, Pattern pattern) {
         if (attributes == null || attributes.isBlank()) {
             return "";
         }
-        var matcher = SCENE_TYPE_ATTR_PATTERN.matcher(attributes);
+        var matcher = pattern.matcher(attributes);
         if (!matcher.find()) {
             return "";
         }
-        var raw = firstNotBlank(matcher.group(2), matcher.group(3), matcher.group(4));
-        var normalized = raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT);
-        if ("QSO".equals(normalized) || "SWL".equals(normalized)
-            || "ONLINE_EYEBALL".equals(normalized) || "EYEBALL".equals(normalized)) {
-            return normalized;
-        }
-        return "";
+        return firstNotBlank(matcher.group(2), matcher.group(3), matcher.group(4));
     }
 
     private String buildEmbedBlock(String callSign, String sceneType, String embedId) {
         var uriBuilder = UriComponentsBuilder
-            .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/cards/page")
+            .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-public/page")
             .queryParam("embed", "1")
-            .queryParam("embedId", embedId);
+            .queryParam("embedId", embedId)
+            .queryParam("sceneType", sceneType);
         if (!callSign.isBlank()) {
             uriBuilder.queryParam("callSign", callSign);
-        }
-        if (!sceneType.isBlank()) {
-            uriBuilder.queryParam("sceneType", sceneType);
         }
         var src = uriBuilder.build().toUriString();
 
@@ -96,32 +82,24 @@ public class QslCardEmbedContentTransformer {
               <iframe
                 src="%s"
                 data-qsl-embed-id="%s"
-                style="width: 100%%; min-height: 260px; border: 0; border-radius: 10px; background: transparent;"
+                style="width: 100%%; min-height: 300px; border: 0; border-radius: 10px; background: transparent;"
                 loading="lazy"
                 referrerpolicy="same-origin"
-                title="QSL 卡片查询"
+                title="QSL 换卡申请"
               ></iframe>
             </div>
             <script>
               (function () {
-                if (window.__qslCardEmbedResizeBound) {
-                  return;
-                }
+                if (window.__qslCardEmbedResizeBound) { return; }
                 window.__qslCardEmbedResizeBound = true;
                 window.addEventListener("message", function (event) {
                   var data = event.data;
-                  if (!data || data.type !== "qsl-card-height" || !data.embedId) {
-                    return;
-                  }
+                  if (!data || data.type !== "qsl-card-height" || !data.embedId) { return; }
                   var iframe = document.querySelector('iframe[data-qsl-embed-id="' + data.embedId + '"]');
-                  if (!iframe) {
-                    return;
-                  }
+                  if (!iframe) { return; }
                   var parsedHeight = Number(data.height);
-                  if (!Number.isFinite(parsedHeight)) {
-                    return;
-                  }
-                  iframe.style.height = Math.max(260, parsedHeight) + "px";
+                  if (!Number.isFinite(parsedHeight)) { return; }
+                  iframe.style.height = Math.max(300, parsedHeight) + "px";
                 });
               })();
             </script>
@@ -140,3 +118,4 @@ public class QslCardEmbedContentTransformer {
         return "";
     }
 }
+

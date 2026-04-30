@@ -10,6 +10,8 @@ import { summarizeCardRemark, type CardRemarkFields } from '../../utils/card-rem
 interface CardRecordSpec {
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+  offlineActivityName?: string
   cardVersion: string
   cardDate: string
   cardTime: string
@@ -31,6 +33,7 @@ interface CardQueryItem {
   id: string
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  offlineActivityName: string
   cardVersion: string
   cardDate: string
   cardTime: string
@@ -53,6 +56,7 @@ const filters = reactive({
   keyword: '',
   callSign: '',
   cardType: '',
+  activityName: '',
   sentStatus: '',
   signStatus: '',
   receiveStatus: '',
@@ -87,6 +91,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>): CardQueryItem => {
     id: extension.metadata.name,
     callSign: extension.spec?.callSign ?? '',
     cardType: extension.spec?.cardType ?? 'QSO',
+    offlineActivityName: extension.spec?.offlineActivityName ?? '',
     cardVersion: extension.spec?.cardVersion ?? '',
     cardDate: extension.spec?.cardDate ?? '',
     cardTime: extension.spec?.cardTime ?? '',
@@ -134,12 +139,13 @@ const filteredRows = computed(() => {
 
     const keywordOk =
       !keyword ||
-      [item.id, item.callSign, item.cardType, item.cardVersion, item.cardDate, item.cardTime, item.remarksText]
+      [item.id, item.callSign, item.cardType, item.offlineActivityName, item.cardVersion, item.cardDate, item.cardTime, item.remarksText]
         .join(' ')
         .toUpperCase()
         .includes(keyword)
     const callSignOk = !callSign || item.callSign.toUpperCase().includes(callSign)
     const typeOk = !filters.cardType || item.cardType === filters.cardType
+    const activityOk = !filters.activityName || item.offlineActivityName === filters.activityName
     const fromOk = !filters.dateFrom || (item.cardDate && item.cardDate >= filters.dateFrom)
     const toOk = !filters.dateTo || (item.cardDate && item.cardDate <= filters.dateTo)
     const remarksOk = !filters.onlyWithRemarks || Boolean(item.remarksText.trim())
@@ -179,8 +185,19 @@ const filteredRows = computed(() => {
       quickOk = item.cardReceived
     }
 
-    return keywordOk && callSignOk && typeOk && fromOk && toOk && remarksOk && sentOk && signOk && receiveOk && quickOk
+    return keywordOk && callSignOk && typeOk && activityOk && fromOk && toOk && remarksOk && sentOk && signOk && receiveOk && quickOk
   })
+})
+
+const activityFilterOptions = computed(() => {
+  const activitySet = new Set<string>()
+  rows.value.forEach((item) => {
+    const activityName = item.offlineActivityName.trim()
+    if (activityName) {
+      activitySet.add(activityName)
+    }
+  })
+  return Array.from(activitySet).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 })
 
 const sortedRows = computed(() => {
@@ -216,6 +233,9 @@ const activeFilterTags = computed(() => {
   }
   if (filters.cardType) {
     tags.push({ key: 'cardType', label: `卡片类型：${filters.cardType}` })
+  }
+  if (filters.activityName) {
+    tags.push({ key: 'activityName', label: `活动：${filters.activityName}` })
   }
   if (filters.sentStatus) {
     tags.push({ key: 'sentStatus', label: `已发状态：${filters.sentStatus}` })
@@ -278,6 +298,9 @@ const clearFilterTag = (key: string) => {
     case 'cardType':
       filters.cardType = ''
       break
+    case 'activityName':
+      filters.activityName = ''
+      break
     case 'sentStatus':
       filters.sentStatus = ''
       break
@@ -307,6 +330,7 @@ const resetFilters = () => {
   keywordInput.value = ''
   filters.callSign = ''
   filters.cardType = ''
+  filters.activityName = ''
   filters.sentStatus = ''
   filters.signStatus = ''
   filters.receiveStatus = ''
@@ -388,6 +412,18 @@ onMounted(loadRows)
         </label>
 
         <label class="qsl-field">
+          <span class="qsl-field__label">活动</span>
+          <div class="qsl-input-shell">
+            <select v-model="filters.activityName">
+              <option value="">全部</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">
+                {{ item }}
+              </option>
+            </select>
+          </div>
+        </label>
+
+        <label class="qsl-field">
           <span class="qsl-field__label">已发状态</span>
           <div class="qsl-input-shell">
             <select v-model="filters.sentStatus">
@@ -454,6 +490,7 @@ onMounted(loadRows)
               <th>卡片ID</th>
               <th>呼号</th>
               <th>类型</th>
+              <th>活动</th>
               <th>版本</th>
               <th>日期时间</th>
               <th>制卡</th>
@@ -479,6 +516,7 @@ onMounted(loadRows)
                 <td>{{ item.id }}</td>
                 <td>{{ item.callSign || '-' }}</td>
                 <td>{{ item.cardType }}</td>
+                <td>{{ item.offlineActivityName || '-' }}</td>
                 <td>{{ item.cardVersion || '-' }}</td>
                 <td>{{ item.cardDate }} {{ item.cardTime }}</td>
                 <td>
@@ -506,11 +544,12 @@ onMounted(loadRows)
                 </td>
               </tr>
               <tr v-if="expandedId === item.id" class="qsl-table-detail-row">
-                <td colspan="12">
+                <td colspan="13">
                   <div class="qsl-detail-grid">
                     <p><strong>卡片ID：</strong>{{ item.id }}</p>
                     <p><strong>呼号：</strong>{{ item.callSign || '-' }}</p>
                     <p><strong>卡片类型：</strong>{{ item.cardType }}</p>
+                    <p><strong>关联活动：</strong>{{ item.offlineActivityName || '-' }}</p>
                     <p><strong>卡片版本：</strong>{{ item.cardVersion || '-' }}</p>
                     <p><strong>卡片日期：</strong>{{ item.cardDate || '-' }}</p>
                     <p><strong>卡片时间：</strong>{{ item.cardTime || '-' }}</p>
@@ -529,7 +568,7 @@ onMounted(loadRows)
               </tr>
             </template>
             <tr v-if="!pagedRows.length">
-              <td colspan="12" class="qsl-table-empty">暂无数据。</td>
+              <td colspan="13" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>

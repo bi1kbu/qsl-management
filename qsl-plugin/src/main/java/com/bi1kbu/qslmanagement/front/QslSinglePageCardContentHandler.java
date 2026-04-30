@@ -10,18 +10,23 @@ public class QslSinglePageCardContentHandler implements ReactiveSinglePageConten
 
     private final QslCardEmbedContentTransformer cardTransformer;
     private final QslReceiptEmbedContentTransformer receiptTransformer;
+    private final QslExchangeEmbedContentTransformer exchangeTransformer;
 
     public QslSinglePageCardContentHandler(
         QslCardEmbedContentTransformer cardTransformer,
-        QslReceiptEmbedContentTransformer receiptTransformer
+        QslReceiptEmbedContentTransformer receiptTransformer,
+        QslExchangeEmbedContentTransformer exchangeTransformer
     ) {
         this.cardTransformer = cardTransformer;
         this.receiptTransformer = receiptTransformer;
+        this.exchangeTransformer = exchangeTransformer;
     }
 
     @Override
     public Mono<SinglePageContentContext> handle(@NonNull SinglePageContentContext singlePageContent) {
-        var transformed = receiptTransformer.transform(cardTransformer.transform(singlePageContent.getContent()));
+        var transformed = exchangeTransformer.transform(
+            receiptTransformer.transform(cardTransformer.transform(singlePageContent.getContent()))
+        );
         return Mono.just(SinglePageContentContext.builder()
             .singlePage(singlePageContent.getSinglePage())
             .content(transformed)

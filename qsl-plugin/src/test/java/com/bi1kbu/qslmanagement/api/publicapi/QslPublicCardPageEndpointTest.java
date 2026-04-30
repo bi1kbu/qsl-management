@@ -22,21 +22,21 @@ class QslPublicCardPageEndpointTest {
         var renderService = mock(QslPublicCardPageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.render("bg7abc", true, "embed-001"))
+        when(renderService.render("bg7abc", "QSO", true, "embed-001"))
             .thenReturn("<html><body>页面</body></html>");
 
         var endpoint = new QslPublicCardPageEndpoint(rateLimitService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/cards/page?callSign=bg7abc&embed=1&embedId=embed-001")
+            .uri("/cards/page?callSign=bg7abc&sceneType=QSO&embed=1&embedId=embed-001")
             .exchange()
             .expectStatus().isOk()
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
             .expectBody(String.class)
             .isEqualTo("<html><body>页面</body></html>");
 
-        verify(renderService).render("bg7abc", true, "embed-001");
+        verify(renderService).render("bg7abc", "QSO", true, "embed-001");
     }
 
     @Test

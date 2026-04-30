@@ -12,9 +12,11 @@ import QslPaginationBar from '../../components/QslPaginationBar.vue'
 interface CardRecordSpec {
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   cardVersion: string
   qsoRecordName: string
   addressEntryName: string
+  offlineActivityName?: string
   cardDate: string
   cardTime: string
   businessRemarks: string
@@ -59,6 +61,71 @@ interface SendConfirmItem {
   sentAt: string
 }
 
+interface OfflineActivitySpec {
+  activityName: string
+}
+
+type SceneType = 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+
+const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
+
+const props = withDefaults(
+  defineProps<{
+    sceneTypes?: SceneType[]
+    defaultSceneType?: SceneType
+  }>(),
+  {
+    sceneTypes: () => ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL'],
+    defaultSceneType: 'QSO',
+  },
+)
+
+const normalizeSceneType = (sceneType?: string, cardType?: string): SceneType => {
+  const upperScene = (sceneType ?? '').trim().toUpperCase()
+  if (allSceneTypes.includes(upperScene as SceneType)) {
+    return upperScene as SceneType
+  }
+
+  const upperCardType = (cardType ?? '').trim().toUpperCase()
+  if (upperCardType === 'SWL') {
+    return 'SWL'
+  }
+  if (upperCardType === 'EYEBALL') {
+    return props.sceneTypes.includes('ONLINE_EYEBALL') && !props.sceneTypes.includes('EYEBALL')
+      ? 'ONLINE_EYEBALL'
+      : 'EYEBALL'
+  }
+  return 'QSO'
+}
+
+const normalizedSceneTypes = computed<SceneType[]>(() => {
+  const deduplicated = Array.from(
+    new Set(props.sceneTypes.map((item) => normalizeSceneType(item))),
+  )
+  return deduplicated.length ? deduplicated : ['QSO']
+})
+const shouldLoadOfflineActivities = computed(() => {
+  return normalizedSceneTypes.value.includes('EYEBALL')
+})
+
+const resolveSceneTypeByCardType = (cardType: CardRecordSpec['cardType']): SceneType => {
+  if (cardType === 'QSO' && normalizedSceneTypes.value.includes('QSO')) {
+    return 'QSO'
+  }
+  if (cardType === 'SWL' && normalizedSceneTypes.value.includes('SWL')) {
+    return 'SWL'
+  }
+  if (cardType === 'EYEBALL') {
+    if (normalizedSceneTypes.value.includes('ONLINE_EYEBALL')) {
+      return 'ONLINE_EYEBALL'
+    }
+    if (normalizedSceneTypes.value.includes('EYEBALL')) {
+      return 'EYEBALL'
+    }
+  }
+  return normalizeSceneType(props.defaultSceneType, cardType)
+}
+
 const rows = ref<SendConfirmItem[]>([])
 const loading = ref(false)
 const pendingRowName = ref('')
@@ -78,6 +145,8 @@ const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const batchEditField = ref('')
 const batchEditValue = ref('')
+const activityFilter = ref('')
+const offlineActivities = ref<OfflineActivitySpec[]>([])
 
 const editForm = reactive({
   callSign: '',
@@ -91,20 +160,42 @@ const editForm = reactive({
 
 const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
+const offlineActivityPlural = 'offline-activities'
 
 const filteredRows = computed(() => {
   const pendingRows = rows.value.filter((row) => !row.sent || row.spec.sentMailStatus !== 'SENT')
+  const filteredByActivity = activityFilter.value
+    ? pendingRows.filter((row) => (row.spec.offlineActivityName || '') === activityFilter.value)
+    : pendingRows
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
-    return pendingRows
+    return filteredByActivity
   }
-  return pendingRows.filter((row) => {
+  return filteredByActivity.filter((row) => {
     return (
       row.callSign.toUpperCase().includes(keyword) ||
       row.resourceName.toUpperCase().includes(keyword) ||
-      row.cardType.toUpperCase().includes(keyword)
+      row.cardType.toUpperCase().includes(keyword) ||
+      (row.spec.offlineActivityName || '').toUpperCase().includes(keyword)
     )
   })
+})
+
+const activityFilterOptions = computed(() => {
+  const activitySet = new Set<string>()
+  rows.value.forEach((row) => {
+    const name = (row.spec.offlineActivityName || '').trim()
+    if (name) {
+      activitySet.add(name)
+    }
+  })
+  offlineActivities.value.forEach((item) => {
+    const name = (item.activityName || '').trim()
+    if (name) {
+      activitySet.add(name)
+    }
+  })
+  return Array.from(activitySet).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 })
 
 const allFilteredSelected = computed(() => {
@@ -224,9 +315,11 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
   return {
     callSign: spec?.callSign ?? '',
     cardType: spec?.cardType ?? 'QSO',
+    sceneType: spec?.sceneType ?? 'QSO',
     cardVersion: spec?.cardVersion ?? '',
     qsoRecordName: spec?.qsoRecordName ?? '',
     addressEntryName: spec?.addressEntryName ?? '',
+    offlineActivityName: spec?.offlineActivityName ?? '',
     cardDate: spec?.cardDate ?? '',
     cardTime: spec?.cardTime ?? '',
     businessRemarks: spec?.businessRemarks ?? '',
@@ -282,7 +375,9 @@ const loadRows = async (options: { silent?: boolean } = {}) => {
   loading.value = true
   try {
     const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
-    rows.value = extensions.map((extension) => toRow(extension))
+    rows.value = extensions
+      .map((extension) => toRow(extension))
+      .filter((row) => normalizedSceneTypes.value.includes(normalizeSceneType(row.spec.sceneType, row.spec.cardType)))
     if (!options.silent && extensions.length) {
       feedback.value = ''
     }
@@ -293,6 +388,21 @@ const loadRows = async (options: { silent?: boolean } = {}) => {
     feedback.value = `加载发信确认清单失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     loading.value = false
+  }
+}
+
+const loadOfflineActivities = async () => {
+  if (!shouldLoadOfflineActivities.value) {
+    offlineActivities.value = []
+    return
+  }
+  try {
+    const extensions = await listExtensions<OfflineActivitySpec>(offlineActivityPlural)
+    offlineActivities.value = extensions.map((item) => ({
+      activityName: item.spec?.activityName ?? '',
+    }))
+  } catch {
+    offlineActivities.value = []
   }
 }
 
@@ -343,6 +453,7 @@ const saveEdit = async () => {
       ...target.spec,
       callSign: editForm.callSign.trim().toUpperCase(),
       cardType: editForm.cardType,
+      sceneType: resolveSceneTypeByCardType(editForm.cardType),
       cardDate: editForm.cardDate,
       cardTime: editForm.cardTime,
       businessRemarks: editForm.businessRemarks.trim(),
@@ -412,6 +523,9 @@ const selectRowForQuery = (row: SendConfirmItem) => {
     return
   }
   functionCallSign.value = keyword
+  if (row.spec.offlineActivityName?.trim()) {
+    activityFilter.value = row.spec.offlineActivityName.trim()
+  }
   historyKeyword.value = keyword
   historyKeywordInput.value = keyword
   currentPage.value = 1
@@ -467,6 +581,10 @@ const applyHistoryBatchEdit = async () => {
     const targets = rows.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
 
     for (const item of targets) {
+      const nextCardType =
+        batchEditField.value === 'cardType'
+          ? (nextValue as CardRecordSpec['cardType'])
+          : item.spec.cardType
       const nextSent =
         batchEditField.value === 'sentState'
           ? nextValue === 'SENT'
@@ -480,7 +598,8 @@ const applyHistoryBatchEdit = async () => {
 
       const nextSpec: CardRecordSpec = {
         ...item.spec,
-        cardType: batchEditField.value === 'cardType' ? (nextValue as CardRecordSpec['cardType']) : item.spec.cardType,
+        cardType: nextCardType,
+        sceneType: resolveSceneTypeByCardType(nextCardType),
         businessRemarks: batchEditField.value === 'businessRemarks' ? nextValue : item.spec.businessRemarks,
         cardSent: nextSent,
         sentAt: nextSentAt,
@@ -598,7 +717,7 @@ const batchSendSentMail = async () => {
 }
 
 onMounted(() => {
-  loadRows()
+  Promise.all([loadRows(), loadOfflineActivities()])
 })
 </script>
 
@@ -735,6 +854,18 @@ onMounted(() => {
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
 
+      <div class="qsl-form-inline">
+        <label class="qsl-field qsl-field--inline">
+          <span class="qsl-field__label">活动筛选</span>
+          <div class="qsl-input-shell">
+            <select v-model="activityFilter">
+              <option value="">全部活动</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
+          </div>
+        </label>
+      </div>
+
       <div class="qsl-actions">
         <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
@@ -750,6 +881,7 @@ onMounted(() => {
               <th>卡片类型</th>
               <th>卡片打印日期</th>
               <th>打包</th>
+              <th>关联活动</th>
               <th>卡片备注</th>
               <th>操作</th>
             </tr>
@@ -771,6 +903,7 @@ onMounted(() => {
               <td>{{ row.cardType }}</td>
               <td>{{ row.cardPrintAt }}</td>
               <td>{{ row.envelopePrintAt }}</td>
+              <td>{{ row.spec.offlineActivityName || '-' }}</td>
               <td>
                   <QslCardRemarkEntries
                     :remark-fields="{
@@ -826,7 +959,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!pagedRows.length">
-              <td colspan="8" class="qsl-table-empty">暂无待发出数据。</td>
+              <td colspan="9" class="qsl-table-empty">暂无待发出数据。</td>
             </tr>
           </tbody>
         </table>
