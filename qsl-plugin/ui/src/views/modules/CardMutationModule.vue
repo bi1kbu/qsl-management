@@ -302,7 +302,7 @@ const batchEditFields = computed(() => {
     { value: 'cardTime', label: '卡片时间', inputType: 'text', placeholder: 'HHmm' },
     { value: 'businessRemarks', label: '业务备注', inputType: 'textarea', placeholder: '输入备注' },
     { value: 'receivedRemarks', label: '收卡确认备注', inputType: 'textarea', placeholder: '输入备注' },
-    { value: 'publicReceiptRemarks', label: '公开签收备注', inputType: 'textarea', placeholder: '输入备注' },
+    { value: 'publicReceiptRemarks', label: '线下换卡确认备注', inputType: 'textarea', placeholder: '输入线下换卡确认备注' },
     { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
     { value: 'flowStatus', label: '流程状态', inputType: 'text', placeholder: '例如：已发信' },
     {
@@ -1280,9 +1280,9 @@ onMounted(() => {
               </label>
 
               <label class="qsl-field qsl-field--full">
-                <span class="qsl-field__label">公开签收备注</span>
+                <span class="qsl-field__label">线下换卡确认备注</span>
                 <div class="qsl-input-shell qsl-input-shell--textarea">
-                  <textarea v-model.trim="editForm.publicReceiptRemarks" rows="2" placeholder="输入公开签收备注" />
+                  <textarea v-model.trim="editForm.publicReceiptRemarks" rows="2" placeholder="输入线下换卡确认备注" />
                 </div>
               </label>
             </div>

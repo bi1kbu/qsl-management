@@ -87,7 +87,6 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
         var callSign = queryParam(request, "callSign", "cs");
         var cardId = queryParam(request, "cardId", "cid");
         var activityId = queryParam(request, "activityId", "aid");
-        var remarks = queryParam(request, "remarks", "r");
         var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
         var embedId = queryParam(request, "embedId", "eid");
 
@@ -97,7 +96,7 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
                 callSign,
                 cardId,
                 activityId,
-                remarks,
+                "",
                 embed,
                 embedId,
                 contact.stationAddress(),
@@ -127,7 +126,7 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
                     prefill.callSign(),
                     prefill.cardId(),
                     prefill.activityId(),
-                    prefill.remarks(),
+                    "",
                     embed,
                     embedId,
                     contact.stationAddress(),

@@ -49,7 +49,7 @@ export const parseCardRemarkEntries = (input: string | CardRemarkFields): CardRe
   const entries: CardRemarkEntry[] = []
   appendSceneEntries(entries, '业务备注', input.businessRemarks)
   appendSceneEntries(entries, '收卡确认', input.receivedRemarks)
-  appendSceneEntries(entries, '公开签收', input.publicReceiptRemarks)
+  appendSceneEntries(entries, '线下换卡确认备注', input.publicReceiptRemarks)
   appendSceneEntries(entries, '卡片备注', input.cardRemarks)
   return entries
 }

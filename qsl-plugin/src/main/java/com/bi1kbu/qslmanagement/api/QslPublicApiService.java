@@ -285,11 +285,7 @@ public class QslPublicApiService {
 
                 var prefillCallSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
                 var prefillActivityId = nullToEmpty(spec.getOfflineActivityName()).trim();
-                var prefillRemarks = firstNotBlank(
-                    nullToEmpty(spec.getPublicReceiptRemarks()).trim(),
-                    nullToEmpty(spec.getBusinessRemarks()).trim(),
-                    nullToEmpty(spec.getCardRemarks()).trim()
-                );
+                var prefillRemarks = "";
 
                 return Mono.just(new PublicOfflineExchangePagePrefill(
                     normalizedCardId,
