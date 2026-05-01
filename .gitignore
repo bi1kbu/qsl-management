@@ -1,2 +1,12 @@
 tmp/
-tools/
+# tools 目录纳入版本管理，仅排除数据文件
+tools/**/*.csv
+tools/**/*.tsv
+tools/**/*.xlsx
+tools/**/*.xls
+tools/**/*.db
+tools/**/*.sqlite
+tools/**/*.sqlite3
+tools/**/*.zip
+tools/**/*.7z
+tools/**/*.rar
