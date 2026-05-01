@@ -24,7 +24,7 @@ class QslCardEmbedContentTransformerTest {
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("/apis/api.qsl-management.halo.run/v1alpha1/cards/page?embed=1&embedId=qsl-card-"));
+        assertTrue(transformed.contains("/apis/api.qsl-management.halo.run/v1alpha1/cards/page?embed=1&eid=qsl-card-"));
         assertTrue(transformed.contains("data-qsl-embed-id=\"qsl-card-"));
         assertTrue(transformed.contains("window.__qslCardEmbedResizeBound"));
     }
@@ -35,7 +35,7 @@ class QslCardEmbedContentTransformerTest {
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("callSign=BI1KBU"));
+        assertTrue(transformed.contains("cs=BI1KBU"));
     }
 
     @Test
@@ -44,7 +44,7 @@ class QslCardEmbedContentTransformerTest {
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("/cards/page?embed=1&embedId=qsl-card-"));
-        assertTrue(!transformed.contains("callSign="));
+        assertTrue(transformed.contains("/cards/page?embed=1&eid=qsl-card-"));
+        assertTrue(!transformed.contains("cs="));
     }
 }

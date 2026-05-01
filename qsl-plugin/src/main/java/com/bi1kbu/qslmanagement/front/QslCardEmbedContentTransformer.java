@@ -1,7 +1,6 @@
 package com.bi1kbu.qslmanagement.front;
 
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -14,9 +13,6 @@ public class QslCardEmbedContentTransformer {
     private static final Pattern SHORTCODE_PATTERN = Pattern.compile("(?is)\\[qsl-card([^\\]]*)\\]");
     private static final Pattern CALL_SIGN_ATTR_PATTERN = Pattern.compile(
         "(?i)callSign\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
-    );
-    private static final Pattern SCENE_TYPE_ATTR_PATTERN = Pattern.compile(
-        "(?i)sceneType\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
     );
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
 
@@ -32,9 +28,8 @@ public class QslCardEmbedContentTransformer {
         while (matcher.find()) {
             var attributes = matcher.group(1);
             var callSign = extractCallSign(attributes);
-            var sceneType = extractSceneType(attributes);
             var embedId = prefix + "-" + sequence++;
-            var replacement = buildEmbedBlock(callSign, sceneType, embedId);
+            var replacement = buildEmbedBlock(callSign, embedId);
             matcher.appendReplacement(builder, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(builder);
@@ -61,33 +56,13 @@ public class QslCardEmbedContentTransformer {
         return normalized;
     }
 
-    private String extractSceneType(String attributes) {
-        if (attributes == null || attributes.isBlank()) {
-            return "";
-        }
-        var matcher = SCENE_TYPE_ATTR_PATTERN.matcher(attributes);
-        if (!matcher.find()) {
-            return "";
-        }
-        var raw = firstNotBlank(matcher.group(2), matcher.group(3), matcher.group(4));
-        var normalized = raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT);
-        if ("QSO".equals(normalized) || "SWL".equals(normalized)
-            || "ONLINE_EYEBALL".equals(normalized) || "EYEBALL".equals(normalized)) {
-            return normalized;
-        }
-        return "";
-    }
-
-    private String buildEmbedBlock(String callSign, String sceneType, String embedId) {
+    private String buildEmbedBlock(String callSign, String embedId) {
         var uriBuilder = UriComponentsBuilder
             .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/cards/page")
             .queryParam("embed", "1")
-            .queryParam("embedId", embedId);
+            .queryParam("eid", embedId);
         if (!callSign.isBlank()) {
-            uriBuilder.queryParam("callSign", callSign);
-        }
-        if (!sceneType.isBlank()) {
-            uriBuilder.queryParam("sceneType", sceneType);
+            uriBuilder.queryParam("cs", callSign);
         }
         var src = uriBuilder.build().toUriString();
 

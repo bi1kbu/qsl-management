@@ -4,6 +4,7 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
 import com.bi1kbu.qslmanagement.api.QslApiException;
+import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
 import com.bi1kbu.qslmanagement.front.QslPublicReceiptPageRenderService;
@@ -20,19 +21,23 @@ import run.halo.app.extension.GroupVersion;
 public class QslPublicReceiptPageEndpoint implements CustomEndpoint {
 
     private final QslPublicRateLimitService publicRateLimitService;
+    private final QslPublicApiService publicApiService;
     private final QslPublicReceiptPageRenderService pageRenderService;
 
     public QslPublicReceiptPageEndpoint(
         QslPublicRateLimitService publicRateLimitService,
+        QslPublicApiService publicApiService,
         QslPublicReceiptPageRenderService pageRenderService
     ) {
         this.publicRateLimitService = publicRateLimitService;
+        this.publicApiService = publicApiService;
         this.pageRenderService = pageRenderService;
     }
 
     @Override
     public RouterFunction<ServerResponse> endpoint() {
-        return route(GET("/receipt-public/page"), this::renderReceiptPage);
+        return route(GET("/receipt-public"), this::renderReceiptPageByQuery)
+            .andRoute(GET("/receipt-public/{cardId}"), this::renderReceiptPageByCardId);
     }
 
     @Override
@@ -40,16 +45,34 @@ public class QslPublicReceiptPageEndpoint implements CustomEndpoint {
         return GroupVersion.parseAPIVersion("api.qsl-management.halo.run/v1alpha1");
     }
 
-    private Mono<ServerResponse> renderReceiptPage(ServerRequest request) {
+    private Mono<ServerResponse> renderReceiptPageByQuery(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
-        var callSign = request.queryParam("callSign").orElse("");
-        var cardId = request.queryParam("cardId").orElse("");
-        var sceneType = request.queryParam("sceneType").orElse("");
+        var callSign = queryParam(request, "callSign", "cs");
+        var cardId = queryParam(request, "cardId", "cid");
+        var remarks = queryParam(request, "remarks", "r");
         var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
-        var embedId = request.queryParam("embedId").orElse("");
+        var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("receipt-public-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, cardId, sceneType, embed, embedId)))
+            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, cardId, remarks, embed, embedId)))
+            .flatMap(html -> ServerResponse.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .bodyValue(html))
+            .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
+                .contentType(MediaType.TEXT_HTML)
+                .bodyValue(pageRenderService.renderError(error.getMessage(), embed)));
+    }
+
+    private Mono<ServerResponse> renderReceiptPageByCardId(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        var cardId = request.pathVariable("cardId");
+        var callSign = queryParam(request, "callSign", "cs");
+        var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
+        var embedId = queryParam(request, "embedId", "eid");
+
+        return publicRateLimitService.checkLimit("receipt-public-page", clientIp)
+            .then(publicApiService.getReceiptPagePrefill(cardId, callSign))
+            .map(prefill -> pageRenderService.render(prefill.callSign(), prefill.cardId(), prefill.remarks(), embed, embedId))
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))
@@ -65,4 +88,15 @@ public class QslPublicReceiptPageEndpoint implements CustomEndpoint {
         var normalized = value.trim().toLowerCase();
         return "1".equals(normalized) || "true".equals(normalized) || "yes".equals(normalized);
     }
+
+    private String queryParam(ServerRequest request, String primary, String alias) {
+        if (primary != null && !primary.isBlank()) {
+            var primaryValue = request.queryParam(primary).orElse("").trim();
+            if (!primaryValue.isBlank()) {
+                return primaryValue;
+            }
+        }
+        return request.queryParam(alias).orElse("").trim();
+    }
+
 }

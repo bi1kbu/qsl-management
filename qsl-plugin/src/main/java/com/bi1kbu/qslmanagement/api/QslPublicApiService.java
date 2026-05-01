@@ -259,17 +259,62 @@ public class QslPublicApiService {
                 )));
     }
 
+    public Mono<PublicOfflineExchangePagePrefill> getOfflineExchangePagePrefill(String cardId) {
+        var normalizedCardId = nullToEmpty(cardId).trim().toUpperCase(Locale.ROOT);
+        if (normalizedCardId.isBlank()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片编号不能为空"));
+        }
+        if (!validateLength(normalizedCardId, 128)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片编号长度不能超过128字符"));
+        }
+
+        return client.fetch(CardRecord.class, normalizedCardId)
+            .switchIfEmpty(Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "QSL-422-0001", "未找到对应卡片记录")))
+            .flatMap(cardRecord -> {
+                if (cardRecord.getSpec() == null) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "卡片记录缺少业务字段"));
+                }
+                var spec = cardRecord.getSpec();
+                var sceneType = normalizeSceneType(spec.getSceneType());
+                if (!"EYEBALL".equals(sceneType)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "该卡片不属于线下换卡场景"));
+                }
+
+                var prefillCallSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
+                var prefillActivityId = nullToEmpty(spec.getOfflineActivityName()).trim();
+                var prefillRemarks = firstNotBlank(
+                    nullToEmpty(spec.getPublicReceiptRemarks()).trim(),
+                    nullToEmpty(spec.getBusinessRemarks()).trim(),
+                    nullToEmpty(spec.getCardRemarks()).trim()
+                );
+
+                return Mono.just(new PublicOfflineExchangePagePrefill(
+                    normalizedCardId,
+                    prefillCallSign,
+                    prefillActivityId,
+                    prefillRemarks
+                ));
+            });
+    }
+
+    public Mono<PublicCardPagePrefill> getOnlineExchangePagePrefill(String cardId, String callSign) {
+        return getCardPagePrefillByCardIdAndCallSign(cardId, callSign, "ONLINE_EYEBALL");
+    }
+
+    public Mono<PublicCardPagePrefill> getReceiptPagePrefill(String cardId, String callSign) {
+        return getCardPagePrefillByCardIdAndCallSign(cardId, callSign, "QSO", "SWL", "ONLINE_EYEBALL");
+    }
+
     public Mono<PublicReceiptConfirmResult> confirmReceipt(PublicReceiptConfirmCommand command, String clientIp) {
         var callSign = QslApiSupport.normalizeCallSign(command.callSign());
-        var sceneType = normalizeSceneType(command.sceneType());
         if (callSign.isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号不能为空"));
         }
         if (!isValidCallSign(callSign)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
-        }
-        if (!sceneType.isBlank() && !ALLOWED_SCENE_TYPES.contains(sceneType)) {
-            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "签收场景不合法"));
         }
 
         var cardId = nullToEmpty(command.cardId()).trim().toUpperCase(Locale.ROOT);
@@ -290,10 +335,6 @@ public class QslPublicApiService {
                 }
                 var cardCallSign = QslApiSupport.normalizeCallSign(cardRecord.getSpec().getCallSign());
                 var cardSceneType = normalizeSceneType(cardRecord.getSpec().getSceneType());
-                if (!sceneType.isBlank() && !sceneType.equals(cardSceneType)) {
-                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
-                        "QSL-422-0001", "卡片场景和签收场景不匹配"));
-                }
 
                 var offlineEyeballScene = "EYEBALL".equals(cardSceneType);
                 if (offlineEyeballScene && cardCallSign.isBlank()) {
@@ -407,12 +448,69 @@ public class QslPublicApiService {
         return value.trim().toUpperCase(Locale.ROOT);
     }
 
+    private String firstNotBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (var value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
     private String buildOfflineActivityDisplayName(String id, String name, String date) {
         var safeName = name.isBlank() ? id : name;
         if (date.isBlank()) {
             return safeName;
         }
         return "【" + date + "】" + safeName;
+    }
+
+    private Mono<PublicCardPagePrefill> getCardPagePrefillByCardIdAndCallSign(
+        String cardId,
+        String providedCallSign,
+        String... allowedSceneTypes
+    ) {
+        var normalizedCardId = nullToEmpty(cardId).trim().toUpperCase(Locale.ROOT);
+        var normalizedProvidedCallSign = QslApiSupport.normalizeCallSign(providedCallSign);
+        if (normalizedCardId.isBlank() || normalizedProvidedCallSign.isBlank()) {
+            return Mono.just(new PublicCardPagePrefill("", "", ""));
+        }
+        if (!validateLength(normalizedCardId, 128) || !isValidCallSign(normalizedProvidedCallSign)) {
+            return Mono.just(new PublicCardPagePrefill("", "", ""));
+        }
+
+        var allowed = List.of(allowedSceneTypes == null ? new String[0] : allowedSceneTypes);
+        return client.fetch(CardRecord.class, normalizedCardId)
+            .flatMap(cardRecord -> {
+                if (cardRecord == null || cardRecord.getSpec() == null) {
+                    return Mono.just(new PublicCardPagePrefill("", "", ""));
+                }
+                var spec = cardRecord.getSpec();
+                var cardCallSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
+                if (cardCallSign.isBlank() || !normalizedProvidedCallSign.equals(cardCallSign)) {
+                    return Mono.just(new PublicCardPagePrefill("", "", ""));
+                }
+
+                var sceneType = normalizeSceneType(spec.getSceneType());
+                if (!allowed.contains(sceneType)) {
+                    return Mono.just(new PublicCardPagePrefill("", "", ""));
+                }
+
+                var remarks = firstNotBlank(
+                    nullToEmpty(spec.getPublicReceiptRemarks()).trim(),
+                    nullToEmpty(spec.getBusinessRemarks()).trim(),
+                    nullToEmpty(spec.getCardRemarks()).trim()
+                );
+                return Mono.just(new PublicCardPagePrefill(
+                    normalizedCardId,
+                    cardCallSign,
+                    remarks
+                ));
+            })
+            .defaultIfEmpty(new PublicCardPagePrefill("", "", ""));
     }
 
     public record PublicQsoQueryResult(
@@ -480,6 +578,21 @@ public class QslPublicApiService {
         String stationAddress,
         String stationEmail,
         String confirmedAt
+    ) {
+    }
+
+    public record PublicOfflineExchangePagePrefill(
+        String cardId,
+        String callSign,
+        String activityId,
+        String remarks
+    ) {
+    }
+
+    public record PublicCardPagePrefill(
+        String cardId,
+        String callSign,
+        String remarks
     ) {
     }
 

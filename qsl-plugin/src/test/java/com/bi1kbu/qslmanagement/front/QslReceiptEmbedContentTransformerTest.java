@@ -24,7 +24,7 @@ class QslReceiptEmbedContentTransformerTest {
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/page?embed=1&embedId=qsl-receipt-card-"));
+        assertTrue(transformed.contains("/apis/api.qsl-management.halo.run/v1alpha1/receipt-public?embed=1&eid=qsl-receipt-card-"));
         assertTrue(transformed.contains("data-qsl-embed-id=\"qsl-receipt-card-"));
         assertTrue(transformed.contains("window.__qslCardEmbedResizeBound"));
     }
@@ -35,7 +35,7 @@ class QslReceiptEmbedContentTransformerTest {
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("callSign=BI1KBU"));
+        assertTrue(transformed.contains("cs=BI1KBU"));
     }
 
     @Test
@@ -44,6 +44,6 @@ class QslReceiptEmbedContentTransformerTest {
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("cardId=card-record-001"));
+        assertTrue(transformed.contains("/receipt-public/card-record-001?embed=1&eid=qsl-receipt-card-"));
     }
 }

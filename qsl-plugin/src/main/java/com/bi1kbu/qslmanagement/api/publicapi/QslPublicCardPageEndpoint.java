@@ -42,13 +42,12 @@ public class QslPublicCardPageEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> renderCardPage(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
-        var callSign = request.queryParam("callSign").orElse("");
-        var sceneType = request.queryParam("sceneType").orElse("");
+        var callSign = queryParam(request, "callSign", "cs");
         var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
-        var embedId = request.queryParam("embedId").orElse("");
+        var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("cards-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, sceneType, embed, embedId)))
+            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, embed, embedId)))
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))
@@ -64,4 +63,15 @@ public class QslPublicCardPageEndpoint implements CustomEndpoint {
         var normalized = value.trim().toLowerCase();
         return "1".equals(normalized) || "true".equals(normalized) || "yes".equals(normalized);
     }
+
+    private String queryParam(ServerRequest request, String primary, String alias) {
+        if (primary != null && !primary.isBlank()) {
+            var primaryValue = request.queryParam(primary).orElse("").trim();
+            if (!primaryValue.isBlank()) {
+                return primaryValue;
+            }
+        }
+        return request.queryParam(alias).orElse("").trim();
+    }
+
 }

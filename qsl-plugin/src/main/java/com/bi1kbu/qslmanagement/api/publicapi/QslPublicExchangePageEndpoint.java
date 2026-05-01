@@ -36,8 +36,10 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
 
     @Override
     public RouterFunction<ServerResponse> endpoint() {
-        return route(GET("/exchange-online/page"), this::renderOnlineExchangePage)
-            .andRoute(GET("/exchange-offline/page"), this::renderOfflineExchangePage);
+        return route(GET("/exchange-online"), this::renderOnlineExchangePageByQuery)
+            .andRoute(GET("/exchange-online/{cardId}"), this::renderOnlineExchangePageByCardId)
+            .andRoute(GET("/exchange-offline"), this::renderOfflineExchangePageByQuery)
+            .andRoute(GET("/exchange-offline/{cardId}"), this::renderOfflineExchangePageByCardId);
     }
 
     @Override
@@ -45,14 +47,15 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
         return GroupVersion.parseAPIVersion("api.qsl-management.halo.run/v1alpha1");
     }
 
-    private Mono<ServerResponse> renderOnlineExchangePage(ServerRequest request) {
+    private Mono<ServerResponse> renderOnlineExchangePageByQuery(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
-        var callSign = request.queryParam("callSign").orElse("");
+        var callSign = queryParam(request, "callSign", "cs");
+        var remarks = queryParam(request, "remarks", "r");
         var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
-        var embedId = request.queryParam("embedId").orElse("");
+        var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("exchange-online-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.renderOnline(callSign, embed, embedId)))
+            .then(Mono.fromSupplier(() -> pageRenderService.renderOnline(callSign, remarks, embed, embedId)))
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))
@@ -61,13 +64,32 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
                 .bodyValue(pageRenderService.renderError(error.getMessage(), embed)));
     }
 
-    private Mono<ServerResponse> renderOfflineExchangePage(ServerRequest request) {
+    private Mono<ServerResponse> renderOnlineExchangePageByCardId(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
-        var callSign = request.queryParam("callSign").orElse("");
-        var cardId = request.queryParam("cardId").orElse("");
-        var activityId = request.queryParam("activityId").orElse("");
+        var cardId = request.pathVariable("cardId");
+        var callSign = queryParam(request, "callSign", "cs");
         var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
-        var embedId = request.queryParam("embedId").orElse("");
+        var embedId = queryParam(request, "embedId", "eid");
+
+        return publicRateLimitService.checkLimit("exchange-online-page", clientIp)
+            .then(publicApiService.getOnlineExchangePagePrefill(cardId, callSign))
+            .map(prefill -> pageRenderService.renderOnline(prefill.callSign(), prefill.remarks(), embed, embedId))
+            .flatMap(html -> ServerResponse.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .bodyValue(html))
+            .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
+                .contentType(MediaType.TEXT_HTML)
+                .bodyValue(pageRenderService.renderError(error.getMessage(), embed)));
+    }
+
+    private Mono<ServerResponse> renderOfflineExchangePageByQuery(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        var callSign = queryParam(request, "callSign", "cs");
+        var cardId = queryParam(request, "cardId", "cid");
+        var activityId = queryParam(request, "activityId", "aid");
+        var remarks = queryParam(request, "remarks", "r");
+        var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
+        var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("exchange-offline-page", clientIp)
             .then(Mono.defer(publicApiService::getPublicStationContact))
@@ -75,11 +97,43 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
                 callSign,
                 cardId,
                 activityId,
+                remarks,
                 embed,
                 embedId,
                 contact.stationAddress(),
                 contact.stationEmail()
             ))
+            .flatMap(html -> ServerResponse.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .bodyValue(html))
+            .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
+                .contentType(MediaType.TEXT_HTML)
+                .bodyValue(pageRenderService.renderError(error.getMessage(), embed)));
+    }
+
+    private Mono<ServerResponse> renderOfflineExchangePageByCardId(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        var cardId = request.pathVariable("cardId");
+        var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
+        var embedId = queryParam(request, "embedId", "eid");
+
+        return publicRateLimitService.checkLimit("exchange-offline-page", clientIp)
+            .then(publicApiService.getOfflineExchangePagePrefill(cardId)
+                .zipWith(publicApiService.getPublicStationContact()))
+            .map(tuple -> {
+                var prefill = tuple.getT1();
+                var contact = tuple.getT2();
+                return pageRenderService.renderOffline(
+                    prefill.callSign(),
+                    prefill.cardId(),
+                    prefill.activityId(),
+                    prefill.remarks(),
+                    embed,
+                    embedId,
+                    contact.stationAddress(),
+                    contact.stationEmail()
+                );
+            })
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))
@@ -94,5 +148,15 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
         }
         var normalized = value.trim().toLowerCase();
         return "1".equals(normalized) || "true".equals(normalized) || "yes".equals(normalized);
+    }
+
+    private String queryParam(ServerRequest request, String primary, String alias) {
+        if (primary != null && !primary.isBlank()) {
+            var primaryValue = request.queryParam(primary).orElse("").trim();
+            if (!primaryValue.isBlank()) {
+                return primaryValue;
+            }
+        }
+        return request.queryParam(alias).orElse("").trim();
     }
 }

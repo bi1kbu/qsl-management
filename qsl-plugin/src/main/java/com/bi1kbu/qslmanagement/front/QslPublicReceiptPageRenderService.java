@@ -10,21 +10,27 @@ public class QslPublicReceiptPageRenderService {
 
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
     private static final Pattern EMBED_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
-    private static final Pattern SCENE_TYPE_PATTERN = Pattern.compile("^(QSO|SWL|ONLINE_EYEBALL|EYEBALL)?$");
 
-    public String render(String rawCallSign, String rawCardId, String rawSceneType, boolean embed, String rawEmbedId) {
+    public String render(
+        String rawCallSign,
+        String rawCardId,
+        String rawRemarks,
+        boolean embed,
+        String rawEmbedId
+    ) {
         var callSign = normalizeCallSign(rawCallSign);
         var cardId = normalizeCardId(rawCardId);
-        var sceneType = normalizeSceneType(rawSceneType);
+        var remarks = normalizeRemarks(rawRemarks);
         var embedId = normalizeEmbedId(rawEmbedId);
 
         return BASE_TEMPLATE
             .replace("__TITLE__", embed ? "QSL 卡片签收" : "QSL 前台签收")
             .replace("__CALL_SIGN_HTML__", escapeHtml(callSign))
             .replace("__CARD_ID_HTML__", escapeHtml(cardId))
+            .replace("__REMARKS_HTML__", escapeHtml(remarks))
             .replace("__CALL_SIGN_JS__", escapeJs(callSign))
             .replace("__CARD_ID_JS__", escapeJs(cardId))
-            .replace("__SCENE_TYPE_JS__", escapeJs(sceneType))
+            .replace("__REMARKS_JS__", escapeJs(remarks))
             .replace("__EMBED_MODE__", Boolean.toString(embed))
             .replace("__EMBED_ID__", escapeJs(embedId));
     }
@@ -108,13 +114,13 @@ public class QslPublicReceiptPageRenderService {
         return normalized;
     }
 
-    private String normalizeSceneType(String rawSceneType) {
-        if (rawSceneType == null) {
+    private String normalizeRemarks(String rawRemarks) {
+        if (rawRemarks == null) {
             return "";
         }
-        var normalized = rawSceneType.trim().toUpperCase(Locale.ROOT);
-        if (!SCENE_TYPE_PATTERN.matcher(normalized).matches()) {
-            return "";
+        var normalized = rawRemarks.trim();
+        if (normalized.length() > 500) {
+            return normalized.substring(0, 500);
         }
         return normalized;
     }
@@ -330,7 +336,7 @@ public class QslPublicReceiptPageRenderService {
                     </label>
                     <label class="qsl-field full">
                       <span class="qsl-label">签收备注（可选）</span>
-                      <textarea id="qsl-remarks-input" class="qsl-textarea" maxlength="500" placeholder="可填写签收说明，最多 500 字"></textarea>
+                      <textarea id="qsl-remarks-input" class="qsl-textarea" maxlength="500" placeholder="可填写签收说明，最多 500 字">__REMARKS_HTML__</textarea>
                     </label>
                   </div>
                   <div class="qsl-actions">
@@ -357,7 +363,6 @@ public class QslPublicReceiptPageRenderService {
                 const API_BASE = "/apis/api.qsl-management.halo.run/v1alpha1";
                 const EMBED_MODE = __EMBED_MODE__;
                 const EMBED_ID = "__EMBED_ID__";
-                const SCENE_TYPE = "__SCENE_TYPE_JS__";
                 const CALL_SIGN_PATTERN = /^[A-Z0-9/-]{3,16}$/;
 
                 const page = document.getElementById("qsl-page");
@@ -486,8 +491,7 @@ public class QslPublicReceiptPageRenderService {
                       body: JSON.stringify({
                         callSign,
                         cardId,
-                        remarks,
-                        sceneType: SCENE_TYPE
+                        remarks
                       })
                     });
                     const result = await parseResponse(response);
@@ -503,6 +507,7 @@ public class QslPublicReceiptPageRenderService {
 
                 callSignInput.value = normalizeCallSign("__CALL_SIGN_JS__");
                 cardIdInput.value = normalizeCardId("__CARD_ID_JS__");
+                remarksInput.value = "__REMARKS_JS__";
 
                 if (window.ResizeObserver) {
                   const resizeObserver = new ResizeObserver(() => notifyParentHeight());

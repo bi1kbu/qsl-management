@@ -76,21 +76,35 @@ public class QslExchangeEmbedContentTransformer {
     }
 
     private String buildEmbedBlock(String callSign, String cardId, String activityId, boolean offlineMode, String embedId) {
-        var uriBuilder = UriComponentsBuilder
-            .fromPath(offlineMode
-                ? "/apis/api.qsl-management.halo.run/v1alpha1/exchange-offline/page"
-                : "/apis/api.qsl-management.halo.run/v1alpha1/exchange-online/page")
-            .queryParam("embed", "1")
-            .queryParam("embedId", embedId);
-        if (!callSign.isBlank()) {
-            uriBuilder.queryParam("callSign", callSign);
+        UriComponentsBuilder uriBuilder;
+        if (offlineMode) {
+            if (!cardId.isBlank()) {
+                uriBuilder = UriComponentsBuilder
+                    .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-offline")
+                    .pathSegment(cardId);
+            } else {
+                uriBuilder = UriComponentsBuilder.fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-offline");
+                if (!callSign.isBlank()) {
+                    uriBuilder.queryParam("cs", callSign);
+                }
+                if (!activityId.isBlank()) {
+                    uriBuilder.queryParam("aid", activityId);
+                }
+            }
+        } else {
+            if (!cardId.isBlank()) {
+                uriBuilder = UriComponentsBuilder
+                    .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-online")
+                    .pathSegment(cardId);
+            } else {
+                uriBuilder = UriComponentsBuilder
+                    .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-online");
+            }
+            if (!callSign.isBlank()) {
+                uriBuilder.queryParam("cs", callSign);
+            }
         }
-        if (!cardId.isBlank()) {
-            uriBuilder.queryParam("cardId", cardId);
-        }
-        if (!activityId.isBlank()) {
-            uriBuilder.queryParam("activityId", activityId);
-        }
+        uriBuilder.queryParam("embed", "1").queryParam("eid", embedId);
         var src = uriBuilder.build().toUriString();
         var cardTitle = offlineMode ? "线下换卡确认" : "线上换卡申请";
 

@@ -13,16 +13,18 @@ public class QslPublicExchangePageRenderService {
 
     public String renderOnline(
         String rawCallSign,
+        String rawRemarks,
         boolean embed,
         String rawEmbedId
     ) {
         var callSign = normalizeCallSign(rawCallSign);
+        var remarks = normalizeText(rawRemarks, 500);
         var embedId = normalizeEmbedId(rawEmbedId);
         return renderInternal(
             callSign,
             "",
             "",
-            "ONLINE_EYEBALL",
+            remarks,
             false,
             embed,
             embedId,
@@ -35,6 +37,7 @@ public class QslPublicExchangePageRenderService {
         String rawCallSign,
         String rawCardId,
         String rawActivityId,
+        String rawRemarks,
         boolean embed,
         String rawEmbedId,
         String rawStationAddress,
@@ -43,6 +46,7 @@ public class QslPublicExchangePageRenderService {
         var callSign = normalizeCallSign(rawCallSign);
         var cardId = normalizeText(rawCardId, 128).toUpperCase(Locale.ROOT);
         var activityId = normalizeText(rawActivityId, 64);
+        var remarks = normalizeText(rawRemarks, 500);
         var embedId = normalizeEmbedId(rawEmbedId);
         var stationAddress = normalizeText(rawStationAddress, 200);
         var stationEmail = normalizeText(rawStationEmail, 120);
@@ -50,7 +54,7 @@ public class QslPublicExchangePageRenderService {
             callSign,
             cardId,
             activityId,
-            "EYEBALL",
+            remarks,
             true,
             embed,
             embedId,
@@ -63,7 +67,7 @@ public class QslPublicExchangePageRenderService {
         String callSign,
         String cardId,
         String activityId,
-        String sceneType,
+        String remarks,
         boolean offlineMode,
         boolean embed,
         String embedId,
@@ -80,12 +84,13 @@ public class QslPublicExchangePageRenderService {
             .replace("__CALL_SIGN_HTML__", escapeHtml(callSign))
             .replace("__CARD_ID_HTML__", escapeHtml(cardId))
             .replace("__ACTIVITY_ID_HTML__", escapeHtml(activityId))
+            .replace("__REMARKS_HTML__", escapeHtml(remarks))
             .replace("__CALL_SIGN_JS__", escapeJs(callSign))
             .replace("__CARD_ID_JS__", escapeJs(cardId))
             .replace("__ACTIVITY_ID_JS__", escapeJs(activityId))
+            .replace("__REMARKS_JS__", escapeJs(remarks))
             .replace("__STATION_ADDRESS_JS__", escapeJs(stationAddress))
             .replace("__STATION_EMAIL_JS__", escapeJs(stationEmail))
-            .replace("__SCENE_TYPE_JS__", escapeJs(sceneType))
             .replace("__OFFLINE_MODE__", Boolean.toString(offlineMode))
             .replace("__EMBED_MODE__", Boolean.toString(embed))
             .replace("__EMBED_ID__", escapeJs(embedId));
@@ -207,7 +212,7 @@ public class QslPublicExchangePageRenderService {
                     <label id="online-bureau-field"><span class="qsl-label">卡片局名称</span><input id="bureauName" class="qsl-input" maxlength="80" placeholder="可选，填写时默认按卡局模式" /></label>
                     <label id="online-address-field" class="qsl-field full"><span class="qsl-label">通信地址</span><textarea id="address" class="qsl-textarea" maxlength="200" placeholder="可选"></textarea></label>
 
-                    <label class="qsl-field full"><span class="qsl-label">备注</span><textarea id="remarks" class="qsl-textarea" maxlength="500" placeholder="可选"></textarea></label>
+                    <label class="qsl-field full"><span class="qsl-label">备注</span><textarea id="remarks" class="qsl-textarea" maxlength="500" placeholder="可选">__REMARKS_HTML__</textarea></label>
                   </div>
                   <div class="qsl-actions"><button id="submitBtn" class="qsl-button" type="submit">提交</button></div>
                   <p id="error" class="qsl-error"></p>
@@ -220,7 +225,6 @@ public class QslPublicExchangePageRenderService {
                 const API_BASE = "/apis/api.qsl-management.halo.run/v1alpha1";
                 const EMBED_MODE = __EMBED_MODE__;
                 const EMBED_ID = "__EMBED_ID__";
-                const SCENE_TYPE = "__SCENE_TYPE_JS__" || "ONLINE_EYEBALL";
                 const OFFLINE_MODE = __OFFLINE_MODE__;
                 const STATION_ADDRESS = "__STATION_ADDRESS_JS__";
                 const STATION_EMAIL = "__STATION_EMAIL_JS__";
@@ -322,6 +326,10 @@ public class QslPublicExchangePageRenderService {
                 }
                 if (activityIdInput) {
                   activityIdInput.addEventListener("input", refreshActivityNameHint);
+                }
+                const remarksInput = document.getElementById("remarks");
+                if (remarksInput) {
+                  remarksInput.value = "__REMARKS_JS__";
                 }
 
                 form.addEventListener("submit", async (event) => {

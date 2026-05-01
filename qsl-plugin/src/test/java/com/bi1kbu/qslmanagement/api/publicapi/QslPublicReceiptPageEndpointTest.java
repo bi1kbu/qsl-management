@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.api.QslApiException;
+import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.front.QslPublicReceiptPageRenderService;
 import org.junit.jupiter.api.Test;
@@ -19,29 +20,58 @@ class QslPublicReceiptPageEndpointTest {
     @Test
     void shouldRenderReceiptPageHtml() {
         var rateLimitService = mock(QslPublicRateLimitService.class);
+        var publicApiService = mock(QslPublicApiService.class);
         var renderService = mock(QslPublicReceiptPageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.render("BI1KBU", "card-record-001", "ONLINE_EYEBALL", true, "embed-001"))
+        when(renderService.render("BI1KBU", "card-record-001", "SIGNED", true, "embed-001"))
             .thenReturn("<html><body>签收页</body></html>");
 
-        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, renderService);
+        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, publicApiService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/receipt-public/page?callSign=BI1KBU&cardId=card-record-001&sceneType=ONLINE_EYEBALL&embed=1&embedId=embed-001")
+            .uri("/receipt-public?cs=BI1KBU&cid=card-record-001&r=SIGNED&embed=1&eid=embed-001")
             .exchange()
             .expectStatus().isOk()
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
             .expectBody(String.class)
             .isEqualTo("<html><body>签收页</body></html>");
 
-        verify(renderService).render("BI1KBU", "card-record-001", "ONLINE_EYEBALL", true, "embed-001");
+        verify(renderService).render("BI1KBU", "card-record-001", "SIGNED", true, "embed-001");
+    }
+
+    @Test
+    void shouldRenderReceiptPageByCardIdHtml() {
+        var rateLimitService = mock(QslPublicRateLimitService.class);
+        var publicApiService = mock(QslPublicApiService.class);
+        var renderService = mock(QslPublicReceiptPageRenderService.class);
+
+        when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
+        when(publicApiService.getReceiptPagePrefill("C1003", "BI1KBU"))
+            .thenReturn(Mono.just(new QslPublicApiService.PublicCardPagePrefill("C1003", "BI1KBU", "后端回填")));
+        when(renderService.render("BI1KBU", "C1003", "后端回填", true, "embed-005"))
+            .thenReturn("<html><body>签收页-按卡片回填</body></html>");
+
+        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, publicApiService, renderService);
+        var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
+
+        client.get()
+            .uri("/receipt-public/C1003?cs=BI1KBU&embed=1&eid=embed-005")
+            .exchange()
+            .expectStatus().isOk()
+            .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
+            .expectBody(String.class)
+            .isEqualTo("<html><body>签收页-按卡片回填</body></html>");
+
+        verify(publicApiService).getReceiptPagePrefill("C1003", "BI1KBU");
+        verify(renderService).render("BI1KBU", "C1003", "后端回填", true, "embed-005");
     }
 
     @Test
     void shouldRenderErrorHtmlWhenRateLimited() {
         var rateLimitService = mock(QslPublicRateLimitService.class);
+        var publicApiService = mock(QslPublicApiService.class);
         var renderService = mock(QslPublicReceiptPageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(
@@ -50,11 +80,11 @@ class QslPublicReceiptPageEndpointTest {
         when(renderService.renderError("请求过于频繁，请稍后再试", false))
             .thenReturn("<html><body>限流</body></html>");
 
-        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, renderService);
+        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, publicApiService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/receipt-public/page")
+            .uri("/receipt-public")
             .exchange()
             .expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS)
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
