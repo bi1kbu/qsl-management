@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -48,6 +49,35 @@ class QslPublicApiEndpointRouteTest {
             .expectBody()
             .jsonPath("$.code").isEqualTo("QSL-0000")
             .jsonPath("$.data.requestName").isEqualTo("exchange-request-001");
+    }
+
+    @Test
+    void shouldListOfflineActivitiesBySubresourceGetPath() {
+        var publicApiService = mock(QslPublicApiService.class);
+        var rateLimitService = mock(QslPublicRateLimitService.class);
+
+        when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
+        when(publicApiService.listPublicOfflineActivities()).thenReturn(Mono.just(List.of(
+            new QslPublicApiService.PublicOfflineActivityItem(
+                "202604ACT01",
+                "城市联谊换卡",
+                "2026-04-28",
+                "【2026-04-28】城市联谊换卡"
+            )
+        )));
+
+        var client = WebTestClient.bindToRouterFunction(
+            new QslPublicApiEndpoint(publicApiService, rateLimitService).endpoint()
+        ).build();
+
+        client.get()
+            .uri("/exchange-public/-/activities")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-0000")
+            .jsonPath("$.data[0].activityId").isEqualTo("202604ACT01")
+            .jsonPath("$.data[0].displayName").isEqualTo("【2026-04-28】城市联谊换卡");
     }
 
     @Test

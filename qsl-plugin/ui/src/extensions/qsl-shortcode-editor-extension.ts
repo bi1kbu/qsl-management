@@ -65,7 +65,7 @@ function parseShortcode(text: string): ParsedShortcode | null {
     const sceneText = sceneType === 'EYEBALL' ? '线下换卡' : '线上换卡'
     return {
       type,
-      title: 'QSL 换卡申请卡片',
+      title: sceneType === 'EYEBALL' ? '线下换卡确认卡片' : '线上换卡申请卡片',
       subtitle: `${sceneText}${callSign ? ` · 呼号：${callSign}` : ''}`,
     }
   }
@@ -205,8 +205,8 @@ const qslShortcodeEditorExtension = Extension.create({
             props: {
               editor,
               icon: markRaw(RiExchangeLine),
-              title: '插入线下换卡申请卡片',
-              description: '插入线下换卡申请短码',
+              title: '插入线下换卡确认卡片',
+              description: '插入线下换卡确认短码',
               action: () => insertShortcode(editor, '[qsl-exchange-card sceneType="EYEBALL"]'),
             },
           },
@@ -259,8 +259,8 @@ const qslShortcodeEditorExtension = Extension.create({
           {
             priority: 153,
             icon: markRaw(RiExchangeLine),
-            title: '插入线下换卡申请卡片',
-            keywords: ['qsl', '线下换卡', '申请', 'exchange'],
+            title: '插入线下换卡确认卡片',
+            keywords: ['qsl', '线下换卡', '确认', 'exchange'],
             command: ({ editor, range }: { editor: Editor; range: { from: number; to: number } }) => {
               editor
                 .chain()

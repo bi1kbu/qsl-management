@@ -4,7 +4,6 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
   createExtension,
-  createResourceName,
   deleteExtension,
   listExtensions,
   qslApiVersion,
@@ -86,6 +85,44 @@ const toItem = (extension: QslExtension<OfflineActivitySpec, OfflineActivityStat
   spec: normalizeSpec(extension.spec),
   createdAt: extension.metadata.creationTimestamp ?? '',
 })
+
+const buildActivityIdPrefix = (activityDate: string): string => {
+  const normalized = activityDate.trim().replace(/-/g, '')
+  if (normalized.length >= 6) {
+    return normalized.slice(0, 6)
+  }
+  const now = new Date()
+  const year = String(now.getFullYear())
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  return `${year}${month}`
+}
+
+const allocateActivityResourceName = (activityDate: string): string => {
+  const prefix = `${buildActivityIdPrefix(activityDate)}ACT`
+  const used = new Set(rows.value.map((item) => item.resourceName.trim().toUpperCase()))
+  let maxSequence = 0
+
+  for (const row of rows.value) {
+    const name = row.resourceName.trim().toUpperCase()
+    const matched = name.match(/^\d{6}ACT(\d+)$/)
+    if (!matched) {
+      continue
+    }
+    const sequence = Number.parseInt(matched[1] ?? '0', 10)
+    if (Number.isFinite(sequence)) {
+      maxSequence = Math.max(maxSequence, sequence)
+    }
+  }
+
+  let nextSequence = maxSequence + 1
+  while (true) {
+    const candidate = `${prefix}${String(nextSequence).padStart(2, '0')}`
+    if (!used.has(candidate)) {
+      return candidate
+    }
+    nextSequence += 1
+  }
+}
 
 const resetForm = () => {
   form.activityName = ''
@@ -173,7 +210,7 @@ const saveActivity = async () => {
       return
     }
 
-    const resourceName = createResourceName('offline-activity')
+    const resourceName = allocateActivityResourceName(nextSpec.activityDate)
     await createExtension<OfflineActivitySpec, OfflineActivityStatus>(resourcePlural, {
       apiVersion: qslApiVersion,
       kind: resourceKind,

@@ -2,7 +2,9 @@ package com.bi1kbu.qslmanagement.api;
 
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
+import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
+import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -18,6 +20,7 @@ public class QslPublicApiService {
 
     private static final ListOptions EMPTY_OPTIONS = ListOptions.builder().build();
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("metadata.creationTimestamp"));
+    private static final String STATION_PROFILE_NAME = "qsl-station-profile-default";
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$");
     private static final Pattern TELEPHONE_PATTERN = Pattern.compile("^[0-9+\\-\\s]{0,30}$");
@@ -164,6 +167,102 @@ public class QslPublicApiService {
             ));
     }
 
+    public Mono<List<PublicOfflineActivityItem>> listPublicOfflineActivities() {
+        return client.listAll(OfflineActivity.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .filter(activity -> activity.getMetadata() != null && activity.getSpec() != null)
+            .map(activity -> {
+                var id = nullToEmpty(activity.getMetadata().getName()).trim();
+                var spec = activity.getSpec();
+                var name = nullToEmpty(spec.getActivityName()).trim();
+                var date = nullToEmpty(spec.getActivityDate()).trim();
+                var displayName = buildOfflineActivityDisplayName(id, name, date);
+                return new PublicOfflineActivityItem(id, name, date, displayName);
+            })
+            .collectList();
+    }
+
+    public Mono<PublicOfflineExchangeConfirmResult> confirmOfflineExchange(
+        PublicOfflineExchangeConfirmCommand command,
+        String clientIp
+    ) {
+        var callSign = QslApiSupport.normalizeCallSign(command.callSign());
+        if (callSign.isBlank()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号不能为空"));
+        }
+        if (!isValidCallSign(callSign)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
+        }
+
+        var cardId = nullToEmpty(command.cardId()).trim().toUpperCase(Locale.ROOT);
+        if (cardId.isBlank()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片编号不能为空"));
+        }
+
+        var activityId = nullToEmpty(command.activityId()).trim();
+        if (activityId.isBlank()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "活动ID不能为空"));
+        }
+
+        if (!validateLength(activityId, 64)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "活动ID长度不能超过64字符"));
+        }
+        if (!validateLength(command.remarks(), 500)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "备注长度不能超过500字符"));
+        }
+
+        return client.fetch(CardRecord.class, cardId)
+            .switchIfEmpty(Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "QSL-422-0001", "未找到对应卡片记录")))
+            .flatMap(cardRecord -> {
+                if (cardRecord.getSpec() == null) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "卡片记录缺少业务字段"));
+                }
+                var spec = cardRecord.getSpec();
+                var sceneType = normalizeSceneType(spec.getSceneType());
+                if (!"EYEBALL".equals(sceneType)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "该卡片不属于线下换卡场景"));
+                }
+                var offlineActivityName = nullToEmpty(spec.getOfflineActivityName()).trim();
+                if (!activityId.equals(offlineActivityName)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "活动ID与卡片记录不匹配"));
+                }
+
+                var cardCallSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
+                if (!cardCallSign.isBlank()) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "该卡片已被签收"));
+                }
+
+                spec.setCallSign(callSign);
+                spec.setReceiptConfirmed(Boolean.TRUE);
+                spec.setPublicReceiptRemarks(QslApiSupport.appendRemark(
+                    spec.getPublicReceiptRemarks(),
+                    command.remarks() == null ? "" : command.remarks().trim()
+                ));
+                return client.update(cardRecord);
+            })
+            .flatMap(updated -> qslAuditService.appendAuditLog(
+                "前台线下换卡确认",
+                "card-record",
+                updated.getMetadata().getName(),
+                "呼号=" + callSign + "，活动ID=" + activityId,
+                "匿名用户",
+                clientIp
+            ).thenReturn(updated))
+            .flatMap(updated -> getPublicStationContact()
+                .map(contact -> new PublicOfflineExchangeConfirmResult(
+                    updated.getMetadata().getName(),
+                    callSign,
+                    activityId,
+                    nullToEmpty(contact.stationAddress()),
+                    nullToEmpty(contact.stationEmail()),
+                    QslApiSupport.nowText()
+                )));
+    }
+
     public Mono<PublicReceiptConfirmResult> confirmReceipt(PublicReceiptConfirmCommand command, String clientIp) {
         var callSign = QslApiSupport.normalizeCallSign(command.callSign());
         var sceneType = normalizeSceneType(command.sceneType());
@@ -194,14 +293,24 @@ public class QslPublicApiService {
                         "QSL-422-0001", "卡片记录缺少业务字段，无法签收"));
                 }
                 var cardCallSign = QslApiSupport.normalizeCallSign(cardRecord.getSpec().getCallSign());
-                if (!callSign.equals(cardCallSign)) {
-                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
-                        "QSL-422-0001", "卡片和呼号不匹配"));
-                }
                 var cardSceneType = normalizeSceneType(cardRecord.getSpec().getSceneType());
                 if (!sceneType.isBlank() && !sceneType.equals(cardSceneType)) {
                     return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "QSL-422-0001", "卡片场景和签收场景不匹配"));
+                }
+
+                var offlineEyeballScene = "EYEBALL".equals(cardSceneType);
+                if (offlineEyeballScene && cardCallSign.isBlank()) {
+                    cardRecord.getSpec().setCallSign(callSign);
+                } else {
+                    if (offlineEyeballScene) {
+                        return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                            "QSL-422-0001", "该卡片已被签收"));
+                    }
+                    if (!callSign.equals(cardCallSign)) {
+                        return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                            "QSL-422-0001", "卡片和呼号不匹配"));
+                    }
                 }
                 cardRecord.getSpec().setReceiptConfirmed(Boolean.TRUE);
                 cardRecord.getSpec().setPublicReceiptRemarks(QslApiSupport.appendRemark(
@@ -265,11 +374,49 @@ public class QslPublicApiService {
         return POSTAL_CODE_PATTERN.matcher(normalized).matches();
     }
 
+    public Mono<PublicStationContact> getPublicStationContact() {
+        return client.fetch(StationProfile.class, STATION_PROFILE_NAME)
+            .map(stationProfile -> {
+                var spec = stationProfile.getSpec();
+                if (spec == null) {
+                    return new PublicStationContact("", "");
+                }
+                var callSign = nullToEmpty(spec.getMyCallSign()).trim().toUpperCase(Locale.ROOT);
+                var name = nullToEmpty(spec.getMyName()).trim();
+                var telephone = nullToEmpty(spec.getMyTelephone()).trim();
+                var postalCode = nullToEmpty(spec.getMyPostalCode()).trim();
+                var address = nullToEmpty(spec.getMyAddress()).trim();
+                var email = nullToEmpty(spec.getMyEmail()).trim();
+
+                var recipient = (name.isBlank() ? "" : name) + "（" + (callSign.isBlank() ? "-" : callSign) + "）（收）";
+                var stationAddressText = String.join("\n",
+                    "邮编：" + (postalCode.isBlank() ? "-" : postalCode),
+                    "地址：" + (address.isBlank() ? "-" : address),
+                    "收件人：" + recipient,
+                    "联系电话：" + (telephone.isBlank() ? "-" : telephone),
+                    "电子邮箱：" + (email.isBlank() ? "-" : email)
+                );
+                return new PublicStationContact(
+                    stationAddressText,
+                    email
+                );
+            })
+            .defaultIfEmpty(new PublicStationContact("", ""));
+    }
+
     private String normalizeSceneType(String value) {
         if (value == null) {
             return "";
         }
         return value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String buildOfflineActivityDisplayName(String id, String name, String date) {
+        var safeName = name.isBlank() ? id : name;
+        if (date.isBlank()) {
+            return safeName;
+        }
+        return "【" + date + "】" + safeName;
     }
 
     public record PublicQsoQueryResult(
@@ -320,6 +467,38 @@ public class QslPublicApiService {
         String callSign,
         String reviewStatus,
         String submittedAt
+    ) {
+    }
+
+    public record PublicOfflineExchangeConfirmCommand(
+        String callSign,
+        String cardId,
+        String activityId,
+        String remarks
+    ) {
+    }
+
+    public record PublicOfflineExchangeConfirmResult(
+        String cardRecordName,
+        String callSign,
+        String activityId,
+        String stationAddress,
+        String stationEmail,
+        String confirmedAt
+    ) {
+    }
+
+    public record PublicOfflineActivityItem(
+        String activityId,
+        String activityName,
+        String activityDate,
+        String displayName
+    ) {
+    }
+
+    public record PublicStationContact(
+        String stationAddress,
+        String stationEmail
     ) {
     }
 

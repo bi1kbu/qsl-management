@@ -4,6 +4,7 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
 import com.bi1kbu.qslmanagement.api.QslApiException;
+import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
 import com.bi1kbu.qslmanagement.front.QslPublicExchangePageRenderService;
@@ -20,13 +21,16 @@ import run.halo.app.extension.GroupVersion;
 public class QslPublicExchangePageEndpoint implements CustomEndpoint {
 
     private final QslPublicRateLimitService publicRateLimitService;
+    private final QslPublicApiService publicApiService;
     private final QslPublicExchangePageRenderService pageRenderService;
 
     public QslPublicExchangePageEndpoint(
         QslPublicRateLimitService publicRateLimitService,
+        QslPublicApiService publicApiService,
         QslPublicExchangePageRenderService pageRenderService
     ) {
         this.publicRateLimitService = publicRateLimitService;
+        this.publicApiService = publicApiService;
         this.pageRenderService = pageRenderService;
     }
 
@@ -43,12 +47,24 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> renderExchangePage(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
         var callSign = request.queryParam("callSign").orElse("");
+        var cardId = request.queryParam("cardId").orElse("");
+        var activityId = request.queryParam("activityId").orElse("");
         var sceneType = request.queryParam("sceneType").orElse("");
         var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
         var embedId = request.queryParam("embedId").orElse("");
 
         return publicRateLimitService.checkLimit("exchange-public-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, sceneType, embed, embedId)))
+            .then(Mono.defer(publicApiService::getPublicStationContact))
+            .map(contact -> pageRenderService.render(
+                callSign,
+                cardId,
+                activityId,
+                sceneType,
+                embed,
+                embedId,
+                contact.stationAddress(),
+                contact.stationEmail()
+            ))
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))
@@ -65,4 +81,3 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
         return "1".equals(normalized) || "true".equals(normalized) || "yes".equals(normalized);
     }
 }
-

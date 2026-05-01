@@ -33,7 +33,9 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
     @Override
     public RouterFunction<ServerResponse> endpoint() {
         return route(GET("/qso-public/records"), this::listPublicQso)
+            .andRoute(GET("/exchange-public/-/activities"), this::listOfflineActivities)
             .andRoute(POST("/exchange-public/-/requests"), this::submitExchangeRequest)
+            .andRoute(POST("/exchange-public/-/offline-confirm"), this::confirmOfflineExchange)
             .andRoute(POST("/receipt-public/-/confirm"), this::confirmReceipt);
     }
 
@@ -73,6 +75,14 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
             .onErrorResume(QslApiResponses::handleError);
     }
 
+    private Mono<ServerResponse> listOfflineActivities(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        return publicRateLimitService.checkLimit("exchange-public-activities", clientIp)
+            .then(publicApiService.listPublicOfflineActivities())
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
     private Mono<ServerResponse> confirmReceipt(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
         var sceneType = request.queryParam("sceneType").orElse("");
@@ -91,6 +101,16 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
                     }
                     return publicApiService.confirmReceipt(effectivePayload, clientIp);
                 }))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> confirmOfflineExchange(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        return publicRateLimitService.checkLimit("exchange-public-offline-confirm", clientIp)
+            .then(request.bodyToMono(QslPublicApiService.PublicOfflineExchangeConfirmCommand.class)
+                .defaultIfEmpty(new QslPublicApiService.PublicOfflineExchangeConfirmCommand("", "", "", ""))
+                .flatMap(payload -> publicApiService.confirmOfflineExchange(payload, clientIp)))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

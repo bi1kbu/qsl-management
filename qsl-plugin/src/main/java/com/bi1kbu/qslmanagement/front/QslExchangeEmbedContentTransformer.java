@@ -18,6 +18,12 @@ public class QslExchangeEmbedContentTransformer {
     private static final Pattern SCENE_TYPE_ATTR_PATTERN = Pattern.compile(
         "(?i)sceneType\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
     );
+    private static final Pattern CARD_ID_ATTR_PATTERN = Pattern.compile(
+        "(?i)cardId\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
+    );
+    private static final Pattern ACTIVITY_ID_ATTR_PATTERN = Pattern.compile(
+        "(?i)activityId\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
+    );
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
 
     public String transform(String content) {
@@ -33,8 +39,10 @@ public class QslExchangeEmbedContentTransformer {
             var attributes = matcher.group(1);
             var callSign = extractCallSign(attributes);
             var sceneType = extractSceneType(attributes);
+            var cardId = extractCardId(attributes);
+            var activityId = extractActivityId(attributes);
             var embedId = prefix + "-" + sequence++;
-            var replacement = buildEmbedBlock(callSign, sceneType, embedId);
+            var replacement = buildEmbedBlock(callSign, cardId, activityId, sceneType, embedId);
             matcher.appendReplacement(builder, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(builder);
@@ -55,6 +63,14 @@ public class QslExchangeEmbedContentTransformer {
         return "EYEBALL".equals(raw) ? "EYEBALL" : "ONLINE_EYEBALL";
     }
 
+    private String extractCardId(String attributes) {
+        return extractAttributeValue(attributes, CARD_ID_ATTR_PATTERN).trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String extractActivityId(String attributes) {
+        return extractAttributeValue(attributes, ACTIVITY_ID_ATTR_PATTERN).trim();
+    }
+
     private String extractAttributeValue(String attributes, Pattern pattern) {
         if (attributes == null || attributes.isBlank()) {
             return "";
@@ -66,7 +82,7 @@ public class QslExchangeEmbedContentTransformer {
         return firstNotBlank(matcher.group(2), matcher.group(3), matcher.group(4));
     }
 
-    private String buildEmbedBlock(String callSign, String sceneType, String embedId) {
+    private String buildEmbedBlock(String callSign, String cardId, String activityId, String sceneType, String embedId) {
         var uriBuilder = UriComponentsBuilder
             .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-public/page")
             .queryParam("embed", "1")
@@ -74,6 +90,12 @@ public class QslExchangeEmbedContentTransformer {
             .queryParam("sceneType", sceneType);
         if (!callSign.isBlank()) {
             uriBuilder.queryParam("callSign", callSign);
+        }
+        if (!cardId.isBlank()) {
+            uriBuilder.queryParam("cardId", cardId);
+        }
+        if (!activityId.isBlank()) {
+            uriBuilder.queryParam("activityId", activityId);
         }
         var src = uriBuilder.build().toUriString();
 
@@ -85,7 +107,7 @@ public class QslExchangeEmbedContentTransformer {
                 style="width: 100%%; min-height: 300px; border: 0; border-radius: 10px; background: transparent;"
                 loading="lazy"
                 referrerpolicy="same-origin"
-                title="QSL 换卡申请"
+                title="%s"
               ></iframe>
             </div>
             <script>
@@ -103,7 +125,7 @@ public class QslExchangeEmbedContentTransformer {
                 });
               })();
             </script>
-            """.formatted(src, embedId);
+            """.formatted(src, sceneType.equals("EYEBALL") ? "线下换卡确认" : "线上换卡申请", embedId);
     }
 
     private String firstNotBlank(String... candidates) {
@@ -118,4 +140,3 @@ public class QslExchangeEmbedContentTransformer {
         return "";
     }
 }
-

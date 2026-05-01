@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.api.QslApiException;
+import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.front.QslPublicExchangePageRenderService;
 import org.junit.jupiter.api.Test;
@@ -19,13 +20,16 @@ class QslPublicExchangePageEndpointTest {
     @Test
     void shouldRenderExchangePageHtml() {
         var rateLimitService = mock(QslPublicRateLimitService.class);
+        var publicApiService = mock(QslPublicApiService.class);
         var renderService = mock(QslPublicExchangePageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.render("bg7abc", "EYEBALL", true, "embed-001"))
+        when(publicApiService.getPublicStationContact())
+            .thenReturn(Mono.just(new QslPublicApiService.PublicStationContact("北京市测试路1号", "test@example.com")));
+        when(renderService.render("bg7abc", "", "", "EYEBALL", true, "embed-001", "北京市测试路1号", "test@example.com"))
             .thenReturn("<html><body>换卡页</body></html>");
 
-        var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, renderService);
+        var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -36,12 +40,13 @@ class QslPublicExchangePageEndpointTest {
             .expectBody(String.class)
             .isEqualTo("<html><body>换卡页</body></html>");
 
-        verify(renderService).render("bg7abc", "EYEBALL", true, "embed-001");
+        verify(renderService).render("bg7abc", "", "", "EYEBALL", true, "embed-001", "北京市测试路1号", "test@example.com");
     }
 
     @Test
     void shouldRenderErrorHtmlWhenRateLimited() {
         var rateLimitService = mock(QslPublicRateLimitService.class);
+        var publicApiService = mock(QslPublicApiService.class);
         var renderService = mock(QslPublicExchangePageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(
@@ -50,7 +55,7 @@ class QslPublicExchangePageEndpointTest {
         when(renderService.renderError("请求过于频繁，请稍后再试", false))
             .thenReturn("<html><body>限流</body></html>");
 
-        var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, renderService);
+        var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -64,4 +69,3 @@ class QslPublicExchangePageEndpointTest {
         verify(renderService).renderError("请求过于频繁，请稍后再试", false);
     }
 }
-
