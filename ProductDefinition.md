@@ -231,7 +231,7 @@
 当前实现形态：
 
 1. 提供独立前台页面：`/apis/api.qsl-management.halo.run/v1alpha1/cards/page`
-2. 提供文章/单页嵌入能力：在正文中写入 `[qsl-card]` 或 `[qsl-card callSign="BG7ABC"]`，渲染为可交互卡片 iframe
+2. 提供文章/单页嵌入能力：在正文中写入 `[qsl-card]` 或 `[qsl-card callSign="BI1KBU"]`，渲染为可交互卡片 iframe
 3. 前台页面与嵌入卡片均复用同一套公开 API（总览、呼号查询、换卡申请、签收确认）
 
 ### 3.1 数据总览

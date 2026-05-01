@@ -92,15 +92,11 @@ public class QslPublicApiService {
 
     public Mono<PublicExchangeSubmitResult> submitExchangeRequest(PublicExchangeSubmitCommand command, String clientIp) {
         var callSign = QslApiSupport.normalizeCallSign(command.callSign());
-        var sceneType = normalizeSceneType(command.sceneType());
         if (callSign.isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号不能为空"));
         }
         if (!isValidCallSign(callSign)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号格式不合法"));
-        }
-        if (!sceneType.isBlank() && !("ONLINE_EYEBALL".equals(sceneType) || "EYEBALL".equals(sceneType))) {
-            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "换卡申请场景不合法"));
         }
         if (Boolean.TRUE.equals(command.useBureau()) && nullToEmpty(command.bureauName()).isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "选择卡片局模式时必须填写卡片局名称"));
@@ -131,7 +127,7 @@ public class QslPublicApiService {
         request.setMetadata(QslApiSupport.createMetadata(QslApiSupport.createResourceName("exchange-request")));
 
         var spec = new ExchangeRequest.ExchangeRequestSpec();
-        spec.setSceneType(sceneType.isBlank() ? "ONLINE_EYEBALL" : sceneType);
+        spec.setSceneType("ONLINE_EYEBALL");
         spec.setCallSign(callSign);
         spec.setUseBureau(Boolean.TRUE.equals(command.useBureau()));
         spec.setBureauName(nullToEmpty(command.bureauName()));
@@ -449,7 +445,6 @@ public class QslPublicApiService {
     }
 
     public record PublicExchangeSubmitCommand(
-        String sceneType,
         String callSign,
         Boolean useBureau,
         String bureauName,

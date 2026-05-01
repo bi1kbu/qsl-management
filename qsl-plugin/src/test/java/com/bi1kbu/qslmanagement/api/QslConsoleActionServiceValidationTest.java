@@ -40,7 +40,7 @@ class QslConsoleActionServiceValidationTest {
         );
 
         var error = assertThrows(QslApiException.class, () -> service.confirmMailReceive(
-            new QslConsoleActionService.MailReceiveConfirmCommand("BG7ABC", "INVALID", "", ""),
+            new QslConsoleActionService.MailReceiveConfirmCommand("BI1KBU", "INVALID", "", ""),
             "admin",
             "127.0.0.1"
         ).block());
@@ -61,7 +61,7 @@ class QslConsoleActionServiceValidationTest {
         var exchangeRequest = new ExchangeRequest();
         exchangeRequest.setMetadata(QslApiSupport.createMetadata("exchange-request-1"));
         var spec = new ExchangeRequest.ExchangeRequestSpec();
-        spec.setCallSign("BG7ABC");
+        spec.setCallSign("BI1KBU");
         exchangeRequest.setSpec(spec);
         var status = new ExchangeRequest.ExchangeRequestStatus();
         status.setReviewStatus("已通过");

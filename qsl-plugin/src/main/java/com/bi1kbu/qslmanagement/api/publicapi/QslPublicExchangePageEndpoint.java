@@ -36,7 +36,8 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
 
     @Override
     public RouterFunction<ServerResponse> endpoint() {
-        return route(GET("/exchange-public/page"), this::renderExchangePage);
+        return route(GET("/exchange-online/page"), this::renderOnlineExchangePage)
+            .andRoute(GET("/exchange-offline/page"), this::renderOfflineExchangePage);
     }
 
     @Override
@@ -44,22 +45,36 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
         return GroupVersion.parseAPIVersion("api.qsl-management.halo.run/v1alpha1");
     }
 
-    private Mono<ServerResponse> renderExchangePage(ServerRequest request) {
+    private Mono<ServerResponse> renderOnlineExchangePage(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        var callSign = request.queryParam("callSign").orElse("");
+        var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
+        var embedId = request.queryParam("embedId").orElse("");
+
+        return publicRateLimitService.checkLimit("exchange-online-page", clientIp)
+            .then(Mono.fromSupplier(() -> pageRenderService.renderOnline(callSign, embed, embedId)))
+            .flatMap(html -> ServerResponse.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .bodyValue(html))
+            .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
+                .contentType(MediaType.TEXT_HTML)
+                .bodyValue(pageRenderService.renderError(error.getMessage(), embed)));
+    }
+
+    private Mono<ServerResponse> renderOfflineExchangePage(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
         var callSign = request.queryParam("callSign").orElse("");
         var cardId = request.queryParam("cardId").orElse("");
         var activityId = request.queryParam("activityId").orElse("");
-        var sceneType = request.queryParam("sceneType").orElse("");
         var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
         var embedId = request.queryParam("embedId").orElse("");
 
-        return publicRateLimitService.checkLimit("exchange-public-page", clientIp)
+        return publicRateLimitService.checkLimit("exchange-offline-page", clientIp)
             .then(Mono.defer(publicApiService::getPublicStationContact))
-            .map(contact -> pageRenderService.render(
+            .map(contact -> pageRenderService.renderOffline(
                 callSign,
                 cardId,
                 activityId,
-                sceneType,
                 embed,
                 embedId,
                 contact.stationAddress(),

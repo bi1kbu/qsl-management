@@ -674,6 +674,18 @@
   line-height: 1.5;
 }
 
+.ProseMirror .qsl-shortcode-preview-card__remove {
+  margin-top: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  color: #334155;
+  font-size: 12px;
+  line-height: 20px;
+  padding: 0 8px;
+  cursor: pointer;
+}
+
 .ProseMirror .qsl-shortcode-preview-card--qsl-receipt-card {
   border-color: #c7d2fe;
   background: #f5f7ff;

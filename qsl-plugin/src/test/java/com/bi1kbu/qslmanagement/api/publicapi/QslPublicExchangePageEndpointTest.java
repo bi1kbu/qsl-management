@@ -18,7 +18,31 @@ import reactor.core.publisher.Mono;
 class QslPublicExchangePageEndpointTest {
 
     @Test
-    void shouldRenderExchangePageHtml() {
+    void shouldRenderOnlineExchangePageHtml() {
+        var rateLimitService = mock(QslPublicRateLimitService.class);
+        var publicApiService = mock(QslPublicApiService.class);
+        var renderService = mock(QslPublicExchangePageRenderService.class);
+
+        when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
+        when(renderService.renderOnline("BI1KBU", true, "embed-001"))
+            .thenReturn("<html><body>线上换卡页</body></html>");
+
+        var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
+
+        client.get()
+            .uri("/exchange-online/page?callSign=BI1KBU&embed=1&embedId=embed-001")
+            .exchange()
+            .expectStatus().isOk()
+            .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
+            .expectBody(String.class)
+            .isEqualTo("<html><body>线上换卡页</body></html>");
+
+        verify(renderService).renderOnline("BI1KBU", true, "embed-001");
+    }
+
+    @Test
+    void shouldRenderOfflineExchangePageHtml() {
         var rateLimitService = mock(QslPublicRateLimitService.class);
         var publicApiService = mock(QslPublicApiService.class);
         var renderService = mock(QslPublicExchangePageRenderService.class);
@@ -26,21 +50,21 @@ class QslPublicExchangePageEndpointTest {
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
         when(publicApiService.getPublicStationContact())
             .thenReturn(Mono.just(new QslPublicApiService.PublicStationContact("北京市测试路1号", "test@example.com")));
-        when(renderService.render("bg7abc", "", "", "EYEBALL", true, "embed-001", "北京市测试路1号", "test@example.com"))
-            .thenReturn("<html><body>换卡页</body></html>");
+        when(renderService.renderOffline("BI1KBU", "C1001", "202604ACT01", true, "embed-002", "北京市测试路1号", "test@example.com"))
+            .thenReturn("<html><body>线下换卡页</body></html>");
 
         var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/exchange-public/page?callSign=bg7abc&sceneType=EYEBALL&embed=1&embedId=embed-001")
+            .uri("/exchange-offline/page?callSign=BI1KBU&cardId=C1001&activityId=202604ACT01&embed=1&embedId=embed-002")
             .exchange()
             .expectStatus().isOk()
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
             .expectBody(String.class)
-            .isEqualTo("<html><body>换卡页</body></html>");
+            .isEqualTo("<html><body>线下换卡页</body></html>");
 
-        verify(renderService).render("bg7abc", "", "", "EYEBALL", true, "embed-001", "北京市测试路1号", "test@example.com");
+        verify(renderService).renderOffline("BI1KBU", "C1001", "202604ACT01", true, "embed-002", "北京市测试路1号", "test@example.com");
     }
 
     @Test
@@ -59,7 +83,7 @@ class QslPublicExchangePageEndpointTest {
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/exchange-public/page")
+            .uri("/exchange-online/page")
             .exchange()
             .expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS)
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)

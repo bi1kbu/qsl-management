@@ -10,13 +10,31 @@ public class QslPublicExchangePageRenderService {
 
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
     private static final Pattern EMBED_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
-    private static final Pattern SCENE_TYPE_PATTERN = Pattern.compile("^(ONLINE_EYEBALL|EYEBALL)?$");
 
-    public String render(
+    public String renderOnline(
+        String rawCallSign,
+        boolean embed,
+        String rawEmbedId
+    ) {
+        var callSign = normalizeCallSign(rawCallSign);
+        var embedId = normalizeEmbedId(rawEmbedId);
+        return renderInternal(
+            callSign,
+            "",
+            "",
+            "ONLINE_EYEBALL",
+            false,
+            embed,
+            embedId,
+            "",
+            ""
+        );
+    }
+
+    public String renderOffline(
         String rawCallSign,
         String rawCardId,
         String rawActivityId,
-        String rawSceneType,
         boolean embed,
         String rawEmbedId,
         String rawStationAddress,
@@ -25,13 +43,34 @@ public class QslPublicExchangePageRenderService {
         var callSign = normalizeCallSign(rawCallSign);
         var cardId = normalizeText(rawCardId, 128).toUpperCase(Locale.ROOT);
         var activityId = normalizeText(rawActivityId, 64);
-        var sceneType = normalizeSceneType(rawSceneType);
         var embedId = normalizeEmbedId(rawEmbedId);
         var stationAddress = normalizeText(rawStationAddress, 200);
         var stationEmail = normalizeText(rawStationEmail, 120);
-        var offlineMode = "EYEBALL".equals(sceneType);
-        var title = offlineMode ? "线下换卡确认" : "QSL 线上换卡申请";
+        return renderInternal(
+            callSign,
+            cardId,
+            activityId,
+            "EYEBALL",
+            true,
+            embed,
+            embedId,
+            stationAddress,
+            stationEmail
+        );
+    }
 
+    private String renderInternal(
+        String callSign,
+        String cardId,
+        String activityId,
+        String sceneType,
+        boolean offlineMode,
+        boolean embed,
+        String embedId,
+        String stationAddress,
+        String stationEmail
+    ) {
+        var title = offlineMode ? "线下换卡确认" : "QSL 线上换卡申请";
         return BASE_TEMPLATE
             .replace("__TITLE__", embed ? title + "卡片" : title + "页面")
             .replace("__PAGE_TITLE__", title)
@@ -71,17 +110,6 @@ public class QslPublicExchangePageRenderService {
         var normalized = QslApiSupport.normalizeCallSign(rawCallSign);
         if (!CALL_SIGN_PATTERN.matcher(normalized).matches()) {
             return "";
-        }
-        return normalized;
-    }
-
-    private String normalizeSceneType(String rawSceneType) {
-        if (rawSceneType == null) {
-            return "ONLINE_EYEBALL";
-        }
-        var normalized = rawSceneType.trim().toUpperCase(Locale.ROOT);
-        if (!SCENE_TYPE_PATTERN.matcher(normalized).matches() || normalized.isBlank()) {
-            return "ONLINE_EYEBALL";
         }
         return normalized;
     }
@@ -163,7 +191,7 @@ public class QslPublicExchangePageRenderService {
                 <p id="qsl-desc" class="qsl-desc">__PAGE_DESC__</p>
                 <form id="qsl-form">
                   <div class="qsl-grid">
-                    <label id="offline-call-sign-field" class="qsl-field full"><span class="qsl-label">呼号</span><input id="callSign" class="qsl-input" maxlength="16" value="__CALL_SIGN_HTML__" placeholder="例如 BG7ABC" /></label>
+                    <label id="offline-call-sign-field" class="qsl-field full"><span class="qsl-label">呼号</span><input id="callSign" class="qsl-input" maxlength="16" value="__CALL_SIGN_HTML__" placeholder="例如 BI1KBU" /></label>
                     <label id="offline-card-id-field" class="qsl-field"><span class="qsl-label">卡片ID</span><input id="cardId" class="qsl-input" maxlength="128" value="__CARD_ID_HTML__" placeholder="例如 C1001" /></label>
                     <label id="offline-activity-id-field" class="qsl-field">
                       <span class="qsl-label">活动ID</span>
@@ -246,7 +274,7 @@ public class QslPublicExchangePageRenderService {
                   if (!OFFLINE_MODE) return;
                   if (!activityList) return;
                   try {
-                    const response = await fetch(`${API_BASE}/exchange-public/-/activities`, {
+                    const response = await fetch(`${API_BASE}/exchange-offline/-/activities`, {
                       method: "GET",
                       credentials: "same-origin"
                     });
@@ -320,7 +348,7 @@ public class QslPublicExchangePageRenderService {
                       if (!activityId) {
                         throw new Error("请填写活动ID。");
                       }
-                      const response = await fetch(`${API_BASE}/exchange-public/-/offline-confirm`, {
+                      const response = await fetch(`${API_BASE}/exchange-offline/-/confirm`, {
                         method: "POST",
                         credentials: "same-origin",
                         headers: { "Content-Type": "application/json" },
@@ -340,12 +368,11 @@ public class QslPublicExchangePageRenderService {
                       success.style.display = "";
                     } else {
                       const bureauName = text("bureauName");
-                      const response = await fetch(`${API_BASE}/exchange-public/-/requests`, {
+                      const response = await fetch(`${API_BASE}/exchange-online/-/requests`, {
                         method: "POST",
                         credentials: "same-origin",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                          sceneType: SCENE_TYPE,
                           callSign,
                           useBureau: !!bureauName,
                           bureauName,

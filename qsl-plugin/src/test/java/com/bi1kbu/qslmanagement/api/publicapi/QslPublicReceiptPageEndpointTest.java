@@ -22,21 +22,21 @@ class QslPublicReceiptPageEndpointTest {
         var renderService = mock(QslPublicReceiptPageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.render("bg7abc", "card-record-001", "ONLINE_EYEBALL", true, "embed-001"))
+        when(renderService.render("BI1KBU", "card-record-001", "ONLINE_EYEBALL", true, "embed-001"))
             .thenReturn("<html><body>签收页</body></html>");
 
         var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/receipt-public/page?callSign=bg7abc&cardId=card-record-001&sceneType=ONLINE_EYEBALL&embed=1&embedId=embed-001")
+            .uri("/receipt-public/page?callSign=BI1KBU&cardId=card-record-001&sceneType=ONLINE_EYEBALL&embed=1&embedId=embed-001")
             .exchange()
             .expectStatus().isOk()
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
             .expectBody(String.class)
             .isEqualTo("<html><body>签收页</body></html>");
 
-        verify(renderService).render("bg7abc", "card-record-001", "ONLINE_EYEBALL", true, "embed-001");
+        verify(renderService).render("BI1KBU", "card-record-001", "ONLINE_EYEBALL", true, "embed-001");
     }
 
     @Test

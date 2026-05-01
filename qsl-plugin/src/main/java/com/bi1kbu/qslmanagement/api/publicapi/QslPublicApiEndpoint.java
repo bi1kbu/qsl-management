@@ -33,9 +33,9 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
     @Override
     public RouterFunction<ServerResponse> endpoint() {
         return route(GET("/qso-public/records"), this::listPublicQso)
-            .andRoute(GET("/exchange-public/-/activities"), this::listOfflineActivities)
-            .andRoute(POST("/exchange-public/-/requests"), this::submitExchangeRequest)
-            .andRoute(POST("/exchange-public/-/offline-confirm"), this::confirmOfflineExchange)
+            .andRoute(GET("/exchange-offline/-/activities"), this::listOfflineActivities)
+            .andRoute(POST("/exchange-online/-/requests"), this::submitExchangeRequest)
+            .andRoute(POST("/exchange-offline/-/confirm"), this::confirmOfflineExchange)
             .andRoute(POST("/receipt-public/-/confirm"), this::confirmReceipt);
     }
 
@@ -56,10 +56,9 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> submitExchangeRequest(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
-        return publicRateLimitService.checkLimit("exchange-public-requests", clientIp)
+        return publicRateLimitService.checkLimit("exchange-online-requests", clientIp)
             .then(request.bodyToMono(QslPublicApiService.PublicExchangeSubmitCommand.class)
                 .defaultIfEmpty(new QslPublicApiService.PublicExchangeSubmitCommand(
-                    "",
                     "",
                     Boolean.FALSE,
                     "",
@@ -77,7 +76,7 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> listOfflineActivities(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
-        return publicRateLimitService.checkLimit("exchange-public-activities", clientIp)
+        return publicRateLimitService.checkLimit("exchange-offline-activities", clientIp)
             .then(publicApiService.listPublicOfflineActivities())
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
@@ -107,7 +106,7 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> confirmOfflineExchange(ServerRequest request) {
         var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
-        return publicRateLimitService.checkLimit("exchange-public-offline-confirm", clientIp)
+        return publicRateLimitService.checkLimit("exchange-offline-confirm", clientIp)
             .then(request.bodyToMono(QslPublicApiService.PublicOfflineExchangeConfirmCommand.class)
                 .defaultIfEmpty(new QslPublicApiService.PublicOfflineExchangeConfirmCommand("", "", "", ""))
                 .flatMap(payload -> publicApiService.confirmOfflineExchange(payload, clientIp)))

@@ -24,7 +24,7 @@ class QslPublicApiEndpointRouteTest {
         when(publicApiService.submitExchangeRequest(any(), anyString())).thenReturn(Mono.just(
             new QslPublicApiService.PublicExchangeSubmitResult(
                 "exchange-request-001",
-                "BG7ABC",
+                "BI1KBU",
                 "待审核",
                 "2026-04-16T12:00:00Z"
             )
@@ -35,12 +35,11 @@ class QslPublicApiEndpointRouteTest {
         ).build();
 
         client.post()
-            .uri("/exchange-public/-/requests")
+            .uri("/exchange-online/-/requests")
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue("""
                 {
-                  "sceneType": "ONLINE_EYEBALL",
-                  "callSign": "BG7ABC",
+                  "callSign": "BI1KBU",
                   "useBureau": false
                 }
                 """)
@@ -71,7 +70,7 @@ class QslPublicApiEndpointRouteTest {
         ).build();
 
         client.get()
-            .uri("/exchange-public/-/activities")
+            .uri("/exchange-offline/-/activities")
             .exchange()
             .expectStatus().isOk()
             .expectBody()
@@ -89,7 +88,7 @@ class QslPublicApiEndpointRouteTest {
         when(publicApiService.confirmReceipt(any(), anyString())).thenReturn(Mono.just(
             new QslPublicApiService.PublicReceiptConfirmResult(
                 "card-record-001",
-                "BG7ABC",
+                "BI1KBU",
                 "QSO",
                 "2026-04-16T12:00:00Z"
             )
@@ -104,7 +103,7 @@ class QslPublicApiEndpointRouteTest {
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue("""
                 {
-                  "callSign": "BG7ABC",
+                  "callSign": "BI1KBU",
                   "cardId": "card-record-001",
                   "remarks": "已签收",
                   "sceneType": "ONLINE_EYEBALL"
@@ -128,7 +127,14 @@ class QslPublicApiEndpointRouteTest {
         ).build();
 
         client.post()
-            .uri("/exchange-public/requests")
+            .uri("/exchange-online/requests")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue("{}")
+            .exchange()
+            .expectStatus().isNotFound();
+
+        client.post()
+            .uri("/exchange-public/-/requests")
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue("{}")
             .exchange()

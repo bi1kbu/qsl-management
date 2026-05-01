@@ -14,14 +14,13 @@ import RiArticleLine from '~icons/ri/article-line'
 import RiMailSendLine from '~icons/ri/mail-send-line'
 import RiExchangeLine from '~icons/ri/exchange-line'
 
-const SHORTCODE_PATTERN = /^\s*\[(qsl-card|qsl-receipt-card|qsl-exchange-card)([^\]]*)\]\s*$/i
+const SHORTCODE_PATTERN = /^\s*\[(qsl-card|qsl-receipt-card|qsl-online-exchange-card|qsl-offline-exchange-card)([^\]]*)\]\s*$/i
 const CALLSIGN_ATTR_PATTERN = /callSign\s*=\s*("([^"]*)"|'([^']*)'|([^\s\]]+))/i
 const CARD_ID_ATTR_PATTERN = /cardId\s*=\s*("([^"]*)"|'([^']*)'|([^\s\]]+))/i
-const SCENE_TYPE_ATTR_PATTERN = /sceneType\s*=\s*("([^"]*)"|'([^']*)'|([^\s\]]+))/i
 const shortcodePreviewPluginKey = new PluginKey('qsl-shortcode-preview-plugin')
 
 interface ParsedShortcode {
-  type: 'qsl-card' | 'qsl-receipt-card' | 'qsl-exchange-card'
+  type: 'qsl-card' | 'qsl-receipt-card' | 'qsl-online-exchange-card' | 'qsl-offline-exchange-card'
   title: string
   subtitle: string
 }
@@ -53,7 +52,6 @@ function parseShortcode(text: string): ParsedShortcode | null {
   const type = match[1].toLowerCase() as ParsedShortcode['type']
   const attrs = match[2] ?? ''
   const callSign = extractAttrValue(attrs, CALLSIGN_ATTR_PATTERN)
-  const sceneType = extractAttrValue(attrs, SCENE_TYPE_ATTR_PATTERN).toUpperCase()
   if (type === 'qsl-card') {
     return {
       type,
@@ -61,11 +59,12 @@ function parseShortcode(text: string): ParsedShortcode | null {
       subtitle: callSign ? `呼号：${callSign}` : '',
     }
   }
-  if (type === 'qsl-exchange-card') {
-    const sceneText = sceneType === 'EYEBALL' ? '线下换卡' : '线上换卡'
+  if (type === 'qsl-online-exchange-card' || type === 'qsl-offline-exchange-card') {
+    const offline = type === 'qsl-offline-exchange-card'
+    const sceneText = offline ? '线下换卡' : '线上换卡'
     return {
-      type,
-      title: sceneType === 'EYEBALL' ? '线下换卡确认卡片' : '线上换卡申请卡片',
+      type: offline ? 'qsl-offline-exchange-card' : 'qsl-online-exchange-card',
+      title: offline ? '线下换卡确认卡片' : '线上换卡申请卡片',
       subtitle: `${sceneText}${callSign ? ` · 呼号：${callSign}` : ''}`,
     }
   }
@@ -82,6 +81,18 @@ function parseShortcode(text: string): ParsedShortcode | null {
     title: 'QSL 签收卡片',
     subtitle: parts.join('  '),
   }
+}
+
+function removeShortcodeParagraph(view: any, getPos: () => number | undefined) {
+  const pos = getPos()
+  if (typeof pos !== 'number' || Number.isNaN(pos)) {
+    return
+  }
+  const resolved = view.state.doc.resolve(pos)
+  const nodeStart = resolved.before()
+  const nodeEnd = resolved.after()
+  view.dispatch(view.state.tr.delete(nodeStart, nodeEnd))
+  view.focus()
 }
 
 function createPreviewDecorations(doc: PMNode): DecorationSet {
@@ -108,9 +119,10 @@ function createPreviewDecorations(doc: PMNode): DecorationSet {
     decorations.push(
       Decoration.widget(
         contentFrom,
-        () => {
+        (view, getPos) => {
           const card = document.createElement('div')
           card.className = `qsl-shortcode-preview-card qsl-shortcode-preview-card--${parsed.type}`
+          card.setAttribute('title', '点击右侧“删除”可移除该卡片短码')
 
           const title = document.createElement('div')
           title.className = 'qsl-shortcode-preview-card__title'
@@ -123,6 +135,17 @@ function createPreviewDecorations(doc: PMNode): DecorationSet {
             subtitle.textContent = parsed.subtitle
             card.appendChild(subtitle)
           }
+
+          const removeButton = document.createElement('button')
+          removeButton.type = 'button'
+          removeButton.className = 'qsl-shortcode-preview-card__remove'
+          removeButton.textContent = '删除'
+          removeButton.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            removeShortcodeParagraph(view, getPos)
+          })
+          card.appendChild(removeButton)
 
           return card
         },
@@ -196,7 +219,7 @@ const qslShortcodeEditorExtension = Extension.create({
               icon: markRaw(RiExchangeLine),
               title: '插入线上换卡申请卡片',
               description: '插入线上换卡申请短码',
-              action: () => insertShortcode(editor, '[qsl-exchange-card sceneType="ONLINE_EYEBALL"]'),
+              action: () => insertShortcode(editor, '[qsl-online-exchange-card]'),
             },
           },
           {
@@ -207,7 +230,7 @@ const qslShortcodeEditorExtension = Extension.create({
               icon: markRaw(RiExchangeLine),
               title: '插入线下换卡确认卡片',
               description: '插入线下换卡确认短码',
-              action: () => insertShortcode(editor, '[qsl-exchange-card sceneType="EYEBALL"]'),
+              action: () => insertShortcode(editor, '[qsl-offline-exchange-card]'),
             },
           },
         ]
@@ -252,7 +275,7 @@ const qslShortcodeEditorExtension = Extension.create({
                 .chain()
                 .focus()
                 .deleteRange(range)
-                .insertContent('[qsl-exchange-card sceneType="ONLINE_EYEBALL"]')
+                .insertContent('[qsl-online-exchange-card]')
                 .run()
             },
           },
@@ -266,7 +289,7 @@ const qslShortcodeEditorExtension = Extension.create({
                 .chain()
                 .focus()
                 .deleteRange(range)
-                .insertContent('[qsl-exchange-card sceneType="EYEBALL"]')
+                .insertContent('[qsl-offline-exchange-card]')
                 .run()
             },
           },

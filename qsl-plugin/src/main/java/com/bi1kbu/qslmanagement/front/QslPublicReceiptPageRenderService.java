@@ -322,7 +322,7 @@ public class QslPublicReceiptPageRenderService {
                   <div class="qsl-form-grid">
                     <label class="qsl-field">
                       <span class="qsl-label">呼号（Call Sign）</span>
-                      <input id="qsl-call-sign-input" class="qsl-input" type="text" value="__CALL_SIGN_HTML__" maxlength="16" placeholder="例如 BG7ABC" />
+                      <input id="qsl-call-sign-input" class="qsl-input" type="text" value="__CALL_SIGN_HTML__" maxlength="16" placeholder="例如 BI1KBU" />
                     </label>
                     <label class="qsl-field">
                       <span class="qsl-label">卡片编号（Card ID）</span>

@@ -272,7 +272,7 @@ const selectableAddressOptions = computed(() => {
 
 const batchEditFields = computed(() => {
   return [
-    { value: 'callSign', label: '对方呼号', inputType: 'text', placeholder: '例如：BG7ABC' },
+    { value: 'callSign', label: '对方呼号', inputType: 'text', placeholder: '例如：BI1KBU' },
     {
       value: 'cardType',
       label: '卡片类型',

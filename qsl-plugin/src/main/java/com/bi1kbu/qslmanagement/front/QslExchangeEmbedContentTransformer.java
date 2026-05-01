@@ -1,7 +1,6 @@
 package com.bi1kbu.qslmanagement.front;
 
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -11,12 +10,9 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Component
 public class QslExchangeEmbedContentTransformer {
 
-    private static final Pattern SHORTCODE_PATTERN = Pattern.compile("(?is)\\[qsl-exchange-card([^\\]]*)\\]");
+    private static final Pattern SHORTCODE_PATTERN = Pattern.compile("(?is)\\[(qsl-online-exchange-card|qsl-offline-exchange-card)([^\\]]*)\\]");
     private static final Pattern CALL_SIGN_ATTR_PATTERN = Pattern.compile(
         "(?i)callSign\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
-    );
-    private static final Pattern SCENE_TYPE_ATTR_PATTERN = Pattern.compile(
-        "(?i)sceneType\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
     );
     private static final Pattern CARD_ID_ATTR_PATTERN = Pattern.compile(
         "(?i)cardId\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s]+))"
@@ -27,22 +23,24 @@ public class QslExchangeEmbedContentTransformer {
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
 
     public String transform(String content) {
-        if (content == null || content.isBlank() || !content.contains("[qsl-exchange-card")) {
+        if (content == null || content.isBlank() || (!content.contains("[qsl-online-exchange-card")
+            && !content.contains("[qsl-offline-exchange-card"))) {
             return content;
         }
 
         var matcher = SHORTCODE_PATTERN.matcher(content);
         var builder = new StringBuilder();
-        var prefix = "qsl-exchange-card-" + UUID.randomUUID().toString().replace("-", "");
+        var prefix = "qsl-exchange-" + UUID.randomUUID().toString().replace("-", "");
         var sequence = 1;
         while (matcher.find()) {
-            var attributes = matcher.group(1);
+            var shortcodeName = firstNotBlank(matcher.group(1));
+            var attributes = matcher.group(2);
+            var offlineMode = "qsl-offline-exchange-card".equalsIgnoreCase(shortcodeName);
             var callSign = extractCallSign(attributes);
-            var sceneType = extractSceneType(attributes);
             var cardId = extractCardId(attributes);
             var activityId = extractActivityId(attributes);
             var embedId = prefix + "-" + sequence++;
-            var replacement = buildEmbedBlock(callSign, cardId, activityId, sceneType, embedId);
+            var replacement = buildEmbedBlock(callSign, cardId, activityId, offlineMode, embedId);
             matcher.appendReplacement(builder, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(builder);
@@ -58,13 +56,8 @@ public class QslExchangeEmbedContentTransformer {
         return normalized;
     }
 
-    private String extractSceneType(String attributes) {
-        var raw = extractAttributeValue(attributes, SCENE_TYPE_ATTR_PATTERN).trim().toUpperCase(Locale.ROOT);
-        return "EYEBALL".equals(raw) ? "EYEBALL" : "ONLINE_EYEBALL";
-    }
-
     private String extractCardId(String attributes) {
-        return extractAttributeValue(attributes, CARD_ID_ATTR_PATTERN).trim().toUpperCase(Locale.ROOT);
+        return extractAttributeValue(attributes, CARD_ID_ATTR_PATTERN).trim().toUpperCase();
     }
 
     private String extractActivityId(String attributes) {
@@ -82,12 +75,13 @@ public class QslExchangeEmbedContentTransformer {
         return firstNotBlank(matcher.group(2), matcher.group(3), matcher.group(4));
     }
 
-    private String buildEmbedBlock(String callSign, String cardId, String activityId, String sceneType, String embedId) {
+    private String buildEmbedBlock(String callSign, String cardId, String activityId, boolean offlineMode, String embedId) {
         var uriBuilder = UriComponentsBuilder
-            .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-public/page")
+            .fromPath(offlineMode
+                ? "/apis/api.qsl-management.halo.run/v1alpha1/exchange-offline/page"
+                : "/apis/api.qsl-management.halo.run/v1alpha1/exchange-online/page")
             .queryParam("embed", "1")
-            .queryParam("embedId", embedId)
-            .queryParam("sceneType", sceneType);
+            .queryParam("embedId", embedId);
         if (!callSign.isBlank()) {
             uriBuilder.queryParam("callSign", callSign);
         }
@@ -98,6 +92,7 @@ public class QslExchangeEmbedContentTransformer {
             uriBuilder.queryParam("activityId", activityId);
         }
         var src = uriBuilder.build().toUriString();
+        var cardTitle = offlineMode ? "线下换卡确认" : "线上换卡申请";
 
         return """
             <div class="qsl-article-card" style="margin: 16px 0;">
@@ -125,7 +120,7 @@ public class QslExchangeEmbedContentTransformer {
                 });
               })();
             </script>
-            """.formatted(src, sceneType.equals("EYEBALL") ? "线下换卡确认" : "线上换卡申请", embedId);
+            """.formatted(src, embedId, cardTitle);
     }
 
     private String firstNotBlank(String... candidates) {

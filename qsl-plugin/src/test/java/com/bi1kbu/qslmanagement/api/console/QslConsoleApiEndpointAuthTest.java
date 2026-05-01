@@ -35,7 +35,7 @@ class QslConsoleApiEndpointAuthTest {
     void shouldRejectMailReceiveConfirmWhenUnauthenticated() {
         unauthorizedPost("/mail-receive-confirms/confirm", """
             {
-              "callSign": "BG7ABC",
+              "callSign": "BI1KBU",
               "cardType": "QSO",
               "receiptRemarks": "签收"
             }
@@ -69,7 +69,7 @@ class QslConsoleApiEndpointAuthTest {
                   "rows": [
                     {
                       "id": "qso-record-001",
-                      "callSign": "BG7ABC"
+                      "callSign": "BI1KBU"
                     }
                   ]
                 }
@@ -91,7 +91,7 @@ class QslConsoleApiEndpointAuthTest {
                   "rows": [
                     {
                       "id": "qso-record-001",
-                      "callSign": "BG7ABC"
+                      "callSign": "BI1KBU"
                     }
                   ]
                 }

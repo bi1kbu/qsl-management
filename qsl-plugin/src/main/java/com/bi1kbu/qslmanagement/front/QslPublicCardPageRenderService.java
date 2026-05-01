@@ -312,7 +312,7 @@ public class QslPublicCardPageRenderService {
                     type="text"
                     value="__CALL_SIGN_HTML__"
                     maxlength="16"
-                    placeholder="请输入呼号，例如 BG7ABC"
+                    placeholder="请输入呼号，例如 BI1KBU"
                   />
                   <button class="qsl-button" type="submit">查询</button>
                 </form>

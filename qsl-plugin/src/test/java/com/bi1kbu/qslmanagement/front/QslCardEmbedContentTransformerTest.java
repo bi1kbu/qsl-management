@@ -31,11 +31,11 @@ class QslCardEmbedContentTransformerTest {
 
     @Test
     void shouldNormalizeCallSignInShortcode() {
-        var content = "[qsl-card callSign=\"bg7abc\"]";
+        var content = "[qsl-card callSign=\"BI1KBU\"]";
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("callSign=BG7ABC"));
+        assertTrue(transformed.contains("callSign=BI1KBU"));
     }
 
     @Test

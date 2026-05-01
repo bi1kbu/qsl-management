@@ -1094,7 +1094,7 @@ onMounted(() => {
           <label class="qsl-field">
             <span class="qsl-field__label">{{ isSwlMode ? '监听呼号（Call_Sign）' : '对方呼号（Call_Sign）' }}</span>
             <div class="qsl-input-shell">
-              <input v-model.trim="form.callSign" type="text" placeholder="例如：JA1ABC" />
+              <input v-model.trim="form.callSign" type="text" placeholder="例如：BI1KBU" />
             </div>
           </label>
 

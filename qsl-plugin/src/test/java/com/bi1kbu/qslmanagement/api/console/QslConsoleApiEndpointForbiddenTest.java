@@ -61,7 +61,7 @@ class QslConsoleApiEndpointForbiddenTest {
                       "rows": [
                         {
                           "id": "qso-record-001",
-                          "callSign": "BG7ABC",
+                          "callSign": "BI1KBU",
                           "date": "2026-04-15",
                           "time": "1200",
                           "timezone": "UTC"

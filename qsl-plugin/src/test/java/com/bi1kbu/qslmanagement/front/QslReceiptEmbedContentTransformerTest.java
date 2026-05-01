@@ -31,11 +31,11 @@ class QslReceiptEmbedContentTransformerTest {
 
     @Test
     void shouldNormalizeCallSignInReceiptShortcode() {
-        var content = "[qsl-receipt-card callSign=\"bg7abc\"]";
+        var content = "[qsl-receipt-card callSign=\"BI1KBU\"]";
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("callSign=BG7ABC"));
+        assertTrue(transformed.contains("callSign=BI1KBU"));
     }
 
     @Test

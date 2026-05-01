@@ -161,7 +161,7 @@
 
 ```json
 {
-  "callSign": "BG7ABC",
+  "callSign": "BI1KBU",
   "cardType": "QSO",
   "receiptRemarks": "签收备注"
 }
@@ -198,7 +198,7 @@
       "rows": [
         {
           "id": "QSO1001",
-          "callSign": "BG7ABC",
+          "callSign": "BI1KBU",
           "date": "2026-04-15",
           "time": "1200",
           "timezone": "UTC"
@@ -261,7 +261,7 @@
       "rows": [
         {
           "id": "QSO1001",
-          "callSign": "BG7ABC",
+          "callSign": "BI1KBU",
           "date": "2026-04-15",
           "time": "1200",
           "timezone": "UTC"
@@ -317,7 +317,7 @@
 
 ### 8.2.1 公开查询
 
-`GET /qso-public/records?callSign=BG7ABC`
+`GET /qso-public/records?callSign=BI1KBU`
 
 说明：`callSign` 为必填查询参数。
 
@@ -327,7 +327,7 @@
 
 ```json
 {
-  "callSign": "BG7ABC",
+  "callSign": "BI1KBU",
   "useBureau": true,
   "bureauName": "示例卡片局",
   "email": "demo@example.com",
@@ -345,7 +345,7 @@
 
 ```json
 {
-  "callSign": "BG7ABC",
+  "callSign": "BI1KBU",
   "cardId": "C1001",
   "remarks": "已签收"
 }
@@ -353,7 +353,7 @@
 
 ### 8.2.4 前台查询页面（可嵌入）
 
-`GET /cards/page?callSign=BG7ABC&embed=1&embedId=qsl-card-1`
+`GET /cards/page?callSign=BI1KBU&embed=1&embedId=qsl-card-1`
 
 说明：
 
@@ -361,11 +361,11 @@
 2. `callSign` 选填，传入后页面默认执行一次查询。
 3. `embed` 选填（`1/true/yes`），用于启用嵌入模式（紧凑样式 + 高度回传）。
 4. `embedId` 选填，嵌入模式下通过 `window.postMessage` 回传高度时用于父页面匹配对应 iframe。
-5. 文章/页面短码：`[qsl-receipt-card callSign="BG7ABC" cardId="C1001"]`，渲染独立签收卡片。
+5. 文章/页面短码：`[qsl-receipt-card callSign="BI1KBU" cardId="C1001"]`，渲染独立签收卡片。
 
 ### 8.2.5 前台签收页面（可嵌入）
 
-`GET /receipt-public/page?callSign=BG7ABC&cardId=C1001&embed=1&embedId=qsl-receipt-card-1`
+`GET /receipt-public/page?callSign=BI1KBU&cardId=C1001&embed=1&embedId=qsl-receipt-card-1`
 
 说明：
 
@@ -470,4 +470,4 @@
 8. 导入任务已切换为服务端执行：`imports/jobs` 接收结构化行数据后由后端完成写库、统计成功/跳过/失败并持久化任务结果。
 9. 已增加权限模板合同自动校验测试：校验 `qsl-menu-role-templates.yaml` 对控制台/公开 CustomEndpoint 的 `apiGroup + resource + verb` 覆盖完整。
 10. 已新增前台页面接口：`GET /cards/page` 返回可直接访问的公开查询页面（支持嵌入模式）。
-11. 已新增文章/单页内容扩展：支持在正文中使用 `[qsl-card]` 或 `[qsl-card callSign="BG7ABC"]` 自动渲染嵌入卡片。
+11. 已新增文章/单页内容扩展：支持在正文中使用 `[qsl-card]` 或 `[qsl-card callSign="BI1KBU"]` 自动渲染嵌入卡片。
