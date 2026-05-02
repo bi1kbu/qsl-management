@@ -685,7 +685,10 @@ public class QslPublicExchangePageRenderService {
                       });
                       const result = await response.json();
                       const data = parseResult(result);
-                      success.textContent = `提交成功，申请编号：${data.requestName || "-"}，状态：${data.reviewStatus || "-"}`;
+                      const stationAddress = (data.stationAddress || "").trim();
+                      success.textContent = stationAddress
+                        ? `提交成功，申请编号：${data.requestName || "-"}，状态：${data.reviewStatus || "-"}\\n${stationAddress}`
+                        : `提交成功，申请编号：${data.requestName || "-"}，状态：${data.reviewStatus || "-"}`;
                       success.style.display = "";
                     }
                   } catch (e) {

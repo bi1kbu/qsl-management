@@ -202,7 +202,7 @@ API 版本：`v1alpha1`
 | GET | `/exchange-online/-/bureaus` | 公开线上换卡卡片局候选，只返回卡片局名称、邮编、地址 | 是 |
 | GET | `/exchange-online/-/station-cards` | 公开线上换卡本台卡片版本候选，按配置顺序返回图案、版本号、版本总量、库存余量 | 是 |
 | GET | `/exchange-offline/-/activities` | 公开线下活动列表 | 是 |
-| POST | `/exchange-online/-/requests` | 匿名提交线上换卡申请 | 是 |
+| POST | `/exchange-online/-/requests` | 匿名提交线上换卡申请；同呼号存在待审核申请时返回 `409/QSL-409-0001`；提交写入成功后返回本站通信地址用于寄送提示 | 是 |
 | POST | `/exchange-offline/-/confirm` | 匿名确认线下换卡；提交校验通过并写入卡片后才返回本站通信地址 | 是 |
 | POST | `/receipt-public/-/confirm` | 匿名签收确认 | 是 |
 

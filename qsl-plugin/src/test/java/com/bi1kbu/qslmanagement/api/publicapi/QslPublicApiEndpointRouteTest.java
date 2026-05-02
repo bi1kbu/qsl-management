@@ -26,6 +26,7 @@ class QslPublicApiEndpointRouteTest {
                 "exchange-request-001",
                 "BI1KBU",
                 "待审核",
+                "邮编：100000\n地址：北京市测试路1号\n收件人：测试台（BI1KBU）（收）\n联系电话：010-00000000\n电子邮箱：test@example.com",
                 "2026-04-16T12:00:00Z"
             )
         ));
@@ -47,7 +48,8 @@ class QslPublicApiEndpointRouteTest {
             .expectStatus().isOk()
             .expectBody()
             .jsonPath("$.code").isEqualTo("QSL-0000")
-            .jsonPath("$.data.requestName").isEqualTo("exchange-request-001");
+            .jsonPath("$.data.requestName").isEqualTo("exchange-request-001")
+            .jsonPath("$.data.stationAddress").isEqualTo("邮编：100000\n地址：北京市测试路1号\n收件人：测试台（BI1KBU）（收）\n联系电话：010-00000000\n电子邮箱：test@example.com");
     }
 
     @Test

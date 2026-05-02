@@ -147,7 +147,8 @@ public class QslPublicApiService {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "最多只能选择两张卡片"));
         }
 
-        return validateSelectedStationCardVersions(cardVersions)
+        return ensureNoPendingOnlineExchangeRequest(callSign)
+            .then(Mono.defer(() -> validateSelectedStationCardVersions(cardVersions)))
             .flatMap(persistedCardVersion -> {
                 var request = new ExchangeRequest();
                 request.setMetadata(QslApiSupport.createMetadata(QslApiSupport.createResourceName("exchange-request")));
@@ -182,12 +183,14 @@ public class QslPublicApiService {
                         "匿名用户",
                         clientIp
                     ).thenReturn(created))
-                    .map(created -> new PublicExchangeSubmitResult(
-                        created.getMetadata().getName(),
-                        callSign,
-                        created.getStatus().getReviewStatus(),
-                        QslApiSupport.nowText()
-                    ));
+                    .flatMap(created -> getPublicStationContact()
+                        .map(contact -> new PublicExchangeSubmitResult(
+                            created.getMetadata().getName(),
+                            callSign,
+                            created.getStatus().getReviewStatus(),
+                            nullToEmpty(contact.stationAddress()),
+                            QslApiSupport.nowText()
+                        )));
             });
     }
 
@@ -518,6 +521,30 @@ public class QslPublicApiService {
             });
     }
 
+    private Mono<Void> ensureNoPendingOnlineExchangeRequest(String callSign) {
+        return client.listAll(ExchangeRequest.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .filter(request -> request.getSpec() != null)
+            .filter(request -> "ONLINE_EYEBALL".equals(normalizeSceneType(request.getSpec().getSceneType())))
+            .filter(request -> callSign.equals(QslApiSupport.normalizeCallSign(request.getSpec().getCallSign())))
+            .filter(request -> isPendingReview(request.getStatus()))
+            .hasElements()
+            .flatMap(exists -> {
+                if (Boolean.TRUE.equals(exists)) {
+                    return Mono.error(new QslApiException(
+                        HttpStatus.CONFLICT,
+                        "QSL-409-0001",
+                        "该呼号已有待审核换卡申请，请等待后台审核后再提交"
+                    ));
+                }
+                return Mono.<Void>empty();
+            });
+    }
+
+    private boolean isPendingReview(ExchangeRequest.ExchangeRequestStatus status) {
+        var reviewStatus = status == null ? "" : nullToEmpty(status.getReviewStatus()).trim();
+        return reviewStatus.isBlank() || "待审核".equals(reviewStatus);
+    }
+
     private boolean isValidCallSign(String callSign) {
         return CALL_SIGN_PATTERN.matcher(callSign).matches();
     }
@@ -702,6 +729,7 @@ public class QslPublicApiService {
         String requestName,
         String callSign,
         String reviewStatus,
+        String stationAddress,
         String submittedAt
     ) {
     }
