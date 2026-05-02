@@ -187,7 +187,7 @@ API 版本：`v1alpha1`
 }
 ```
 
-当前导入导出数据集：`qso-record`、`card-record`、`exchange-request-review`、`address-management`、`bureau-management`、`equipment-catalog`。`all` 仅用于导出聚合。
+当前导入导出数据集：`qso-record`、`card-record`、`exchange-request-review`、`offline-activity`、`address-management`、`bureau-management`、`equipment-catalog`、`system-setting`、`station-profile`、`station-equipment`、`station-card`。`all` 仅用于导出聚合，覆盖业务数据与配置菜单数据。
 
 ## 7. 前台公开 API 与页面
 

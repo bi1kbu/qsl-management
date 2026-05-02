@@ -4,9 +4,14 @@ export type DatasetValue =
   | 'qso-record'
   | 'card-record'
   | 'exchange-request-review'
+  | 'offline-activity'
   | 'address-management'
   | 'bureau-management'
   | 'equipment-catalog'
+  | 'system-setting'
+  | 'station-profile'
+  | 'station-equipment'
+  | 'station-card'
 
 interface DatasetConfig {
   value: DatasetValue
@@ -26,6 +31,27 @@ interface DatasetConfig {
 const parseBoolean = (value: string): boolean => {
   const normalized = value.trim().toLowerCase()
   return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === '是'
+}
+
+const parseInteger = (value: string): number => {
+  const normalized = value.trim()
+  if (!normalized) {
+    return 0
+  }
+  const parsed = Number.parseInt(normalized, 10)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const parseList = (value: string): string[] => {
+  return value
+    .replace(/[，、；;]/g, ',')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+const stringifyList = (value: unknown): string => {
+  return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean).join('、') : ''
 }
 
 const datasetConfigs: DatasetConfig[] = [
@@ -263,6 +289,44 @@ const datasetConfigs: DatasetConfig[] = [
     }),
   },
   {
+    value: 'offline-activity',
+    label: '线下换卡活动',
+    plural: 'offline-activities',
+    kind: 'OfflineActivity',
+    idPrefix: 'offline-activity',
+    headers: [
+      'id',
+      'activityName',
+      'activityLocation',
+      'activityDate',
+      'activityTime',
+      'cardRemarks',
+      'workflowStatus',
+    ],
+    keywords: ['offline-activity', 'offline-activities', '线下换卡活动', '活动清单'],
+    toRow: (item) => ({
+      id: item.metadata.name,
+      activityName: String(item.spec?.activityName ?? ''),
+      activityLocation: String(item.spec?.activityLocation ?? ''),
+      activityDate: String(item.spec?.activityDate ?? ''),
+      activityTime: String(item.spec?.activityTime ?? ''),
+      cardRemarks: String(item.spec?.cardRemarks ?? ''),
+      workflowStatus: String(item.status?.workflowStatus ?? ''),
+    }),
+    fromRow: (row) => ({
+      spec: {
+        activityName: row.activityName ?? '',
+        activityLocation: row.activityLocation ?? '',
+        activityDate: row.activityDate ?? '',
+        activityTime: row.activityTime ?? '',
+        cardRemarks: row.cardRemarks ?? '',
+      },
+      status: {
+        workflowStatus: row.workflowStatus ?? '',
+      },
+    }),
+  },
+  {
     value: 'address-management',
     label: '地址管理',
     plural: 'address-book-entries',
@@ -337,6 +401,174 @@ const datasetConfigs: DatasetConfig[] = [
         type: row.type ?? '',
         value: row.value ?? '',
         remarks: row.remarks ?? '',
+      },
+    }),
+  },
+  {
+    value: 'system-setting',
+    label: '系统参数与通知策略',
+    plural: 'system-settings',
+    kind: 'SystemSetting',
+    idPrefix: 'system-setting',
+    headers: [
+      'id',
+      'guestQueryPerMinute',
+      'requiresExchangeReview',
+      'autoNotifyOnCardCreated',
+      'autoNotifyOnCardSent',
+      'autoNotifyOnCardReceived',
+      'cardRecordSequence',
+      'receiveRecordSequence',
+      'lastModifiedBy',
+      'lastModifiedAt',
+    ],
+    keywords: ['system-setting', 'system-settings', '系统参数', '通知策略'],
+    toRow: (item) => ({
+      id: item.metadata.name,
+      guestQueryPerMinute: String(item.spec?.guestQueryPerMinute ?? ''),
+      requiresExchangeReview: String(Boolean(item.spec?.requiresExchangeReview)),
+      autoNotifyOnCardCreated: String(Boolean(item.spec?.autoNotifyOnCardCreated)),
+      autoNotifyOnCardSent: String(Boolean(item.spec?.autoNotifyOnCardSent)),
+      autoNotifyOnCardReceived: String(Boolean(item.spec?.autoNotifyOnCardReceived)),
+      cardRecordSequence: String(item.spec?.cardRecordSequence ?? ''),
+      receiveRecordSequence: String(item.spec?.receiveRecordSequence ?? ''),
+      lastModifiedBy: String(item.status?.lastModifiedBy ?? ''),
+      lastModifiedAt: String(item.status?.lastModifiedAt ?? ''),
+    }),
+    fromRow: (row) => ({
+      spec: {
+        guestQueryPerMinute: parseInteger(row.guestQueryPerMinute ?? ''),
+        requiresExchangeReview: parseBoolean(row.requiresExchangeReview ?? ''),
+        autoNotifyOnCardCreated: parseBoolean(row.autoNotifyOnCardCreated ?? ''),
+        autoNotifyOnCardSent: parseBoolean(row.autoNotifyOnCardSent ?? ''),
+        autoNotifyOnCardReceived: parseBoolean(row.autoNotifyOnCardReceived ?? ''),
+        cardRecordSequence: parseInteger(row.cardRecordSequence ?? ''),
+        receiveRecordSequence: parseInteger(row.receiveRecordSequence ?? ''),
+      },
+      status: {
+        lastModifiedBy: row.lastModifiedBy ?? '',
+        lastModifiedAt: row.lastModifiedAt ?? '',
+      },
+    }),
+  },
+  {
+    value: 'station-profile',
+    label: '通信地址',
+    plural: 'station-profiles',
+    kind: 'StationProfile',
+    idPrefix: 'station-profile',
+    headers: [
+      'id',
+      'myCallSign',
+      'myName',
+      'myTelephone',
+      'myPostalCode',
+      'myAddress',
+      'myEmail',
+      'stationRemarks',
+      'lastModifiedBy',
+      'lastModifiedAt',
+    ],
+    keywords: ['station-profile', 'station-profiles', '通信地址'],
+    toRow: (item) => ({
+      id: item.metadata.name,
+      myCallSign: String(item.spec?.myCallSign ?? ''),
+      myName: String(item.spec?.myName ?? ''),
+      myTelephone: String(item.spec?.myTelephone ?? ''),
+      myPostalCode: String(item.spec?.myPostalCode ?? ''),
+      myAddress: String(item.spec?.myAddress ?? ''),
+      myEmail: String(item.spec?.myEmail ?? ''),
+      stationRemarks: String(item.spec?.stationRemarks ?? ''),
+      lastModifiedBy: String(item.status?.lastModifiedBy ?? ''),
+      lastModifiedAt: String(item.status?.lastModifiedAt ?? ''),
+    }),
+    fromRow: (row) => ({
+      spec: {
+        myCallSign: row.myCallSign ?? '',
+        myName: row.myName ?? '',
+        myTelephone: row.myTelephone ?? '',
+        myPostalCode: row.myPostalCode ?? '',
+        myAddress: row.myAddress ?? '',
+        myEmail: row.myEmail ?? '',
+        stationRemarks: row.stationRemarks ?? '',
+      },
+      status: {
+        lastModifiedBy: row.lastModifiedBy ?? '',
+        lastModifiedAt: row.lastModifiedAt ?? '',
+      },
+    }),
+  },
+  {
+    value: 'station-equipment',
+    label: '本台设备',
+    plural: 'station-equipments',
+    kind: 'StationEquipment',
+    idPrefix: 'station-equipment',
+    headers: ['id', 'rigName', 'antennas', 'powers', 'modes', 'remarks', 'enabled'],
+    keywords: ['station-equipment', 'station-equipments', '本台设备'],
+    toRow: (item) => ({
+      id: item.metadata.name,
+      rigName: String(item.spec?.rigName ?? ''),
+      antennas: stringifyList(item.spec?.antennas),
+      powers: stringifyList(item.spec?.powers),
+      modes: stringifyList(item.spec?.modes),
+      remarks: String(item.spec?.remarks ?? ''),
+      enabled: String(Boolean(item.status?.enabled)),
+    }),
+    fromRow: (row) => ({
+      spec: {
+        rigName: row.rigName ?? '',
+        antennas: parseList(row.antennas ?? ''),
+        powers: parseList(row.powers ?? ''),
+        modes: parseList(row.modes ?? ''),
+        remarks: row.remarks ?? '',
+      },
+      status: {
+        enabled: parseBoolean(row.enabled ?? ''),
+      },
+    }),
+  },
+  {
+    value: 'station-card',
+    label: '本台卡片',
+    plural: 'station-cards',
+    kind: 'StationCard',
+    idPrefix: 'station-card',
+    headers: [
+      'id',
+      'cardVersion',
+      'imageUrl',
+      'imageMediaType',
+      'availableInventory',
+      'versionTotal',
+      'sortOrder',
+      'remarks',
+      'active',
+    ],
+    keywords: ['station-card', 'station-cards', '本台卡片'],
+    toRow: (item) => ({
+      id: item.metadata.name,
+      cardVersion: String(item.spec?.cardVersion ?? ''),
+      imageUrl: String(item.spec?.imageUrl ?? ''),
+      imageMediaType: String(item.spec?.imageMediaType ?? ''),
+      availableInventory: String(item.spec?.availableInventory ?? ''),
+      versionTotal: String(item.spec?.versionTotal ?? ''),
+      sortOrder: String(item.spec?.sortOrder ?? ''),
+      remarks: String(item.spec?.remarks ?? ''),
+      active: String(Boolean(item.status?.active)),
+    }),
+    fromRow: (row) => ({
+      spec: {
+        cardVersion: row.cardVersion ?? '',
+        imageUrl: row.imageUrl ?? '',
+        imageMediaType: row.imageMediaType ?? '',
+        availableInventory: parseInteger(row.availableInventory ?? ''),
+        versionTotal: parseInteger(row.versionTotal ?? ''),
+        sortOrder: parseInteger(row.sortOrder ?? ''),
+        remarks: row.remarks ?? '',
+      },
+      status: {
+        active: parseBoolean(row.active ?? ''),
       },
     }),
   },

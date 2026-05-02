@@ -6,7 +6,12 @@ import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.EquipmentCatalogEntry;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.ImportExportJob;
+import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
+import com.bi1kbu.qslmanagement.extension.model.StationCard;
+import com.bi1kbu.qslmanagement.extension.model.StationEquipment;
+import com.bi1kbu.qslmanagement.extension.model.StationProfile;
+import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -47,9 +52,14 @@ public class QslImportExportJobService {
         "qso-record",
         "card-record",
         "exchange-request-review",
+        "offline-activity",
         "address-management",
         "bureau-management",
-        "equipment-catalog"
+        "equipment-catalog",
+        "system-setting",
+        "station-profile",
+        "station-equipment",
+        "station-card"
     );
     private static final Set<String> SUPPORTED_EXPORT_DATASETS = Set.copyOf(DATASET_EXPORT_ORDER);
     private static final Set<String> SUPPORTED_FORMATS = Set.of(FORMAT_CSV, FORMAT_ZIP);
@@ -477,6 +487,24 @@ public class QslImportExportJobService {
                     record.setStatus(status);
                 }
             );
+            case "offline-activity" -> importRows(
+                dataset, rows, strategy, "offline-activity", OfflineActivity.class, OfflineActivity::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new OfflineActivity.OfflineActivitySpec() : record.getSpec();
+                    spec.setActivityName(value(row, "activityName"));
+                    spec.setActivityLocation(value(row, "activityLocation"));
+                    spec.setActivityDate(value(row, "activityDate"));
+                    spec.setActivityTime(value(row, "activityTime"));
+                    spec.setCardRemarks(value(row, "cardRemarks"));
+                    record.setSpec(spec);
+
+                    var status = record.getStatus() == null
+                        ? new OfflineActivity.OfflineActivityStatus()
+                        : record.getStatus();
+                    status.setWorkflowStatus(value(row, "workflowStatus"));
+                    record.setStatus(status);
+                }
+            );
             case "address-management" -> importRows(
                 dataset, rows, strategy, "ADDRESS", AddressBookEntry.class, AddressBookEntry::new, dryRun,
                 (record, row) -> {
@@ -514,6 +542,78 @@ public class QslImportExportJobService {
                     spec.setValue(value(row, "value"));
                     spec.setRemarks(value(row, "remarks"));
                     record.setSpec(spec);
+                }
+            );
+            case "system-setting" -> importRows(
+                dataset, rows, strategy, "system-setting", SystemSetting.class, SystemSetting::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new SystemSetting.SystemSettingSpec() : record.getSpec();
+                    spec.setGuestQueryPerMinute(parseInteger(value(row, "guestQueryPerMinute")));
+                    spec.setRequiresExchangeReview(parseBoolean(value(row, "requiresExchangeReview")));
+                    spec.setAutoNotifyOnCardCreated(parseBoolean(value(row, "autoNotifyOnCardCreated")));
+                    spec.setAutoNotifyOnCardSent(parseBoolean(value(row, "autoNotifyOnCardSent")));
+                    spec.setAutoNotifyOnCardReceived(parseBoolean(value(row, "autoNotifyOnCardReceived")));
+                    spec.setCardRecordSequence(parseInteger(value(row, "cardRecordSequence")));
+                    spec.setReceiveRecordSequence(parseInteger(value(row, "receiveRecordSequence")));
+                    record.setSpec(spec);
+
+                    var status = record.getStatus() == null ? new SystemSetting.SystemSettingStatus() : record.getStatus();
+                    status.setLastModifiedBy(value(row, "lastModifiedBy"));
+                    status.setLastModifiedAt(value(row, "lastModifiedAt"));
+                    record.setStatus(status);
+                }
+            );
+            case "station-profile" -> importRows(
+                dataset, rows, strategy, "station-profile", StationProfile.class, StationProfile::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new StationProfile.StationProfileSpec() : record.getSpec();
+                    spec.setMyCallSign(value(row, "myCallSign"));
+                    spec.setMyName(value(row, "myName"));
+                    spec.setMyTelephone(value(row, "myTelephone"));
+                    spec.setMyPostalCode(value(row, "myPostalCode"));
+                    spec.setMyAddress(value(row, "myAddress"));
+                    spec.setMyEmail(value(row, "myEmail"));
+                    spec.setStationRemarks(value(row, "stationRemarks"));
+                    record.setSpec(spec);
+
+                    var status = record.getStatus() == null ? new StationProfile.StationProfileStatus() : record.getStatus();
+                    status.setLastModifiedBy(value(row, "lastModifiedBy"));
+                    status.setLastModifiedAt(value(row, "lastModifiedAt"));
+                    record.setStatus(status);
+                }
+            );
+            case "station-equipment" -> importRows(
+                dataset, rows, strategy, "station-equipment", StationEquipment.class, StationEquipment::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new StationEquipment.StationEquipmentSpec() : record.getSpec();
+                    spec.setRigName(value(row, "rigName"));
+                    spec.setAntennas(parseStringList(value(row, "antennas")));
+                    spec.setPowers(parseStringList(value(row, "powers")));
+                    spec.setModes(parseStringList(value(row, "modes")));
+                    spec.setRemarks(value(row, "remarks"));
+                    record.setSpec(spec);
+
+                    var status = record.getStatus() == null ? new StationEquipment.StationEquipmentStatus() : record.getStatus();
+                    status.setEnabled(parseBoolean(value(row, "enabled")));
+                    record.setStatus(status);
+                }
+            );
+            case "station-card" -> importRows(
+                dataset, rows, strategy, "station-card", StationCard.class, StationCard::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new StationCard.StationCardSpec() : record.getSpec();
+                    spec.setCardVersion(value(row, "cardVersion"));
+                    spec.setImageUrl(value(row, "imageUrl"));
+                    spec.setImageMediaType(value(row, "imageMediaType"));
+                    spec.setAvailableInventory(parseInteger(value(row, "availableInventory")));
+                    spec.setVersionTotal(parseInteger(value(row, "versionTotal")));
+                    spec.setSortOrder(parseInteger(value(row, "sortOrder")));
+                    spec.setRemarks(value(row, "remarks"));
+                    record.setSpec(spec);
+
+                    var status = record.getStatus() == null ? new StationCard.StationCardStatus() : record.getStatus();
+                    status.setActive(parseBoolean(value(row, "active")));
+                    record.setStatus(status);
                 }
             );
             default -> Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0003", "数据集类型不支持"));
@@ -664,9 +764,14 @@ public class QslImportExportJobService {
             case "qso-record" -> client.countBy(QsoRecord.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "card-record" -> client.countBy(CardRecord.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "exchange-request-review" -> client.countBy(ExchangeRequest.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+            case "offline-activity" -> client.countBy(OfflineActivity.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "address-management" -> client.countBy(AddressBookEntry.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "bureau-management" -> client.countBy(BureauEntry.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "equipment-catalog" -> client.countBy(EquipmentCatalogEntry.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+            case "system-setting" -> client.countBy(SystemSetting.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+            case "station-profile" -> client.countBy(StationProfile.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+            case "station-equipment" -> client.countBy(StationEquipment.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+            case "station-card" -> client.countBy(StationCard.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             default -> Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0003", "数据集类型不支持"));
         };
     }
@@ -837,6 +942,30 @@ public class QslImportExportJobService {
                     "reviewedBy",
                     "reviewedAt"
                 ), rows));
+            case "offline-activity" -> client.listAll(OfflineActivity.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .map(record -> {
+                    var spec = record.getSpec();
+                    var status = record.getStatus();
+                    return csvRow(
+                        record.getMetadata().getName(),
+                        spec == null ? "" : nullToEmpty(spec.getActivityName()),
+                        spec == null ? "" : nullToEmpty(spec.getActivityLocation()),
+                        spec == null ? "" : nullToEmpty(spec.getActivityDate()),
+                        spec == null ? "" : nullToEmpty(spec.getActivityTime()),
+                        spec == null ? "" : nullToEmpty(spec.getCardRemarks()),
+                        status == null ? "" : nullToEmpty(status.getWorkflowStatus())
+                    );
+                })
+                .collectList()
+                .map(rows -> renderCsv(dataset, List.of(
+                    "id",
+                    "activityName",
+                    "activityLocation",
+                    "activityDate",
+                    "activityTime",
+                    "cardRemarks",
+                    "workflowStatus"
+                ), rows));
             case "address-management" -> client.listAll(AddressBookEntry.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
                     var spec = record.getSpec();
@@ -899,6 +1028,118 @@ public class QslImportExportJobService {
                     "type",
                     "value",
                     "remarks"
+                ), rows));
+            case "system-setting" -> client.listAll(SystemSetting.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .map(record -> {
+                    var spec = record.getSpec();
+                    var status = record.getStatus();
+                    return csvRow(
+                        record.getMetadata().getName(),
+                        spec == null ? "" : integerToText(spec.getGuestQueryPerMinute()),
+                        spec == null ? "" : boolToText(spec.getRequiresExchangeReview()),
+                        spec == null ? "" : boolToText(spec.getAutoNotifyOnCardCreated()),
+                        spec == null ? "" : boolToText(spec.getAutoNotifyOnCardSent()),
+                        spec == null ? "" : boolToText(spec.getAutoNotifyOnCardReceived()),
+                        spec == null ? "" : integerToText(spec.getCardRecordSequence()),
+                        spec == null ? "" : integerToText(spec.getReceiveRecordSequence()),
+                        status == null ? "" : nullToEmpty(status.getLastModifiedBy()),
+                        status == null ? "" : nullToEmpty(status.getLastModifiedAt())
+                    );
+                })
+                .collectList()
+                .map(rows -> renderCsv(dataset, List.of(
+                    "id",
+                    "guestQueryPerMinute",
+                    "requiresExchangeReview",
+                    "autoNotifyOnCardCreated",
+                    "autoNotifyOnCardSent",
+                    "autoNotifyOnCardReceived",
+                    "cardRecordSequence",
+                    "receiveRecordSequence",
+                    "lastModifiedBy",
+                    "lastModifiedAt"
+                ), rows));
+            case "station-profile" -> client.listAll(StationProfile.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .map(record -> {
+                    var spec = record.getSpec();
+                    var status = record.getStatus();
+                    return csvRow(
+                        record.getMetadata().getName(),
+                        spec == null ? "" : nullToEmpty(spec.getMyCallSign()),
+                        spec == null ? "" : nullToEmpty(spec.getMyName()),
+                        spec == null ? "" : nullToEmpty(spec.getMyTelephone()),
+                        spec == null ? "" : nullToEmpty(spec.getMyPostalCode()),
+                        spec == null ? "" : nullToEmpty(spec.getMyAddress()),
+                        spec == null ? "" : nullToEmpty(spec.getMyEmail()),
+                        spec == null ? "" : nullToEmpty(spec.getStationRemarks()),
+                        status == null ? "" : nullToEmpty(status.getLastModifiedBy()),
+                        status == null ? "" : nullToEmpty(status.getLastModifiedAt())
+                    );
+                })
+                .collectList()
+                .map(rows -> renderCsv(dataset, List.of(
+                    "id",
+                    "myCallSign",
+                    "myName",
+                    "myTelephone",
+                    "myPostalCode",
+                    "myAddress",
+                    "myEmail",
+                    "stationRemarks",
+                    "lastModifiedBy",
+                    "lastModifiedAt"
+                ), rows));
+            case "station-equipment" -> client.listAll(StationEquipment.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .map(record -> {
+                    var spec = record.getSpec();
+                    var status = record.getStatus();
+                    return csvRow(
+                        record.getMetadata().getName(),
+                        spec == null ? "" : nullToEmpty(spec.getRigName()),
+                        spec == null ? "" : stringListToText(spec.getAntennas()),
+                        spec == null ? "" : stringListToText(spec.getPowers()),
+                        spec == null ? "" : stringListToText(spec.getModes()),
+                        spec == null ? "" : nullToEmpty(spec.getRemarks()),
+                        status == null ? "" : boolToText(status.getEnabled())
+                    );
+                })
+                .collectList()
+                .map(rows -> renderCsv(dataset, List.of(
+                    "id",
+                    "rigName",
+                    "antennas",
+                    "powers",
+                    "modes",
+                    "remarks",
+                    "enabled"
+                ), rows));
+            case "station-card" -> client.listAll(StationCard.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .map(record -> {
+                    var spec = record.getSpec();
+                    var status = record.getStatus();
+                    return csvRow(
+                        record.getMetadata().getName(),
+                        spec == null ? "" : nullToEmpty(spec.getCardVersion()),
+                        spec == null ? "" : nullToEmpty(spec.getImageUrl()),
+                        spec == null ? "" : nullToEmpty(spec.getImageMediaType()),
+                        spec == null ? "" : integerToText(spec.getAvailableInventory()),
+                        spec == null ? "" : integerToText(spec.getVersionTotal()),
+                        spec == null ? "" : integerToText(spec.getSortOrder()),
+                        spec == null ? "" : nullToEmpty(spec.getRemarks()),
+                        status == null ? "" : boolToText(status.getActive())
+                    );
+                })
+                .collectList()
+                .map(rows -> renderCsv(dataset, List.of(
+                    "id",
+                    "cardVersion",
+                    "imageUrl",
+                    "imageMediaType",
+                    "availableInventory",
+                    "versionTotal",
+                    "sortOrder",
+                    "remarks",
+                    "active"
                 ), rows));
             default -> Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0003", "数据集类型不支持"));
         };
@@ -1086,6 +1327,8 @@ public class QslImportExportJobService {
                 yield normalizedPrefix + "-" + nextNumericSuffix(occupiedNames, pattern, 0);
             }
             case "BURO" -> "BURO-" + nextNumericSuffix(occupiedNames, BURO_RESOURCE_PATTERN, 0);
+            case "system-setting" -> "qsl-system-setting-default";
+            case "station-profile" -> "qsl-station-profile-default";
             default -> QslApiSupport.createResourceName(idPrefix);
         };
     }
@@ -1161,6 +1404,42 @@ public class QslImportExportJobService {
             || "yes".equals(normalized)
             || "y".equals(normalized)
             || "是".equals(normalized);
+    }
+
+    private Integer parseInteger(String value) {
+        if (isBlank(value)) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("数字格式不合法：" + value);
+        }
+    }
+
+    private String integerToText(Integer value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private List<String> parseStringList(String value) {
+        if (isBlank(value)) {
+            return List.of();
+        }
+        return Arrays.stream(value.replace('，', ',')
+                .replace('、', ',')
+                .replace('；', ',')
+                .replace(';', ',')
+                .split(","))
+            .map(String::trim)
+            .filter(item -> !item.isBlank())
+            .toList();
+    }
+
+    private String stringListToText(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "";
+        }
+        return String.join("、", values);
     }
 
     private String nullToEmpty(String value) {

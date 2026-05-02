@@ -8,10 +8,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.extension.model.ImportExportJob;
+import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
+import com.bi1kbu.qslmanagement.extension.model.StationEquipment;
+import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -68,6 +72,104 @@ class QslImportExportJobServiceTest {
         assertEquals(1, result.errors().size());
         assertEquals("第3行：缺少呼号", result.errors().get(0));
         assertEquals("/imports/jobs/import-job-3/errors/download", result.errorReportPath());
+    }
+
+    @Test
+    void shouldExportSystemSettingCsv() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+        var service = new QslImportExportJobService(client, auditService);
+
+        var job = buildExportJob("export-job-1", "system-setting", "csv");
+        var setting = new SystemSetting();
+        setting.setMetadata(QslApiSupport.createMetadata("qsl-system-setting-default"));
+        var spec = new SystemSetting.SystemSettingSpec();
+        spec.setGuestQueryPerMinute(30);
+        spec.setRequiresExchangeReview(Boolean.TRUE);
+        spec.setAutoNotifyOnCardCreated(Boolean.FALSE);
+        spec.setAutoNotifyOnCardSent(Boolean.TRUE);
+        spec.setAutoNotifyOnCardReceived(Boolean.FALSE);
+        spec.setCardRecordSequence(1000);
+        spec.setReceiveRecordSequence(12);
+        setting.setSpec(spec);
+
+        when(client.fetch(eq(ImportExportJob.class), eq("export-job-1"))).thenReturn(Mono.just(job));
+        when(client.listAll(eq(SystemSetting.class), any(), any())).thenReturn(Flux.just(setting));
+
+        var payload = service.buildExportDownload("export-job-1").block();
+
+        assertNotNull(payload);
+        assertEquals("export-job-1.csv", payload.fileName());
+        var csv = new String(payload.content(), StandardCharsets.UTF_8);
+        assertEquals(true, csv.contains("id#system-setting,guestQueryPerMinute,requiresExchangeReview"));
+        assertEquals(true, csv.contains("qsl-system-setting-default,30,true,false,true,false,1000,12"));
+    }
+
+    @Test
+    void shouldExportOfflineActivityCsv() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+        var service = new QslImportExportJobService(client, auditService);
+
+        var job = buildExportJob("export-job-activity", "offline-activity", "csv");
+        var activity = new OfflineActivity();
+        activity.setMetadata(QslApiSupport.createMetadata("20260502ACT01"));
+        var spec = new OfflineActivity.OfflineActivitySpec();
+        spec.setActivityName("五月线下换卡");
+        spec.setActivityLocation("北京");
+        spec.setActivityDate("2026-05-02");
+        spec.setActivityTime("0900");
+        spec.setCardRemarks("活动卡");
+        activity.setSpec(spec);
+        var status = new OfflineActivity.OfflineActivityStatus();
+        status.setWorkflowStatus("进行中");
+        activity.setStatus(status);
+
+        when(client.fetch(eq(ImportExportJob.class), eq("export-job-activity"))).thenReturn(Mono.just(job));
+        when(client.listAll(eq(OfflineActivity.class), any(), any())).thenReturn(Flux.just(activity));
+
+        var payload = service.buildExportDownload("export-job-activity").block();
+
+        assertNotNull(payload);
+        var csv = new String(payload.content(), StandardCharsets.UTF_8);
+        assertEquals(true, csv.contains("id#offline-activity,activityName,activityLocation,activityDate,activityTime,cardRemarks,workflowStatus"));
+        assertEquals(true, csv.contains("20260502ACT01,五月线下换卡,北京,2026-05-02,0900,活动卡,进行中"));
+    }
+
+    @Test
+    void shouldPrecheckImportStationEquipmentConfiguration() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+        var service = new QslImportExportJobService(client, auditService);
+
+        when(client.listAll(eq(StationEquipment.class), any(), any())).thenReturn(Flux.empty());
+
+        var result = service.precheckImport(
+            new QslImportExportJobService.ExecuteImportJobCommand(
+                "csv",
+                "overwrite",
+                "station-equipment.csv",
+                List.of(new QslImportExportJobService.ImportDatasetPayload(
+                    "station-equipment",
+                    List.of(Map.of(
+                        "id", "qsl-station-equipment-1",
+                        "rigName", "IC-705",
+                        "antennas", "DP、GP",
+                        "powers", "5W、10W",
+                        "modes", "SSB、CW",
+                        "enabled", "true"
+                    ))
+                ))
+            )
+        ).block();
+
+        assertNotNull(result);
+        assertEquals("station-equipment", result.dataset());
+        assertEquals(1L, result.totalCount());
+        assertEquals(1L, result.successCount());
+        assertEquals(0L, result.failedCount());
+        Mockito.verify(client, Mockito.never()).create(any(StationEquipment.class));
+        Mockito.verify(client, Mockito.never()).update(any(StationEquipment.class));
     }
 
     @Test
@@ -256,6 +358,28 @@ class QslImportExportJobServiceTest {
         status.setErrorReportPath(errorReportPath);
         status.setStartedAt("2026-04-15 12:00:00");
         status.setFinishedAt("2026-04-15 12:00:01");
+        job.setStatus(status);
+        return job;
+    }
+
+    private ImportExportJob buildExportJob(String name, String dataset, String format) {
+        var job = new ImportExportJob();
+        job.setMetadata(QslApiSupport.createMetadata(name));
+
+        var spec = new ImportExportJob.ImportExportJobSpec();
+        spec.setJobType("export");
+        spec.setDataset(dataset);
+        spec.setFormat(format);
+        spec.setOutputFile(name + "." + format);
+        spec.setRequestedBy("admin");
+        job.setSpec(spec);
+
+        var status = new ImportExportJob.ImportExportJobStatus();
+        status.setStatus("已完成");
+        status.setTotalCount(1L);
+        status.setSuccessCount(1L);
+        status.setSkippedCount(0L);
+        status.setFailedCount(0L);
         job.setStatus(status);
         return job;
     }
