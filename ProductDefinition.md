@@ -1,8 +1,8 @@
 # QSL 卡片管理系统产品定义
 
-更新时间：2026-05-01  
-代码核验范围：`qsl-plugin` 后端、控制台前端、RBAC 模板与 `tools/CardPrint` 在线打印桥接  
-Halo 官方资料核验日期：2026-05-01
+更新时间：2026-05-02
+代码核验范围：`qsl-plugin` 后端、控制台前端、RBAC 模板与 `tools/CardPrint` 在线打印桥接
+Halo 官方资料核验日期：2026-05-02
 
 ## 1. 产品一句话定义
 
@@ -59,12 +59,12 @@ Halo 官方资料核验日期：2026-05-01
 | 收卡业务 | 通联收卡 | `/qsl/receive-business/receive-qso` | `mail-receive-confirm` |
 | 收卡业务 | 线上换卡收卡 | `/qsl/receive-business/receive-online-eyeball` | `mail-receive-confirm` |
 | 收卡业务 | 线下换卡收卡 | `/qsl/receive-business/receive-eyeball` | `mail-receive-confirm` |
-| 收卡业务 | 卡片异动 | `/qsl/receive-business/card-mutation` | `card-mutation` |
 | 审计 | 通联记录查询 | `/qsl/audit/qso-query` | `qso-query` |
 | 审计 | 卡片记录查询 | `/qsl/audit/card-query` | `card-query` |
 | 审计 | 收卡记录查询 | `/qsl/audit/receive-record-query` | `card-query` |
 | 审计 | 统计报表 | `/qsl/audit/report-auditlog` | `report-auditlog` |
 | 审计 | 审计日志 | `/qsl/audit/audit-log` | `report-auditlog` |
+| 数据 | 卡片异动 | `/qsl/data/card-mutation` | `card-mutation` |
 | 数据 | 地址管理 | `/qsl/data/address-management` | `address-bureau` |
 | 数据 | 卡片局管理 | `/qsl/data/bureau-management` | `address-bureau` |
 | 数据 | 设备库维护 | `/qsl/data/equipment-catalog` | `equipment-catalog` |
@@ -131,17 +131,17 @@ Halo 官方资料核验日期：2026-05-01
 
 ### 3.7 收卡业务
 
-收卡业务包含通联收卡、线上换卡收卡、线下换卡收卡、卡片异动。
+收卡业务包含通联收卡、线上换卡收卡、线下换卡收卡。
 
 1. 三类收卡菜单复用送达确认组件，以 `sceneType` 限定业务范围。
 2. 收卡编号写入 `CardRecord.spec.receivedRecordCodes`，允许同一卡片关联多个收卡编号。
-3. 卡片异动提供卡片记录修正能力，权限节点为 `card-mutation`。
+3. 收卡业务提供基本确认、已收卡片、批量编辑与单条编辑能力；修改收卡日期时会同步重新赋予收卡编号。
 
 ### 3.8 审计与数据
 
 审计包含通联记录查询、卡片记录查询、收卡记录查询、统计报表、审计日志。写操作通过 `QslAuditLog` 追加记录。
 
-数据包含地址管理、卡片局管理、设备库维护、导入导出。导入导出当前由服务端执行预检、导入、导出任务，并持久化 `ImportExportJob`。
+数据包含卡片异动、地址管理、卡片局管理、设备库维护、导入导出。卡片异动提供卡片记录修正能力，权限节点为 `card-mutation`。导入导出当前由服务端执行预检、导入、导出任务，并持久化 `ImportExportJob`。
 
 ## 4. 前台公开能力
 
@@ -161,10 +161,11 @@ Halo 官方资料核验日期：2026-05-01
 1. `GET /qso-public/records`
 2. `GET /overview-public/summary`
 3. `GET /exchange-online/-/bureaus`
-4. `GET /exchange-offline/-/activities`
-5. `POST /exchange-online/-/requests`
-6. `POST /exchange-offline/-/confirm`
-7. `POST /receipt-public/-/confirm`
+4. `GET /exchange-online/-/station-cards`
+5. `GET /exchange-offline/-/activities`
+6. `POST /exchange-online/-/requests`
+7. `POST /exchange-offline/-/confirm`
+8. `POST /receipt-public/-/confirm`
 
 公开接口允许匿名访问，但必须通过输入校验与限流。限流维度为 `endpoint + clientIp`，阈值来自 `SystemSetting.spec.guestQueryPerMinute`，未配置时使用默认值 `30`。
 
@@ -224,6 +225,6 @@ python -m cardprint.cli ui online
 
 ## 7. 当前一致性说明
 
-1. 本文件已按 2026-05-01 代码事实同步。
+1. 本文件已按 2026-05-02 代码事实同步。
 2. 若本文件与 `qsl-plugin` 代码不一致，以代码事实为准，并在同次改动中更新本文档。
 3. 若后续新增 API、权限节点、模型字段、菜单或打印桥接契约，必须同步更新本文件、`BackendApiContract.md` 与 `docs/spec/项目信息结构化清单.md`。

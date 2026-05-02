@@ -1,9 +1,9 @@
 # QSL 管理插件后端 API 合同
 
-更新时间：2026-05-01  
-适用插件：`qsl-management`  
-目标 Halo 版本：`2.23.0`  
-API 版本：`v1alpha1`  
+更新时间：2026-05-02
+适用插件：`qsl-management`
+目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.24 官方文档核验
+API 版本：`v1alpha1`
 代码核验范围：`qsl-plugin/src/main/java`、`qsl-plugin/src/main/resources/extensions/qsl-menu-role-templates.yaml`
 
 ## 1. 目标与范围
@@ -12,10 +12,10 @@ API 版本：`v1alpha1`
 
 ## 2. 官方依据
 
-核验日期：2026-05-01
+核验日期：2026-05-02
 
-1. Halo 2.23 Extension、自定义模型与自动 CRUD  
-   https://docs.halo.run/2.23/developer-guide/plugin/api-reference/server/extension
+1. Halo Extension、自定义模型与自动 CRUD
+   https://docs.halo.run/developer-guide/plugin/api-reference/server/extension
 2. API 权限控制与角色模板  
    https://docs.halo.run/developer-guide/plugin/security/role-template
 3. RBAC 与匿名聚合角色  
@@ -133,7 +133,7 @@ API 版本：`v1alpha1`
 }
 ```
 
-服务端会将 `cardReceived` 置为 `true`，按 `receivedDate` 更新 `receivedAt` 日期段，并把已有收卡编号改写为 `R0001-20260502` 形式。若原记录没有收卡编号，则自动分配新的收卡编号。
+服务端会将 `cardReceived` 置为 `true`，按 `receivedDate` 更新 `receivedAt` 日期段，并把可识别的已有收卡编号改写为 `R0001-20260502` 形式。若原记录没有收卡编号，或已有编号不符合 `R{序号}-{yyyyMMdd}` 格式，则自动分配新的收卡编号。
 
 换卡申请拒绝：
 
