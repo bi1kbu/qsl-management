@@ -93,7 +93,7 @@ const resetSearch = () => {
         />
       </div>
       <VButton size="sm" type="secondary" @click="submitSearch">搜索</VButton>
-      <VButton v-if="showReset" size="sm" @click="resetSearch">{{ resetText }}</VButton>
+      <VButton v-if="showReset" size="sm" type="secondary" @click="resetSearch">{{ resetText }}</VButton>
     </div>
 
     <label v-if="showSync" class="qsl-checkbox qsl-business-record-header__sync">

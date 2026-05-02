@@ -1042,7 +1042,6 @@ onMounted(() => {
         <div class="qsl-actions">
           <VButton type="secondary" :disabled="submitting" @click="submitReceive">确认收信</VButton>
           <VButton
-            size="sm"
             type="secondary"
             :disabled="batchSendingReceivedMail || !selectedHistoryCount"
             @click="batchSendReceivedMail"
