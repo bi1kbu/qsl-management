@@ -276,8 +276,8 @@ export const qslMenuModules: QslMenuModule[] = [
   {
     key: 'card-mutation',
     title: '卡片异动',
-    group: '收卡业务',
-    priority: 40,
+    group: '数据',
+    priority: 5,
     viewPermission: toViewPermission('card-mutation'),
     editPermission: toEditPermission('card-mutation'),
     viewDependencies: [toViewPermission('card-record'), toViewPermission('qso-record'), addressBureauViewPermission],

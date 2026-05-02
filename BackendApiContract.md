@@ -89,6 +89,7 @@ API 版本：`v1alpha1`
 | --- | --- | --- | --- |
 | POST | `/mail-send-confirms/{cardRecordName}/confirm` | 确认发信，更新 `cardSent/sentAt` | `mail-send-confirm:edit` |
 | POST | `/mail-receive-confirms/confirm` | 送达确认/收卡确认，按 `callSign + cardType + sceneType` 匹配或自动补建记录 | `mail-receive-confirm:edit` |
+| POST | `/mail-receive-confirms/{cardRecordName}/received-date` | 修改卡片收卡日期，并按日期重新赋予收卡编号 | `mail-receive-confirm:edit` |
 | POST | `/exchange-requests/{name}/approve` | 换卡申请通过并创建线上换卡卡片 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/reject` | 换卡申请拒绝 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/notify` | 发送线上换卡申请审核结果邮件 | `exchange-request-review:edit` |
@@ -117,11 +118,22 @@ API 版本：`v1alpha1`
   "callSign": "BI1KBU",
   "cardType": "QSO",
   "sceneType": "QSO",
+  "receivedDate": "2026-05-02",
   "receiptRemarks": "签收备注"
 }
 ```
 
-`cardType` 允许：`QSO`、`SWL`、`EYEBALL`。`sceneType` 允许：`QSO`、`SWL`、`ONLINE_EYEBALL`、`EYEBALL`。
+`cardType` 允许：`QSO`、`SWL`、`EYEBALL`。`sceneType` 允许：`QSO`、`SWL`、`ONLINE_EYEBALL`、`EYEBALL`。`receivedDate` 选填，格式为 `yyyy-MM-dd`，用于生成收卡编号日期段并写入收卡时间；不填则使用当前日期时间。
+
+修改收卡日期：
+
+```json
+{
+  "receivedDate": "2026-05-02"
+}
+```
+
+服务端会将 `cardReceived` 置为 `true`，按 `receivedDate` 更新 `receivedAt` 日期段，并把已有收卡编号改写为 `R0001-20260502` 形式。若原记录没有收卡编号，则自动分配新的收卡编号。
 
 换卡申请拒绝：
 

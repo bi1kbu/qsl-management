@@ -7,6 +7,7 @@ import {
   confirmMailReceive,
   sendNotificationMail,
   type MailReceiveConfirmResult,
+  updateMailReceiveDate,
 } from '../../api/qsl-console-api'
 import { listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
@@ -112,6 +113,10 @@ const normalizedSceneTypes = computed<SceneType[]>(() => {
 const shouldLoadOfflineActivities = computed(() => {
   return normalizedSceneTypes.value.includes('EYEBALL')
 })
+const showOfflineActivity = computed(() => {
+  return normalizedSceneTypes.value.includes('EYEBALL')
+    && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+})
 
 const resolveSceneTypeByCardType = (cardType: CardRecordSpec['cardType']): SceneType => {
   if (cardType === 'QSO' && normalizedSceneTypes.value.includes('QSO')) {
@@ -134,6 +139,7 @@ const resolveSceneTypeByCardType = (cardType: CardRecordSpec['cardType']): Scene
 const form = reactive({
   callSign: '',
   cardType: props.defaultCardType,
+  receivedDate: '',
   receiptRemarks: '',
 })
 
@@ -141,7 +147,7 @@ const results = ref<ReceiveResult[]>([])
 const feedback = ref('')
 const submitting = ref(false)
 const loadingResults = ref(false)
-const activeFunctionTab = ref<'basic' | 'batch'>('basic')
+const activeFunctionTab = ref<'basic' | 'received' | 'batch'>('basic')
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
 const syncHistoryQuery = ref(false)
@@ -155,6 +161,15 @@ const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const batchEditField = ref('')
 const batchEditValue = ref('')
+const editingResourceName = ref('')
+const savingSingleEdit = ref(false)
+const singleEditForm = reactive({
+  cardType: props.defaultCardType,
+  cardReceivedState: 'UNRECEIVED',
+  receiptConfirmedState: 'UNCONFIRMED',
+  receivedDate: '',
+  receivedRemarks: '',
+})
 const activityFilter = ref('')
 const offlineActivities = ref<OfflineActivitySpec[]>([])
 
@@ -181,7 +196,7 @@ const availableCardTypes = computed<CardRecordSpec['cardType'][]>(() => {
 
 const filteredResults = computed(() => {
   const actionableResults = results.value.filter((item) => !item.spec.cardReceived || item.spec.receivedMailStatus !== 'SENT')
-  const filteredByActivity = activityFilter.value
+  const filteredByActivity = showOfflineActivity.value && activityFilter.value
     ? actionableResults.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
     : actionableResults
   const keyword = historyKeyword.value.trim().toUpperCase()
@@ -193,12 +208,60 @@ const filteredResults = computed(() => {
       item.callSign.toUpperCase().includes(keyword) ||
       item.resourceName.toUpperCase().includes(keyword) ||
       item.cardType.toUpperCase().includes(keyword)
-      || (item.spec.offlineActivityName || '').toUpperCase().includes(keyword)
+      || (showOfflineActivity.value && (item.spec.offlineActivityName || '').toUpperCase().includes(keyword))
     )
   })
 })
 
+const filteredReceivedResults = computed(() => {
+  const receivedResults = results.value.filter((item) => item.spec.cardReceived)
+  const filteredByActivity = showOfflineActivity.value && activityFilter.value
+    ? receivedResults.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
+    : receivedResults
+  const keyword = historyKeyword.value.trim().toUpperCase()
+  if (!keyword) {
+    return filteredByActivity
+  }
+  return filteredByActivity.filter((item) => {
+    return (
+      item.callSign.toUpperCase().includes(keyword) ||
+      item.resourceName.toUpperCase().includes(keyword) ||
+      item.cardType.toUpperCase().includes(keyword) ||
+      item.spec.receivedRecordCodes.toUpperCase().includes(keyword) ||
+      item.spec.receivedRemarks.toUpperCase().includes(keyword) ||
+      (showOfflineActivity.value && (item.spec.offlineActivityName || '').toUpperCase().includes(keyword))
+    )
+  })
+})
+
+const filteredBatchResults = computed(() => {
+  const filteredByActivity = showOfflineActivity.value && activityFilter.value
+    ? results.value.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
+    : results.value
+  const keyword = historyKeyword.value.trim().toUpperCase()
+  if (!keyword) {
+    return filteredByActivity
+  }
+  return filteredByActivity.filter((item) => {
+    return (
+      item.callSign.toUpperCase().includes(keyword) ||
+      item.resourceName.toUpperCase().includes(keyword) ||
+      item.cardType.toUpperCase().includes(keyword) ||
+      item.spec.receivedRecordCodes.toUpperCase().includes(keyword) ||
+      item.spec.receivedRemarks.toUpperCase().includes(keyword) ||
+      (showOfflineActivity.value && (item.spec.offlineActivityName || '').toUpperCase().includes(keyword))
+    )
+  })
+})
+
+const activeHistoryResults = computed(() => {
+  return activeFunctionTab.value === 'batch' ? filteredBatchResults.value : filteredResults.value
+})
+
 const activityFilterOptions = computed(() => {
+  if (!showOfflineActivity.value) {
+    return []
+  }
   const fromRecords = new Set<string>()
   results.value.forEach((item) => {
     const value = (item.spec.offlineActivityName || '').trim()
@@ -216,15 +279,19 @@ const activityFilterOptions = computed(() => {
 })
 
 const allFilteredSelected = computed(() => {
-  if (!filteredResults.value.length) {
+  if (!activeHistoryResults.value.length) {
     return false
   }
-  return filteredResults.value.every((item) => selectedHistoryNames.value.includes(item.resourceName))
+  return activeHistoryResults.value.every((item) => selectedHistoryNames.value.includes(item.resourceName))
 })
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
 const isBasicTab = computed(() => activeFunctionTab.value === 'basic')
+const isReceivedTab = computed(() => activeFunctionTab.value === 'received')
 const isBatchTab = computed(() => activeFunctionTab.value === 'batch')
+const singleEditTarget = computed(() => {
+  return results.value.find((item) => item.resourceName === editingResourceName.value) ?? null
+})
 const batchEditFields = [
   {
     value: 'cardType',
@@ -254,17 +321,28 @@ const batchEditFields = [
       { label: '未签收', value: 'UNCONFIRMED' },
     ],
   },
+  { value: 'receivedDate', label: '收卡日期', inputType: 'date', placeholder: '选择收卡日期' },
   { value: 'receiptRemarks', label: '签收备注', inputType: 'textarea', placeholder: '输入备注' },
 ] as const
 const totalPages = computed(() => {
-  if (!filteredResults.value.length) {
+  if (!activeHistoryResults.value.length) {
     return 1
   }
-  return Math.ceil(filteredResults.value.length / pageSize.value)
+  return Math.ceil(activeHistoryResults.value.length / pageSize.value)
+})
+const totalReceivedPages = computed(() => {
+  if (!filteredReceivedResults.value.length) {
+    return 1
+  }
+  return Math.ceil(filteredReceivedResults.value.length / pageSize.value)
 })
 const pagedFilteredResults = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return filteredResults.value.slice(start, start + pageSize.value)
+  return activeHistoryResults.value.slice(start, start + pageSize.value)
+})
+const pagedReceivedResults = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredReceivedResults.value.slice(start, start + pageSize.value)
 })
 
 const isFormalCardRecordName = (resourceName: string): boolean => {
@@ -274,15 +352,31 @@ const isFormalCardRecordName = (resourceName: string): boolean => {
 watch(results, () => {
   const nameSet = new Set(results.value.map((item) => item.resourceName))
   selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => nameSet.has(name))
+  if (editingResourceName.value && !nameSet.has(editingResourceName.value)) {
+    editingResourceName.value = ''
+  }
 })
 
-watch(filteredResults, () => {
-  if (currentPage.value > totalPages.value) {
+watch(activeHistoryResults, () => {
+  if (!isReceivedTab.value && currentPage.value > totalPages.value) {
     currentPage.value = totalPages.value
   }
   if (currentPage.value < 1) {
     currentPage.value = 1
   }
+})
+
+watch(filteredReceivedResults, () => {
+  if (isReceivedTab.value && currentPage.value > totalReceivedPages.value) {
+    currentPage.value = totalReceivedPages.value
+  }
+  if (currentPage.value < 1) {
+    currentPage.value = 1
+  }
+})
+
+watch(activeFunctionTab, () => {
+  currentPage.value = 1
 })
 
 watch(pageSize, () => {
@@ -346,6 +440,11 @@ const nowText = (): string => {
   })
 }
 
+const extractDateValue = (dateTime?: string): string => {
+  const matched = (dateTime ?? '').trim().match(/^(\d{4}-\d{2}-\d{2})/)
+  return matched?.[1] ?? ''
+}
+
 const resolveMailStatusText = (status: string): string => {
   if (status === 'PENDING') {
     return '待发送'
@@ -357,6 +456,15 @@ const resolveMailStatusText = (status: string): string => {
     return '发送失败'
   }
   return ''
+}
+
+const formatReceivedRecordCodes = (codes?: string): string => {
+  const normalized = (codes ?? '')
+    .split(',')
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean)
+    .join(', ')
+  return normalized || '-'
 }
 
 const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec => {
@@ -393,7 +501,7 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     receivedMailSentAt: spec?.receivedMailSentAt ?? '',
     receivedMailLastError: spec?.receivedMailLastError ?? '',
     mailTargetEmail: spec?.mailTargetEmail ?? '',
-    receivedRecordCodes: spec?.receivedRecordCodes ?? '',
+    receivedRecordCodes: formatReceivedRecordCodes(spec?.receivedRecordCodes).replace(/^-$/, ''),
   }
 }
 
@@ -477,6 +585,7 @@ const submitReceive = async () => {
       cardType: form.cardType,
       sceneType: resolveSceneTypeByCardType(form.cardType),
       receiptRemarks: form.receiptRemarks.trim(),
+      receivedDate: form.receivedDate.trim(),
     })
 
     await appendQslAuditLog({
@@ -489,6 +598,7 @@ const submitReceive = async () => {
     await loadResults({ silent: true })
     feedback.value = `收信确认完成：${result.callSign || callSign}（收卡编号：${result.receivedRecordCode || '-'}）`
     form.callSign = ''
+    form.receivedDate = ''
     form.receiptRemarks = ''
   } catch (error) {
     feedback.value = `收信确认失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -508,6 +618,7 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
       cardType: item.cardType,
       sceneType: resolveSceneTypeByCardType(item.cardType),
       receiptRemarks: '',
+      receivedDate: '',
     })
     await appendQslAuditLog({
       action: '确认收卡',
@@ -553,18 +664,97 @@ const toggleHistorySelection = (resourceName: string) => {
 
 const toggleAllFilteredHistorySelection = () => {
   if (allFilteredSelected.value) {
-    const filteredNameSet = new Set(filteredResults.value.map((item) => item.resourceName))
+    const filteredNameSet = new Set(activeHistoryResults.value.map((item) => item.resourceName))
     selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !filteredNameSet.has(name))
     return
   }
 
   const merged = new Set(selectedHistoryNames.value)
-  filteredResults.value.forEach((item) => merged.add(item.resourceName))
+  activeHistoryResults.value.forEach((item) => merged.add(item.resourceName))
   selectedHistoryNames.value = Array.from(merged)
 }
 
 const clearHistorySelection = () => {
   selectedHistoryNames.value = []
+}
+
+const startSingleEdit = (item: ReceiveResult) => {
+  editingResourceName.value = item.resourceName
+  singleEditForm.cardType = item.spec.cardType
+  singleEditForm.cardReceivedState = item.spec.cardReceived ? 'RECEIVED' : 'UNRECEIVED'
+  singleEditForm.receiptConfirmedState = item.spec.receiptConfirmed ? 'CONFIRMED' : 'UNCONFIRMED'
+  singleEditForm.receivedDate = extractDateValue(item.spec.receivedAt)
+  singleEditForm.receivedRemarks = item.spec.receivedRemarks || ''
+  feedback.value = `正在编辑：${item.resourceName}`
+}
+
+const cancelSingleEdit = () => {
+  editingResourceName.value = ''
+  singleEditForm.cardType = props.defaultCardType
+  singleEditForm.cardReceivedState = 'UNRECEIVED'
+  singleEditForm.receiptConfirmedState = 'UNCONFIRMED'
+  singleEditForm.receivedDate = ''
+  singleEditForm.receivedRemarks = ''
+  feedback.value = '已取消单条编辑。'
+}
+
+const saveSingleEdit = async () => {
+  const target = singleEditTarget.value
+  if (!target) {
+    feedback.value = '未找到要编辑的记录，请刷新清单后重试。'
+    return
+  }
+
+  const nextReceived = singleEditForm.cardReceivedState === 'RECEIVED'
+  const nextReceivedDate = singleEditForm.receivedDate.trim()
+  const currentReceivedDate = extractDateValue(target.spec.receivedAt)
+  if (!nextReceived && nextReceivedDate) {
+    feedback.value = '未收卡状态不能设置收卡日期。'
+    return
+  }
+
+  savingSingleEdit.value = true
+  try {
+    const nextCardType = singleEditForm.cardType as CardRecordSpec['cardType']
+    const nextSpec: CardRecordSpec = {
+      ...target.spec,
+      cardType: nextCardType,
+      sceneType: resolveSceneTypeByCardType(nextCardType),
+      cardReceived: nextReceived,
+      receiptConfirmed: singleEditForm.receiptConfirmedState === 'CONFIRMED',
+      receivedRemarks: singleEditForm.receivedRemarks.trim(),
+      receivedAt: nextReceived ? target.spec.receivedAt || nowText() : '',
+    }
+
+    await updateExtension<CardRecordSpec>(resourcePlural, target.resourceName, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: target.resourceName,
+        version: target.metadataVersion,
+      },
+      spec: nextSpec,
+    })
+
+    if (nextReceived && nextReceivedDate && nextReceivedDate !== currentReceivedDate) {
+      await updateMailReceiveDate(target.resourceName, nextReceivedDate)
+    }
+
+    await appendQslAuditLog({
+      action: '单条编辑收信确认记录',
+      resourceType: 'card-record',
+      resourceName: target.resourceName,
+      detail: `卡片类型：${nextCardType}，收卡状态：${nextReceived ? '已收卡' : '未收卡'}，签收状态：${singleEditForm.receiptConfirmedState === 'CONFIRMED' ? '已签收' : '未签收'}，收卡日期：${nextReceivedDate || '-'}`,
+    })
+
+    await loadResults({ silent: true })
+    editingResourceName.value = ''
+    feedback.value = `已保存单条编辑：${target.resourceName}`
+  } catch (error) {
+    feedback.value = `保存单条编辑失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    savingSingleEdit.value = false
+  }
 }
 
 const applyHistoryBatchEdit = async () => {
@@ -587,6 +777,29 @@ const applyHistoryBatchEdit = async () => {
   batchUpdating.value = true
   try {
     const targets = results.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
+
+    if (batchEditField.value === 'receivedDate') {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(nextValue)) {
+        feedback.value = '收卡日期格式必须为 yyyy-MM-dd。'
+        return
+      }
+      for (const item of targets) {
+        await updateMailReceiveDate(item.resourceName, nextValue)
+      }
+      await appendQslAuditLog({
+        action: '批量编辑收信确认记录',
+        resourceType: 'card-record',
+        resourceName: `count=${targets.length}`,
+        detail: `批量修改字段：收卡日期，值：${nextValue}，已同步重新赋予收卡编号。`,
+      })
+
+      await loadResults({ silent: true })
+      clearHistorySelection()
+      batchEditField.value = ''
+      batchEditValue.value = ''
+      feedback.value = `已批量更新 ${targets.length} 条记录的收卡日期，并重新赋予收卡编号。`
+      return
+    }
 
     for (const item of targets) {
       const nextCardType =
@@ -782,6 +995,9 @@ onMounted(() => {
           <VTabItem id="basic" label="基本功能">
             <div class="qsl-tab-panel-placeholder" />
           </VTabItem>
+          <VTabItem id="received" label="已收卡片">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
           <VTabItem id="batch" label="批量编辑">
             <div class="qsl-tab-panel-placeholder" />
           </VTabItem>
@@ -805,6 +1021,13 @@ onMounted(() => {
                 <option v-if="availableCardTypes.includes('SWL')" value="SWL">SWL</option>
                 <option v-if="availableCardTypes.includes('EYEBALL')" value="EYEBALL">EYEBALL</option>
               </select>
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">收卡日期</span>
+            <div class="qsl-input-shell">
+              <input v-model="form.receivedDate" type="date" />
             </div>
           </label>
 
@@ -832,7 +1055,7 @@ onMounted(() => {
         </div>
       </template>
 
-      <template v-else>
+      <template v-else-if="isBatchTab">
         <div class="qsl-actions">
           <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
         </div>
@@ -847,15 +1070,133 @@ onMounted(() => {
           @update:field-value="(value) => (batchEditValue = value)"
           @confirm="applyHistoryBatchEdit"
         />
+        <div v-if="singleEditTarget" class="qsl-single-edit">
+          <div class="qsl-single-edit__header">
+            <strong>单条编辑：{{ singleEditTarget.resourceName }}</strong>
+            <span class="qsl-muted">{{ singleEditTarget.callSign || '-' }}</span>
+          </div>
+          <div class="qsl-form-grid">
+            <label class="qsl-field">
+              <span class="qsl-field__label">卡片类型</span>
+              <div class="qsl-input-shell">
+                <select v-model="singleEditForm.cardType">
+                  <option value="QSO">QSO</option>
+                  <option value="SWL">SWL</option>
+                  <option value="EYEBALL">EYEBALL</option>
+                </select>
+              </div>
+            </label>
+            <label class="qsl-field">
+              <span class="qsl-field__label">收卡状态</span>
+              <div class="qsl-input-shell">
+                <select v-model="singleEditForm.cardReceivedState">
+                  <option value="RECEIVED">已收卡</option>
+                  <option value="UNRECEIVED">未收卡</option>
+                </select>
+              </div>
+            </label>
+            <label class="qsl-field">
+              <span class="qsl-field__label">签收状态</span>
+              <div class="qsl-input-shell">
+                <select v-model="singleEditForm.receiptConfirmedState">
+                  <option value="CONFIRMED">已签收</option>
+                  <option value="UNCONFIRMED">未签收</option>
+                </select>
+              </div>
+            </label>
+            <label class="qsl-field">
+              <span class="qsl-field__label">收卡日期</span>
+              <div class="qsl-input-shell">
+                <input v-model="singleEditForm.receivedDate" type="date" />
+              </div>
+            </label>
+            <label class="qsl-field qsl-field--full">
+              <span class="qsl-field__label">签收备注</span>
+              <div class="qsl-input-shell qsl-input-shell--textarea">
+                <textarea v-model="singleEditForm.receivedRemarks" rows="2" placeholder="输入备注" />
+              </div>
+            </label>
+          </div>
+          <div class="qsl-actions">
+            <VButton type="secondary" :disabled="savingSingleEdit" @click="saveSingleEdit">保存编辑</VButton>
+            <VButton :disabled="savingSingleEdit" @click="cancelSingleEdit">取消编辑</VButton>
+          </div>
+        </div>
       </template>
     </VCard>
 
-    <VCard>
+    <VCard v-if="isReceivedTab">
+      <QslBusinessRecordHeader
+        title="已收卡片清单"
+        :keyword="historyKeywordInput"
+        :all-selected="false"
+        :has-rows="filteredReceivedResults.length > 0"
+        :sync-enabled="syncHistoryQuery"
+        :show-select="false"
+        :show-reset="true"
+        placeholder="按呼号筛选"
+        @update:keyword="(value) => (historyKeywordInput = value)"
+        @search="applyHistorySearch"
+        @reset-search="resetHistorySearch"
+        @update:sync-enabled="(value) => (syncHistoryQuery = value)"
+      />
+
+      <div v-if="showOfflineActivity" class="qsl-form-inline">
+        <label class="qsl-field qsl-field--inline">
+          <span class="qsl-field__label">活动筛选</span>
+          <div class="qsl-input-shell">
+            <select v-model="activityFilter">
+              <option value="">全部活动</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+            </select>
+          </div>
+        </label>
+      </div>
+
+      <div class="qsl-table-wrap">
+        <table class="qsl-table">
+          <thead>
+            <tr>
+              <th>卡片ID</th>
+              <th>对方呼号</th>
+              <th>卡片类型</th>
+              <th>收卡编号</th>
+              <th>收卡确认备注</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in pagedReceivedResults" :key="`received-${item.resourceName}`">
+              <td>{{ item.resourceName }}</td>
+              <td>{{ item.callSign || '-' }}</td>
+              <td>{{ item.cardType }}</td>
+              <td>{{ formatReceivedRecordCodes(item.spec.receivedRecordCodes) }}</td>
+              <td>{{ item.spec.receivedRemarks || '-' }}</td>
+            </tr>
+            <tr v-if="!pagedReceivedResults.length">
+              <td colspan="5" class="qsl-table-empty">暂无已收卡片记录。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <QslPaginationBar
+        :total="filteredReceivedResults.length"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        @update:current-page="(value) => (currentPage = value)"
+        @update:page-size="(value) => (pageSize = value)"
+      />
+      <div class="qsl-actions">
+        <VButton :disabled="loadingResults || submitting" @click="loadResults">刷新清单</VButton>
+      </div>
+    </VCard>
+
+    <VCard v-else>
       <QslBusinessRecordHeader
         title="收信确认清单"
         :keyword="historyKeywordInput"
         :all-selected="allFilteredSelected"
-        :has-rows="filteredResults.length > 0"
+        :has-rows="activeHistoryResults.length > 0"
         :sync-enabled="syncHistoryQuery"
         :show-reset="true"
         placeholder="按呼号筛选"
@@ -866,7 +1207,7 @@ onMounted(() => {
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
 
-      <div class="qsl-form-inline">
+      <div v-if="showOfflineActivity" class="qsl-form-inline">
         <label class="qsl-field qsl-field--inline">
           <span class="qsl-field__label">活动筛选</span>
           <div class="qsl-input-shell">
@@ -893,7 +1234,7 @@ onMounted(() => {
               <th>卡片类型</th>
               <th>收卡状态</th>
               <th>发卡状态</th>
-              <th>关联活动</th>
+              <th v-if="showOfflineActivity">关联活动</th>
               <th>收卡编号</th>
               <th>收卡确认备注</th>
               <th>操作</th>
@@ -920,11 +1261,21 @@ onMounted(() => {
               <td>
                 <VTag :theme="item.spec.cardSent ? 'secondary' : 'default'">{{ item.spec.cardSent ? '是' : '否' }}</VTag>
               </td>
-              <td>{{ item.spec.offlineActivityName || '-' }}</td>
-              <td>{{ item.spec.receivedRecordCodes || '-' }}</td>
+              <td v-if="showOfflineActivity">{{ item.spec.offlineActivityName || '-' }}</td>
+              <td>{{ formatReceivedRecordCodes(item.spec.receivedRecordCodes) }}</td>
               <td>{{ item.spec.receivedRemarks || '-' }}</td>
               <td>
-                <div class="qsl-actions qsl-actions--tight">
+                <div v-if="isBatchTab" class="qsl-actions qsl-actions--tight">
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="savingSingleEdit"
+                    @click="startSingleEdit(item)"
+                  >
+                    {{ editingResourceName === item.resourceName ? '正在编辑' : '编辑' }}
+                  </VButton>
+                </div>
+                <div v-else class="qsl-actions qsl-actions--tight">
                   <VButton
                     size="xs"
                     type="secondary"
@@ -995,7 +1346,7 @@ onMounted(() => {
         </table>
       </div>
       <QslPaginationBar
-        :total="filteredResults.length"
+        :total="activeHistoryResults.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
@@ -1026,5 +1377,22 @@ onMounted(() => {
 
 .qsl-row-clickable {
   cursor: pointer;
+}
+
+.qsl-single-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.qsl-single-edit__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 </style>

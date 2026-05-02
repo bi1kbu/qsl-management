@@ -49,6 +49,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         return route(GET("/reports/summary"), this::reportSummary)
             .andRoute(POST("/mail-send-confirms/{cardRecordName}/confirm"), this::confirmMailSend)
             .andRoute(POST("/mail-receive-confirms/confirm"), this::confirmMailReceive)
+            .andRoute(POST("/mail-receive-confirms/{cardRecordName}/received-date"), this::updateMailReceiveDate)
             .andRoute(POST("/exchange-requests/{name}/approve"), this::approveExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/reject"), this::rejectExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
@@ -91,14 +92,30 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> confirmMailReceive(ServerRequest request) {
         return ensureAuthenticated(request)
             .flatMap(authenticatedOperator -> request.bodyToMono(MailReceiveConfirmRequest.class)
-                .switchIfEmpty(Mono.just(new MailReceiveConfirmRequest("", "QSO", "", "")))
+                .switchIfEmpty(Mono.just(new MailReceiveConfirmRequest("", "QSO", "", "", "")))
                 .flatMap(payload -> actionService.confirmMailReceive(
                     new QslConsoleActionService.MailReceiveConfirmCommand(
                         payload.callSign(),
                         payload.cardType(),
                         payload.sceneType(),
-                        payload.receiptRemarks()
+                        payload.receiptRemarks(),
+                        payload.receivedDate()
                     ),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> updateMailReceiveDate(ServerRequest request) {
+        var cardRecordName = request.pathVariable("cardRecordName");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(ReceivedDateUpdateRequest.class)
+                .defaultIfEmpty(new ReceivedDateUpdateRequest(""))
+                .flatMap(payload -> actionService.updateMailReceiveDate(
+                    cardRecordName,
+                    payload.receivedDate(),
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp()
                 )))
@@ -306,7 +323,16 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private record AuthenticatedOperator(String name, String clientIp) {
     }
 
-    private record MailReceiveConfirmRequest(String callSign, String cardType, String sceneType, String receiptRemarks) {
+    private record MailReceiveConfirmRequest(
+        String callSign,
+        String cardType,
+        String sceneType,
+        String receiptRemarks,
+        String receivedDate
+    ) {
+    }
+
+    private record ReceivedDateUpdateRequest(String receivedDate) {
     }
 
     private record ExchangeRejectRequest(String reason) {

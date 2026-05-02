@@ -10,12 +10,14 @@ const props = withDefaults(
     hasRows: boolean
     syncEnabled: boolean
     placeholder?: string
+    showSelect?: boolean
     showSync?: boolean
     showReset?: boolean
     resetText?: string
   }>(),
   {
     placeholder: '按呼号筛选',
+    showSelect: true,
     showSync: true,
     showReset: false,
     resetText: '重置',
@@ -77,7 +79,7 @@ const resetSearch = () => {
 <template>
   <div class="qsl-business-record-header">
     <div class="qsl-business-record-header__left">
-      <label class="qsl-checkbox qsl-select-only">
+      <label v-if="showSelect" class="qsl-checkbox qsl-select-only">
         <input :checked="allSelected" type="checkbox" :disabled="!hasRows" @change="emit('toggle-all')" />
       </label>
       <span class="qsl-business-record-header__title">{{ title }}</span>

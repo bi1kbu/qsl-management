@@ -13,6 +13,7 @@ export interface MailReceiveConfirmPayload {
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
   sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   receiptRemarks: string
+  receivedDate?: string
 }
 
 export interface MailReceiveConfirmResult {
@@ -165,6 +166,17 @@ export async function confirmMailReceive(payload: MailReceiveConfirmPayload): Pr
   const response = await axiosInstance.post<ApiResult<MailReceiveConfirmResult>>(
     `${consoleApiBase}/mail-receive-confirms/confirm`,
     payload,
+  )
+  return response.data.data
+}
+
+export async function updateMailReceiveDate(
+  cardRecordName: string,
+  receivedDate: string,
+): Promise<MailReceiveConfirmResult> {
+  const response = await axiosInstance.post<ApiResult<MailReceiveConfirmResult>>(
+    `${consoleApiBase}/mail-receive-confirms/${encodeURIComponent(cardRecordName)}/received-date`,
+    { receivedDate },
   )
   return response.data.data
 }

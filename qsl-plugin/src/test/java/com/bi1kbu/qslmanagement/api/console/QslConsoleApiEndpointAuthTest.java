@@ -43,6 +43,15 @@ class QslConsoleApiEndpointAuthTest {
     }
 
     @Test
+    void shouldRejectMailReceiveDateUpdateWhenUnauthenticated() {
+        unauthorizedPost("/mail-receive-confirms/C1001/received-date", """
+            {
+              "receivedDate": "2026-05-02"
+            }
+            """);
+    }
+
+    @Test
     void shouldRejectExchangeApproveWhenUnauthenticated() {
         unauthorizedPost("/exchange-requests/exchange-request-1/approve", "{}");
     }

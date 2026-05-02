@@ -217,6 +217,6 @@ const renderer = computed<ModuleRenderer>(() => {
 
 <template>
   <QslModuleFrame :module="currentModule">
-    <component :is="renderer.component" v-bind="renderer.props" />
+    <component :is="renderer.component" :key="currentModule.key" v-bind="renderer.props" />
   </QslModuleFrame>
 </template>

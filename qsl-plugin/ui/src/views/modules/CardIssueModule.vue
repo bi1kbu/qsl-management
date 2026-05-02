@@ -148,7 +148,9 @@ const normalizedSceneTypes = computed<SceneType[]>(() => {
 const shouldLoadOfflineActivities = computed(() => {
   return normalizedSceneTypes.value.includes('EYEBALL')
 })
-const showAssociationColumns = computed(() => !normalizedSceneTypes.value.includes('ONLINE_EYEBALL'))
+const showAssociationColumns = computed(() => {
+  return normalizedSceneTypes.value.some((item) => item === 'QSO' || item === 'SWL')
+})
 
 interface CardIssueAddressRow {
   id: string
@@ -283,7 +285,7 @@ const matchedAddressRows = computed(() => {
 })
 
 const matchedQsoRows = computed(() => {
-  if (!hasKeyword.value) {
+  if (!showAssociationColumns.value || !hasKeyword.value) {
     return []
   }
   const qsoIdSet = new Set(
@@ -301,7 +303,7 @@ const remarkRows = computed(() => {
   if (!hasKeyword.value) {
     return []
   }
-  return queriedCardRows.value.flatMap((item) => {
+  return matchedCardRows.value.flatMap((item) => {
     const cardId = item.id || '-'
     const prefix = `【${cardId}】`
     const createdRemark = item.createdRemarks?.trim() || '-'
@@ -481,7 +483,7 @@ const loadSourceData = async () => {
       listExtensions<CardRecordSpec, CardRecordStatus>(cardRecordPlural),
       listExtensions<AddressBookSpec>(addressBookPlural),
       listExtensions<BureauSpec>(bureauPlural),
-      listExtensions<QsoRecordSpec>(qsoRecordPlural),
+      showAssociationColumns.value ? listExtensions<QsoRecordSpec>(qsoRecordPlural) : Promise.resolve([]),
     ])
     let activityExtensions: QslExtension<OfflineActivitySpec>[] = []
     if (shouldLoadOfflineActivities.value) {
@@ -516,7 +518,8 @@ const loadSourceData = async () => {
     if (!hasKeyword.value && !hasAddressKeyword.value) {
       feedback.value = ''
     } else {
-      feedback.value = `查询完成：未制卡卡片 ${matchedCardRows.value.length} 条，关联QSO ${matchedQsoRows.value.length} 条，地址候选 ${matchedAddressRows.value.length} 条。`
+      const qsoFeedback = showAssociationColumns.value ? `，关联QSO ${matchedQsoRows.value.length} 条` : ''
+      feedback.value = `查询完成：未制卡卡片 ${matchedCardRows.value.length} 条${qsoFeedback}，地址候选 ${matchedAddressRows.value.length} 条。`
     }
   } catch (error) {
     feedback.value = `加载制卡签发数据失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -1005,7 +1008,7 @@ onMounted(loadSourceData)
       </div>
     </VCard>
 
-    <VCard title="关联QSO信息">
+    <VCard v-if="showAssociationColumns" title="关联QSO信息">
       <div class="qsl-table-wrap">
         <table class="qsl-table">
           <thead>

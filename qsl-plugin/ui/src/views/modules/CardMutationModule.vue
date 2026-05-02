@@ -106,6 +106,7 @@ const resourceKind = 'CardRecord'
 const qsoPlural = 'qso-records'
 const addressPlural = 'address-book-entries'
 const bureauPlural = 'bureau-entries'
+const NO_CARD_PLACEHOLDER_REMARK = '不创建卡片'
 
 const rows = ref<CardMutationItem[]>([])
 const qsoOptions = ref<OptionItem[]>([])
@@ -508,11 +509,20 @@ const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): CardM
   }
 }
 
+const isNoCardPlaceholder = (item: CardMutationItem): boolean => {
+  const resourceName = item.resourceName.trim().toLowerCase()
+  return resourceName.startsWith('no-card-')
+    && item.spec.businessRemarks.trim() === NO_CARD_PLACEHOLDER_REMARK
+    && item.spec.cardRemarks.trim() === NO_CARD_PLACEHOLDER_REMARK
+}
+
 const loadRows = async (options: { silent?: boolean } = {}) => {
   loading.value = true
   try {
     const extensions = await listExtensions<CardRecordSpec, CardRecordStatus>(resourcePlural)
-    rows.value = extensions.map((extension) => toRow(extension))
+    rows.value = extensions
+      .map((extension) => toRow(extension))
+      .filter((item) => !isNoCardPlaceholder(item))
     if (!options.silent) {
       feedback.value = ''
     }
