@@ -27,9 +27,7 @@ public class QslPublicExchangePageRenderService {
             remarks,
             false,
             embed,
-            embedId,
-            "",
-            ""
+            embedId
         );
     }
 
@@ -39,17 +37,13 @@ public class QslPublicExchangePageRenderService {
         String rawActivityId,
         String rawRemarks,
         boolean embed,
-        String rawEmbedId,
-        String rawStationAddress,
-        String rawStationEmail
+        String rawEmbedId
     ) {
         var callSign = normalizeCallSign(rawCallSign);
         var cardId = normalizeText(rawCardId, 128).toUpperCase(Locale.ROOT);
         var activityId = normalizeText(rawActivityId, 64);
         var remarks = normalizeText(rawRemarks, 500);
         var embedId = normalizeEmbedId(rawEmbedId);
-        var stationAddress = normalizeText(rawStationAddress, 200);
-        var stationEmail = normalizeText(rawStationEmail, 120);
         return renderInternal(
             callSign,
             cardId,
@@ -57,9 +51,7 @@ public class QslPublicExchangePageRenderService {
             remarks,
             true,
             embed,
-            embedId,
-            stationAddress,
-            stationEmail
+            embedId
         );
     }
 
@@ -70,9 +62,7 @@ public class QslPublicExchangePageRenderService {
         String remarks,
         boolean offlineMode,
         boolean embed,
-        String embedId,
-        String stationAddress,
-        String stationEmail
+        String embedId
     ) {
         var title = offlineMode ? "线下换卡确认" : "QSL 线上换卡申请";
         return BASE_TEMPLATE
@@ -89,8 +79,6 @@ public class QslPublicExchangePageRenderService {
             .replace("__CARD_ID_JS__", escapeJs(cardId))
             .replace("__ACTIVITY_ID_JS__", escapeJs(activityId))
             .replace("__REMARKS_JS__", escapeJs(remarks))
-            .replace("__STATION_ADDRESS_JS__", escapeJs(stationAddress))
-            .replace("__STATION_EMAIL_JS__", escapeJs(stationEmail))
             .replace("__OFFLINE_MODE__", Boolean.toString(offlineMode))
             .replace("__EMBED_MODE__", Boolean.toString(embed))
             .replace("__EMBED_ID__", escapeJs(embedId));
@@ -271,8 +259,6 @@ public class QslPublicExchangePageRenderService {
                 const EMBED_MODE = __EMBED_MODE__;
                 const EMBED_ID = "__EMBED_ID__";
                 const OFFLINE_MODE = __OFFLINE_MODE__;
-                const STATION_ADDRESS = "__STATION_ADDRESS_JS__";
-                const STATION_EMAIL = "__STATION_EMAIL_JS__";
                 const page = document.getElementById("qsl-page");
                 const form = document.getElementById("qsl-form");
                 const title = document.getElementById("qsl-title");
@@ -614,9 +600,9 @@ public class QslPublicExchangePageRenderService {
                       });
                       const result = await response.json();
                       const data = parseResult(result);
-                      const stationAddress = (data.stationAddress || STATION_ADDRESS || "").trim();
+                      const stationAddress = (data.stationAddress || "").trim();
                       success.textContent = stationAddress
-                        ? `提交成功。\\n本台通信地址\\n${stationAddress}`
+                        ? `提交成功。\\n${stationAddress}`
                         : "提交成功。";
                       success.style.display = "";
                     } else {
@@ -704,11 +690,7 @@ public class QslPublicExchangePageRenderService {
                     }
                   } catch (e) {
                     const message = e?.message || "提交失败";
-                    if (OFFLINE_MODE && STATION_EMAIL) {
-                      error.textContent = `${message}\\n本台电子邮件：${STATION_EMAIL}`;
-                    } else {
-                      error.textContent = message;
-                    }
+                    error.textContent = message;
                   } finally {
                     submitBtn.disabled = false;
                     submitBtn.textContent = OFFLINE_MODE ? "提交线下换卡确认" : "提交换卡申请";

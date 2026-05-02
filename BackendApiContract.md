@@ -203,7 +203,7 @@ API 版本：`v1alpha1`
 | GET | `/exchange-online/-/station-cards` | 公开线上换卡本台卡片版本候选，按配置顺序返回图案、版本号、版本总量、库存余量 | 是 |
 | GET | `/exchange-offline/-/activities` | 公开线下活动列表 | 是 |
 | POST | `/exchange-online/-/requests` | 匿名提交线上换卡申请 | 是 |
-| POST | `/exchange-offline/-/confirm` | 匿名确认线下换卡 | 是 |
+| POST | `/exchange-offline/-/confirm` | 匿名确认线下换卡；提交校验通过并写入卡片后才返回本站通信地址 | 是 |
 | POST | `/receipt-public/-/confirm` | 匿名签收确认 | 是 |
 
 ### 7.2 公开页面
@@ -217,6 +217,8 @@ API 版本：`v1alpha1`
 | GET | `/ONLINE_EYEBALL/{cardId}` | 线上换卡申请页面，按卡片编号与呼号二次校验后预填 |
 | GET | `/EYEBALL` | 线下换卡确认页面 |
 | GET | `/EYEBALL/{cardId}` | 线下换卡确认页面，按卡片编号预填 |
+
+线下换卡页面 HTML 不直接包含本站通信地址、收件人、电话或邮箱；本站联系信息只在 `POST /exchange-offline/-/confirm` 成功写入后随响应返回，用于页面展示提交成功后的寄送提示。
 
 ### 7.3 短码
 

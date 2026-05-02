@@ -91,17 +91,14 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
         var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("exchange-offline-page", clientIp)
-            .then(Mono.defer(publicApiService::getPublicStationContact))
-            .map(contact -> pageRenderService.renderOffline(
+            .then(Mono.fromSupplier(() -> pageRenderService.renderOffline(
                 callSign,
                 cardId,
                 activityId,
                 "",
                 embed,
-                embedId,
-                contact.stationAddress(),
-                contact.stationEmail()
-            ))
+                embedId
+            )))
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))
@@ -117,22 +114,15 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
         var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("exchange-offline-page", clientIp)
-            .then(publicApiService.getOfflineExchangePagePrefill(cardId)
-                .zipWith(publicApiService.getPublicStationContact()))
-            .map(tuple -> {
-                var prefill = tuple.getT1();
-                var contact = tuple.getT2();
-                return pageRenderService.renderOffline(
-                    prefill.callSign(),
-                    prefill.cardId(),
-                    prefill.activityId(),
-                    "",
-                    embed,
-                    embedId,
-                    contact.stationAddress(),
-                    contact.stationEmail()
-                );
-            })
+            .then(publicApiService.getOfflineExchangePagePrefill(cardId))
+            .map(prefill -> pageRenderService.renderOffline(
+                prefill.callSign(),
+                prefill.cardId(),
+                prefill.activityId(),
+                "",
+                embed,
+                embedId
+            ))
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))

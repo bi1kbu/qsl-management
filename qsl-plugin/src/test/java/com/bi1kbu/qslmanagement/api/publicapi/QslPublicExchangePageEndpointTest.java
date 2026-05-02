@@ -2,6 +2,7 @@ package com.bi1kbu.qslmanagement.api.publicapi;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -75,9 +76,7 @@ class QslPublicExchangePageEndpointTest {
         var renderService = mock(QslPublicExchangePageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(publicApiService.getPublicStationContact())
-            .thenReturn(Mono.just(new QslPublicApiService.PublicStationContact("北京市测试路1号", "test@example.com")));
-        when(renderService.renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002", "北京市测试路1号", "test@example.com"))
+        when(renderService.renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002"))
             .thenReturn("<html><body>线下换卡页</body></html>");
 
         var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
@@ -91,7 +90,8 @@ class QslPublicExchangePageEndpointTest {
             .expectBody(String.class)
             .isEqualTo("<html><body>线下换卡页</body></html>");
 
-        verify(renderService).renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002", "北京市测试路1号", "test@example.com");
+        verify(publicApiService, never()).getPublicStationContact();
+        verify(renderService).renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002");
     }
 
     @Test
@@ -103,9 +103,7 @@ class QslPublicExchangePageEndpointTest {
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
         when(publicApiService.getOfflineExchangePagePrefill("C1001"))
             .thenReturn(Mono.just(new QslPublicApiService.PublicOfflineExchangePagePrefill("C1001", "BI1KBU", "202604ACT01", "")));
-        when(publicApiService.getPublicStationContact())
-            .thenReturn(Mono.just(new QslPublicApiService.PublicStationContact("北京市测试路1号", "test@example.com")));
-        when(renderService.renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003", "北京市测试路1号", "test@example.com"))
+        when(renderService.renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003"))
             .thenReturn("<html><body>线下换卡页-按卡片回填</body></html>");
 
         var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
@@ -120,7 +118,8 @@ class QslPublicExchangePageEndpointTest {
             .isEqualTo("<html><body>线下换卡页-按卡片回填</body></html>");
 
         verify(publicApiService).getOfflineExchangePagePrefill("C1001");
-        verify(renderService).renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003", "北京市测试路1号", "test@example.com");
+        verify(publicApiService, never()).getPublicStationContact();
+        verify(renderService).renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003");
     }
 
     @Test
