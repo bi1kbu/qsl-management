@@ -267,6 +267,10 @@ const pagedFilteredResults = computed(() => {
   return filteredResults.value.slice(start, start + pageSize.value)
 })
 
+const isFormalCardRecordName = (resourceName: string): boolean => {
+  return /^C\d+$/i.test(resourceName.trim())
+}
+
 watch(results, () => {
   const nameSet = new Set(results.value.map((item) => item.resourceName))
   selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => nameSet.has(name))
@@ -428,6 +432,7 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
     results.value = extensions
       .map((extension) => toReceiveResult(extension))
       .filter((item) => normalizedSceneTypes.value.includes(normalizeSceneType(item.spec.sceneType, item.spec.cardType)))
+      .filter((item) => isFormalCardRecordName(item.resourceName))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
     if (!options.silent && results.value.length) {

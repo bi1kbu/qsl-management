@@ -35,6 +35,49 @@ spec:
 apiVersion: notification.halo.run/v1alpha1
 kind: ReasonType
 metadata:
+  name: qsl-exchange-reviewed
+  labels:
+    halo.run/hidden: "true"
+spec:
+  displayName: "QSL 换卡审核通知"
+  description: "当线上换卡申请完成审核后触发，用于发送审核结果邮件通知。"
+  properties:
+    - name: callSign
+      type: string
+    - name: reviewStatus
+      type: string
+    - name: reviewReason
+      type: string
+      optional: true
+    - name: requestName
+      type: string
+    - name: cardVersion
+      type: string
+      optional: true
+    - name: addressMode
+      type: string
+    - name: bureauName
+      type: string
+      optional: true
+    - name: postalCode
+      type: string
+      optional: true
+    - name: address
+      type: string
+      optional: true
+    - name: remarks
+      type: string
+      optional: true
+    - name: targetEmail
+      type: string
+    - name: triggerAt
+      type: string
+    - name: operator
+      type: string
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: ReasonType
+metadata:
   name: qsl-card-sent
   labels:
     halo.run/hidden: "true"
@@ -99,4 +142,3 @@ spec:
       type: string
     - name: operator
       type: string
-

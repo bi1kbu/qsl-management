@@ -51,6 +51,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/mail-receive-confirms/confirm"), this::confirmMailReceive)
             .andRoute(POST("/exchange-requests/{name}/approve"), this::approveExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/reject"), this::rejectExchangeRequest)
+            .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
             .andRoute(POST("/notification-mails/send"), this::sendNotificationMail)
             .andRoute(POST("/notification-mails/batch-send"), this::batchSendNotificationMail)
             .andRoute(POST("/imports/precheck"), this::importPrecheck)
@@ -131,6 +132,19 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp()
                 )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> notifyExchangeRequest(ServerRequest request) {
+        var requestName = request.pathVariable("name");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> notificationMailService.sendExchangeReviewMail(
+                requestName,
+                authenticatedOperator.name(),
+                authenticatedOperator.clientIp(),
+                "换卡申请审核-手动发送"
+            ))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

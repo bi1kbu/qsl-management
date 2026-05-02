@@ -36,10 +36,10 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
 
     @Override
     public RouterFunction<ServerResponse> endpoint() {
-        return route(GET("/exchange-online"), this::renderOnlineExchangePageByQuery)
-            .andRoute(GET("/exchange-online/{cardId}"), this::renderOnlineExchangePageByCardId)
-            .andRoute(GET("/exchange-offline"), this::renderOfflineExchangePageByQuery)
-            .andRoute(GET("/exchange-offline/{cardId}"), this::renderOfflineExchangePageByCardId);
+        return route(GET("/ONLINE_EYEBALL"), this::renderOnlineExchangePageByQuery)
+            .andRoute(GET("/ONLINE_EYEBALL/{cardId}"), this::renderOnlineExchangePageByCardId)
+            .andRoute(GET("/EYEBALL"), this::renderOfflineExchangePageByQuery)
+            .andRoute(GET("/EYEBALL/{cardId}"), this::renderOfflineExchangePageByCardId);
     }
 
     @Override

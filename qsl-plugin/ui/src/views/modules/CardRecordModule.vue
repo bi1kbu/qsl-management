@@ -3,6 +3,7 @@ import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
+  createResourceName,
   deleteExtension,
   getExtensionOrNull,
   listExtensions,
@@ -265,6 +266,7 @@ const systemSettingPlural = 'system-settings'
 const systemSettingName = 'qsl-system-setting-default'
 const offlineActivityPlural = 'offline-activities'
 const DAILY_OFFLINE_ACTIVITY_NAME = '日常换卡'
+const NO_CARD_PLACEHOLDER_REMARK = '不创建卡片'
 
 const selectedQso = computed(() => {
   if (!form.qsoRecordName.trim()) {
@@ -276,6 +278,9 @@ const selectedQso = computed(() => {
 const showQsoSelector = computed(() => form.cardType !== 'EYEBALL')
 const isOfflineExchangeScene = computed(() => {
   return normalizedSceneTypes.value.length === 1 && normalizedSceneTypes.value[0] === 'EYEBALL'
+})
+const allowDeleteCardRecord = computed(() => {
+  return isOfflineExchangeScene.value || normalizedSceneTypes.value.includes('QSO') || normalizedSceneTypes.value.includes('SWL')
 })
 const dateTimeRequired = computed(() => {
   return form.cardType === 'EYEBALL' && !isOfflineExchangeScene.value
@@ -362,14 +367,40 @@ const batchEditFields = computed(() => {
   ] as const
 })
 
+const isNoCardPlaceholder = (item: CardRecordItem): boolean => {
+  return (
+    item.qsoRecordName.trim().length > 0
+    && !item.cardVersion.trim()
+    && !item.cardDate.trim()
+    && !item.cardTime.trim()
+    && item.spec.businessRemarks.trim() === NO_CARD_PLACEHOLDER_REMARK
+  )
+}
+
+const getCardRecordDisplayName = (item: CardRecordItem): string => {
+  if (isNoCardPlaceholder(item)) {
+    return item.qsoRecordName ? `未编号记录（关联记录 ${item.qsoRecordName}）` : '未编号记录'
+  }
+  return item.resourceName
+}
+
+const isQsoRecordConsumed = (qsoRecordName: string, excludedResourceName = ''): boolean => {
+  const normalizedName = qsoRecordName.trim()
+  if (!normalizedName) {
+    return false
+  }
+  return records.value.some((item) => {
+    return item.resourceName !== excludedResourceName && item.qsoRecordName.trim() === normalizedName
+  })
+}
+
 const filteredQsoRecords = computed(() => {
   const keyword = qsoFilter.value.trim().toUpperCase()
-  if (!keyword) {
-    return qsoRecords.value.slice(0, 50)
-  }
-
   return qsoRecords.value
-    .filter((item) => item.callSign.toUpperCase().includes(keyword) || item.id.toUpperCase().includes(keyword))
+    .filter((item) => !isQsoRecordConsumed(item.id, editingResourceName.value))
+    .filter((item) => {
+      return !keyword || item.callSign.toUpperCase().includes(keyword) || item.id.toUpperCase().includes(keyword)
+    })
     .slice(0, 50)
 })
 
@@ -969,8 +1000,8 @@ const fillFormFromRecord = (item: CardRecordItem) => {
   form.addressEntryName = item.addressEntryName
   form.cardDate = item.cardDate
   form.cardTime = item.cardTime
-  form.businessRemarks = item.spec.businessRemarks
-  form.cardRemarks = item.cardRemarks
+  form.businessRemarks = isNoCardPlaceholder(item) ? '' : item.spec.businessRemarks
+  form.cardRemarks = isNoCardPlaceholder(item) ? '' : item.cardRemarks
   const normalizedVersions = item.cardType === 'EYEBALL'
     ? normalizeCardVersions(splitCardVersions(item.cardVersion))
     : []
@@ -1059,6 +1090,76 @@ const clearSelectedQso = () => {
   form.cardTime = ''
 }
 
+const markQsoAsNoCard = async (item: QsoRecordItem) => {
+  if (isQsoRecordConsumed(item.id)) {
+    feedback.value = `关联记录 ${item.id} 已创建过卡片或已标记不创建卡片。`
+    return
+  }
+
+  saving.value = true
+  try {
+    const resourceName = createResourceName('no-card')
+    await createExtension<CardRecordSpec>(resourcePlural, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: resourceName,
+      },
+      spec: {
+        callSign: item.callSign.trim().toUpperCase(),
+        cardType: form.cardType,
+        sceneType: resolveSceneTypeByCardType(form.cardType),
+        cardVersion: '',
+        qsoRecordName: item.id,
+        offlineActivityName: '',
+        addressEntryName: '',
+        cardDate: '',
+        cardTime: '',
+        businessRemarks: NO_CARD_PLACEHOLDER_REMARK,
+        createdRemarks: '',
+        sentRemarks: '',
+        receivedRemarks: '',
+        publicReceiptRemarks: '',
+        cardRemarks: NO_CARD_PLACEHOLDER_REMARK,
+        cardSent: false,
+        cardIssued: false,
+        envelopePrinted: false,
+        cardReceived: false,
+        receiptConfirmed: false,
+        cardIssuedAt: '',
+        sentAt: '',
+        receivedAt: '',
+        createdMailStatus: '',
+        createdMailSentAt: '',
+        createdMailLastError: '',
+        sentMailStatus: '',
+        sentMailSentAt: '',
+        sentMailLastError: '',
+        receivedMailStatus: '',
+        receivedMailSentAt: '',
+        receivedMailLastError: '',
+        mailTargetEmail: '',
+        receivedRecordCodes: '',
+      },
+    })
+
+    await appendQslAuditLog({
+      action: '标记不创建卡片',
+      resourceType: 'card-record',
+      resourceName,
+      detail: `关联记录=${item.id}，呼号=${item.callSign || '-'}`,
+    })
+
+    await loadCardRecords({ silent: true })
+    closeQsoSelector()
+    feedback.value = `已将关联记录 ${item.id} 标记为不创建卡片。`
+  } catch (error) {
+    feedback.value = `标记不创建卡片失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    saving.value = false
+  }
+}
+
 watch(
   () => form.cardType,
   (cardType) => {
@@ -1095,7 +1196,7 @@ const startEditRecord = (item: CardRecordItem) => {
   } else {
     activeFunctionTab.value = resolveDefaultCardType()
   }
-  feedback.value = `正在编辑卡片记录：${item.resourceName}`
+  feedback.value = `正在编辑卡片记录：${getCardRecordDisplayName(item)}`
 }
 
 const cancelEditRecord = () => {
@@ -1105,14 +1206,18 @@ const cancelEditRecord = () => {
 }
 
 const removeCardRecord = async (item: CardRecordItem) => {
-  const firstConfirmed = window.confirm(`确认删除卡片记录 ${item.resourceName} 吗？`)
+  const displayName = getCardRecordDisplayName(item)
+  const firstConfirmed = window.confirm(`确认删除卡片记录 ${displayName} 吗？`)
   if (!firstConfirmed) {
-    feedback.value = `已取消删除：${item.resourceName}`
+    feedback.value = `已取消删除：${displayName}`
     return
   }
-  const secondConfirmed = window.confirm(`二次确认：删除后卡片ID ${item.resourceName} 将作废且不可复用，是否继续？`)
+  const secondConfirmText = isNoCardPlaceholder(item)
+    ? `二次确认：删除后关联记录 ${item.qsoRecordName} 会重新进入创建卡片候选，是否继续？`
+    : `二次确认：删除后卡片ID ${item.resourceName} 将作废且不可复用，是否继续？`
+  const secondConfirmed = window.confirm(secondConfirmText)
   if (!secondConfirmed) {
-    feedback.value = `已取消删除：${item.resourceName}`
+    feedback.value = `已取消删除：${displayName}`
     return
   }
 
@@ -1129,12 +1234,21 @@ const removeCardRecord = async (item: CardRecordItem) => {
     if (editingResourceName.value === item.resourceName) {
       cancelEditRecord()
     }
-    feedback.value = `已删除卡片记录：${item.resourceName}`
+    feedback.value = `已删除卡片记录：${displayName}`
   } catch (error) {
     feedback.value = `删除卡片记录失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     saving.value = false
   }
+}
+
+const removeEditingCardRecord = async () => {
+  const target = records.value.find((item) => item.resourceName === editingResourceName.value)
+  if (!target) {
+    feedback.value = '未找到待删除的卡片记录，请刷新后重试。'
+    return
+  }
+  await removeCardRecord(target)
 }
 
 const clearHistorySelection = () => {
@@ -1363,6 +1477,15 @@ const saveCardRecord = async () => {
   }
 
   const qsoRecordName = showQsoSelector.value ? form.qsoRecordName.trim() : ''
+  if (showQsoSelector.value && !qsoRecordName) {
+    feedback.value = '请选择关联记录。'
+    return
+  }
+  if (showQsoSelector.value && isQsoRecordConsumed(qsoRecordName, editingResourceName.value)) {
+    feedback.value = `关联记录 ${qsoRecordName} 已创建过卡片或已标记不创建卡片。`
+    return
+  }
+
   const rawOfflineActivityName = showOfflineActivitySelect.value ? form.offlineActivityName.trim() : ''
   let offlineActivityName = rawOfflineActivityName
   let cardDate = lockCardDateTime.value ? selectedQso.value?.date || '' : form.cardDate
@@ -1417,6 +1540,35 @@ const saveCardRecord = async () => {
         businessRemarks: form.businessRemarks.trim(),
         cardRemarks: form.cardRemarks.trim(),
         envelopePrinted: target.spec.envelopePrinted,
+      }
+
+      if (isNoCardPlaceholder(target)) {
+        const nextCardResourceName = await allocateCardResourceName()
+        await createExtension<CardRecordSpec>(resourcePlural, {
+          apiVersion: qslApiVersion,
+          kind: resourceKind,
+          metadata: {
+            name: nextCardResourceName,
+          },
+          spec: nextSpec,
+        })
+        await deleteExtension(resourcePlural, target.resourceName)
+
+        await appendQslAuditLog({
+          action: '未编号记录转为正式卡片记录',
+          resourceType: 'card-record',
+          resourceName: nextCardResourceName,
+          detail: `${nextSpec.callSign} ${nextSpec.cardType}，原占位记录=${target.resourceName}`,
+        })
+
+        await Promise.all([
+          loadCardRecords({ silent: true }),
+          loadCardVersions(),
+        ])
+        editingResourceName.value = ''
+        resetForm()
+        feedback.value = `未编号记录已转为正式卡片记录：${nextCardResourceName}。`
+        return
       }
 
       await updateExtension<CardRecordSpec>(resourcePlural, target.resourceName, {
@@ -1602,7 +1754,7 @@ onBeforeUnmount(() => {
             <span class="qsl-field__label">关联记录 QSO_ID</span>
             <div class="qsl-form-inline">
               <div class="qsl-input-shell">
-                <input :value="form.qsoRecordName" type="text" placeholder="可选，点击右侧按钮选择" readonly />
+                <input :value="form.qsoRecordName" type="text" placeholder="必填，点击右侧按钮选择" readonly />
               </div>
               <VButton size="sm" type="secondary" :disabled="loading" @click="openQsoSelector">选择QSO</VButton>
               <VButton size="sm" :disabled="loading || !form.qsoRecordName" @click="clearSelectedQso">清空</VButton>
@@ -1663,6 +1815,14 @@ onBeforeUnmount(() => {
             isEditing ? '保存编辑' : '保存卡片记录'
           }}</VButton>
           <VButton v-if="isEditing" :disabled="loading || saving" @click="cancelEditRecord">取消编辑</VButton>
+          <VButton
+            v-if="isEditing"
+            type="danger"
+            :disabled="loading || saving"
+            @click="removeEditingCardRecord"
+          >
+            删除当前记录
+          </VButton>
           <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
         </div>
 
@@ -1731,7 +1891,12 @@ onBeforeUnmount(() => {
               <td>{{ item.freq || '-' }}</td>
               <td>{{ item.mode || '-' }}</td>
               <td>
-                <VButton size="xs" type="secondary" @click="selectQsoRecord(item)">选择</VButton>
+                <div class="qsl-row-actions">
+                  <VButton size="xs" type="secondary" :disabled="saving" @click="selectQsoRecord(item)">选择</VButton>
+                  <VButton size="xs" :disabled="saving || isQsoRecordConsumed(item.id)" @click="markQsoAsNoCard(item)">
+                    不创建卡片
+                  </VButton>
+                </div>
               </td>
             </tr>
             <tr v-if="!filteredQsoRecords.length">
@@ -1780,6 +1945,10 @@ onBeforeUnmount(() => {
         empty-text="暂无卡片记录。"
         @update:selected-keys="(value) => (selectedHistoryNames = value)"
       >
+        <template #cell-resourceName="{ row }">
+          {{ isNoCardPlaceholder(toHistoryItem(row)) ? '' : toHistoryItem(row).resourceName }}
+        </template>
+
         <template #cell-callSign="{ row }">
           <span class="qsl-row-clickable" @click="selectHistoryRowForQuery(toHistoryItem(row))">
             {{ toHistoryItem(row).callSign || '-' }}
@@ -1787,22 +1956,22 @@ onBeforeUnmount(() => {
         </template>
 
         <template #cell-cardDate="{ row }">
-          {{ toHistoryItem(row).cardDate || '-' }}
+          {{ isNoCardPlaceholder(toHistoryItem(row)) ? '' : (toHistoryItem(row).cardDate || '-') }}
         </template>
 
         <template #cell-cardTime="{ row }">
-          {{ toHistoryItem(row).cardTime || '-' }}
+          {{ isNoCardPlaceholder(toHistoryItem(row)) ? '' : (toHistoryItem(row).cardTime || '-') }}
         </template>
 
         <template #cell-cardVersion="{ row }">
-          {{ toHistoryItem(row).cardVersion || '未填' }}
+          {{ isNoCardPlaceholder(toHistoryItem(row)) ? '' : (toHistoryItem(row).cardVersion || '未填') }}
         </template>
 
         <template #row-actions="{ row }">
           <div class="qsl-row-actions">
             <VButton size="xs" @click="startEditRecord(toHistoryItem(row))">编辑</VButton>
             <VButton
-              v-if="isOfflineExchangeScene"
+              v-if="allowDeleteCardRecord"
               size="xs"
               type="danger"
               :disabled="saving || loading"

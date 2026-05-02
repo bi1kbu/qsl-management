@@ -33,6 +33,8 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
     @Override
     public RouterFunction<ServerResponse> endpoint() {
         return route(GET("/qso-public/records"), this::listPublicQso)
+            .andRoute(GET("/exchange-online/-/bureaus"), this::listOnlineBureaus)
+            .andRoute(GET("/exchange-online/-/station-cards"), this::listOnlineStationCards)
             .andRoute(GET("/exchange-offline/-/activities"), this::listOfflineActivities)
             .andRoute(POST("/exchange-online/-/requests"), this::submitExchangeRequest)
             .andRoute(POST("/exchange-offline/-/confirm"), this::confirmOfflineExchange)
@@ -67,9 +69,26 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
                     "",
                     "",
                     "",
+                    "",
                     ""
                 ))
                 .flatMap(payload -> publicApiService.submitExchangeRequest(payload, clientIp)))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> listOnlineBureaus(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        return publicRateLimitService.checkLimit("exchange-online-bureaus", clientIp)
+            .then(publicApiService.listPublicBureaus())
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> listOnlineStationCards(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        return publicRateLimitService.checkLimit("exchange-online-station-cards", clientIp)
+            .then(publicApiService.listPublicStationCards())
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

@@ -64,6 +64,8 @@ interface BindCandidateItem {
 interface CardRecordSpec {
   callSign: string
   addressEntryName: string
+  businessRemarks?: string
+  cardRemarks?: string
   [key: string]: unknown
 }
 
@@ -110,6 +112,7 @@ const resourcePlural = 'address-book-entries'
 const resourceKind = 'AddressBookEntry'
 const bureauPlural = 'bureau-entries'
 const cardRecordPlural = 'card-records'
+const NO_CARD_PLACEHOLDER_REMARK = '不创建卡片'
 const cardRecordKind = 'CardRecord'
 
 const normalizeCallSign = (value: string): string => {
@@ -341,6 +344,9 @@ const buildPendingBindings = (
   const grouped = new Map<string, { count: number; cardIds: string[] }>()
 
   cardExtensions.forEach((item) => {
+    if (isNoCardPlaceholder(item)) {
+      return
+    }
     const callSign = normalizeCallSign(item.spec?.callSign ?? '')
     const addressEntryName = (item.spec?.addressEntryName ?? '').trim()
     if (!callSign || addressEntryName) {
@@ -372,6 +378,17 @@ const buildPendingBindings = (
       }
       return a.callSign.localeCompare(b.callSign)
     })
+}
+
+const isNoCardPlaceholder = (item: QslExtension<CardRecordSpec>): boolean => {
+  const resourceName = item.metadata.name.trim().toLowerCase()
+  const businessRemarks = String(item.spec?.businessRemarks ?? '').trim()
+  const cardRemarks = String(item.spec?.cardRemarks ?? '').trim()
+  return (
+    resourceName.startsWith('no-card-')
+    || businessRemarks === NO_CARD_PLACEHOLDER_REMARK
+    || cardRemarks === NO_CARD_PLACEHOLDER_REMARK
+  )
 }
 
 const loadRows = async (options: { silent?: boolean } = {}) => {

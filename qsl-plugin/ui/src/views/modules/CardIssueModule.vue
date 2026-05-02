@@ -148,6 +148,7 @@ const normalizedSceneTypes = computed<SceneType[]>(() => {
 const shouldLoadOfflineActivities = computed(() => {
   return normalizedSceneTypes.value.includes('EYEBALL')
 })
+const showAssociationColumns = computed(() => !normalizedSceneTypes.value.includes('ONLINE_EYEBALL'))
 
 interface CardIssueAddressRow {
   id: string
@@ -323,6 +324,10 @@ const pendingIssueCardRows = computed(() => {
   })
 })
 
+const isFormalCardRecord = (row: CardIssueCardRow): boolean => {
+  return /^C\d+$/i.test(row.id.trim())
+}
+
 const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', {
     hour12: false,
@@ -488,6 +493,7 @@ const loadSourceData = async () => {
     }
     cardRows.value = cards.map((item) => toCardRow(item))
       .filter((item) => normalizedSceneTypes.value.includes(normalizeSceneType(item.spec.sceneType, item.spec.cardType)))
+      .filter((item) => isFormalCardRecord(item))
     addressRows.value = addresses.map((item) => toAddressRow(item))
     bureauRows.value = bureaus.map((item) => toBureauRow(item))
     qsoRows.value = qsos.map((item) => toQsoRow(item))
@@ -938,8 +944,8 @@ onMounted(loadSourceData)
               <th>呼号</th>
               <th>卡片类型</th>
               <th>卡片版本</th>
-              <th>关联QSO</th>
-              <th>关联活动</th>
+              <th v-if="showAssociationColumns">关联QSO</th>
+              <th v-if="showAssociationColumns">关联活动</th>
               <th>日期</th>
               <th>时间</th>
               <th>发卡</th>
@@ -954,8 +960,8 @@ onMounted(loadSourceData)
               <td>{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType || '-' }}</td>
               <td>{{ item.cardVersion || '-' }}</td>
-              <td>{{ item.qsoRecordName || '-' }}</td>
-              <td>{{ resolveActivityText(item) }}</td>
+              <td v-if="showAssociationColumns">{{ item.qsoRecordName || '-' }}</td>
+              <td v-if="showAssociationColumns">{{ resolveActivityText(item) }}</td>
               <td>{{ item.cardDate || '-' }}</td>
               <td>{{ item.cardTime || '-' }}</td>
               <td>{{ item.cardSent ? '是' : '否' }}</td>
@@ -964,10 +970,10 @@ onMounted(loadSourceData)
               <td>{{ item.addressEntryName || '-' }}</td>
             </tr>
             <tr v-if="!hasKeyword">
-              <td colspan="12" class="qsl-table-empty">请输入呼号进行查询。</td>
+              <td :colspan="showAssociationColumns ? 12 : 10" class="qsl-table-empty">请输入呼号进行查询。</td>
             </tr>
             <tr v-else-if="!matchedCardRows.length">
-              <td colspan="12" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
+              <td :colspan="showAssociationColumns ? 12 : 10" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
             </tr>
           </tbody>
         </table>

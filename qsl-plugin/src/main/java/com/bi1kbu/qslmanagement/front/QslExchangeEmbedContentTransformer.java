@@ -80,10 +80,10 @@ public class QslExchangeEmbedContentTransformer {
         if (offlineMode) {
             if (!cardId.isBlank()) {
                 uriBuilder = UriComponentsBuilder
-                    .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-offline")
+                    .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/EYEBALL")
                     .pathSegment(cardId);
             } else {
-                uriBuilder = UriComponentsBuilder.fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-offline");
+                uriBuilder = UriComponentsBuilder.fromPath("/apis/api.qsl-management.halo.run/v1alpha1/EYEBALL");
                 if (!callSign.isBlank()) {
                     uriBuilder.queryParam("cs", callSign);
                 }
@@ -94,11 +94,11 @@ public class QslExchangeEmbedContentTransformer {
         } else {
             if (!cardId.isBlank()) {
                 uriBuilder = UriComponentsBuilder
-                    .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-online")
+                    .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/ONLINE_EYEBALL")
                     .pathSegment(cardId);
             } else {
                 uriBuilder = UriComponentsBuilder
-                    .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/exchange-online");
+                    .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/ONLINE_EYEBALL");
             }
             if (!callSign.isBlank()) {
                 uriBuilder.queryParam("cs", callSign);

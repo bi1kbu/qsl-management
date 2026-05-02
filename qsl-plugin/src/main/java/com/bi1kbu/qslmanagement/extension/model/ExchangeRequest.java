@@ -20,6 +20,7 @@ public class ExchangeRequest extends QslBaseExtension<ExchangeRequest.ExchangeRe
     public static class ExchangeRequestSpec {
         private String sceneType;
         private String callSign;
+        private String cardVersion;
         private Boolean useBureau;
         private String bureauName;
         private String email;

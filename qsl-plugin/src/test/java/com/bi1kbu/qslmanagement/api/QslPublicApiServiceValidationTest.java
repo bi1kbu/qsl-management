@@ -37,7 +37,56 @@ class QslPublicApiServiceValidationTest {
             "13800000000",
             "510000",
             "广东省广州市",
-            "测试"
+            "测试",
+            "2026春季版"
+        );
+        var error = assertThrows(QslApiException.class, () -> service.submitExchangeRequest(command, "127.0.0.1").block());
+        assertEquals("QSL-400-0001", error.getCode());
+        assertEquals(400, error.getStatus().value());
+    }
+
+    @Test
+    void shouldRejectBlankPersonalAddressOnExchangeSubmit() {
+        var service = new QslPublicApiService(
+            Mockito.mock(ReactiveExtensionClient.class),
+            Mockito.mock(QslAuditService.class)
+        );
+
+        var command = new QslPublicApiService.PublicExchangeSubmitCommand(
+            "BI1KBU",
+            Boolean.FALSE,
+            "",
+            "",
+            "张三",
+            "",
+            "510000",
+            "广东省广州市",
+            "测试",
+            "2026春季版"
+        );
+        var error = assertThrows(QslApiException.class, () -> service.submitExchangeRequest(command, "127.0.0.1").block());
+        assertEquals("QSL-400-0001", error.getCode());
+        assertEquals(400, error.getStatus().value());
+    }
+
+    @Test
+    void shouldRejectBlankBureauAddressOnExchangeSubmit() {
+        var service = new QslPublicApiService(
+            Mockito.mock(ReactiveExtensionClient.class),
+            Mockito.mock(QslAuditService.class)
+        );
+
+        var command = new QslPublicApiService.PublicExchangeSubmitCommand(
+            "BI1KBU",
+            Boolean.TRUE,
+            "北京卡片局",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "测试",
+            "2026春季版"
         );
         var error = assertThrows(QslApiException.class, () -> service.submitExchangeRequest(command, "127.0.0.1").block());
         assertEquals("QSL-400-0001", error.getCode());

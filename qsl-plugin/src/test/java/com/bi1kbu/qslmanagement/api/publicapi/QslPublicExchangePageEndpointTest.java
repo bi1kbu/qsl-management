@@ -31,7 +31,7 @@ class QslPublicExchangePageEndpointTest {
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/exchange-online?cs=BI1KBU&r=ONLINE&embed=1&eid=embed-001")
+            .uri("/ONLINE_EYEBALL?cs=BI1KBU&r=ONLINE&embed=1&eid=embed-001")
             .exchange()
             .expectStatus().isOk()
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
@@ -57,7 +57,7 @@ class QslPublicExchangePageEndpointTest {
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/exchange-online/C1002?cs=BI1KBU&embed=1&eid=embed-004")
+            .uri("/ONLINE_EYEBALL/C1002?cs=BI1KBU&embed=1&eid=embed-004")
             .exchange()
             .expectStatus().isOk()
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
@@ -84,7 +84,7 @@ class QslPublicExchangePageEndpointTest {
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/exchange-offline?cs=BI1KBU&cid=C1001&aid=202604ACT01&r=OFFLINE&embed=1&eid=embed-002")
+            .uri("/EYEBALL?cs=BI1KBU&cid=C1001&aid=202604ACT01&r=OFFLINE&embed=1&eid=embed-002")
             .exchange()
             .expectStatus().isOk()
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
@@ -112,7 +112,7 @@ class QslPublicExchangePageEndpointTest {
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/exchange-offline/C1001?cs=SHOULD_NOT_USE&aid=IGNORE&embed=1&eid=embed-003")
+            .uri("/EYEBALL/C1001?cs=SHOULD_NOT_USE&aid=IGNORE&embed=1&eid=embed-003")
             .exchange()
             .expectStatus().isOk()
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)
@@ -139,7 +139,7 @@ class QslPublicExchangePageEndpointTest {
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
-            .uri("/exchange-online")
+            .uri("/ONLINE_EYEBALL")
             .exchange()
             .expectStatus().isEqualTo(HttpStatus.TOO_MANY_REQUESTS)
             .expectHeader().contentTypeCompatibleWith(MediaType.TEXT_HTML)

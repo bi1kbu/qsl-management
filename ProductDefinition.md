@@ -1,321 +1,229 @@
-# QSL卡片管理系统产品定义
+# QSL 卡片管理系统产品定义
+
+更新时间：2026-05-01  
+代码核验范围：`qsl-plugin` 后端、控制台前端、RBAC 模板与 `tools/CardPrint` 在线打印桥接  
+Halo 官方资料核验日期：2026-05-01
 
 ## 1. 产品一句话定义
 
-面向业余无线电场景的 QSO 记录与 QSL 卡片全流程管理产品，覆盖“记录、制卡、发卡、收卡、查询、申请、审计、统计”的业务闭环，并兼顾公开查询与隐私保护。
-
----
+面向业余无线电场景的 QSO/SWL、线上换卡、线下换卡与收卡闭环管理产品，覆盖“记录、制卡、发卡、送达确认、收卡编号、查询、申请、审计、统计、打印桥接”的可持久化业务流，并提供公开查询、换卡与签收页面。
 
 ## 2. 菜单组织
 
-零级菜单分组：QSL管理（左侧菜单分组名，不是可点击功能页面）
+零级菜单分组：`QSL管理`（左侧菜单分组名，不是可点击功能页面）。
+
+入口路由：`/qsl`，当前代码会重定向到第一个可用模块。
+
+当前一级菜单按 `qsl-plugin/ui/src/index.ts` 与 `qsl-plugin/ui/src/constants/menu-modules.ts` 生效：
+
+1. 总览
+2. 配置
+3. 通联业务
+4. 线上换卡业务
+5. 线下换卡业务
+6. 收卡业务
+7. 审计
+8. 数据
+
+### 2.0.1 页面展示约定
+
+1. 后台功能页不展示“前端权限定义”卡片与“页面状态”卡片。
+2. 权限定义、依赖关系与路由映射以本文件和 `qsl-menu-role-templates.yaml` 为准。
+3. 页面状态与实现进度通过输出性文档记录，不在页面内重复展示。
+4. 支持详情展开的表格页面统一采用整行点击展开；行内按钮需阻止冒泡。
+5. 同一业务组件可按 `sceneTypes/defaultSceneType/defaultCardType` 复用到不同菜单场景。
+
+### 2.0.2 菜单与路由映射
 
-入口路由：`/qsl`（仅重定向到默认功能页）
+| 一级菜单 | 二级菜单 | 控制台路由 | 权限节点 |
+| --- | --- | --- | --- |
+| 总览 | 总览看板 | `/qsl/overview/overview-dashboard` | `overview-dashboard` |
+| 配置 | 系统参数 | `/qsl/settings/system-settings` | `system-settings` |
+| 配置 | 通信地址 | `/qsl/settings/station-profile` | `station-profile` |
+| 配置 | 本台设备 | `/qsl/settings/station-equipment` | `station-profile` |
+| 配置 | 本台卡片 | `/qsl/settings/station-card` | `station-profile` |
+| 通联业务 | 通联日志 | `/qsl/traffic-business/qso-record` | `qso-record` |
+| 通联业务 | 创建卡片 | `/qsl/traffic-business/card-record` | `card-record` |
+| 通联业务 | 制卡签发 | `/qsl/traffic-business/card-issue` | `card-issue` |
+| 通联业务 | 发信确认 | `/qsl/traffic-business/mail-send-confirm` | `mail-send-confirm` |
+| 通联业务 | 送达确认 | `/qsl/traffic-business/mail-receive-confirm` | `mail-receive-confirm` |
+| 线上换卡业务 | 换卡申请审核 | `/qsl/online-exchange-business/online-exchange-request-review` | `exchange-request-review` |
+| 线上换卡业务 | 创建卡片 | `/qsl/online-exchange-business/online-card-record` | `card-record` |
+| 线上换卡业务 | 制卡签发 | `/qsl/online-exchange-business/online-card-issue` | `card-issue` |
+| 线上换卡业务 | 发信确认 | `/qsl/online-exchange-business/online-mail-send-confirm` | `mail-send-confirm` |
+| 线上换卡业务 | 送达确认 | `/qsl/online-exchange-business/online-delivery-confirm` | `mail-receive-confirm` |
+| 线下换卡业务 | 创建活动 | `/qsl/offline-exchange-business/offline-activity` | `exchange-request-review` |
+| 线下换卡业务 | 创建卡片 | `/qsl/offline-exchange-business/offline-card-record` | `card-record` |
+| 线下换卡业务 | 制卡签发 | `/qsl/offline-exchange-business/offline-card-issue` | `card-issue` |
+| 线下换卡业务 | 送达确认 | `/qsl/offline-exchange-business/offline-delivery-confirm` | `mail-receive-confirm` |
+| 收卡业务 | 通联收卡 | `/qsl/receive-business/receive-qso` | `mail-receive-confirm` |
+| 收卡业务 | 线上换卡收卡 | `/qsl/receive-business/receive-online-eyeball` | `mail-receive-confirm` |
+| 收卡业务 | 线下换卡收卡 | `/qsl/receive-business/receive-eyeball` | `mail-receive-confirm` |
+| 收卡业务 | 卡片异动 | `/qsl/receive-business/card-mutation` | `card-mutation` |
+| 审计 | 通联记录查询 | `/qsl/audit/qso-query` | `qso-query` |
+| 审计 | 卡片记录查询 | `/qsl/audit/card-query` | `card-query` |
+| 审计 | 收卡记录查询 | `/qsl/audit/receive-record-query` | `card-query` |
+| 审计 | 统计报表 | `/qsl/audit/report-auditlog` | `report-auditlog` |
+| 审计 | 审计日志 | `/qsl/audit/audit-log` | `report-auditlog` |
+| 数据 | 地址管理 | `/qsl/data/address-management` | `address-bureau` |
+| 数据 | 卡片局管理 | `/qsl/data/bureau-management` | `address-bureau` |
+| 数据 | 设备库维护 | `/qsl/data/equipment-catalog` | `equipment-catalog` |
+| 数据 | 导入导出 | `/qsl/data/import-export` | `import-export` |
 
-一级菜单：总览、配置、业务、审核、审计、数据
+权限节点实际 UI 权限名统一为 `plugin:qsl-management:<权限节点>:view` 与 `plugin:qsl-management:<权限节点>:edit`。
 
-二级菜单：一级菜单下的具体功能页（如总览看板、系统参数、通联记录等）
+## 3. 业务场景
 
-说明：当前实现中，左侧展示结构为“QSL管理分组 -> 一级菜单 -> 二级菜单”。
+### 3.1 场景主字段
 
-### 2.0.1 页面展示约定（已落地）
+当前持久化模型使用 `sceneType` 区分业务场景：
 
-1. 后台功能页不再展示“前端权限定义”卡片与“页面状态”卡片，避免向最终用户暴露实现细节。  
-2. 权限定义、依赖关系与路由映射统一以本文档 `2.0 菜单与路由映射` 和 `4.2 权限节点` 为准。  
-3. 页面状态与实现进度统一通过输出性文档记录（如 `plan.md`、`场景流程验证汇总.md`），不在页面内重复展示。
-4. 对于支持“详情展开”的表格页面，统一采用“整行可点击展开”的交互：  
-   4.1 不再使用单独“展开/收起”按钮。  
-   4.2 同时仅允许一个条目展开（单开模式）；点击新条目时，自动折起当前条目并展开新条目。  
-   4.3 详情内容以表格内“详情行”形式展示，不切换到列表卡片样式。  
-   4.4 行内操作按钮（如同意/拒绝）需阻止冒泡，避免误触发行展开。
+1. `QSO`：通联业务 QSO。
+2. `SWL`：通联业务 SWL。
+3. `ONLINE_EYEBALL`：线上换卡。
+4. `EYEBALL`：线下换卡。
 
-### 2.0 菜单与路由映射
+`QsoRecord.spec.sceneType`、`CardRecord.spec.sceneType`、`ExchangeRequest.spec.sceneType` 已按当前代码落地。
 
-| 一级菜单 | 二级菜单 | 控制台路由 | 只读节点 | 编辑节点 | 备注 |
-| --- | --- | --- | --- | --- | --- |
-| 总览 | 总览看板 | `/qsl/overview/overview-dashboard` | `plugin:qsl-management:overview-dashboard:view` | `plugin:qsl-management:overview-dashboard:edit` | 独立节点 |
-| 配置 | 系统参数 | `/qsl/settings/system-settings` | `plugin:qsl-management:system-settings:view` | `plugin:qsl-management:system-settings:edit` | 独立节点 |
-| 配置 | 通信地址 | `/qsl/settings/station-profile` | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | 与“本台设备/本台卡片”共用节点 |
-| 配置 | 本台设备 | `/qsl/settings/station-equipment` | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | 与“通信地址/本台卡片”共用节点 |
-| 配置 | 本台卡片 | `/qsl/settings/station-card` | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | 与“通信地址/本台设备”共用节点 |
-| 业务 | 通联记录 | `/qsl/business/qso-record` | `plugin:qsl-management:qso-record:view` | `plugin:qsl-management:qso-record:edit` | 独立节点 |
-| 业务 | 卡片记录 | `/qsl/business/card-record` | `plugin:qsl-management:card-record:view` | `plugin:qsl-management:card-record:edit` | 独立节点 |
-| 业务 | 发信确认 | `/qsl/business/mail-send-confirm` | `plugin:qsl-management:mail-send-confirm:view` | `plugin:qsl-management:mail-send-confirm:edit` | 独立节点 |
-| 业务 | 收信确认 | `/qsl/business/mail-receive-confirm` | `plugin:qsl-management:mail-receive-confirm:view` | `plugin:qsl-management:mail-receive-confirm:edit` | 独立节点 |
-| 审核 | 换卡申请 | `/qsl/review/exchange-request-review` | `plugin:qsl-management:exchange-request-review:view` | `plugin:qsl-management:exchange-request-review:edit` | 独立节点 |
-| 审计 | 通联记录查询 | `/qsl/audit/qso-query` | `plugin:qsl-management:qso-query:view` | `plugin:qsl-management:qso-query:edit` | 独立节点 |
-| 审计 | 卡片记录查询 | `/qsl/audit/card-query` | `plugin:qsl-management:card-query:view` | `plugin:qsl-management:card-query:edit` | 独立节点 |
-| 审计 | 统计报表 | `/qsl/audit/report-auditlog` | `plugin:qsl-management:report-auditlog:view` | `plugin:qsl-management:report-auditlog:edit` | 与“审计日志”共用节点 |
-| 审计 | 审计日志 | `/qsl/audit/audit-log` | `plugin:qsl-management:report-auditlog:view` | `plugin:qsl-management:report-auditlog:edit` | 与“统计报表”共用节点 |
-| 数据 | 地址管理 | `/qsl/data/address-management` | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 与“卡片局管理”共用节点 |
-| 数据 | 卡片局管理 | `/qsl/data/bureau-management` | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 与“地址管理”共用节点 |
-| 数据 | 设备库维护 | `/qsl/data/equipment-catalog` | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:equipment-catalog:edit` | 独立节点 |
-| 数据 | 导入导出 | `/qsl/data/import-export` | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | 页内拆分“导入板块/导出板块” |
+### 3.2 总览
 
-### 2.1 总览
+总览看板通过控制台接口聚合统计，覆盖 QSO、卡片、待发、已发、签收、已收等指标。公开侧也提供匿名总览读取接口。
 
-总览看板是统计报表的可视化表现形式，包括QSO总数、眼球总数、卡片总数、待发卡片（数）、已发卡片（数）、发卡签收（数）、已收卡片（数）
+### 3.3 配置
 
-### 2.2 配置
+系统参数当前包括：
 
-配置页包括以下内容：系统参数、通信地址、本台设备、本台卡片
+1. `guestQueryPerMinute`：匿名公开接口每分钟限流阈值。
+2. `requiresExchangeReview`：线上换卡申请是否需要审核。
+3. `autoNotifyOnCardCreated`、`autoNotifyOnCardSent`、`autoNotifyOnCardReceived`：制卡、发卡、收卡节点邮件自动通知开关。
+4. `cardRecordSequence`：卡片编号序列。
+5. `receiveRecordSequence`：收卡编号序列。
 
-#### 系统参数
+通信地址、本台设备、本台卡片分别落在 `StationProfile`、`StationEquipment`、`StationCard` 扩展资源中。
 
-​	**游客每分钟查询次数**：*整数*，用于限制单IP每分钟通过前台卡片访问后端接口的频率
+### 3.4 通联业务
 
-​	**换卡是否需要审核**：*布尔值*，用于控制游客在前台填写换卡申请后自动通过审核还是需要人工审核
+通联业务包含通联日志、创建卡片、制卡签发、发信确认、送达确认。
 
-#### 通信地址
+1. 通联日志支持 `QSO/SWL` 场景切换，字段落在 `QsoRecord.spec`。
+2. 创建卡片必须关联 QSO/SWL 记录，候选列表排除已写入 `CardRecord.spec.qsoRecordName` 的记录；若选择“不创建卡片”，写入不占用 `C{序号}` 的占位 `CardRecord`，该记录后续不再出现在候选列表中。卡片记录清单支持编辑与删除；编辑占位记录并保存时会重新分配正式卡片编号。
+3. 制卡签发只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，不显示“不创建卡片”的无编号占位记录；确认制卡更新 `CardRecord.spec.cardIssued/cardIssuedAt`，信封打印或打包状态使用 `envelopePrinted`。
+4. 发信确认只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，调用控制台接口更新 `cardSent/sentAt`，并可触发发卡邮件通知。
+5. 送达确认只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，调用控制台接口按 `callSign + cardType + sceneType` 匹配卡片；未匹配时按业务规则自动补建记录。
 
-​	**本台呼号（My_Call_Sign）**
+### 3.5 线上换卡业务
 
-​	**姓名（My_Name）**
+线上换卡业务包含换卡申请审核、创建卡片、制卡签发、发信确认、送达确认。
 
-​	**电话（My_Telephone）**
+1. 前台匿名提交线上换卡申请写入 `ExchangeRequest`，`sceneType=ONLINE_EYEBALL`；公开表单先填写呼号，再从本台卡片版本列表选择最多两张卡片，页面按 `StationCard.spec.sortOrder` 展示卡片图案、版本号、版本总量和库存余量，随后选择“个人地址”或“卡片局地址”，地址类型默认不选。
+2. 个人地址模式填写姓名、电话、邮编、通信地址，电子邮箱可选；卡片局地址模式从 `BureauEntry` 候选选择已有卡片局，或填写新的卡片局名称、邮编、地址。新的卡片局仅随本次申请保存，不由匿名接口写入卡片局管理主数据。
+3. 后台审核通过后自动创建 `ONLINE_EYEBALL` 场景卡片，并把 `ExchangeRequest.spec.cardVersion` 写入新建 `CardRecord.spec.cardVersion`；同时根据申请中的个人地址或卡片局地址复用/创建地址资源，并写入 `CardRecord.spec.addressEntryName`。
+4. 换卡申请审核在同意或拒绝后显示“发送邮件通知”和“修改”操作；邮件通知面向 `ExchangeRequest.spec.email`，无邮箱时按跳过处理；修改操作可调整申请信息与审核状态，并可删除本条换卡申请记录。
+5. 后续流程复用创建卡片、制卡签发、发信确认、送达确认组件。
 
-​	**邮编（My_Postal_Code）**
+### 3.6 线下换卡业务
 
-​	**收件地址（My_Address）**
+线下换卡业务包含创建活动、创建卡片、制卡签发、送达确认。
 
-​	**电子邮件（My_E-mail）**
+1. 创建活动写入 `OfflineActivity`。
+2. 线下创建卡片可关联 `offlineActivityName`，允许先生成待填写呼号的活动卡片。
+3. 线下送达确认允许补录呼号并触发对应状态变化。
 
-​	**备注（Station_Remarks）**
+### 3.7 收卡业务
 
-#### 本台设备（二维字典）
+收卡业务包含通联收卡、线上换卡收卡、线下换卡收卡、卡片异动。
 
-​	**设备（My_RIG）**：通过新增按钮可将设备库中的设备标记为本站已持有，并在通联记录时使用
+1. 三类收卡菜单复用送达确认组件，以 `sceneType` 限定业务范围。
+2. 收卡编号写入 `CardRecord.spec.receivedRecordCodes`，允许同一卡片关联多个收卡编号。
+3. 卡片异动提供卡片记录修正能力，权限节点为 `card-mutation`。
 
-​		**天线（My_RIG_ANT）**：与设备相关联，通过新增按钮可将设备库中的天线标记为本台设备可用，并在通联记录时使用
+### 3.8 审计与数据
 
-​		**功率（My_RIG_PWR）**：与设备相关联，通过新增按钮可将设备库中的功率候选标记为本台设备可用，并在通联记录时使用
+审计包含通联记录查询、卡片记录查询、收卡记录查询、统计报表、审计日志。写操作通过 `QslAuditLog` 追加记录。
 
-​		**模式（My_RIG_MODE）**：与设备相关联，通过新增按钮可将设备库中的模式标记为本台设备可用，并在通联记录时使用
+数据包含地址管理、卡片局管理、设备库维护、导入导出。导入导出当前由服务端执行预检、导入、导出任务，并持久化 `ImportExportJob`。
 
-#### 本台卡片
+## 4. 前台公开能力
 
-​	上传图片，并给图片添加 卡片版本（Card_Version）名称
+公开接口 API Group：`api.qsl-management.halo.run/v1alpha1`。
 
-### 2.3 业务
+当前公开页面与短码：
 
-#### 通联记录
+| 能力 | 公开页面 | 短码 |
+| --- | --- | --- |
+| 公开查询 | `/apis/api.qsl-management.halo.run/v1alpha1/cards/page` | `[qsl-card]` |
+| 线上换卡申请 | `/apis/api.qsl-management.halo.run/v1alpha1/ONLINE_EYEBALL`、`/apis/api.qsl-management.halo.run/v1alpha1/ONLINE_EYEBALL/{cardId}` | `[qsl-online-exchange-card]` |
+| 线下换卡确认 | `/apis/api.qsl-management.halo.run/v1alpha1/EYEBALL`、`/apis/api.qsl-management.halo.run/v1alpha1/EYEBALL/{cardId}` | `[qsl-offline-exchange-card]` |
+| 公开签收 | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public`、`/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/{cardId}` | `[qsl-receipt-card]` |
 
-​	用于记录与其他电台产生的QSO，包括：
+当前公开数据接口：
 
-​	**基本信息**
+1. `GET /qso-public/records`
+2. `GET /overview-public/summary`
+3. `GET /exchange-online/-/bureaus`
+4. `GET /exchange-offline/-/activities`
+5. `POST /exchange-online/-/requests`
+6. `POST /exchange-offline/-/confirm`
+7. `POST /receipt-public/-/confirm`
 
-​		**日期（DATE）**：Y-M-D 格式
+公开接口允许匿名访问，但必须通过输入校验与限流。限流维度为 `endpoint + clientIp`，阈值来自 `SystemSetting.spec.guestQueryPerMinute`，未配置时使用默认值 `30`。
 
-​		**时间（TIME）**：HHmm 格式
+## 5. 角色模型与权限节点
 
-​		**时区（TIMEZONE）**：UTC或UTC+8二选一
+### 5.1 角色模型
 
-​		**是否实时**：非字段，复选框，勾选后将日期时间时区的输入框设置为实时的UTC时间，并每分钟跳动
+1. 游客：仅可访问聚合到 `anonymous` 的公开页面与公开接口。
+2. HAM 用户、操作员：当前仅保留业务规划，不作为一期差异化授权落地。
+3. 管理员/超级管理员：当前后台能力的主要使用对象。
 
-​		**频率（FREQ）**：文本型
+### 5.2 权限设计原则
 
-​		**设备（My_RIG）**：下拉选项
+1. 后台每个业务能力至少包含 `view` 与 `edit`。
+2. 服务端 RBAC 为安全边界，前端权限隐藏仅作为用户体验。
+3. 多菜单可复用同一权限节点，例如 `station-profile`、`card-record`、`mail-receive-confirm`。
+4. `edit` 默认依赖同项或相关 `view` 权限。
 
-​		**模式（My_RIG_MODE）**：下拉选项
+### 5.3 当前权限节点
 
-​		**天线（My_RIG_ANT）**：下拉选项
+| 权限节点 | 复用菜单或能力 | 主要依赖 |
+| --- | --- | --- |
+| `overview-dashboard` | 总览看板 | 通联、卡片、发信、送达读取 |
+| `system-settings` | 系统参数 | 无 |
+| `station-profile` | 通信地址、本台设备、本台卡片 | 设备库读取 |
+| `qso-record` | 通联日志 | 设备库、本台配置读取 |
+| `card-record` | 各场景创建卡片 | 通联、本台配置读取 |
+| `card-issue` | 各场景制卡签发 | 卡片、地址读取 |
+| `mail-send-confirm` | 发信确认 | 卡片读取 |
+| `mail-receive-confirm` | 送达确认、三类收卡 | 卡片、通联读取 |
+| `exchange-request-review` | 线上审核、线下活动 | 地址/卡片读取，编辑依赖卡片写入 |
+| `card-mutation` | 卡片异动 | 卡片写入、通联与地址读取 |
+| `qso-query` | 通联记录查询 | 通联读取 |
+| `card-query` | 卡片记录查询、收卡记录查询 | 卡片读取 |
+| `report-auditlog` | 统计报表、审计日志 | 查询与业务读取 |
+| `address-bureau` | 地址管理、卡片局管理 | 无 |
+| `equipment-catalog` | 设备库维护 | 无 |
+| `import-export` | 导入导出 | 查询、审核、地址、设备读取；编辑依赖相关写权限 |
 
-​		**功率（My_RIG_PWR）**：下拉选项
+RBAC 模板实际落点：`qsl-plugin/src/main/resources/extensions/qsl-menu-role-templates.yaml`。
 
-​	**对方电台信息**
+## 6. 本地打印工具
 
-​		**呼号（Call_Sign）**：文本型
+`tools/CardPrint` 当前作为独立 Python 工具存在，入口为：
 
-​		**设备（RIG）**：输入内容自动联想设备库的内容并选中，如果联想不到则在设备库中新增后再被选中
+```powershell
+python -m cardprint.cli ui online
+```
 
-​		**天线（ANT）**：输入内容自动联想设备库的内容并选中，如果联想不到则在设备库中新增后再被选中
+当前在线桥接代码事实：
 
-​		**功率（PWR）**：输入内容自动联想设备库的内容并选中，如果联想不到则在设备库中新增后再被选中
+1. 默认地址为 `http://localhost:8090`，但配置中可传入其他 `base_url`。
+2. 读取 `card-records` 生成卡片/信封队列。
+3. 信封打印会额外读取 `station-profiles`、`address-book-entries`、`bureau-entries` 做本台地址和收件地址补全。
+4. 卡片版本以 `station-cards` 为准。
+5. 打印状态通过人工确认回写 `CardRecord.spec.cardIssued/cardIssuedAt` 或 `envelopePrinted`。
 
-​		**位置（QTH）**：文本型
+## 7. 当前一致性说明
 
-​	**信号报告**
-
-​		**给对方（RST_Sent）**：文本型，在页面层面和模式相关联，如果为CW，默认显示599，否则默认显示59。可修改可留空。
-
-​		**给我方（RST_Rcvd）**：文本型，在页面层面和模式相关联，如果为CW，默认显示599，否则默认显示59。可修改可留空。
-
-​		**备注（Remarks）**：文本型
-
-​	**历史记录**
-
-​		在输入对方呼号后自动显示历史通信记录，显示字段包括对方呼号、日期、频率、模式、设备、天线、功率、位置、备注
-
-#### 卡片记录
-
-​	**对方呼号（Call_Sign）**：文本型
-
-​	**卡片类型（Card_Type）**：下拉选项，包括QSO、SWL、EYEBALL
-
-​	**卡片版本（Card_Version）**：下拉选项，选择上传的卡片图片对应的名称
-
-​	**关联记录QSO_ID**：选填。点击后弹出页内卡片，卡片内可通过呼号、QSO_ID等检索到通联记录，并选中保存对应的QSO_ID
-
-​	**卡片创建日期（Card_DATE）**：Y-M-D 格式，如果关联了QSO_ID，则锁定使用QSO的日期，否则可手动填写
-
-​	**卡片创建时间（Card_TIME）**：HHmm 格式，如果关联了QSO_ID，则锁定使用QSO的时间，否则可手动填写
-
-​	**卡片备注（Card_Remarks）**：文本型，多行文本，支持换行。
-
-#### 发信确认
-
-​	显示一个清单，包括卡片ID（Card_ID）、对方呼号（Call_Sign）、卡片类型（Card_Type）、卡片创建日期（Card_DATE）、卡片打印日期（（Card_Print_DATE）日期+时间或显示“未制卡”）、信封打印日期（（Envelope_Print_DATE）日期+时间或显示“未打印”）、卡片备注（Card_Remarks）、确认发信（按钮，按下后隐藏确认发信按钮并显示提示文本“已发卡”+点下按钮时的日期时间）
-
-#### 收信确认
-
-​	输入对方呼号（Call_Sign），选择卡片类型（Card_Type），并找到对应的QSO记录或卡片记录，如果能找到记录，则将该记录的 已收卡片（Card_Received，布尔值）标记为 True 。
-
-​	如果卡片类型为QSO且查询无记录，则在点击确认收信时自动创建一个通联记录，并关联创建绑定了这个通联记录的卡片记录，并将该记录的 已收卡片（Card_Received，布尔值）标记为 True ，并将卡片备注（Card_Remarks）填写为“异常QSO记录，无法找到原始通信QSO”。
-
-​	如果卡片类型为SWL且查询无记录，则在点击确认收信时自动创建一个通联记录，并关联创建绑定了这个通联记录的卡片记录，并将该记录的 已收卡片（Card_Received，布尔值）标记为 True ，已发卡片（Card_Sent，布尔值）标记为 True ，并将卡片备注（Card_Remarks）填写为“SWL收信，无需发卡”。
-
-​	如果卡片类型为EYEBALL且查询无记录，则在点击确认收信时自动创建一个eyeball类型的卡片
-
-### 2.4 审核
-
-**换卡申请**
-
-​	显示前台提交过来的换卡申请的各项字段，并显示同意和拒绝按钮。点击按钮后按钮隐藏，并显示通过与否的状态文字。如果审批通过，则创建对应的eyeball卡片记录。
-
-### 2.5 审计
-
-**通联记录查询**
-
-​	显示通联记录的对方呼号、频率、日期、时间、时区等，点击条目后会展开条目，显示完整字段，完整字段参照“通联记录”菜单
-
-**卡片记录查询**
-
-​	显示“卡片记录”的各项字段内容
-
-**统计报表**
-
-​	QSO总数（数量）、眼球总数（数量）、卡片总数（数量）、待发卡片（数量）、已发卡片（数量）、发卡签收（数量）、已收卡片（数量）
-
-**审计日志**
-
-​	所有操作全部都需要留存审计日志，且不得删除日志
-
-### 2.6 数据
-
-**地址管理**
-
-​	包含呼号（Call_Sign）、姓名（Name）、电话（Telephone）、邮编（Postal_Code）、收件地址（Address）、电子邮件（E-mail）、地址备注（Address_Remarks）等字段
-
-**卡片局管理**
-
-​	包含卡片局名名称（复用Call_Sign字段）、电话（Telephone，选填）、邮编（Postal_Code）、收件地址（Address）、地址备注（Address_Remarks）等字段
-
-**设备库维护**
-
-​	包括：设备（RIG）、天线（ANT）、功率（PWR）、模式（MODE）等字段，每个字段可存放若干行内容
-
-**导入导出**
-
-​	页面内拆分为两个功能板块：
-
-​	**导入板块**：用于批量写入“通联记录”、“卡片记录”、“换卡申请”、“地址管理”、“卡片局管理”、“设备库”等数据
-
-​	**导出板块**：支持“单独导出”和“全部导出”。单独导出为对应数据集的 CSV 文件；全部导出为包含全部数据集 CSV 文件的 ZIP 压缩包。
-
-------
-
-## 3. 前台卡片
-
-前台卡片均为开放接口，接受匿名用户的访问，受到“游客每分钟查询次数”的频率限制
-
-当前实现形态：
-
-1. 提供独立前台页面：`/apis/api.qsl-management.halo.run/v1alpha1/cards/page`
-2. 提供文章/单页嵌入能力：在正文中写入 `[qsl-card]` 或 `[qsl-card callSign="BI1KBU"]`，渲染为可交互卡片 iframe
-3. 前台页面与嵌入卡片均复用同一套公开 API（总览、呼号查询、换卡申请、签收确认）
-
-### 3.1 数据总览
-
-​	包括卡片型的数据总览（同后台“总览”一致）和数据表格，表格包括目标呼号（Call_Sign）、卡片类型（Card_Type）、发卡时间、收卡时间（无记录则显示“未收到回卡”）。支持输入呼号、时间、卡片类型等实现过滤
-
-### 3.2 换卡申请
-
-​	前台输入呼号（Call_Sign）、是否使用卡片局（下拉选项）、电子邮件（E-mail）、换卡备注（Eyeball_Remarks）等字段
-
-​	如果选择不使用卡片局，则需输入 姓名（Name）、电话（Telephone）、邮编（Postal_Code）、收件地址（Address）
-
-​	如果选择使用卡片局，则需在下拉选项当中选择卡片局名称，选择后自动拉取电话（Telephone，选填）、邮编（Postal_Code）、收件地址（Address）等字段
-
-​	提交申请后将发送到后台用于审核
-
-### 3.3 卡片签收
-
-​	前台输入呼号（Call_Sign）、卡片编号（Card_ID）、签收备注（Receipt_Remarks，选填），点击 确认签收 按钮，将数据传递给后台，后台做出判断后如果通过则变更“发卡签收”的值为“True”，并回传签收成功。否则回传签收失败，卡片和呼号不匹配。
-
-## 4. 角色模型与权限节点
-
-### 4.1 角色模型
-
-- 游客：仅可做公开呼号查询与公开报表查看。
-- HAM 用户：在通过呼号审核后，可查看本人相关记录并发起换卡/补卡申请。
-- 操作员：执行录入、导出、发信确认、收信确认等日常业务。
-- 管理员：拥有配置、审核、审计、统计和权限分配治理能力。
-
-> 一期实施范围说明：当前仅落地管理员（含超级管理员）相关后台权限能力；HAM 用户与操作员角色暂不启用，作为二期能力预留。
-
-## 4.2 权限节点
-
-### 4.2.1 设计原则
-
-1. 权限节点按“业务能力”设计：每个能力至少包含只读 `view` 与编辑 `edit` 两个节点。
-2. 权限节点命名统一为 `plugin:qsl-management:<slug>:<action>`，其中 `<action>` 仅允许 `view` 或 `edit`。
-3. 多个菜单可复用同一组权限节点（仅拆分菜单展示，不强制新增节点）。
-4. `edit` 默认依赖同项 `view`，并可附加其他前置依赖。
-5. 跨模块依赖优先依赖对方的 `view` 节点；确需跨模块写操作时才依赖对方 `edit` 节点。
-6. 本期（一期）仅启用管理员相关授权，HAM 用户、操作员等角色不落地实现。
-7. 本节节点在一期先完成预留与定义，二期再按角色模型分配与启用。
-
-### 4.2.2 菜单权限节点（当前实现）
-
-| 菜单项（按你给出的行） | 只读节点 | 编辑节点 | 只读依赖 | 编辑依赖 | 说明 |
-| --- | --- | --- | --- | --- | --- |
-| 总览看板 | `plugin:qsl-management:overview-dashboard:view` | `plugin:qsl-management:overview-dashboard:edit` | `plugin:qsl-management:qso-record:view`,`plugin:qsl-management:card-record:view`,`plugin:qsl-management:mail-send-confirm:view`,`plugin:qsl-management:mail-receive-confirm:view` | `plugin:qsl-management:overview-dashboard:view` | 总览依赖业务数据读取 |
-| 系统参数 | `plugin:qsl-management:system-settings:view` | `plugin:qsl-management:system-settings:edit` | 无 | `plugin:qsl-management:system-settings:view` | 独立配置项 |
-| 通信地址 | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:station-profile:view`,`plugin:qsl-management:equipment-catalog:view` | 与“本台设备/本台卡片”共用同一权限节点（仅拆分菜单） |
-| 本台设备 | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:station-profile:view`,`plugin:qsl-management:equipment-catalog:view` | 与“通信地址/本台卡片”共用同一权限节点（仅拆分菜单） |
-| 本台卡片 | `plugin:qsl-management:station-profile:view` | `plugin:qsl-management:station-profile:edit` | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:station-profile:view`,`plugin:qsl-management:equipment-catalog:view` | 与“通信地址/本台设备”共用同一权限节点（仅拆分菜单） |
-| 通联记录 | `plugin:qsl-management:qso-record:view` | `plugin:qsl-management:qso-record:edit` | `plugin:qsl-management:equipment-catalog:view`,`plugin:qsl-management:station-profile:view` | `plugin:qsl-management:qso-record:view` | 录入时使用本台配置与设备候选 |
-| 卡片记录 | `plugin:qsl-management:card-record:view` | `plugin:qsl-management:card-record:edit` | `plugin:qsl-management:qso-record:view`,`plugin:qsl-management:station-profile:view` | `plugin:qsl-management:card-record:view`,`plugin:qsl-management:qso-record:view` | 可关联 QSO，依赖本台卡片版本读取 |
-| 发信确认 | `plugin:qsl-management:mail-send-confirm:view` | `plugin:qsl-management:mail-send-confirm:edit` | `plugin:qsl-management:card-record:view` | `plugin:qsl-management:mail-send-confirm:view`,`plugin:qsl-management:card-record:view` | 发信对象来源于卡片记录 |
-| 收信确认 | `plugin:qsl-management:mail-receive-confirm:view` | `plugin:qsl-management:mail-receive-confirm:edit` | `plugin:qsl-management:card-record:view`,`plugin:qsl-management:qso-record:view` | `plugin:qsl-management:mail-receive-confirm:view`,`plugin:qsl-management:card-record:view`,`plugin:qsl-management:qso-record:view` | 收信匹配依赖卡片/通联读取 |
-| 换卡申请 | `plugin:qsl-management:exchange-request-review:view` | `plugin:qsl-management:exchange-request-review:edit` | `plugin:qsl-management:address-bureau:view`,`plugin:qsl-management:card-record:view` | `plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:card-record:edit` | 审批通过涉及创建卡片记录 |
-| 通联记录查询 | `plugin:qsl-management:qso-query:view` | `plugin:qsl-management:qso-query:edit` | `plugin:qsl-management:qso-record:view` | `plugin:qsl-management:qso-query:view` | 查询菜单编辑节点一期预留 |
-| 卡片记录查询 | `plugin:qsl-management:card-query:view` | `plugin:qsl-management:card-query:edit` | `plugin:qsl-management:card-record:view` | `plugin:qsl-management:card-query:view` | 查询菜单编辑节点一期预留 |
-| 统计报表 | `plugin:qsl-management:report-auditlog:view` | `plugin:qsl-management:report-auditlog:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:mail-send-confirm:view`,`plugin:qsl-management:mail-receive-confirm:view` | `plugin:qsl-management:report-auditlog:view` | 与“审计日志”共用同一权限节点（仅拆分菜单） |
-| 审计日志 | `plugin:qsl-management:report-auditlog:view` | `plugin:qsl-management:report-auditlog:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:mail-send-confirm:view`,`plugin:qsl-management:mail-receive-confirm:view` | `plugin:qsl-management:report-auditlog:view` | 与“统计报表”共用同一权限节点（仅拆分菜单） |
-| 地址管理 | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 无 | `plugin:qsl-management:address-bureau:view` | 与“卡片局管理”共用同一权限节点（仅拆分菜单） |
-| 卡片局管理 | `plugin:qsl-management:address-bureau:view` | `plugin:qsl-management:address-bureau:edit` | 无 | `plugin:qsl-management:address-bureau:view` | 与“地址管理”共用同一权限节点（仅拆分菜单） |
-| 设备库维护 | `plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:equipment-catalog:edit` | 无 | `plugin:qsl-management:equipment-catalog:view` | 基础主数据维护 |
-| 导入导出 | `plugin:qsl-management:import-export:view` | `plugin:qsl-management:import-export:edit` | `plugin:qsl-management:qso-query:view`,`plugin:qsl-management:card-query:view`,`plugin:qsl-management:exchange-request-review:view`,`plugin:qsl-management:address-bureau:view`,`plugin:qsl-management:equipment-catalog:view` | `plugin:qsl-management:import-export:view`,`plugin:qsl-management:qso-record:edit`,`plugin:qsl-management:card-record:edit`,`plugin:qsl-management:exchange-request-review:edit`,`plugin:qsl-management:address-bureau:edit`,`plugin:qsl-management:equipment-catalog:edit` | 单一菜单，页内拆分导入/导出两个板块 |
-
-### 4.2.3 权限节点复用关系（避免歧义）
-
-| 权限节点（view/edit） | 被哪些菜单复用 |
-| --- | --- |
-| `station-profile` | 通信地址、本台设备、本台卡片 |
-| `report-auditlog` | 统计报表、审计日志 |
-| `address-bureau` | 地址管理、卡片局管理 |
-| `import-export` | 导入导出（页内导入板块、导出板块） |
-
-### 4.2.4 一期与二期启用策略
-
-1. 一期启用：后台仅管理员/超级管理员使用上述节点；普通游客前台访问走匿名接口与限流策略，不走后台 RBAC 分配。
-2. 一期不启用：HAM 用户、操作员角色及其差异化授权暂不实现，仅保留角色定义与权限预留。
-3. 二期计划：基于本节节点给 HAM 用户、操作员做正式授权编排；如需更细粒度，在对应节点下再拆分子权限。
-
-
----
-
-
-
-
+1. 本文件已按 2026-05-01 代码事实同步。
+2. 若本文件与 `qsl-plugin` 代码不一致，以代码事实为准，并在同次改动中更新本文档。
+3. 若后续新增 API、权限节点、模型字段、菜单或打印桥接契约，必须同步更新本文件、`BackendApiContract.md` 与 `docs/spec/项目信息结构化清单.md`。

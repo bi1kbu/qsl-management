@@ -2,6 +2,7 @@ package com.bi1kbu.qslmanagement.api;
 
 import com.bi1kbu.qslmanagement.extension.model.AddressBookEntry;
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
+import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,6 +30,8 @@ public class QslNotificationMailService {
     private static final String SYSTEM_SETTING_NAME = "qsl-system-setting-default";
     private static final String QSL_API_VERSION = "qsl-management.halo.run/v1alpha1";
     private static final String CARD_RECORD_KIND = "CardRecord";
+    private static final String EXCHANGE_REQUEST_KIND = "ExchangeRequest";
+    private static final String EXCHANGE_REVIEW_REASON_TYPE = "qsl-exchange-reviewed";
 
     private final ReactiveExtensionClient client;
     private final NotificationCenter notificationCenter;
@@ -140,6 +143,66 @@ public class QslNotificationMailService {
                     .then();
             })
             .onErrorResume(error -> Mono.empty());
+    }
+
+    public Mono<ExchangeReviewMailSendResult> sendExchangeReviewMail(
+        String requestName,
+        String operator,
+        String clientIp,
+        String source
+    ) {
+        if (StringUtils.isBlank(requestName)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "换卡申请名称不能为空"));
+        }
+
+        return fetchOr404(ExchangeRequest.class, requestName.trim())
+            .flatMap(exchangeRequest -> {
+                var spec = exchangeRequest.getSpec();
+                var status = exchangeRequest.getStatus();
+                var reviewStatus = status == null ? "" : StringUtils.defaultString(status.getReviewStatus()).trim();
+                if (StringUtils.isBlank(reviewStatus) || "待审核".equals(reviewStatus)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "换卡申请尚未审核，不能发送审核结果通知"));
+                }
+
+                var targetEmail = spec == null ? "" : StringUtils.defaultString(spec.getEmail()).trim();
+                if (StringUtils.isBlank(targetEmail)) {
+                    return auditExchangeReviewMail(
+                        exchangeRequest,
+                        MAIL_STATUS_SKIPPED,
+                        "申请未配置电子邮箱，已跳过。",
+                        "",
+                        "",
+                        operator,
+                        clientIp,
+                        source
+                    );
+                }
+
+                var sentAt = QslApiSupport.nowText();
+                return subscribeTarget(targetEmail, EXCHANGE_REVIEW_REASON_TYPE, EXCHANGE_REQUEST_KIND)
+                    .then(emitExchangeReviewReason(exchangeRequest, targetEmail, safeOperator(operator), sentAt))
+                    .then(auditExchangeReviewMail(
+                        exchangeRequest,
+                        MAIL_STATUS_SENT,
+                        "发送成功。",
+                        targetEmail,
+                        sentAt,
+                        operator,
+                        clientIp,
+                        source
+                    ))
+                    .onErrorResume(error -> auditExchangeReviewMail(
+                        exchangeRequest,
+                        MAIL_STATUS_FAILED,
+                        "发送失败：" + shortError(error),
+                        targetEmail,
+                        "",
+                        operator,
+                        clientIp,
+                        source
+                    ));
+            });
     }
 
     private Mono<NotificationMailSendResult> sendSceneMail(
@@ -330,18 +393,95 @@ public class QslNotificationMailService {
     }
 
     private Mono<Void> subscribeTarget(String targetEmail, MailScene scene) {
+        return subscribeTarget(targetEmail, scene.reasonType, CARD_RECORD_KIND);
+    }
+
+    private Mono<Void> subscribeTarget(String targetEmail, String reasonType, String subjectKind) {
         var subscriber = new Subscription.Subscriber();
         subscriber.setName(UserIdentity.anonymousWithEmail(targetEmail).name());
 
         var reason = new Subscription.InterestReason();
-        reason.setReasonType(scene.reasonType);
+        reason.setReasonType(reasonType);
         reason.setSubject(Subscription.ReasonSubject.builder()
             .apiVersion(QSL_API_VERSION)
-            .kind(CARD_RECORD_KIND)
+            .kind(subjectKind)
             .name(subscriber.getName())
             .build());
 
         return notificationCenter.subscribe(subscriber, reason).then();
+    }
+
+    private Mono<Void> emitExchangeReviewReason(
+        ExchangeRequest exchangeRequest,
+        String targetEmail,
+        String operator,
+        String sentAt
+    ) {
+        var spec = exchangeRequest.getSpec() == null
+            ? new ExchangeRequest.ExchangeRequestSpec()
+            : exchangeRequest.getSpec();
+        var status = exchangeRequest.getStatus() == null
+            ? new ExchangeRequest.ExchangeRequestStatus()
+            : exchangeRequest.getStatus();
+        var anonymousIdentity = UserIdentity.anonymousWithEmail(targetEmail).name();
+        var callSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
+        var reviewStatus = StringUtils.defaultString(status.getReviewStatus());
+        var subject = Reason.Subject.builder()
+            .apiVersion(QSL_API_VERSION)
+            .kind(EXCHANGE_REQUEST_KIND)
+            .name(anonymousIdentity)
+            .title("QSL 换卡申请审核：" + callSign + " " + reviewStatus)
+            .build();
+
+        return notificationReasonEmitter.emit(EXCHANGE_REVIEW_REASON_TYPE, builder -> builder
+            .subject(subject)
+            .author(UserIdentity.of(operator))
+            .attribute("callSign", callSign)
+            .attribute("reviewStatus", reviewStatus)
+            .attribute("reviewReason", StringUtils.defaultString(status.getReviewReason()))
+            .attribute("requestName", StringUtils.defaultString(exchangeRequest.getMetadata().getName()))
+            .attribute("cardVersion", StringUtils.defaultString(spec.getCardVersion()))
+            .attribute("addressMode", Boolean.TRUE.equals(spec.getUseBureau()) ? "卡片局地址" : "个人地址")
+            .attribute("bureauName", StringUtils.defaultString(spec.getBureauName()))
+            .attribute("postalCode", StringUtils.defaultString(spec.getPostalCode()))
+            .attribute("address", StringUtils.defaultString(spec.getAddress()))
+            .attribute("remarks", StringUtils.defaultString(spec.getRemarks()))
+            .attribute("targetEmail", targetEmail)
+            .attribute("triggerAt", sentAt)
+            .attribute("operator", operator)
+        ).then();
+    }
+
+    private Mono<ExchangeReviewMailSendResult> auditExchangeReviewMail(
+        ExchangeRequest exchangeRequest,
+        String status,
+        String message,
+        String targetEmail,
+        String sentAt,
+        String operator,
+        String clientIp,
+        String source
+    ) {
+        var requestName = exchangeRequest.getMetadata().getName();
+        var safeSource = StringUtils.isBlank(source) ? "手动触发" : source.trim();
+        var detail = "来源=" + safeSource
+            + "；状态=" + status
+            + "；目标邮箱=" + (StringUtils.isBlank(targetEmail) ? "未配置" : targetEmail)
+            + "；消息=" + message;
+        return qslAuditService.appendAuditLog(
+            "换卡审核邮件通知",
+            "exchange-request",
+            requestName,
+            detail,
+            safeOperator(operator),
+            clientIp
+        ).thenReturn(new ExchangeReviewMailSendResult(
+            requestName,
+            status,
+            message,
+            StringUtils.defaultString(targetEmail),
+            StringUtils.defaultString(sentAt)
+        ));
     }
 
     private Mono<String> resolveTargetEmailByBindingAddress(String addressEntryName) {
@@ -525,6 +665,15 @@ public class QslNotificationMailService {
         int skippedCount,
         int failedCount,
         List<NotificationMailSendResult> results
+    ) {
+    }
+
+    public record ExchangeReviewMailSendResult(
+        String requestName,
+        String status,
+        String message,
+        String targetEmail,
+        String sentAt
     ) {
     }
 }

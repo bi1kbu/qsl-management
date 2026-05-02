@@ -1,12 +1,17 @@
 package com.bi1kbu.qslmanagement.api;
 
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
+import com.bi1kbu.qslmanagement.extension.model.BureauEntry;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
+import com.bi1kbu.qslmanagement.extension.model.StationCard;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Pattern;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -101,6 +106,17 @@ public class QslPublicApiService {
         if (Boolean.TRUE.equals(command.useBureau()) && nullToEmpty(command.bureauName()).isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "选择卡片局模式时必须填写卡片局名称"));
         }
+        if (Boolean.TRUE.equals(command.useBureau())
+            && (nullToEmpty(command.postalCode()).isBlank() || nullToEmpty(command.address()).isBlank())) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "选择卡片局模式时必须提供卡片局邮编和地址"));
+        }
+        if (!Boolean.TRUE.equals(command.useBureau())
+            && (nullToEmpty(command.name()).isBlank()
+                || nullToEmpty(command.telephone()).isBlank()
+                || nullToEmpty(command.postalCode()).isBlank()
+                || nullToEmpty(command.address()).isBlank())) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "选择个人地址时必须填写姓名、电话、邮编和通信地址"));
+        }
         if (!validateLength(command.bureauName(), 80)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片局名称长度不能超过80字符"));
         }
@@ -123,44 +139,82 @@ public class QslPublicApiService {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "邮编格式不合法"));
         }
 
-        var request = new ExchangeRequest();
-        request.setMetadata(QslApiSupport.createMetadata(QslApiSupport.createResourceName("exchange-request")));
+        var cardVersions = normalizeCardVersions(command.cardVersion());
+        if (cardVersions.isEmpty()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "请选择卡片版本"));
+        }
+        if (cardVersions.size() > 2) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "最多只能选择两张卡片"));
+        }
 
-        var spec = new ExchangeRequest.ExchangeRequestSpec();
-        spec.setSceneType("ONLINE_EYEBALL");
-        spec.setCallSign(callSign);
-        spec.setUseBureau(Boolean.TRUE.equals(command.useBureau()));
-        spec.setBureauName(nullToEmpty(command.bureauName()));
-        spec.setEmail(nullToEmpty(command.email()));
-        spec.setName(nullToEmpty(command.name()));
-        spec.setTelephone(nullToEmpty(command.telephone()));
-        spec.setPostalCode(nullToEmpty(command.postalCode()));
-        spec.setAddress(nullToEmpty(command.address()));
-        spec.setRemarks(nullToEmpty(command.remarks()));
-        request.setSpec(spec);
+        return validateSelectedStationCardVersions(cardVersions)
+            .flatMap(persistedCardVersion -> {
+                var request = new ExchangeRequest();
+                request.setMetadata(QslApiSupport.createMetadata(QslApiSupport.createResourceName("exchange-request")));
 
-        var status = new ExchangeRequest.ExchangeRequestStatus();
-        status.setReviewStatus("待审核");
-        status.setReviewReason("");
-        status.setReviewedBy("");
-        status.setReviewedAt("");
-        request.setStatus(status);
+                var spec = new ExchangeRequest.ExchangeRequestSpec();
+                spec.setSceneType("ONLINE_EYEBALL");
+                spec.setCallSign(callSign);
+                spec.setCardVersion(persistedCardVersion);
+                spec.setUseBureau(Boolean.TRUE.equals(command.useBureau()));
+                spec.setBureauName(nullToEmpty(command.bureauName()));
+                spec.setEmail(nullToEmpty(command.email()));
+                spec.setName(nullToEmpty(command.name()));
+                spec.setTelephone(nullToEmpty(command.telephone()));
+                spec.setPostalCode(nullToEmpty(command.postalCode()));
+                spec.setAddress(nullToEmpty(command.address()));
+                spec.setRemarks(nullToEmpty(command.remarks()));
+                request.setSpec(spec);
 
-        return client.create(request)
-            .flatMap(created -> qslAuditService.appendAuditLog(
-                "匿名提交换卡申请",
-                "exchange-request",
-                created.getMetadata().getName(),
-                "呼号=" + callSign,
-                "匿名用户",
-                clientIp
-            ).thenReturn(created))
-            .map(created -> new PublicExchangeSubmitResult(
-                created.getMetadata().getName(),
-                callSign,
-                created.getStatus().getReviewStatus(),
-                QslApiSupport.nowText()
-            ));
+                var status = new ExchangeRequest.ExchangeRequestStatus();
+                status.setReviewStatus("待审核");
+                status.setReviewReason("");
+                status.setReviewedBy("");
+                status.setReviewedAt("");
+                request.setStatus(status);
+
+                return client.create(request)
+                    .flatMap(created -> qslAuditService.appendAuditLog(
+                        "匿名提交换卡申请",
+                        "exchange-request",
+                        created.getMetadata().getName(),
+                        "呼号=" + callSign + "，卡片版本=" + persistedCardVersion,
+                        "匿名用户",
+                        clientIp
+                    ).thenReturn(created))
+                    .map(created -> new PublicExchangeSubmitResult(
+                        created.getMetadata().getName(),
+                        callSign,
+                        created.getStatus().getReviewStatus(),
+                        QslApiSupport.nowText()
+                    ));
+            });
+    }
+
+    public Mono<List<PublicBureauItem>> listPublicBureaus() {
+        return client.listAll(BureauEntry.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .filter(bureau -> bureau.getMetadata() != null && bureau.getSpec() != null)
+            .map(bureau -> {
+                var spec = bureau.getSpec();
+                return new PublicBureauItem(
+                    nullToEmpty(bureau.getMetadata().getName()),
+                    nullToEmpty(spec.getBureauName()).trim(),
+                    nullToEmpty(spec.getPostalCode()).trim(),
+                    nullToEmpty(spec.getAddress()).trim()
+                );
+            })
+            .filter(item -> !item.bureauName().isBlank())
+            .collectSortedList(Comparator.comparing(PublicBureauItem::bureauName, String.CASE_INSENSITIVE_ORDER));
+    }
+
+    public Mono<List<PublicStationCardItem>> listPublicStationCards() {
+        return loadCardVersionUsedCounts()
+            .flatMap(usedCounts -> client.listAll(StationCard.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .filter(stationCard -> stationCard.getMetadata() != null && stationCard.getSpec() != null)
+                .map(stationCard -> toPublicStationCardItem(stationCard, usedCounts))
+                .filter(item -> !item.cardVersion().isBlank())
+                .collectSortedList(Comparator.comparingInt(PublicStationCardItem::sortOrder)
+                    .thenComparing(PublicStationCardItem::cardVersion, String.CASE_INSENSITIVE_ORDER)));
     }
 
     public Mono<List<PublicOfflineActivityItem>> listPublicOfflineActivities() {
@@ -372,6 +426,98 @@ public class QslPublicApiService {
         return value == null ? "" : value;
     }
 
+    private List<String> normalizeCardVersions(String raw) {
+        var normalized = nullToEmpty(raw)
+            .replace('，', ',')
+            .replace('、', ',')
+            .replace('；', ',')
+            .replace(';', ',');
+        var values = normalized.split(",");
+        var deduplicated = new LinkedHashMap<String, String>();
+        for (var value : values) {
+            var version = value == null ? "" : value.trim();
+            if (version.isBlank()) {
+                continue;
+            }
+            deduplicated.putIfAbsent(normalizeVersionKey(version), version);
+        }
+        return List.copyOf(deduplicated.values());
+    }
+
+    private String normalizeVersionKey(String value) {
+        return nullToEmpty(value).trim().toUpperCase(Locale.ROOT);
+    }
+
+    private int safeInventoryTotal(Integer value) {
+        return value == null || value < 0 ? 0 : value;
+    }
+
+    private int safeSortOrder(Integer value) {
+        return value == null || value <= 0 ? Integer.MAX_VALUE : value;
+    }
+
+    private Mono<Map<String, Integer>> loadCardVersionUsedCounts() {
+        return client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .filter(cardRecord -> cardRecord.getSpec() != null)
+            .map(cardRecord -> normalizeCardVersions(cardRecord.getSpec().getCardVersion()))
+            .collectList()
+            .map(groups -> {
+                Map<String, Integer> counter = new LinkedHashMap<>();
+                for (var group : groups) {
+                    for (var version : group) {
+                        var key = normalizeVersionKey(version);
+                        if (!key.isBlank()) {
+                            counter.merge(key, 1, Integer::sum);
+                        }
+                    }
+                }
+                return counter;
+            });
+    }
+
+    private PublicStationCardItem toPublicStationCardItem(StationCard stationCard, Map<String, Integer> usedCounts) {
+        var spec = stationCard.getSpec();
+        var cardVersion = nullToEmpty(spec.getCardVersion()).trim();
+        var usedCount = usedCounts.getOrDefault(normalizeVersionKey(cardVersion), 0);
+        var availableInventory = safeInventoryTotal(spec.getAvailableInventory());
+        return new PublicStationCardItem(
+            nullToEmpty(stationCard.getMetadata().getName()),
+            cardVersion,
+            nullToEmpty(spec.getImageUrl()),
+            nullToEmpty(spec.getImageMediaType()),
+            safeInventoryTotal(spec.getVersionTotal()),
+            availableInventory,
+            usedCount,
+            Math.max(availableInventory - usedCount, 0),
+            safeSortOrder(spec.getSortOrder())
+        );
+    }
+
+    private Mono<String> validateSelectedStationCardVersions(List<String> requestedVersions) {
+        return listPublicStationCards()
+            .map(items -> {
+                Map<String, PublicStationCardItem> itemMap = new LinkedHashMap<>();
+                for (var item : items) {
+                    itemMap.putIfAbsent(normalizeVersionKey(item.cardVersion()), item);
+                }
+
+                var persisted = new LinkedHashMap<String, String>();
+                for (var requestedVersion : requestedVersions) {
+                    var item = itemMap.get(normalizeVersionKey(requestedVersion));
+                    if (item == null) {
+                        throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001",
+                            "卡片版本不存在：" + requestedVersion);
+                    }
+                    if (item.remainingInventory() <= 0) {
+                        throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001",
+                            "卡片版本已无库存余量：" + item.cardVersion());
+                    }
+                    persisted.putIfAbsent(normalizeVersionKey(item.cardVersion()), item.cardVersion());
+                }
+                return String.join("、", persisted.values());
+            });
+    }
+
     private boolean isValidCallSign(String callSign) {
         return CALL_SIGN_PATTERN.matcher(callSign).matches();
     }
@@ -547,7 +693,8 @@ public class QslPublicApiService {
         String telephone,
         String postalCode,
         String address,
-        String remarks
+        String remarks,
+        String cardVersion
     ) {
     }
 
@@ -556,6 +703,27 @@ public class QslPublicApiService {
         String callSign,
         String reviewStatus,
         String submittedAt
+    ) {
+    }
+
+    public record PublicBureauItem(
+        String bureauId,
+        String bureauName,
+        String postalCode,
+        String address
+    ) {
+    }
+
+    public record PublicStationCardItem(
+        String cardId,
+        String cardVersion,
+        String imageUrl,
+        String imageMediaType,
+        int versionTotal,
+        int availableInventory,
+        int usedCount,
+        int remainingInventory,
+        int sortOrder
     ) {
     }
 

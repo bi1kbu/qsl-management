@@ -456,6 +456,7 @@ public class QslImportExportJobService {
                 (record, row) -> {
                     var spec = record.getSpec() == null ? new ExchangeRequest.ExchangeRequestSpec() : record.getSpec();
                     spec.setCallSign(value(row, "callSign"));
+                    spec.setCardVersion(value(row, "cardVersion"));
                     spec.setUseBureau(parseBoolean(value(row, "useBureau")));
                     spec.setBureauName(value(row, "bureauName"));
                     spec.setEmail(value(row, "email"));
@@ -803,6 +804,7 @@ public class QslImportExportJobService {
                     return csvRow(
                         record.getMetadata().getName(),
                         spec == null ? "" : nullToEmpty(spec.getCallSign()),
+                        spec == null ? "" : nullToEmpty(spec.getCardVersion()),
                         spec == null ? "false" : boolToText(spec.getUseBureau()),
                         spec == null ? "" : nullToEmpty(spec.getBureauName()),
                         spec == null ? "" : nullToEmpty(spec.getEmail()),
@@ -821,6 +823,7 @@ public class QslImportExportJobService {
                 .map(rows -> renderCsv(dataset, List.of(
                     "id",
                     "callSign",
+                    "cardVersion",
                     "useBureau",
                     "bureauName",
                     "email",

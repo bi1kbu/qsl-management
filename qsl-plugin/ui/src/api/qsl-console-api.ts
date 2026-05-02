@@ -32,6 +32,14 @@ export interface ExchangeReviewResult {
   reason: string
 }
 
+export interface ExchangeReviewMailSendResult {
+  requestName: string
+  status: 'SENT' | 'SKIPPED' | 'FAILED'
+  message: string
+  targetEmail: string
+  sentAt: string
+}
+
 export type NotificationMailScene = 'created' | 'sent' | 'received'
 
 export interface NotificationMailSendPayload {
@@ -172,6 +180,13 @@ export async function rejectExchangeRequest(requestName: string, reason: string)
   const response = await axiosInstance.post<ApiResult<ExchangeReviewResult>>(
     `${consoleApiBase}/exchange-requests/${encodeURIComponent(requestName)}/reject`,
     { reason },
+  )
+  return response.data.data
+}
+
+export async function notifyExchangeRequest(requestName: string): Promise<ExchangeReviewMailSendResult> {
+  const response = await axiosInstance.post<ApiResult<ExchangeReviewMailSendResult>>(
+    `${consoleApiBase}/exchange-requests/${encodeURIComponent(requestName)}/notify`,
   )
   return response.data.data
 }

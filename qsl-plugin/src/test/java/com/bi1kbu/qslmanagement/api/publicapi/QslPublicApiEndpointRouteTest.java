@@ -80,6 +80,71 @@ class QslPublicApiEndpointRouteTest {
     }
 
     @Test
+    void shouldListOnlineBureausBySubresourceGetPath() {
+        var publicApiService = mock(QslPublicApiService.class);
+        var rateLimitService = mock(QslPublicRateLimitService.class);
+
+        when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
+        when(publicApiService.listPublicBureaus()).thenReturn(Mono.just(List.of(
+            new QslPublicApiService.PublicBureauItem(
+                "BURO-1",
+                "北京卡片局",
+                "100000",
+                "北京市测试路1号"
+            )
+        )));
+
+        var client = WebTestClient.bindToRouterFunction(
+            new QslPublicApiEndpoint(publicApiService, rateLimitService).endpoint()
+        ).build();
+
+        client.get()
+            .uri("/exchange-online/-/bureaus")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-0000")
+            .jsonPath("$.data[0].bureauName").isEqualTo("北京卡片局")
+            .jsonPath("$.data[0].postalCode").isEqualTo("100000")
+            .jsonPath("$.data[0].address").isEqualTo("北京市测试路1号");
+    }
+
+    @Test
+    void shouldListOnlineStationCardsBySubresourceGetPath() {
+        var publicApiService = mock(QslPublicApiService.class);
+        var rateLimitService = mock(QslPublicRateLimitService.class);
+
+        when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
+        when(publicApiService.listPublicStationCards()).thenReturn(Mono.just(List.of(
+            new QslPublicApiService.PublicStationCardItem(
+                "station-card-001",
+                "2026春季版",
+                "data:image/png;base64,AA==",
+                "image/png",
+                500,
+                300,
+                12,
+                288,
+                1
+            )
+        )));
+
+        var client = WebTestClient.bindToRouterFunction(
+            new QslPublicApiEndpoint(publicApiService, rateLimitService).endpoint()
+        ).build();
+
+        client.get()
+            .uri("/exchange-online/-/station-cards")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-0000")
+            .jsonPath("$.data[0].cardVersion").isEqualTo("2026春季版")
+            .jsonPath("$.data[0].versionTotal").isEqualTo(500)
+            .jsonPath("$.data[0].remainingInventory").isEqualTo(288);
+    }
+
+    @Test
     void shouldConfirmReceiptBySubresourceCreatePath() {
         var publicApiService = mock(QslPublicApiService.class);
         var rateLimitService = mock(QslPublicRateLimitService.class);

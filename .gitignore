@@ -1,5 +1,9 @@
 tmp/
+__pycache__/
+*.py[cod]
+.pytest_cache/
 # tools 目录纳入版本管理，仅排除数据文件
+tools/CardPrint/
 tools/**/*.csv
 tools/**/*.tsv
 tools/**/*.xlsx

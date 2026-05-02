@@ -1,6 +1,8 @@
 package com.bi1kbu.qslmanagement.api;
 
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
+import com.bi1kbu.qslmanagement.extension.model.AddressBookEntry;
+import com.bi1kbu.qslmanagement.extension.model.BureauEntry;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
@@ -27,6 +29,7 @@ public class QslConsoleActionService {
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("metadata.creationTimestamp"));
     private static final Pattern QSO_NAME_PATTERN = Pattern.compile("^QSO(\\d+)$");
     private static final Pattern CARD_NAME_PATTERN = Pattern.compile("^C(\\d+)$");
+    private static final Pattern BUREAU_NAME_PATTERN = Pattern.compile("^BURO-(\\d+)$");
     private static final Pattern RECEIVED_RECORD_PATTERN = Pattern.compile("^R(\\d+)-\\d{8}$");
     private static final String SYSTEM_SETTING_NAME = "qsl-system-setting-default";
     private static final int CARD_SEQUENCE_START = 1000;
@@ -47,6 +50,10 @@ public class QslConsoleActionService {
     }
 
     public Mono<CardRecord> confirmMailSend(String cardRecordName, String operator, String clientIp) {
+        if (!isFormalCardRecordName(cardRecordName)) {
+            return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "QSL-422-0001", "无正式卡片编号的记录不能执行发信确认"));
+        }
         return fetchOr404(CardRecord.class, cardRecordName)
             .flatMap(cardRecord -> {
                 var spec = ensureCardRecordSpec(cardRecord);
@@ -231,7 +238,8 @@ public class QslConsoleActionService {
         String receiptRemarks, String receivedRecordCode) {
         return createAutoQso(callSign, qsoRemarks)
             .flatMap(qsoRecord -> createCardRecord(callSign, cardType, qsoRecord.getMetadata().getName(),
-                QslApiSupport.appendRemark(qsoRemarks, mapReceiptRemark(receiptRemarks)), sceneType, cardSent, receivedRecordCode));
+                QslApiSupport.appendRemark(qsoRemarks, mapReceiptRemark(receiptRemarks)), sceneType, cardSent, receivedRecordCode,
+                "自动生成", "", ""));
     }
 
     private Mono<QsoRecord> createAutoQso(String callSign, String remarks) {
@@ -274,11 +282,128 @@ public class QslConsoleActionService {
             + (exchangeRequest.getSpec().getRemarks() == null || exchangeRequest.getSpec().getRemarks().isBlank()
             ? ""
             : "申请备注：" + exchangeRequest.getSpec().getRemarks());
-        return createEyeballCard(callSign, remarks, "ONLINE_EYEBALL", false, "");
+        var cardVersion = defaultIfBlank(exchangeRequest.getSpec().getCardVersion(), "自动生成");
+        return resolveExchangeAddressBinding(exchangeRequest)
+            .flatMap(binding -> createCardRecord(
+                callSign,
+                "EYEBALL",
+                "",
+                remarks,
+                "ONLINE_EYEBALL",
+                false,
+                "",
+                cardVersion,
+                binding.addressEntryName(),
+                binding.mailTargetEmail()
+            ));
     }
 
     private Mono<CardRecord> createEyeballCard(String callSign, String remarks, String sceneType, boolean sent, String receivedRecordCode) {
-        return createCardRecord(callSign, "EYEBALL", "", remarks, sceneType, sent, receivedRecordCode);
+        return createCardRecord(callSign, "EYEBALL", "", remarks, sceneType, sent, receivedRecordCode, "自动生成", "", "");
+    }
+
+    private Mono<ExchangeAddressBinding> resolveExchangeAddressBinding(ExchangeRequest exchangeRequest) {
+        var spec = exchangeRequest.getSpec();
+        if (spec == null) {
+            return Mono.just(new ExchangeAddressBinding("", ""));
+        }
+        if (Boolean.TRUE.equals(spec.getUseBureau())) {
+            return resolveBureauAddressBinding(spec);
+        }
+        return resolvePersonalAddressBinding(spec);
+    }
+
+    private Mono<ExchangeAddressBinding> resolvePersonalAddressBinding(ExchangeRequest.ExchangeRequestSpec requestSpec) {
+        var callSign = QslApiSupport.normalizeCallSign(requestSpec.getCallSign());
+        var name = defaultIfBlank(requestSpec.getName(), "");
+        var telephone = defaultIfBlank(requestSpec.getTelephone(), "");
+        var postalCode = defaultIfBlank(requestSpec.getPostalCode(), "");
+        var address = defaultIfBlank(requestSpec.getAddress(), "");
+        var email = defaultIfBlank(requestSpec.getEmail(), "");
+        if (callSign.isBlank() || postalCode.isBlank() || address.isBlank()) {
+            return Mono.just(new ExchangeAddressBinding("", email));
+        }
+
+        return client.listAll(AddressBookEntry.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .filter(entry -> entry.getMetadata() != null && entry.getSpec() != null)
+            .filter(entry -> {
+                var spec = entry.getSpec();
+                return callSign.equals(QslApiSupport.normalizeCallSign(spec.getCallSign()))
+                    && postalCode.equals(defaultIfBlank(spec.getPostalCode(), ""))
+                    && address.equals(defaultIfBlank(spec.getAddress(), ""))
+                    && telephone.equals(defaultIfBlank(spec.getTelephone(), ""));
+            })
+            .next()
+            .map(entry -> new ExchangeAddressBinding(entry.getMetadata().getName(), email))
+            .switchIfEmpty(createAddressBookEntry(callSign, name, telephone, postalCode, address, email));
+    }
+
+    private Mono<ExchangeAddressBinding> createAddressBookEntry(
+        String callSign,
+        String name,
+        String telephone,
+        String postalCode,
+        String address,
+        String email
+    ) {
+        return nextAddressResourceName(callSign)
+            .flatMap(resourceName -> {
+                var entry = new AddressBookEntry();
+                entry.setMetadata(QslApiSupport.createMetadata(resourceName));
+                var spec = new AddressBookEntry.AddressBookSpec();
+                spec.setCallSign(callSign);
+                spec.setName(name);
+                spec.setTelephone(telephone);
+                spec.setPostalCode(postalCode);
+                spec.setAddress(address);
+                spec.setEmail(email);
+                spec.setAddressRemarks("线上换卡申请自动生成");
+                entry.setSpec(spec);
+                var status = new AddressBookEntry.AddressBookStatus();
+                status.setSyncStatus("ONLINE_EYEBALL_AUTO");
+                entry.setStatus(status);
+                return client.create(entry).map(created -> new ExchangeAddressBinding(created.getMetadata().getName(), email));
+            });
+    }
+
+    private Mono<ExchangeAddressBinding> resolveBureauAddressBinding(ExchangeRequest.ExchangeRequestSpec requestSpec) {
+        var bureauName = defaultIfBlank(requestSpec.getBureauName(), "");
+        var postalCode = defaultIfBlank(requestSpec.getPostalCode(), "");
+        var address = defaultIfBlank(requestSpec.getAddress(), "");
+        if (bureauName.isBlank() || postalCode.isBlank() || address.isBlank()) {
+            return Mono.just(new ExchangeAddressBinding("", defaultIfBlank(requestSpec.getEmail(), "")));
+        }
+
+        return client.listAll(BureauEntry.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .filter(entry -> entry.getMetadata() != null && entry.getSpec() != null)
+            .filter(entry -> {
+                var spec = entry.getSpec();
+                return bureauName.equals(defaultIfBlank(spec.getBureauName(), ""))
+                    && postalCode.equals(defaultIfBlank(spec.getPostalCode(), ""))
+                    && address.equals(defaultIfBlank(spec.getAddress(), ""));
+            })
+            .next()
+            .map(entry -> new ExchangeAddressBinding(entry.getMetadata().getName(), ""))
+            .switchIfEmpty(createBureauEntry(bureauName, postalCode, address));
+    }
+
+    private Mono<ExchangeAddressBinding> createBureauEntry(String bureauName, String postalCode, String address) {
+        return nextBureauResourceName()
+            .flatMap(resourceName -> {
+                var entry = new BureauEntry();
+                entry.setMetadata(QslApiSupport.createMetadata(resourceName));
+                var spec = new BureauEntry.BureauSpec();
+                spec.setBureauName(bureauName);
+                spec.setTelephone("");
+                spec.setPostalCode(postalCode);
+                spec.setAddress(address);
+                spec.setAddressRemarks("线上换卡申请自动生成");
+                entry.setSpec(spec);
+                var status = new BureauEntry.BureauStatus();
+                status.setSyncStatus("ONLINE_EYEBALL_AUTO");
+                entry.setStatus(status);
+                return client.create(entry).map(created -> new ExchangeAddressBinding(created.getMetadata().getName(), ""));
+            });
     }
 
     private Mono<CardRecord> createCardRecord(
@@ -288,7 +413,10 @@ public class QslConsoleActionService {
         String remarks,
         String sceneType,
         boolean sent,
-        String receivedRecordCode
+        String receivedRecordCode,
+        String cardVersion,
+        String addressEntryName,
+        String mailTargetEmail
     ) {
         return nextCardRecordName()
             .flatMap(resourceName -> {
@@ -299,10 +427,10 @@ public class QslConsoleActionService {
                 spec.setCallSign(callSign);
                 spec.setCardType(cardType);
                 spec.setSceneType(normalizeSceneType(sceneType, cardType));
-                spec.setCardVersion("自动生成");
+                spec.setCardVersion(defaultIfBlank(cardVersion, "自动生成"));
                 spec.setQsoRecordName(qsoRecordName);
                 spec.setOfflineActivityName("");
-                spec.setAddressEntryName("");
+                spec.setAddressEntryName(defaultIfBlank(addressEntryName, ""));
                 spec.setCardDate(QslApiSupport.utcDate());
                 spec.setCardTime(QslApiSupport.utcTime());
                 spec.setBusinessRemarks(remarks);
@@ -328,7 +456,7 @@ public class QslConsoleActionService {
                 spec.setReceivedMailStatus("");
                 spec.setReceivedMailSentAt("");
                 spec.setReceivedMailLastError("");
-                spec.setMailTargetEmail("");
+                spec.setMailTargetEmail(defaultIfBlank(mailTargetEmail, ""));
                 spec.setReceivedRecordCodes(defaultIfBlank(receivedRecordCode, ""));
                 cardRecord.setSpec(spec);
 
@@ -448,12 +576,19 @@ public class QslConsoleActionService {
         if (cardRecord.getSpec() == null) {
             return false;
         }
+        if (!isFormalCardRecordName(cardRecord.getMetadata() == null ? "" : cardRecord.getMetadata().getName())) {
+            return false;
+        }
         var currentCallSign = QslApiSupport.normalizeCallSign(cardRecord.getSpec().getCallSign());
         var currentCardType = QslApiSupport.normalizeCardType(cardRecord.getSpec().getCardType());
         var currentSceneType = normalizeSceneType(cardRecord.getSpec().getSceneType(), currentCardType);
         return currentCallSign.equals(callSign)
             && currentCardType.equals(cardType)
             && currentSceneType.equalsIgnoreCase(sceneType);
+    }
+
+    private boolean isFormalCardRecordName(String resourceName) {
+        return resourceName != null && CARD_NAME_PATTERN.matcher(resourceName.trim()).matches();
     }
 
     private <E extends Extension> Mono<E> fetchOr404(Class<E> extensionType, String name) {
@@ -468,6 +603,30 @@ public class QslConsoleActionService {
     private Mono<String> nextCardRecordName() {
         return reserveNextCardSequence()
             .map(next -> "C" + next);
+    }
+
+    private Mono<String> nextAddressResourceName(String callSign) {
+        var normalizedCallSign = QslApiSupport.normalizeCallSign(callSign);
+        if (normalizedCallSign.isBlank()) {
+            return Mono.just("");
+        }
+        var pattern = Pattern.compile("^" + Pattern.quote(normalizedCallSign) + "-(\\d+)$");
+        return client.listAll(AddressBookEntry.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .map(item -> item.getMetadata() == null ? "" : item.getMetadata().getName())
+            .map(name -> extractSequence(name, pattern))
+            .collectList()
+            .map(sequences -> {
+                var next = 1;
+                var used = new LinkedHashSet<Integer>(sequences);
+                while (used.contains(next)) {
+                    next += 1;
+                }
+                return normalizedCallSign + "-" + next;
+            });
+    }
+
+    private Mono<String> nextBureauResourceName() {
+        return nextNumericResourceName(BureauEntry.class, BUREAU_NAME_PATTERN, "BURO-", 0);
     }
 
     private Mono<Integer> reserveNextCardSequence() {
@@ -616,6 +775,12 @@ public class QslConsoleActionService {
         String reviewStatus,
         String createdCardRecordName,
         String reason
+    ) {
+    }
+
+    private record ExchangeAddressBinding(
+        String addressEntryName,
+        String mailTargetEmail
     ) {
     }
 }

@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
-import { computed, onMounted, ref, watch } from 'vue'
-import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
-import { approveExchangeRequest, rejectExchangeRequest } from '../../api/qsl-console-api'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { deleteExtension, listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
+import { approveExchangeRequest, notifyExchangeRequest, rejectExchangeRequest } from '../../api/qsl-console-api'
+import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
 interface ExchangeRequestSpec {
+  sceneType: 'ONLINE_EYEBALL' | 'QSO' | 'SWL' | 'EYEBALL'
   callSign: string
+  cardVersion: string
   useBureau: boolean
   bureauName: string
   email: string
@@ -26,7 +29,10 @@ interface ExchangeRequestStatus {
 
 interface ExchangeRequestItem {
   id: string
+  metadataVersion?: number | null
+  spec: ExchangeRequestSpec
   callSign: string
+  cardVersion: string
   useBureau: boolean
   bureauName: string
   email: string
@@ -44,30 +50,81 @@ interface ExchangeRequestItem {
 const rows = ref<ExchangeRequestItem[]>([])
 const loading = ref(false)
 const pendingId = ref('')
+const notifyingId = ref('')
 const feedback = ref('')
 const expandedId = ref('')
+const editingId = ref('')
+const savingEdit = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 
 const resourcePlural = 'exchange-requests'
+const resourceKind = 'ExchangeRequest'
+
+const editForm = reactive({
+  callSign: '',
+  cardVersion: '',
+  useBureau: false,
+  bureauName: '',
+  email: '',
+  name: '',
+  telephone: '',
+  postalCode: '',
+  address: '',
+  remarks: '',
+  reviewStatus: '待审核' as ExchangeRequestStatus['reviewStatus'],
+  reviewReason: '',
+  reviewedBy: '',
+  reviewedAt: '',
+})
+
+const normalizeSpec = (spec?: Partial<ExchangeRequestSpec>): ExchangeRequestSpec => {
+  return {
+    sceneType: spec?.sceneType ?? 'ONLINE_EYEBALL',
+    callSign: spec?.callSign ?? '',
+    cardVersion: spec?.cardVersion ?? '',
+    useBureau: Boolean(spec?.useBureau),
+    bureauName: spec?.bureauName ?? '',
+    email: spec?.email ?? '',
+    name: spec?.name ?? '',
+    telephone: spec?.telephone ?? '',
+    postalCode: spec?.postalCode ?? '',
+    address: spec?.address ?? '',
+    remarks: spec?.remarks ?? '',
+  }
+}
+
+const normalizeStatus = (status?: Partial<ExchangeRequestStatus>): ExchangeRequestStatus => {
+  return {
+    reviewStatus: status?.reviewStatus ?? '待审核',
+    reviewReason: status?.reviewReason ?? '',
+    reviewedBy: status?.reviewedBy ?? '',
+    reviewedAt: status?.reviewedAt ?? '',
+  }
+}
 
 const toRow = (extension: QslExtension<ExchangeRequestSpec, ExchangeRequestStatus>): ExchangeRequestItem => {
+  const spec = normalizeSpec(extension.spec)
+  const status = normalizeStatus(extension.status)
   return {
     id: extension.metadata.name,
-    callSign: extension.spec?.callSign ?? '',
-    useBureau: Boolean(extension.spec?.useBureau),
-    bureauName: extension.spec?.bureauName ?? '',
-    email: extension.spec?.email ?? '',
-    name: extension.spec?.name ?? '',
-    telephone: extension.spec?.telephone ?? '',
-    postalCode: extension.spec?.postalCode ?? '',
-    address: extension.spec?.address ?? '',
-    remarks: extension.spec?.remarks ?? '',
-    status: extension.status?.reviewStatus ?? '待审核',
-    reviewReason: extension.status?.reviewReason ?? '',
-    reviewedBy: extension.status?.reviewedBy ?? '',
-    reviewedAt: extension.status?.reviewedAt ?? '',
+    metadataVersion: extension.metadata.version,
+    spec,
+    callSign: spec.callSign,
+    cardVersion: spec.cardVersion,
+    useBureau: spec.useBureau,
+    bureauName: spec.bureauName,
+    email: spec.email,
+    name: spec.name,
+    telephone: spec.telephone,
+    postalCode: spec.postalCode,
+    address: spec.address,
+    remarks: spec.remarks,
+    status: status.reviewStatus,
+    reviewReason: status.reviewReason,
+    reviewedBy: status.reviewedBy,
+    reviewedAt: status.reviewedAt,
   }
 }
 
@@ -112,6 +169,142 @@ const approve = async (row: ExchangeRequestItem) => {
 
 const reject = async (row: ExchangeRequestItem) => {
   await updateReviewStatus(row, '已拒绝', '审批拒绝')
+}
+
+const sendReviewMail = async (row: ExchangeRequestItem) => {
+  notifyingId.value = row.id
+  try {
+    const result = await notifyExchangeRequest(row.id)
+    await loadRows()
+    feedback.value = `审核通知${result.status === 'SENT' ? '发送成功' : result.status === 'SKIPPED' ? '已跳过' : '发送失败'}：${result.message}`
+  } catch (error) {
+    feedback.value = `发送审核通知失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    notifyingId.value = ''
+  }
+}
+
+const startEdit = (row: ExchangeRequestItem) => {
+  editingId.value = row.id
+  editForm.callSign = row.callSign
+  editForm.cardVersion = row.cardVersion
+  editForm.useBureau = row.useBureau
+  editForm.bureauName = row.bureauName
+  editForm.email = row.email
+  editForm.name = row.name
+  editForm.telephone = row.telephone
+  editForm.postalCode = row.postalCode
+  editForm.address = row.address
+  editForm.remarks = row.remarks
+  editForm.reviewStatus = row.status
+  editForm.reviewReason = row.reviewReason
+  editForm.reviewedBy = row.reviewedBy
+  editForm.reviewedAt = row.reviewedAt
+  expandedId.value = row.id
+  feedback.value = `正在修改换卡申请：${row.id}`
+}
+
+const cancelEdit = () => {
+  editingId.value = ''
+  feedback.value = '已取消修改。'
+}
+
+const saveEdit = async () => {
+  const target = rows.value.find((row) => row.id === editingId.value)
+  if (!target) {
+    feedback.value = '未找到待修改的换卡申请，请刷新后重试。'
+    return
+  }
+
+  const callSign = editForm.callSign.trim().toUpperCase()
+  if (!callSign) {
+    feedback.value = '呼号不能为空。'
+    return
+  }
+
+  savingEdit.value = true
+  try {
+    const nextSpec: ExchangeRequestSpec = {
+      ...target.spec,
+      callSign,
+      cardVersion: editForm.cardVersion.trim(),
+      useBureau: editForm.useBureau,
+      bureauName: editForm.bureauName.trim(),
+      email: editForm.email.trim(),
+      name: editForm.name.trim(),
+      telephone: editForm.telephone.trim(),
+      postalCode: editForm.postalCode.trim(),
+      address: editForm.address.trim(),
+      remarks: editForm.remarks.trim(),
+    }
+    const nextStatus: ExchangeRequestStatus = {
+      reviewStatus: editForm.reviewStatus,
+      reviewReason: editForm.reviewReason.trim(),
+      reviewedBy: editForm.reviewedBy.trim(),
+      reviewedAt: editForm.reviewedAt.trim(),
+    }
+
+    await updateExtension<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural, target.id, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: target.id,
+        version: target.metadataVersion,
+      },
+      spec: nextSpec,
+      status: nextStatus,
+    })
+    await appendQslAuditLog({
+      action: '修改换卡申请审核',
+      resourceType: 'exchange-request',
+      resourceName: target.id,
+      detail: `呼号=${nextSpec.callSign}，卡片版本=${nextSpec.cardVersion}，审核状态=${nextStatus.reviewStatus}`,
+    })
+    await loadRows()
+    editingId.value = ''
+    feedback.value = `换卡申请已修改：${target.id}`
+  } catch (error) {
+    feedback.value = `修改换卡申请失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    savingEdit.value = false
+  }
+}
+
+const deleteEditingRequest = async () => {
+  const target = rows.value.find((row) => row.id === editingId.value)
+  if (!target) {
+    feedback.value = '未找到待删除的换卡申请，请刷新后重试。'
+    return
+  }
+
+  const firstConfirmed = window.confirm(`确认删除换卡申请 ${target.id} 吗？`)
+  if (!firstConfirmed) {
+    feedback.value = `已取消删除：${target.id}`
+    return
+  }
+  const secondConfirmed = window.confirm('二次确认：删除后只移除本条换卡申请记录，不会删除已生成的卡片记录，是否继续？')
+  if (!secondConfirmed) {
+    feedback.value = `已取消删除：${target.id}`
+    return
+  }
+
+  savingEdit.value = true
+  try {
+    await deleteExtension(resourcePlural, target.id)
+    await appendQslAuditLog({
+      action: '删除换卡申请',
+      resourceType: 'exchange-request',
+      resourceName: target.id,
+      detail: `呼号=${target.callSign}，审核状态=${target.status}`,
+    })
+    editingId.value = ''
+    await loadRows()
+    feedback.value = `已删除换卡申请：${target.id}`
+  } catch (error) {
+    feedback.value = `删除换卡申请失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    savingEdit.value = false
+  }
 }
 
 const toggleDetails = (id: string) => {
@@ -186,7 +379,7 @@ onMounted(loadRows)
                       size="xs"
                       type="secondary"
                       :disabled="pendingId === row.id || loading"
-                      @click.stop="approve(row)"
+                      @click="approve(row)"
                     >
                       同意
                     </VButton>
@@ -195,9 +388,26 @@ onMounted(loadRows)
                       size="xs"
                       type="danger"
                       :disabled="pendingId === row.id || loading"
-                      @click.stop="reject(row)"
+                      @click="reject(row)"
                     >
                       拒绝
+                    </VButton>
+                    <VButton
+                      v-if="row.status !== '待审核'"
+                      size="xs"
+                      type="secondary"
+                      :disabled="notifyingId === row.id || pendingId === row.id || loading"
+                      @click="sendReviewMail(row)"
+                    >
+                      发送邮件通知
+                    </VButton>
+                    <VButton
+                      v-if="row.status !== '待审核'"
+                      size="xs"
+                      :disabled="savingEdit || pendingId === row.id || loading"
+                      @click="startEdit(row)"
+                    >
+                      修改
                     </VButton>
                   </div>
                 </td>
@@ -205,6 +415,7 @@ onMounted(loadRows)
               <tr v-if="expandedId === row.id" class="qsl-table-detail-row">
                 <td colspan="5">
                   <div class="qsl-detail-grid">
+                    <p><strong>卡片版本：</strong>{{ row.cardVersion || '-' }}</p>
                     <p><strong>是否使用卡片局：</strong>{{ row.useBureau ? '是' : '否' }}</p>
                     <p><strong>卡片局名称：</strong>{{ row.bureauName || '-' }}</p>
                     <p><strong>姓名：</strong>{{ row.name || '-' }}</p>
@@ -234,6 +445,115 @@ onMounted(loadRows)
         @update:page-size="(value) => (pageSize = value)"
       />
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
+    </VCard>
+
+    <VCard v-if="editingId" title="修改换卡申请">
+      <div class="qsl-form-grid">
+        <label class="qsl-field">
+          <span class="qsl-field__label">呼号</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="editForm.callSign" type="text" />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">卡片版本</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="editForm.cardVersion" type="text" />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">审核状态</span>
+          <div class="qsl-input-shell">
+            <select v-model="editForm.reviewStatus">
+              <option value="待审核">待审核</option>
+              <option value="已通过">已通过</option>
+              <option value="已拒绝">已拒绝</option>
+            </select>
+          </div>
+        </label>
+
+        <label class="qsl-checkbox">
+          <input v-model="editForm.useBureau" type="checkbox" />
+          <span>使用卡片局地址</span>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">卡片局名称</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="editForm.bureauName" type="text" />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">姓名</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="editForm.name" type="text" />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">电子邮件</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="editForm.email" type="email" />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">电话</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="editForm.telephone" type="text" />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">邮编</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="editForm.postalCode" type="text" />
+          </div>
+        </label>
+
+        <label class="qsl-field qsl-field--full">
+          <span class="qsl-field__label">收件地址</span>
+          <div class="qsl-input-shell qsl-input-shell--textarea">
+            <textarea v-model.trim="editForm.address" rows="2" />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">审核人</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="editForm.reviewedBy" type="text" />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">审核时间</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="editForm.reviewedAt" type="text" />
+          </div>
+        </label>
+
+        <label class="qsl-field qsl-field--full">
+          <span class="qsl-field__label">审核说明</span>
+          <div class="qsl-input-shell qsl-input-shell--textarea">
+            <textarea v-model.trim="editForm.reviewReason" rows="2" />
+          </div>
+        </label>
+
+        <label class="qsl-field qsl-field--full">
+          <span class="qsl-field__label">申请备注</span>
+          <div class="qsl-input-shell qsl-input-shell--textarea">
+            <textarea v-model.trim="editForm.remarks" rows="3" />
+          </div>
+        </label>
+      </div>
+      <div class="qsl-actions">
+        <VButton type="secondary" :disabled="savingEdit" @click="saveEdit">保存修改</VButton>
+        <VButton :disabled="savingEdit" @click="cancelEdit">取消</VButton>
+        <VButton type="danger" :disabled="savingEdit" @click="deleteEditingRequest">删除本条数据</VButton>
+      </div>
     </VCard>
   </div>
 </template>

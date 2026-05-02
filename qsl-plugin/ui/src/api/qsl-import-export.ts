@@ -209,6 +209,7 @@ const datasetConfigs: DatasetConfig[] = [
     headers: [
       'id',
       'callSign',
+      'cardVersion',
       'useBureau',
       'bureauName',
       'email',
@@ -226,6 +227,7 @@ const datasetConfigs: DatasetConfig[] = [
     toRow: (item) => ({
       id: item.metadata.name,
       callSign: String(item.spec?.callSign ?? ''),
+      cardVersion: String(item.spec?.cardVersion ?? ''),
       useBureau: String(Boolean(item.spec?.useBureau)),
       bureauName: String(item.spec?.bureauName ?? ''),
       email: String(item.spec?.email ?? ''),
@@ -242,6 +244,7 @@ const datasetConfigs: DatasetConfig[] = [
     fromRow: (row) => ({
       spec: {
         callSign: row.callSign ?? '',
+        cardVersion: row.cardVersion ?? '',
         useBureau: parseBoolean(row.useBureau ?? ''),
         bureauName: row.bureauName ?? '',
         email: row.email ?? '',

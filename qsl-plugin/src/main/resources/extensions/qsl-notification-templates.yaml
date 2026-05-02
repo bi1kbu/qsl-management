@@ -41,6 +41,54 @@ spec:
 apiVersion: notification.halo.run/v1alpha1
 kind: NotificationTemplate
 metadata:
+  name: template-qsl-exchange-reviewed
+spec:
+  reasonSelector:
+    reasonType: qsl-exchange-reviewed
+    language: default
+  template:
+    title: "【QSL】换卡申请审核结果：[(${callSign})] [(${reviewStatus})]"
+    rawBody: |
+      [(${subscriber.displayName})] 您好：
+
+        您的 QSL 线上换卡申请已完成审核。
+        呼号：[(${callSign})]
+        审核状态：[(${reviewStatus})]
+        审核说明：[(${reviewReason})]
+        申请编号：[(${requestName})]
+        卡片版本：[(${cardVersion})]
+        地址类型：[(${addressMode})]
+        卡片局：[(${bureauName})]
+        邮编：[(${postalCode})]
+        地址：[(${address})]
+        申请备注：[(${remarks})]
+        通知时间：[(${triggerAt})]
+        操作人：[(${operator})]
+    htmlBody: |
+      <div class="notification-content">
+        <div class="head">
+          <p class="honorific" th:text="|${subscriber.displayName} 您好：|"></p>
+        </div>
+        <div class="body">
+          <p>您的 QSL 线上换卡申请已完成审核。</p>
+          <p th:text="|呼号：${callSign}|"></p>
+          <p th:text="|审核状态：${reviewStatus}|"></p>
+          <p th:text="|审核说明：${reviewReason}|"></p>
+          <p th:text="|申请编号：${requestName}|"></p>
+          <p th:text="|卡片版本：${cardVersion}|"></p>
+          <p th:text="|地址类型：${addressMode}|"></p>
+          <p th:text="|卡片局：${bureauName}|"></p>
+          <p th:text="|邮编：${postalCode}|"></p>
+          <p th:text="|地址：${address}|"></p>
+          <p th:text="|申请备注：${remarks}|"></p>
+          <p th:text="|通知时间：${triggerAt}|"></p>
+          <p th:text="|操作人：${operator}|"></p>
+        </div>
+      </div>
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: NotificationTemplate
+metadata:
   name: template-qsl-card-sent
 spec:
   reasonSelector:
@@ -117,4 +165,3 @@ spec:
           <p th:text="|操作人：${operator}|"></p>
         </div>
       </div>
-
