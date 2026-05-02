@@ -42,6 +42,7 @@ export interface ExchangeReviewMailSendResult {
 }
 
 export type NotificationMailScene = 'created' | 'sent' | 'received'
+export type NotificationMailTestScene = NotificationMailScene | 'exchange-reviewed'
 
 export interface NotificationMailSendPayload {
   cardRecordName: string
@@ -57,7 +58,7 @@ export interface NotificationMailBatchSendPayload {
 
 export interface NotificationMailSendResult {
   cardRecordName: string
-  scene: NotificationMailScene
+  scene: NotificationMailTestScene
   status: 'SENT' | 'SKIPPED' | 'FAILED'
   message: string
   targetEmail: string
@@ -71,6 +72,10 @@ export interface NotificationMailBatchSendResult {
   skippedCount: number
   failedCount: number
   results: NotificationMailSendResult[]
+}
+
+export interface NotificationMailTestPayload {
+  scene: NotificationMailTestScene
 }
 
 export interface ImportJobCreatePayload {
@@ -216,6 +221,16 @@ export async function batchSendNotificationMail(
 ): Promise<NotificationMailBatchSendResult> {
   const response = await axiosInstance.post<ApiResult<NotificationMailBatchSendResult>>(
     `${consoleApiBase}/notification-mails/batch-send`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function sendTestNotificationMail(
+  payload: NotificationMailTestPayload,
+): Promise<NotificationMailSendResult> {
+  const response = await axiosInstance.post<ApiResult<NotificationMailSendResult>>(
+    `${consoleApiBase}/notification-mails/test`,
     payload,
   )
   return response.data.data

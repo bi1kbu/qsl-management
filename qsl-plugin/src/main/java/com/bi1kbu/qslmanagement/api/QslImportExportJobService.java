@@ -553,6 +553,7 @@ public class QslImportExportJobService {
                     spec.setAutoNotifyOnCardCreated(parseBoolean(value(row, "autoNotifyOnCardCreated")));
                     spec.setAutoNotifyOnCardSent(parseBoolean(value(row, "autoNotifyOnCardSent")));
                     spec.setAutoNotifyOnCardReceived(parseBoolean(value(row, "autoNotifyOnCardReceived")));
+                    spec.setAutoNotifyOnExchangeReviewed(parseBoolean(value(row, "autoNotifyOnExchangeReviewed")));
                     spec.setCardRecordSequence(parseInteger(value(row, "cardRecordSequence")));
                     spec.setReceiveRecordSequence(parseInteger(value(row, "receiveRecordSequence")));
                     record.setSpec(spec);
@@ -1040,6 +1041,7 @@ public class QslImportExportJobService {
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnCardCreated()),
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnCardSent()),
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnCardReceived()),
+                        spec == null ? "" : boolToText(spec.getAutoNotifyOnExchangeReviewed()),
                         spec == null ? "" : integerToText(spec.getCardRecordSequence()),
                         spec == null ? "" : integerToText(spec.getReceiveRecordSequence()),
                         status == null ? "" : nullToEmpty(status.getLastModifiedBy()),
@@ -1054,6 +1056,7 @@ public class QslImportExportJobService {
                     "autoNotifyOnCardCreated",
                     "autoNotifyOnCardSent",
                     "autoNotifyOnCardReceived",
+                    "autoNotifyOnExchangeReviewed",
                     "cardRecordSequence",
                     "receiveRecordSequence",
                     "lastModifiedBy",

@@ -3,6 +3,7 @@ package com.bi1kbu.qslmanagement.api;
 import com.bi1kbu.qslmanagement.extension.model.AddressBookEntry;
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
+import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,6 +29,7 @@ public class QslNotificationMailService {
     private static final String MAIL_STATUS_FAILED = "FAILED";
     private static final String MAIL_STATUS_SKIPPED = "SKIPPED";
     private static final String SYSTEM_SETTING_NAME = "qsl-system-setting-default";
+    private static final String STATION_PROFILE_NAME = "qsl-station-profile-default";
     private static final String QSL_API_VERSION = "qsl-management.halo.run/v1alpha1";
     private static final String CARD_RECORD_KIND = "CardRecord";
     private static final String EXCHANGE_REQUEST_KIND = "ExchangeRequest";
@@ -143,6 +145,70 @@ public class QslNotificationMailService {
                     .then();
             })
             .onErrorResume(error -> Mono.empty());
+    }
+
+    public Mono<Void> autoSendExchangeReviewIfEnabled(
+        String requestName,
+        String operator,
+        String clientIp
+    ) {
+        return loadSystemSetting()
+            .flatMap(systemSetting -> {
+                if (!Boolean.TRUE.equals(systemSetting.getAutoNotifyOnExchangeReviewed())) {
+                    return Mono.empty();
+                }
+                return sendExchangeReviewMail(requestName, operator, clientIp, "自动触发")
+                    .then();
+            })
+            .onErrorResume(error -> Mono.empty());
+    }
+
+    public Mono<NotificationMailSendResult> sendTestMail(
+        String sceneCode,
+        String operator,
+        String clientIp
+    ) {
+        var scene = TestMailScene.fromCode(sceneCode);
+        if (scene == null) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "邮件测试场景不支持"));
+        }
+
+        return loadStationProfile()
+            .flatMap(stationProfile -> {
+                var targetEmail = StringUtils.defaultString(stationProfile.getMyEmail()).trim();
+                if (StringUtils.isBlank(targetEmail)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "本台电子邮件为空，不能发送测试邮件"));
+                }
+
+                var sentAt = QslApiSupport.nowText();
+                return subscribeTarget(targetEmail, scene.reasonType, scene.subjectKind)
+                    .then(emitTestReason(scene, stationProfile, targetEmail, safeOperator(operator), sentAt))
+                    .then(qslAuditService.appendAuditLog(
+                        "发送测试邮件",
+                        "system-setting",
+                        SYSTEM_SETTING_NAME,
+                        "场景=" + scene.code + "；目标邮箱=" + targetEmail + "；卡片类型=EYEBALL；卡片编号=C0001",
+                        safeOperator(operator),
+                        clientIp
+                    ))
+                    .thenReturn(new NotificationMailSendResult(
+                        "C0001",
+                        scene.code,
+                        MAIL_STATUS_SENT,
+                        "测试邮件已提交给系统邮件通道。",
+                        targetEmail,
+                        sentAt
+                    ))
+                    .onErrorResume(error -> Mono.just(new NotificationMailSendResult(
+                        "C0001",
+                        scene.code,
+                        MAIL_STATUS_FAILED,
+                        "测试邮件发送失败：" + shortError(error),
+                        targetEmail,
+                        ""
+                    )));
+            });
     }
 
     public Mono<ExchangeReviewMailSendResult> sendExchangeReviewMail(
@@ -358,30 +424,35 @@ public class QslNotificationMailService {
         String operator,
         String sentAt
     ) {
-        var anonymousIdentity = UserIdentity.anonymousWithEmail(targetEmail).name();
-        var normalizedCallSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
-        var subject = Reason.Subject.builder()
-            .apiVersion(QSL_API_VERSION)
-            .kind(CARD_RECORD_KIND)
-            .name(anonymousIdentity)
-            .title(scene.displayName + "：" + normalizedCallSign)
-            .build();
+        return loadStationProfile()
+            .flatMap(stationProfile -> {
+                var anonymousIdentity = UserIdentity.anonymousWithEmail(targetEmail).name();
+                var normalizedCallSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
+                var subject = Reason.Subject.builder()
+                    .apiVersion(QSL_API_VERSION)
+                    .kind(CARD_RECORD_KIND)
+                    .name(anonymousIdentity)
+                    .title(scene.displayName + "：" + normalizedCallSign)
+                    .build();
 
-        return notificationReasonEmitter.emit(scene.reasonType, builder -> builder
-            .subject(subject)
-            .author(UserIdentity.of(safeOperator(operator)))
-            .attribute("sceneDisplay", scene.displayName)
-            .attribute("callSign", normalizedCallSign)
-            .attribute("cardType", StringUtils.defaultString(spec.getCardType()))
-            .attribute("cardVersion", StringUtils.defaultString(spec.getCardVersion()))
-            .attribute("cardDate", StringUtils.defaultString(spec.getCardDate()))
-            .attribute("cardTime", StringUtils.defaultString(spec.getCardTime()))
-            .attribute("cardRecordName", cardRecordName)
-            .attribute("remarks", resolveSceneRemarks(scene, spec))
-            .attribute("targetEmail", targetEmail)
-            .attribute("triggerAt", sentAt)
-            .attribute("operator", safeOperator(operator))
-        );
+                return notificationReasonEmitter.emit(scene.reasonType, builder -> builder
+                    .subject(subject)
+                    .author(UserIdentity.of(safeOperator(operator)))
+                    .attribute("sceneDisplay", scene.displayName)
+                    .attribute("stationCallSign", stationCallSign(stationProfile))
+                    .attribute("callSign", normalizedCallSign)
+                    .attribute("cardType", StringUtils.defaultString(spec.getCardType()))
+                    .attribute("cardVersion", StringUtils.defaultString(spec.getCardVersion()))
+                    .attribute("cardDate", StringUtils.defaultString(spec.getCardDate()))
+                    .attribute("cardTime", StringUtils.defaultString(spec.getCardTime()))
+                    .attribute("cardRecordName", cardRecordName)
+                    .attribute("remarks", resolveSceneRemarks(scene, spec))
+                    .attribute("targetEmail", targetEmail)
+                    .attribute("triggerAt", sentAt)
+                    .attribute("dateText", dateText(sentAt))
+                    .attribute("operator", safeOperator(operator))
+                );
+            });
     }
 
     private String resolveSceneRemarks(MailScene scene, CardRecord.CardRecordSpec spec) {
@@ -423,31 +494,96 @@ public class QslNotificationMailService {
         var status = exchangeRequest.getStatus() == null
             ? new ExchangeRequest.ExchangeRequestStatus()
             : exchangeRequest.getStatus();
+        return loadStationProfile()
+            .flatMap(stationProfile -> {
+                var anonymousIdentity = UserIdentity.anonymousWithEmail(targetEmail).name();
+                var callSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
+                var reviewStatus = StringUtils.defaultString(status.getReviewStatus());
+                var subject = Reason.Subject.builder()
+                    .apiVersion(QSL_API_VERSION)
+                    .kind(EXCHANGE_REQUEST_KIND)
+                    .name(anonymousIdentity)
+                    .title("QSL 换卡申请审核：" + callSign + " " + reviewStatus)
+                    .build();
+
+                return notificationReasonEmitter.emit(EXCHANGE_REVIEW_REASON_TYPE, builder -> builder
+                    .subject(subject)
+                    .author(UserIdentity.of(operator))
+                    .attribute("stationCallSign", stationCallSign(stationProfile))
+                    .attribute("stationName", StringUtils.defaultString(stationProfile.getMyName()))
+                    .attribute("stationTelephone", StringUtils.defaultString(stationProfile.getMyTelephone()))
+                    .attribute("stationPostalCode", StringUtils.defaultString(stationProfile.getMyPostalCode()))
+                    .attribute("stationAddress", StringUtils.defaultString(stationProfile.getMyAddress()))
+                    .attribute("stationEmail", StringUtils.defaultString(stationProfile.getMyEmail()))
+                    .attribute("callSign", callSign)
+                    .attribute("targetName", StringUtils.defaultString(spec.getName()))
+                    .attribute("targetTelephone", StringUtils.defaultString(spec.getTelephone()))
+                    .attribute("reviewStatus", reviewStatus)
+                    .attribute("reviewResultText", exchangeReviewResultText(reviewStatus))
+                    .attribute("reviewMailIntro", exchangeReviewIntro(reviewStatus, stationCallSign(stationProfile)))
+                    .attribute("reviewReason", StringUtils.defaultString(status.getReviewReason()))
+                    .attribute("requestName", StringUtils.defaultString(exchangeRequest.getMetadata().getName()))
+                    .attribute("cardVersion", StringUtils.defaultString(spec.getCardVersion()))
+                    .attribute("addressMode", Boolean.TRUE.equals(spec.getUseBureau()) ? "卡片局地址" : "个人地址")
+                    .attribute("bureauName", StringUtils.defaultString(spec.getBureauName()))
+                    .attribute("postalCode", StringUtils.defaultString(spec.getPostalCode()))
+                    .attribute("address", StringUtils.defaultString(spec.getAddress()))
+                    .attribute("remarks", StringUtils.defaultString(spec.getRemarks()))
+                    .attribute("targetEmail", targetEmail)
+                    .attribute("triggerAt", sentAt)
+                    .attribute("dateText", dateText(sentAt))
+                    .attribute("operator", operator)
+                ).then();
+            });
+    }
+
+    private Mono<Void> emitTestReason(
+        TestMailScene scene,
+        StationProfile.StationProfileSpec stationProfile,
+        String targetEmail,
+        String operator,
+        String sentAt
+    ) {
         var anonymousIdentity = UserIdentity.anonymousWithEmail(targetEmail).name();
-        var callSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
-        var reviewStatus = StringUtils.defaultString(status.getReviewStatus());
+        var callSign = stationCallSign(stationProfile);
         var subject = Reason.Subject.builder()
             .apiVersion(QSL_API_VERSION)
-            .kind(EXCHANGE_REQUEST_KIND)
+            .kind(scene.subjectKind)
             .name(anonymousIdentity)
-            .title("QSL 换卡申请审核：" + callSign + " " + reviewStatus)
+            .title("QSL 测试邮件：" + scene.displayName)
             .build();
 
-        return notificationReasonEmitter.emit(EXCHANGE_REVIEW_REASON_TYPE, builder -> builder
+        return notificationReasonEmitter.emit(scene.reasonType, builder -> builder
             .subject(subject)
             .author(UserIdentity.of(operator))
+            .attribute("sceneDisplay", scene.displayName)
+            .attribute("stationCallSign", callSign)
+            .attribute("stationName", StringUtils.defaultString(stationProfile.getMyName()))
+            .attribute("stationTelephone", StringUtils.defaultString(stationProfile.getMyTelephone()))
+            .attribute("stationPostalCode", StringUtils.defaultString(stationProfile.getMyPostalCode()))
+            .attribute("stationAddress", StringUtils.defaultString(stationProfile.getMyAddress()))
+            .attribute("stationEmail", StringUtils.defaultString(stationProfile.getMyEmail()))
             .attribute("callSign", callSign)
-            .attribute("reviewStatus", reviewStatus)
-            .attribute("reviewReason", StringUtils.defaultString(status.getReviewReason()))
-            .attribute("requestName", StringUtils.defaultString(exchangeRequest.getMetadata().getName()))
-            .attribute("cardVersion", StringUtils.defaultString(spec.getCardVersion()))
-            .attribute("addressMode", Boolean.TRUE.equals(spec.getUseBureau()) ? "卡片局地址" : "个人地址")
-            .attribute("bureauName", StringUtils.defaultString(spec.getBureauName()))
-            .attribute("postalCode", StringUtils.defaultString(spec.getPostalCode()))
-            .attribute("address", StringUtils.defaultString(spec.getAddress()))
-            .attribute("remarks", StringUtils.defaultString(spec.getRemarks()))
+            .attribute("targetName", StringUtils.defaultIfBlank(stationProfile.getMyName(), callSign))
+            .attribute("targetTelephone", StringUtils.defaultString(stationProfile.getMyTelephone()))
+            .attribute("cardType", "EYEBALL")
+            .attribute("cardVersion", "")
+            .attribute("cardDate", dateText(sentAt))
+            .attribute("cardTime", sentAt)
+            .attribute("cardRecordName", "C0001")
+            .attribute("reviewStatus", "已通过")
+            .attribute("reviewResultText", "已被通过")
+            .attribute("reviewMailIntro", exchangeReviewIntro("已通过", callSign))
+            .attribute("reviewReason", "测试邮件")
+            .attribute("requestName", "C0001")
+            .attribute("addressMode", "个人地址")
+            .attribute("bureauName", "")
+            .attribute("postalCode", StringUtils.defaultString(stationProfile.getMyPostalCode()))
+            .attribute("address", StringUtils.defaultString(stationProfile.getMyAddress()))
+            .attribute("remarks", "测试邮件")
             .attribute("targetEmail", targetEmail)
             .attribute("triggerAt", sentAt)
+            .attribute("dateText", dateText(sentAt))
             .attribute("operator", operator)
         ).then();
     }
@@ -496,6 +632,13 @@ public class QslNotificationMailService {
             .map(SystemSetting::getSpec)
             .map(spec -> spec == null ? new SystemSetting.SystemSettingSpec() : spec)
             .switchIfEmpty(Mono.just(new SystemSetting.SystemSettingSpec()));
+    }
+
+    private Mono<StationProfile.StationProfileSpec> loadStationProfile() {
+        return client.fetch(StationProfile.class, STATION_PROFILE_NAME)
+            .map(StationProfile::getSpec)
+            .map(spec -> spec == null ? new StationProfile.StationProfileSpec() : spec)
+            .switchIfEmpty(Mono.just(new StationProfile.StationProfileSpec()));
     }
 
     private CardRecord.CardRecordSpec ensureCardRecordSpec(CardRecord cardRecord) {
@@ -556,6 +699,29 @@ public class QslNotificationMailService {
             return message.substring(0, 120);
         }
         return message;
+    }
+
+    private String stationCallSign(StationProfile.StationProfileSpec stationProfile) {
+        return QslApiSupport.normalizeCallSign(StringUtils.defaultString(stationProfile.getMyCallSign()));
+    }
+
+    private String dateText(String sentAt) {
+        var value = StringUtils.defaultString(sentAt).trim();
+        if (value.length() >= 10) {
+            return value.substring(0, 10);
+        }
+        return QslApiSupport.nowText().substring(0, 10);
+    }
+
+    private String exchangeReviewResultText(String reviewStatus) {
+        return "已拒绝".equals(StringUtils.defaultString(reviewStatus).trim()) ? "已被拒绝" : "已被通过";
+    }
+
+    private String exchangeReviewIntro(String reviewStatus, String stationCallSign) {
+        if ("已拒绝".equals(StringUtils.defaultString(reviewStatus).trim())) {
+            return "您的线上交换眼球卡片申请已被拒绝，请查看审核说明。";
+        }
+        return "很高兴与您线上交换眼球卡片，" + StringUtils.defaultString(stationCallSign) + "将尽快发出您的卡片。";
     }
 
     private <E extends run.halo.app.extension.Extension> Mono<E> fetchOr404(Class<E> extensionType, String name) {
@@ -645,6 +811,38 @@ public class QslNotificationMailService {
                 case CARD_SENT -> Boolean.TRUE.equals(spec.getAutoNotifyOnCardSent());
                 case CARD_RECEIVED -> Boolean.TRUE.equals(spec.getAutoNotifyOnCardReceived());
             };
+        }
+    }
+
+    public enum TestMailScene {
+        CARD_CREATED("created", "qsl-card-created", CARD_RECORD_KIND, "制卡"),
+        CARD_SENT("sent", "qsl-card-sent", CARD_RECORD_KIND, "发卡"),
+        CARD_RECEIVED("received", "qsl-card-received", CARD_RECORD_KIND, "收卡"),
+        EXCHANGE_REVIEWED("exchange-reviewed", EXCHANGE_REVIEW_REASON_TYPE, EXCHANGE_REQUEST_KIND, "线上换卡审核");
+
+        private final String code;
+        private final String reasonType;
+        private final String subjectKind;
+        private final String displayName;
+
+        TestMailScene(String code, String reasonType, String subjectKind, String displayName) {
+            this.code = code;
+            this.reasonType = reasonType;
+            this.subjectKind = subjectKind;
+            this.displayName = displayName;
+        }
+
+        static TestMailScene fromCode(String code) {
+            if (StringUtils.isBlank(code)) {
+                return null;
+            }
+            var normalized = code.trim().toLowerCase(Locale.ROOT);
+            for (var scene : values()) {
+                if (scene.code.equals(normalized)) {
+                    return scene;
+                }
+            }
+            return null;
         }
     }
 

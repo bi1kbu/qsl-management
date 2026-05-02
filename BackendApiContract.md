@@ -95,6 +95,7 @@ API 版本：`v1alpha1`
 | POST | `/exchange-requests/{name}/notify` | 发送线上换卡申请审核结果邮件 | `exchange-request-review:edit` |
 | POST | `/notification-mails/send` | 单条发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
 | POST | `/notification-mails/batch-send` | 批量发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
+| POST | `/notification-mails/test` | 向“本台电子邮件”发送测试通知邮件 | `system-settings:edit` |
 
 ### 6.3 导入导出
 
@@ -154,6 +155,16 @@ API 版本：`v1alpha1`
 ```
 
 `scene` 当前前端使用：`created`、`sent`、`received`。
+
+测试邮件发送：
+
+```json
+{
+  "scene": "exchange-reviewed"
+}
+```
+
+`scene` 允许：`created`、`sent`、`received`、`exchange-reviewed`。服务端使用 `StationProfile.spec.myEmail` 作为收件地址，测试数据中对方呼号等字段临时使用本台资料，卡片类型固定为 `EYEBALL`，卡片编号固定为 `C0001`。
 
 导入预检/导入任务：
 

@@ -95,7 +95,7 @@ Halo 官方资料核验日期：2026-05-02
 
 1. `guestQueryPerMinute`：匿名公开接口每分钟限流阈值。
 2. `requiresExchangeReview`：线上换卡申请是否需要审核。
-3. `autoNotifyOnCardCreated`、`autoNotifyOnCardSent`、`autoNotifyOnCardReceived`：制卡、发卡、收卡节点邮件自动通知开关。
+3. `autoNotifyOnCardCreated`、`autoNotifyOnCardSent`、`autoNotifyOnCardReceived`、`autoNotifyOnExchangeReviewed`：制卡、发卡、收卡、线上换卡审核节点邮件自动通知开关；邮件通知策略支持向 `StationProfile.spec.myEmail` 发送测试邮件，测试数据中对方呼号等字段临时使用本台资料，卡片类型固定为 `EYEBALL`，卡片编号固定为 `C0001`。
 4. `cardRecordSequence`：卡片编号序列。
 5. `receiveRecordSequence`：收卡编号序列。
 
@@ -120,7 +120,7 @@ Halo 官方资料核验日期：2026-05-02
 3. 同一呼号存在 `ONLINE_EYEBALL` 待审核换卡申请时，公开提交接口拒绝再次提交；待后台审核通过或审核拒绝后，才允许该呼号再次提交。
 4. 线上换卡提交校验通过并成功写入 `ExchangeRequest` 后，提交接口返回本站通信地址，前台在成功提示中展示寄送信息。
 5. 后台审核通过后自动创建 `ONLINE_EYEBALL` 场景卡片，并把 `ExchangeRequest.spec.cardVersion` 写入新建 `CardRecord.spec.cardVersion`；同时根据申请中的个人地址或卡片局地址复用/创建地址资源，并写入 `CardRecord.spec.addressEntryName`。
-6. 换卡申请审核在同意或拒绝后显示“发送邮件通知”和“修改”操作；邮件通知面向 `ExchangeRequest.spec.email`，无邮箱时按跳过处理；修改操作可调整申请信息与审核状态，并可删除本条换卡申请记录。
+6. 换卡申请审核在同意或拒绝后显示“发送邮件通知”和“修改”操作；当 `SystemSetting.spec.autoNotifyOnExchangeReviewed=true` 时，审核同意或拒绝后自动发送审核结果邮件。邮件通知面向 `ExchangeRequest.spec.email`，无邮箱时按跳过处理；修改操作可调整申请信息与审核状态，并可删除本条换卡申请记录。
 7. 后续流程复用创建卡片、制卡签发、发信确认、送达确认组件。
 
 ### 3.6 线下换卡业务

@@ -245,7 +245,11 @@ public class QslConsoleActionService {
                 result.reason(),
                 safeOperator(operator),
                 clientIp
-            ).thenReturn(result));
+            ).then(notificationMailService.autoSendExchangeReviewIfEnabled(
+                result.requestName(),
+                operator,
+                clientIp
+            )).thenReturn(result));
     }
 
     private Mono<MailReceiveConfirmResult> createAutoReceiveResult(
@@ -836,6 +840,7 @@ public class QslConsoleActionService {
         spec.setAutoNotifyOnCardCreated(Boolean.FALSE);
         spec.setAutoNotifyOnCardSent(Boolean.FALSE);
         spec.setAutoNotifyOnCardReceived(Boolean.FALSE);
+        spec.setAutoNotifyOnExchangeReviewed(Boolean.FALSE);
         spec.setCardRecordSequence(CARD_SEQUENCE_START);
         spec.setReceiveRecordSequence(RECEIVE_SEQUENCE_START);
         return spec;

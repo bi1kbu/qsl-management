@@ -89,6 +89,7 @@ class QslImportExportJobServiceTest {
         spec.setAutoNotifyOnCardCreated(Boolean.FALSE);
         spec.setAutoNotifyOnCardSent(Boolean.TRUE);
         spec.setAutoNotifyOnCardReceived(Boolean.FALSE);
+        spec.setAutoNotifyOnExchangeReviewed(Boolean.TRUE);
         spec.setCardRecordSequence(1000);
         spec.setReceiveRecordSequence(12);
         setting.setSpec(spec);
@@ -102,7 +103,7 @@ class QslImportExportJobServiceTest {
         assertEquals("export-job-1.csv", payload.fileName());
         var csv = new String(payload.content(), StandardCharsets.UTF_8);
         assertEquals(true, csv.contains("id#system-setting,guestQueryPerMinute,requiresExchangeReview"));
-        assertEquals(true, csv.contains("qsl-system-setting-default,30,true,false,true,false,1000,12"));
+        assertEquals(true, csv.contains("qsl-system-setting-default,30,true,false,true,false,true,1000,12"));
     }
 
     @Test

@@ -2,8 +2,10 @@ package com.bi1kbu.qslmanagement.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
@@ -81,5 +83,48 @@ class QslConsoleActionServiceValidationTest {
 
         assertEquals("QSL-422-0001", error.getCode());
         assertEquals(422, error.getStatus().value());
+    }
+
+    @Test
+    void shouldTriggerAutoExchangeReviewMailAfterReview() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            notificationMailService
+        );
+
+        var exchangeRequest = new ExchangeRequest();
+        exchangeRequest.setMetadata(QslApiSupport.createMetadata("exchange-request-1"));
+        var spec = new ExchangeRequest.ExchangeRequestSpec();
+        spec.setCallSign("BI1KBU");
+        exchangeRequest.setSpec(spec);
+        var status = new ExchangeRequest.ExchangeRequestStatus();
+        status.setReviewStatus("待审核");
+        exchangeRequest.setStatus(status);
+
+        when(client.fetch(eq(ExchangeRequest.class), eq("exchange-request-1")))
+            .thenReturn(Mono.just(exchangeRequest));
+        when(client.update(any(ExchangeRequest.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendExchangeReviewIfEnabled(any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.reviewExchangeRequest(
+            "exchange-request-1",
+            false,
+            "资料不完整",
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("exchange-request-1", result.requestName());
+        assertEquals("已拒绝", result.reviewStatus());
+        verify(notificationMailService).autoSendExchangeReviewIfEnabled(
+            "exchange-request-1",
+            "admin",
+            "127.0.0.1"
+        );
     }
 }

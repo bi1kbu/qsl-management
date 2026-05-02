@@ -55,6 +55,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
             .andRoute(POST("/notification-mails/send"), this::sendNotificationMail)
             .andRoute(POST("/notification-mails/batch-send"), this::batchSendNotificationMail)
+            .andRoute(POST("/notification-mails/test"), this::sendTestNotificationMail)
             .andRoute(POST("/imports/precheck"), this::importPrecheck)
             .andRoute(POST("/imports/jobs"), this::createImportJob)
             .andRoute(GET("/imports/jobs/{jobName}"), this::getImportJob)
@@ -189,6 +190,19 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp(),
                     payload.source()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> sendTestNotificationMail(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(NotificationMailTestRequest.class)
+                .defaultIfEmpty(new NotificationMailTestRequest("created"))
+                .flatMap(payload -> notificationMailService.sendTestMail(
+                    payload.scene(),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
                 )))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
@@ -359,5 +373,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     }
 
     private record NotificationMailBatchSendRequest(List<String> cardRecordNames, String scene, String source) {
+    }
+
+    private record NotificationMailTestRequest(String scene) {
     }
 }

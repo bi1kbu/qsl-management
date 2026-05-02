@@ -61,6 +61,9 @@ rules:
   - apiGroups: [ "qsl-management.halo.run" ]
     resources: [ "system-settings" ]
     verbs: [ "create", "update", "patch", "delete" ]
+  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+    resources: [ "notification-mails" ]
+    verbs: [ "create" ]
 ---
 apiVersion: v1alpha1
 kind: Role

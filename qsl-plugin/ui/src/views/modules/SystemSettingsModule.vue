@@ -3,6 +3,7 @@ import { VButton, VCard, VSwitch } from '@halo-dev/components'
 import { onMounted, reactive, ref } from 'vue'
 import { upsertSingleton, type QslExtension, getExtensionOrNull } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import { sendTestNotificationMail, type NotificationMailTestScene } from '../../api/qsl-console-api'
 
 const systemSettingsForm = reactive({
   guestQueryPerMinute: 30,
@@ -10,6 +11,7 @@ const systemSettingsForm = reactive({
   autoNotifyOnCardCreated: false,
   autoNotifyOnCardSent: false,
   autoNotifyOnCardReceived: false,
+  autoNotifyOnExchangeReviewed: false,
   cardRecordSequence: 1000,
   receiveRecordSequence: 0,
 })
@@ -17,6 +19,7 @@ const systemSettingsForm = reactive({
 const feedback = ref('')
 const loading = ref(false)
 const saving = ref(false)
+const sendingTestScene = ref<NotificationMailTestScene | ''>('')
 
 interface SystemSettingSpec {
   guestQueryPerMinute: number
@@ -24,6 +27,7 @@ interface SystemSettingSpec {
   autoNotifyOnCardCreated: boolean
   autoNotifyOnCardSent: boolean
   autoNotifyOnCardReceived: boolean
+  autoNotifyOnExchangeReviewed: boolean
   cardRecordSequence: number
   receiveRecordSequence: number
 }
@@ -44,6 +48,7 @@ const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
   systemSettingsForm.autoNotifyOnCardCreated = Boolean(extension.spec?.autoNotifyOnCardCreated)
   systemSettingsForm.autoNotifyOnCardSent = Boolean(extension.spec?.autoNotifyOnCardSent)
   systemSettingsForm.autoNotifyOnCardReceived = Boolean(extension.spec?.autoNotifyOnCardReceived)
+  systemSettingsForm.autoNotifyOnExchangeReviewed = Boolean(extension.spec?.autoNotifyOnExchangeReviewed)
   systemSettingsForm.cardRecordSequence = extension.spec?.cardRecordSequence ?? 1000
   systemSettingsForm.receiveRecordSequence = extension.spec?.receiveRecordSequence ?? 0
 }
@@ -55,6 +60,7 @@ const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
     autoNotifyOnCardCreated: false,
     autoNotifyOnCardSent: false,
     autoNotifyOnCardReceived: false,
+    autoNotifyOnExchangeReviewed: false,
     cardRecordSequence: 1000,
     receiveRecordSequence: 0,
   }
@@ -114,6 +120,7 @@ const saveSystemSettings = async () => {
         autoNotifyOnCardCreated: systemSettingsForm.autoNotifyOnCardCreated,
         autoNotifyOnCardSent: systemSettingsForm.autoNotifyOnCardSent,
         autoNotifyOnCardReceived: systemSettingsForm.autoNotifyOnCardReceived,
+        autoNotifyOnExchangeReviewed: systemSettingsForm.autoNotifyOnExchangeReviewed,
         cardRecordSequence: systemSettingsForm.cardRecordSequence,
         receiveRecordSequence: systemSettingsForm.receiveRecordSequence,
       },
@@ -122,13 +129,25 @@ const saveSystemSettings = async () => {
       action: '更新系统参数',
       resourceType: 'system-setting',
       resourceName,
-      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，换卡审核=${systemSettingsForm.requiresExchangeReview ? '是' : '否'}，自动通知（制卡/发卡/收卡）=${systemSettingsForm.autoNotifyOnCardCreated ? '开' : '关'}/${systemSettingsForm.autoNotifyOnCardSent ? '开' : '关'}/${systemSettingsForm.autoNotifyOnCardReceived ? '开' : '关'}`,
+      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，换卡审核=${systemSettingsForm.requiresExchangeReview ? '是' : '否'}，自动通知（制卡/发卡/收卡/审核）=${systemSettingsForm.autoNotifyOnCardCreated ? '开' : '关'}/${systemSettingsForm.autoNotifyOnCardSent ? '开' : '关'}/${systemSettingsForm.autoNotifyOnCardReceived ? '开' : '关'}/${systemSettingsForm.autoNotifyOnExchangeReviewed ? '开' : '关'}`,
     })
     feedback.value = '系统参数已保存。'
   } catch (error) {
     feedback.value = `保存系统参数失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     saving.value = false
+  }
+}
+
+const sendTestMail = async (scene: NotificationMailTestScene) => {
+  sendingTestScene.value = scene
+  try {
+    const result = await sendTestNotificationMail({ scene })
+    feedback.value = `测试邮件${result.status === 'SENT' ? '发送成功' : '发送失败'}：${result.message}（${result.targetEmail || '未配置邮箱'}）`
+  } catch (error) {
+    feedback.value = `发送测试邮件失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    sendingTestScene.value = ''
   }
 }
 
@@ -171,7 +190,7 @@ onMounted(loadSystemSettings)
         <section class="qsl-setting-section">
           <header class="qsl-setting-section__header">
             <h3>邮件通知策略</h3>
-            <p>控制制卡、发卡、收卡三个业务场景的自动邮件发送。</p>
+            <p>控制制卡、发卡、收卡、换卡审核四个业务场景的自动邮件发送。</p>
           </header>
 
           <div class="qsl-switch-row">
@@ -179,7 +198,17 @@ onMounted(loadSystemSettings)
               <p class="qsl-switch-row__title">制卡后自动发送邮件</p>
               <p class="qsl-switch-row__desc">开启后，在卡片记录页面新增记录时会自动尝试发送制卡通知邮件。</p>
             </div>
-            <VSwitch v-model="systemSettingsForm.autoNotifyOnCardCreated" />
+            <div class="qsl-switch-row__controls">
+              <VButton
+                size="sm"
+                type="secondary"
+                :disabled="sendingTestScene !== ''"
+                @click="sendTestMail('created')"
+              >
+                {{ sendingTestScene === 'created' ? '发送中' : '发送测试邮件' }}
+              </VButton>
+              <VSwitch v-model="systemSettingsForm.autoNotifyOnCardCreated" />
+            </div>
           </div>
 
           <div class="qsl-switch-row">
@@ -187,7 +216,17 @@ onMounted(loadSystemSettings)
               <p class="qsl-switch-row__title">发卡后自动发送邮件</p>
               <p class="qsl-switch-row__desc">开启后，发信确认成功会自动尝试发送发卡通知邮件。</p>
             </div>
-            <VSwitch v-model="systemSettingsForm.autoNotifyOnCardSent" />
+            <div class="qsl-switch-row__controls">
+              <VButton
+                size="sm"
+                type="secondary"
+                :disabled="sendingTestScene !== ''"
+                @click="sendTestMail('sent')"
+              >
+                {{ sendingTestScene === 'sent' ? '发送中' : '发送测试邮件' }}
+              </VButton>
+              <VSwitch v-model="systemSettingsForm.autoNotifyOnCardSent" />
+            </div>
           </div>
 
           <div class="qsl-switch-row">
@@ -195,7 +234,35 @@ onMounted(loadSystemSettings)
               <p class="qsl-switch-row__title">收卡后自动发送邮件</p>
               <p class="qsl-switch-row__desc">开启后，收信确认成功会自动尝试发送收卡通知邮件。</p>
             </div>
-            <VSwitch v-model="systemSettingsForm.autoNotifyOnCardReceived" />
+            <div class="qsl-switch-row__controls">
+              <VButton
+                size="sm"
+                type="secondary"
+                :disabled="sendingTestScene !== ''"
+                @click="sendTestMail('received')"
+              >
+                {{ sendingTestScene === 'received' ? '发送中' : '发送测试邮件' }}
+              </VButton>
+              <VSwitch v-model="systemSettingsForm.autoNotifyOnCardReceived" />
+            </div>
+          </div>
+
+          <div class="qsl-switch-row">
+            <div>
+              <p class="qsl-switch-row__title">换卡审核后自动发送邮件</p>
+              <p class="qsl-switch-row__desc">开启后，线上换卡申请审核通过或拒绝后会自动尝试发送审核结果通知邮件。</p>
+            </div>
+            <div class="qsl-switch-row__controls">
+              <VButton
+                size="sm"
+                type="secondary"
+                :disabled="sendingTestScene !== ''"
+                @click="sendTestMail('exchange-reviewed')"
+              >
+                {{ sendingTestScene === 'exchange-reviewed' ? '发送中' : '发送测试邮件' }}
+              </VButton>
+              <VSwitch v-model="systemSettingsForm.autoNotifyOnExchangeReviewed" />
+            </div>
           </div>
         </section>
 
@@ -236,5 +303,12 @@ onMounted(loadSystemSettings)
   color: #6b7280;
   font-size: 12px;
   line-height: 18px;
+}
+
+.qsl-switch-row__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 </style>

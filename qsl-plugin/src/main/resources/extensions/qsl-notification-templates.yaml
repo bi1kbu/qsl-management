@@ -7,35 +7,34 @@ spec:
     reasonType: qsl-card-created
     language: default
   template:
-    title: "【QSL】[(${sceneDisplay})]通知：[(${callSign})] [(${cardType})]"
+    title: "【QSL】制卡通知：[(${stationCallSign})]给您的卡片已完成制卡"
     rawBody: |
-      [(${subscriber.displayName})] 您好：
+      [(${callSign})]：
+          很高兴与您交换卡片，[(${stationCallSign})]给您的卡片已完成制卡，并将择日发出。
+          本次卡片相关信息如下：
+          form [(${stationCallSign})] to [(${callSign})]
+          卡片类型：[(${cardType})]
+          卡片编号：[(${cardRecordName})]
+          制卡时间：[(${triggerAt})]
+          备注：[(${remarks})]
 
-        已触发 QSL [(${sceneDisplay})] 通知，详情如下：
-        呼号：[(${callSign})]
-        卡片类型：[(${cardType})]
-        卡片版本：[(${cardVersion})]
-        卡片时间：[(${cardDate})] [(${cardTime})]
-        记录编号：[(${cardRecordName})]
-        备注：[(${remarks})]
-        触发时间：[(${triggerAt})]
-        操作人：[(${operator})]
+          期待与您保持通联，顺祝一切顺利。
+
+      [(${stationCallSign})]
+      [(${dateText})]
     htmlBody: |
       <div class="notification-content">
-        <div class="head">
-          <p class="honorific" th:text="|${subscriber.displayName} 您好：|"></p>
-        </div>
-        <div class="body">
-          <p th:text="|已触发 QSL ${sceneDisplay} 通知，详情如下：|"></p>
-          <p th:text="|呼号：${callSign}|"></p>
-          <p th:text="|卡片类型：${cardType}|"></p>
-          <p th:text="|卡片版本：${cardVersion}|"></p>
-          <p th:text="|卡片时间：${cardDate} ${cardTime}|"></p>
-          <p th:text="|记录编号：${cardRecordName}|"></p>
-          <p th:text="|备注：${remarks}|"></p>
-          <p th:text="|触发时间：${triggerAt}|"></p>
-          <p th:text="|操作人：${operator}|"></p>
-        </div>
+        <p th:text="|${callSign}：|"></p>
+        <p th:text="|很高兴与您交换卡片，${stationCallSign}给您的卡片已完成制卡，并将择日发出。|"></p>
+        <p>本次卡片相关信息如下：</p>
+        <p th:text="|form ${stationCallSign} to ${callSign}|"></p>
+        <p th:text="|卡片类型：${cardType}|"></p>
+        <p th:text="|卡片编号：${cardRecordName}|"></p>
+        <p th:text="|制卡时间：${triggerAt}|"></p>
+        <p th:text="|备注：${remarks}|"></p>
+        <p>期待与您保持通联，顺祝一切顺利。</p>
+        <p th:text="${stationCallSign}"></p>
+        <p th:text="${dateText}"></p>
       </div>
 ---
 apiVersion: notification.halo.run/v1alpha1
@@ -47,43 +46,47 @@ spec:
     reasonType: qsl-exchange-reviewed
     language: default
   template:
-    title: "【QSL】换卡申请审核结果：[(${callSign})] [(${reviewStatus})]"
+    title: "【QSL】线上换卡审核通知：您向[(${stationCallSign})]发出的换卡申请[(${reviewResultText})]"
     rawBody: |
-      [(${subscriber.displayName})] 您好：
+      [(${callSign})]：
+          [(${reviewMailIntro})]
+          请核对您的收件信息：
+          form [(${stationCallSign})] to [(${callSign})]
+          收件人：[(${targetName})]（[(${callSign})]）（收）
+          邮编：[(${postalCode})]
+          地址：[(${address})]
+          联系电话：[(${targetTelephone})]
+          -----
+          本台的通信地址为：
+          收件人：[(${stationName})]（[(${stationCallSign})]）（收）
+          邮编：[(${stationPostalCode})]
+          地址：[(${stationAddress})]
+          联系电话：[(${stationTelephone})]
+          电子邮件：[(${stationEmail})]
+          请您向上述地址发送回卡，谢谢。
 
-        您的 QSL 线上换卡申请已完成审核。
-        呼号：[(${callSign})]
-        审核状态：[(${reviewStatus})]
-        审核说明：[(${reviewReason})]
-        申请编号：[(${requestName})]
-        卡片版本：[(${cardVersion})]
-        地址类型：[(${addressMode})]
-        卡片局：[(${bureauName})]
-        邮编：[(${postalCode})]
-        地址：[(${address})]
-        申请备注：[(${remarks})]
-        通知时间：[(${triggerAt})]
-        操作人：[(${operator})]
+      [(${stationCallSign})]
+      [(${dateText})]
     htmlBody: |
       <div class="notification-content">
-        <div class="head">
-          <p class="honorific" th:text="|${subscriber.displayName} 您好：|"></p>
-        </div>
-        <div class="body">
-          <p>您的 QSL 线上换卡申请已完成审核。</p>
-          <p th:text="|呼号：${callSign}|"></p>
-          <p th:text="|审核状态：${reviewStatus}|"></p>
-          <p th:text="|审核说明：${reviewReason}|"></p>
-          <p th:text="|申请编号：${requestName}|"></p>
-          <p th:text="|卡片版本：${cardVersion}|"></p>
-          <p th:text="|地址类型：${addressMode}|"></p>
-          <p th:text="|卡片局：${bureauName}|"></p>
-          <p th:text="|邮编：${postalCode}|"></p>
-          <p th:text="|地址：${address}|"></p>
-          <p th:text="|申请备注：${remarks}|"></p>
-          <p th:text="|通知时间：${triggerAt}|"></p>
-          <p th:text="|操作人：${operator}|"></p>
-        </div>
+        <p th:text="|${callSign}：|"></p>
+        <p th:text="${reviewMailIntro}"></p>
+        <p>请核对您的收件信息：</p>
+        <p th:text="|form ${stationCallSign} to ${callSign}|"></p>
+        <p th:text="|收件人：${targetName}（${callSign}）（收）|"></p>
+        <p th:text="|邮编：${postalCode}|"></p>
+        <p th:text="|地址：${address}|"></p>
+        <p th:text="|联系电话：${targetTelephone}|"></p>
+        <p>-----</p>
+        <p>本台的通信地址为：</p>
+        <p th:text="|收件人：${stationName}（${stationCallSign}）（收）|"></p>
+        <p th:text="|邮编：${stationPostalCode}|"></p>
+        <p th:text="|地址：${stationAddress}|"></p>
+        <p th:text="|联系电话：${stationTelephone}|"></p>
+        <p th:text="|电子邮件：${stationEmail}|"></p>
+        <p>请您向上述地址发送回卡，谢谢。</p>
+        <p th:text="${stationCallSign}"></p>
+        <p th:text="${dateText}"></p>
       </div>
 ---
 apiVersion: notification.halo.run/v1alpha1
@@ -95,35 +98,34 @@ spec:
     reasonType: qsl-card-sent
     language: default
   template:
-    title: "【QSL】[(${sceneDisplay})]通知：[(${callSign})] [(${cardType})]"
+    title: "【QSL】发出通知：[(${stationCallSign})]给您的卡片已发出"
     rawBody: |
-      [(${subscriber.displayName})] 您好：
+      [(${callSign})]：
+          很高兴与您交换卡片，[(${stationCallSign})]给您的卡片已交至邮局。
+          本次卡片相关信息如下：
+          form [(${stationCallSign})] to [(${callSign})]
+          卡片类型：[(${cardType})]
+          卡片编号：[(${cardRecordName})]
+          发卡时间：[(${triggerAt})]
+          备注：[(${remarks})]
 
-        已触发 QSL [(${sceneDisplay})] 通知，详情如下：
-        呼号：[(${callSign})]
-        卡片类型：[(${cardType})]
-        卡片版本：[(${cardVersion})]
-        卡片时间：[(${cardDate})] [(${cardTime})]
-        记录编号：[(${cardRecordName})]
-        备注：[(${remarks})]
-        触发时间：[(${triggerAt})]
-        操作人：[(${operator})]
+          期待与您保持通联，顺祝一切顺利。
+
+      [(${stationCallSign})]
+      [(${dateText})]
     htmlBody: |
       <div class="notification-content">
-        <div class="head">
-          <p class="honorific" th:text="|${subscriber.displayName} 您好：|"></p>
-        </div>
-        <div class="body">
-          <p th:text="|已触发 QSL ${sceneDisplay} 通知，详情如下：|"></p>
-          <p th:text="|呼号：${callSign}|"></p>
-          <p th:text="|卡片类型：${cardType}|"></p>
-          <p th:text="|卡片版本：${cardVersion}|"></p>
-          <p th:text="|卡片时间：${cardDate} ${cardTime}|"></p>
-          <p th:text="|记录编号：${cardRecordName}|"></p>
-          <p th:text="|备注：${remarks}|"></p>
-          <p th:text="|触发时间：${triggerAt}|"></p>
-          <p th:text="|操作人：${operator}|"></p>
-        </div>
+        <p th:text="|${callSign}：|"></p>
+        <p th:text="|很高兴与您交换卡片，${stationCallSign}给您的卡片已交至邮局。|"></p>
+        <p>本次卡片相关信息如下：</p>
+        <p th:text="|form ${stationCallSign} to ${callSign}|"></p>
+        <p th:text="|卡片类型：${cardType}|"></p>
+        <p th:text="|卡片编号：${cardRecordName}|"></p>
+        <p th:text="|发卡时间：${triggerAt}|"></p>
+        <p th:text="|备注：${remarks}|"></p>
+        <p>期待与您保持通联，顺祝一切顺利。</p>
+        <p th:text="${stationCallSign}"></p>
+        <p th:text="${dateText}"></p>
       </div>
 ---
 apiVersion: notification.halo.run/v1alpha1
@@ -135,33 +137,22 @@ spec:
     reasonType: qsl-card-received
     language: default
   template:
-    title: "【QSL】[(${sceneDisplay})]通知：[(${callSign})] [(${cardType})]"
+    title: "【QSL】收卡回执：您向[(${stationCallSign})]发出的卡片已收妥"
     rawBody: |
-      [(${subscriber.displayName})] 您好：
+      [(${callSign})]：
+          很高兴收到您的卡片，我于[(${triggerAt})]收到了您的[(${cardType})]卡片，感谢您的来卡。
+          备注：[(${remarks})]
 
-        已触发 QSL [(${sceneDisplay})] 通知，详情如下：
-        呼号：[(${callSign})]
-        卡片类型：[(${cardType})]
-        卡片版本：[(${cardVersion})]
-        卡片时间：[(${cardDate})] [(${cardTime})]
-        记录编号：[(${cardRecordName})]
-        备注：[(${remarks})]
-        触发时间：[(${triggerAt})]
-        操作人：[(${operator})]
+          期待与您保持通联，顺祝一切顺利。
+
+      [(${stationCallSign})]
+      [(${dateText})]
     htmlBody: |
       <div class="notification-content">
-        <div class="head">
-          <p class="honorific" th:text="|${subscriber.displayName} 您好：|"></p>
-        </div>
-        <div class="body">
-          <p th:text="|已触发 QSL ${sceneDisplay} 通知，详情如下：|"></p>
-          <p th:text="|呼号：${callSign}|"></p>
-          <p th:text="|卡片类型：${cardType}|"></p>
-          <p th:text="|卡片版本：${cardVersion}|"></p>
-          <p th:text="|卡片时间：${cardDate} ${cardTime}|"></p>
-          <p th:text="|记录编号：${cardRecordName}|"></p>
-          <p th:text="|备注：${remarks}|"></p>
-          <p th:text="|触发时间：${triggerAt}|"></p>
-          <p th:text="|操作人：${operator}|"></p>
-        </div>
+        <p th:text="|${callSign}：|"></p>
+        <p th:text="|很高兴收到您的卡片，我于${triggerAt}收到了您的${cardType}卡片，感谢您的来卡。|"></p>
+        <p th:text="|备注：${remarks}|"></p>
+        <p>期待与您保持通联，顺祝一切顺利。</p>
+        <p th:text="${stationCallSign}"></p>
+        <p th:text="${dateText}"></p>
       </div>
