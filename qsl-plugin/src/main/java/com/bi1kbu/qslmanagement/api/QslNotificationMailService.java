@@ -457,8 +457,8 @@ public class QslNotificationMailService {
 
     private String resolveSceneRemarks(MailScene scene, CardRecord.CardRecordSpec spec) {
         return switch (scene) {
-            case CARD_CREATED -> StringUtils.defaultString(spec.getBusinessRemarks());
-            case CARD_SENT -> StringUtils.defaultString(spec.getBusinessRemarks());
+            case CARD_CREATED -> StringUtils.defaultString(spec.getCardRemarks());
+            case CARD_SENT -> StringUtils.defaultString(spec.getCardRemarks());
             case CARD_RECEIVED -> StringUtils.defaultString(spec.getReceivedRemarks());
         };
     }

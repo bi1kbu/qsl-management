@@ -55,6 +55,9 @@ const feedback = ref('')
 const expandedId = ref('')
 const editingId = ref('')
 const savingEdit = ref(false)
+const reviewReasonEditingId = ref('')
+const reviewReasonDraft = ref('')
+const savingReviewReasonId = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
@@ -307,6 +310,53 @@ const deleteEditingRequest = async () => {
   }
 }
 
+const startReviewReasonEdit = (row: ExchangeRequestItem) => {
+  reviewReasonEditingId.value = row.id
+  reviewReasonDraft.value = row.reviewReason
+}
+
+const cancelReviewReasonEdit = () => {
+  reviewReasonEditingId.value = ''
+  reviewReasonDraft.value = ''
+}
+
+const saveReviewReason = async (row: ExchangeRequestItem) => {
+  savingReviewReasonId.value = row.id
+  try {
+    const nextStatus: ExchangeRequestStatus = {
+      reviewStatus: row.status,
+      reviewReason: reviewReasonDraft.value.trim(),
+      reviewedBy: row.reviewedBy,
+      reviewedAt: row.reviewedAt,
+    }
+
+    await updateExtension<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural, row.id, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: row.id,
+        version: row.metadataVersion,
+      },
+      spec: row.spec,
+      status: nextStatus,
+    })
+    await appendQslAuditLog({
+      action: '修改换卡审核说明',
+      resourceType: 'exchange-request',
+      resourceName: row.id,
+      detail: `呼号=${row.callSign}，审核状态=${row.status}`,
+    })
+    await loadRows()
+    reviewReasonEditingId.value = ''
+    reviewReasonDraft.value = ''
+    feedback.value = `审核说明已更新：${row.id}`
+  } catch (error) {
+    feedback.value = `更新审核说明失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    savingReviewReasonId.value = ''
+  }
+}
+
 const toggleDetails = (id: string) => {
   expandedId.value = expandedId.value === id ? '' : id
 }
@@ -425,7 +475,38 @@ onMounted(loadRows)
                     <p class="qsl-detail-full"><strong>收件地址：</strong>{{ row.address || '-' }}</p>
                     <p class="qsl-detail-full"><strong>申请备注：</strong>{{ row.remarks || '-' }}</p>
                     <p><strong>审核人：</strong>{{ row.reviewedBy || '-' }}</p>
-                    <p class="qsl-detail-full"><strong>审核说明：</strong>{{ row.reviewReason || '-' }}</p>
+                    <div class="qsl-detail-full qsl-review-reason-editor" @click.stop>
+                      <div class="qsl-review-reason-editor__header">
+                        <strong>审核说明：</strong>
+                        <VButton
+                          v-if="reviewReasonEditingId !== row.id"
+                          size="xs"
+                          :disabled="savingReviewReasonId === row.id || loading"
+                          @click="startReviewReasonEdit(row)"
+                        >
+                          编辑
+                        </VButton>
+                      </div>
+                      <template v-if="reviewReasonEditingId === row.id">
+                        <div class="qsl-input-shell qsl-input-shell--textarea">
+                          <textarea v-model.trim="reviewReasonDraft" rows="2" placeholder="输入审核说明" />
+                        </div>
+                        <div class="qsl-actions qsl-actions--tight">
+                          <VButton
+                            size="xs"
+                            type="secondary"
+                            :disabled="savingReviewReasonId === row.id"
+                            @click="saveReviewReason(row)"
+                          >
+                            保存
+                          </VButton>
+                          <VButton size="xs" :disabled="savingReviewReasonId === row.id" @click="cancelReviewReasonEdit">
+                            取消
+                          </VButton>
+                        </div>
+                      </template>
+                      <p v-else class="qsl-review-reason-editor__text">{{ row.reviewReason || '-' }}</p>
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -562,5 +643,21 @@ onMounted(loadRows)
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;
+}
+
+.qsl-review-reason-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.qsl-review-reason-editor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.qsl-review-reason-editor__text {
+  margin: 0;
 }
 </style>
