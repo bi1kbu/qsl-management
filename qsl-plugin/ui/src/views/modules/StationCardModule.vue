@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { VButton, VCard, VEmpty } from '@halo-dev/components'
+import { consoleApiClient, type Attachment } from '@halo-dev/api-client'
 import { onMounted, ref } from 'vue'
 import {
   createExtension,
@@ -12,13 +13,25 @@ import {
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 
+interface AttachmentOption {
+  name: string
+  displayName: string
+  mediaType: string
+  size: number
+  permalink: string
+  thumbnailUrl: string
+}
+
 interface StationCardVersion {
   resourceName?: string
   id: number
   versionName: string
-  fileName: string
-  imageDataUrl: string
+  attachmentName: string
+  attachmentDisplayName: string
+  imagePermalink: string
+  imageThumbnailUrl: string
   imageMediaType: string
+  imageSize: number
   previewUrl: string
   availableInventory: number
   versionTotal: number
@@ -27,13 +40,18 @@ interface StationCardVersion {
 }
 
 const stationCards = ref<StationCardVersion[]>([])
+const attachmentOptions = ref<AttachmentOption[]>([])
 const loading = ref(false)
+const loadingAttachments = ref(false)
+const uploadingAttachment = ref(false)
 const saving = ref(false)
 const newCardVersionName = ref('')
-const newCardFile = ref<File | null>(null)
 const newCardAvailableInventory = ref(0)
 const newCardVersionTotal = ref(0)
-const cardFileInputRef = ref<HTMLInputElement | null>(null)
+const attachmentKeyword = ref('')
+const attachmentUploadFile = ref<File | null>(null)
+const attachmentUploadInputRef = ref<HTMLInputElement | null>(null)
+const selectedAttachment = ref<AttachmentOption | null>(null)
 const feedback = ref('')
 const draggingCardId = ref<number | null>(null)
 const cardUsageCounter = ref<Record<string, number>>({})
@@ -46,12 +64,20 @@ const cardRecordPlural = 'card-records'
 
 interface StationCardSpec {
   cardVersion: string
-  imageUrl: string
+  imageAttachmentName: string
+  imageAttachmentDisplayName: string
+  imagePermalink: string
+  imageThumbnailUrl: string
   imageMediaType: string
+  imageSize: number
   availableInventory: number
   versionTotal: number
   sortOrder: number
   remarks: string
+}
+
+interface LegacyStationCardSpec extends StationCardSpec {
+  imageUrl?: string
 }
 
 interface CardRecordSpec {
@@ -72,6 +98,19 @@ const safeInventoryTotal = (value: unknown): number => {
     return 0
   }
   return Math.floor(numeric)
+}
+
+const formatFileSize = (value: number): string => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '未知大小'
+  }
+  if (value < 1024) {
+    return `${value} B`
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
 
 const getUsedCount = (versionName: string): number => {
@@ -95,33 +134,143 @@ const refreshCardUsageCounter = async () => {
   cardUsageCounter.value = counter
 }
 
-const onCardFileChange = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  newCardFile.value = target.files?.[0] ?? null
+const resolveAttachmentPreviewUrl = (attachment: Attachment): string => {
+  const thumbnails = attachment.status?.thumbnails ?? {}
+  return (
+    thumbnails['s'] ||
+    thumbnails['m'] ||
+    thumbnails['l'] ||
+    Object.values(thumbnails).find((value): value is string => typeof value === 'string' && Boolean(value)) ||
+    attachment.status?.permalink ||
+    ''
+  )
 }
 
-const fileToDataUrl = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(new Error('读取卡片图片失败。'))
-    reader.readAsDataURL(file)
-  })
+const toAttachmentOption = (attachment: Attachment): AttachmentOption | null => {
+  const mediaType = attachment.spec?.mediaType ?? ''
+  if (!mediaType.startsWith('image/')) {
+    return null
+  }
+  const permalink = attachment.status?.permalink ?? ''
+  const thumbnailUrl = resolveAttachmentPreviewUrl(attachment)
+  if (!permalink && !thumbnailUrl) {
+    return null
+  }
+  return {
+    name: attachment.metadata.name,
+    displayName: attachment.spec?.displayName || attachment.metadata.name,
+    mediaType,
+    size: safeInventoryTotal(attachment.spec?.size),
+    permalink,
+    thumbnailUrl,
+  }
+}
+
+const loadAttachmentOptions = async () => {
+  loadingAttachments.value = true
+  try {
+    const response = await consoleApiClient.storage.attachment.searchAttachments({
+      page: 1,
+      size: 60,
+      sort: ['metadata.creationTimestamp,desc'],
+      keyword: attachmentKeyword.value.trim() || undefined,
+      accepts: ['image/*'],
+    })
+    attachmentOptions.value = (response.data.items ?? [])
+      .map(toAttachmentOption)
+      .filter((item): item is AttachmentOption => Boolean(item))
+    if (
+      selectedAttachment.value &&
+      !attachmentOptions.value.some((item) => item.name === selectedAttachment.value?.name)
+    ) {
+      selectedAttachment.value = null
+    }
+  } catch (error) {
+    feedback.value = `加载附件库图片失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    loadingAttachments.value = false
+  }
+}
+
+const onAttachmentUploadFileChange = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  attachmentUploadFile.value = target.files?.[0] ?? null
+}
+
+const uploadAttachment = async () => {
+  const file = attachmentUploadFile.value
+  if (!file) {
+    feedback.value = '请先选择要上传到附件库的图片。'
+    return
+  }
+  if (!file.type.startsWith('image/')) {
+    feedback.value = '附件库只接受图片文件。'
+    return
+  }
+  uploadingAttachment.value = true
+  try {
+    const response = await consoleApiClient.storage.attachment.uploadAttachmentForConsole({ file })
+    const option = toAttachmentOption(response.data)
+    if (!option) {
+      feedback.value = '图片已上传，但附件缺少可访问地址，请稍后刷新附件库。'
+      await loadAttachmentOptions()
+      return
+    }
+    attachmentOptions.value = [option, ...attachmentOptions.value.filter((item) => item.name !== option.name)]
+    selectedAttachment.value = option
+    attachmentUploadFile.value = null
+    if (attachmentUploadInputRef.value) {
+      attachmentUploadInputRef.value.value = ''
+    }
+    feedback.value = `已上传并选中附件：${option.displayName}`
+  } catch (error) {
+    feedback.value = `上传附件失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    uploadingAttachment.value = false
+  }
+}
+
+const selectAttachment = (attachment: AttachmentOption) => {
+  selectedAttachment.value = attachment
+  feedback.value = `已选择附件：${attachment.displayName}`
+}
+
+const applyAttachmentToCard = (card: StationCardVersion, attachment: AttachmentOption) => {
+  card.attachmentName = attachment.name
+  card.attachmentDisplayName = attachment.displayName
+  card.imagePermalink = attachment.permalink
+  card.imageThumbnailUrl = attachment.thumbnailUrl
+  card.imageMediaType = attachment.mediaType
+  card.imageSize = attachment.size
+  card.previewUrl = attachment.thumbnailUrl || attachment.permalink
+}
+
+const applySelectedAttachmentToCard = (card: StationCardVersion) => {
+  if (!selectedAttachment.value) {
+    feedback.value = '请先在附件库图片中选择一张图片。'
+    return
+  }
+  applyAttachmentToCard(card, selectedAttachment.value)
+  feedback.value = `已为版本 ${card.versionName} 更换附件图片。请点击“保存卡片配置”完成持久化。`
 }
 
 const toCard = (extension: QslExtension<StationCardSpec>, index: number): StationCardVersion => {
-  const imageDataUrl = extension.spec?.imageUrl ?? ''
+  const spec = extension.spec
+  const previewUrl = spec?.imageThumbnailUrl || spec?.imagePermalink || ''
   return {
     resourceName: extension.metadata.name,
     id: index + 1,
-    versionName: extension.spec?.cardVersion ?? `未命名版本-${index + 1}`,
-    fileName: '已持久化图片',
-    imageDataUrl,
-    imageMediaType: extension.spec?.imageMediaType ?? 'image/png',
-    previewUrl: imageDataUrl,
-    availableInventory: safeInventoryTotal(extension.spec?.availableInventory),
-    versionTotal: safeInventoryTotal(extension.spec?.versionTotal),
-    sortOrder: safeInventoryTotal(extension.spec?.sortOrder) || index + 1,
+    versionName: spec?.cardVersion ?? `未命名版本-${index + 1}`,
+    attachmentName: spec?.imageAttachmentName ?? '',
+    attachmentDisplayName: spec?.imageAttachmentDisplayName ?? '',
+    imagePermalink: spec?.imagePermalink ?? '',
+    imageThumbnailUrl: spec?.imageThumbnailUrl ?? '',
+    imageMediaType: spec?.imageMediaType ?? '',
+    imageSize: safeInventoryTotal(spec?.imageSize),
+    previewUrl,
+    availableInventory: safeInventoryTotal(spec?.availableInventory),
+    versionTotal: safeInventoryTotal(spec?.versionTotal),
+    sortOrder: safeInventoryTotal(spec?.sortOrder) || index + 1,
     createdAt: extension.metadata.creationTimestamp
       ? new Date(extension.metadata.creationTimestamp).toLocaleString('zh-CN', { hour12: false })
       : nowText(),
@@ -143,11 +292,6 @@ const loadStationCards = async () => {
         sortOrder: index + 1,
       }))
     stationCards.value = cards
-    if (extensions.length) {
-      feedback.value = ''
-      return
-    }
-    feedback.value = ''
   } catch (error) {
     feedback.value = `加载本台卡片失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -155,7 +299,7 @@ const loadStationCards = async () => {
   }
 }
 
-const addStationCard = async () => {
+const addStationCard = () => {
   const versionName = newCardVersionName.value.trim()
   if (!versionName) {
     feedback.value = '卡片版本名称不能为空。'
@@ -174,8 +318,8 @@ const addStationCard = async () => {
     return
   }
 
-  if (!newCardFile.value) {
-    feedback.value = '请先选择卡片图片。'
+  if (!selectedAttachment.value) {
+    feedback.value = '请先从附件库图片中选择一张卡片图案。'
     return
   }
 
@@ -185,38 +329,32 @@ const addStationCard = async () => {
     return
   }
 
-  try {
-    const imageDataUrl = await fileToDataUrl(newCardFile.value)
-    const nextId = stationCards.value.reduce((max, card) => Math.max(max, card.id), 0) + 1
-    stationCards.value.push({
-      id: nextId,
-      versionName,
-      fileName: newCardFile.value.name,
-      imageDataUrl,
-      imageMediaType: newCardFile.value.type || 'image/png',
-      previewUrl: imageDataUrl,
-      availableInventory,
-      versionTotal,
-      sortOrder: 1,
-      createdAt: nowText(),
-    })
-    stationCards.value = stationCards.value.map((card, index) => ({
-      ...card,
-      sortOrder: index + 1,
-    }))
-  } catch (error) {
-    feedback.value = error instanceof Error ? error.message : '读取卡片图片失败。'
-    return
+  const nextId = stationCards.value.reduce((max, card) => Math.max(max, card.id), 0) + 1
+  const nextCard: StationCardVersion = {
+    id: nextId,
+    versionName,
+    attachmentName: '',
+    attachmentDisplayName: '',
+    imagePermalink: '',
+    imageThumbnailUrl: '',
+    imageMediaType: '',
+    imageSize: 0,
+    previewUrl: '',
+    availableInventory,
+    versionTotal,
+    sortOrder: 1,
+    createdAt: nowText(),
   }
+  applyAttachmentToCard(nextCard, selectedAttachment.value)
+  stationCards.value.push(nextCard)
+  stationCards.value = stationCards.value.map((card, index) => ({
+    ...card,
+    sortOrder: index + 1,
+  }))
 
   newCardVersionName.value = ''
-  newCardFile.value = null
   newCardAvailableInventory.value = 0
   newCardVersionTotal.value = 0
-  if (cardFileInputRef.value) {
-    cardFileInputRef.value.value = ''
-  }
-
   feedback.value = `已新增卡片版本：${versionName}`
 }
 
@@ -299,6 +437,12 @@ const onCardDragEnd = () => {
 }
 
 const saveStationCard = async () => {
+  const missingImage = stationCards.value.find((card) => !card.attachmentName || !card.previewUrl)
+  if (missingImage) {
+    feedback.value = `版本 ${missingImage.versionName} 尚未选择附件库图片，不能保存。`
+    return
+  }
+
   saving.value = true
   try {
     let createdCount = 0
@@ -319,12 +463,16 @@ const saveStationCard = async () => {
         },
         spec: {
           cardVersion: card.versionName,
-          imageUrl: card.imageDataUrl,
+          imageAttachmentName: card.attachmentName,
+          imageAttachmentDisplayName: card.attachmentDisplayName,
+          imagePermalink: card.imagePermalink,
+          imageThumbnailUrl: card.imageThumbnailUrl,
           imageMediaType: card.imageMediaType,
+          imageSize: card.imageSize,
           availableInventory: card.availableInventory,
           versionTotal: card.versionTotal,
           sortOrder: card.sortOrder,
-          remarks: `源文件：${card.fileName}`,
+          remarks: `附件：${card.attachmentDisplayName || card.attachmentName}`,
         },
       }
 
@@ -360,12 +508,67 @@ const saveStationCard = async () => {
   }
 }
 
-onMounted(loadStationCards)
+const cleanupLegacyImageData = async () => {
+  saving.value = true
+  try {
+    const currentRemote = await listExtensions<LegacyStationCardSpec>(resourcePlural)
+    const legacyItems = currentRemote.filter((item) => typeof item.spec?.imageUrl === 'string' && item.spec.imageUrl.trim())
+    if (!legacyItems.length) {
+      feedback.value = '未发现需要清理的旧图片字段。'
+      return
+    }
+
+    for (const item of legacyItems) {
+      const spec = item.spec
+      const payload: QslExtension<StationCardSpec> = {
+        apiVersion: qslApiVersion,
+        kind: resourceKind,
+        metadata: {
+          name: item.metadata.name,
+          version: item.metadata.version,
+        },
+        spec: {
+          cardVersion: spec?.cardVersion ?? '',
+          imageAttachmentName: spec?.imageAttachmentName ?? '',
+          imageAttachmentDisplayName: spec?.imageAttachmentDisplayName ?? '',
+          imagePermalink: spec?.imagePermalink ?? '',
+          imageThumbnailUrl: spec?.imageThumbnailUrl ?? '',
+          imageMediaType: spec?.imageMediaType ?? '',
+          imageSize: safeInventoryTotal(spec?.imageSize),
+          availableInventory: safeInventoryTotal(spec?.availableInventory),
+          versionTotal: safeInventoryTotal(spec?.versionTotal),
+          sortOrder: safeInventoryTotal(spec?.sortOrder),
+          remarks: spec?.remarks ?? '',
+        },
+        status: item.status,
+      }
+      await updateExtension(resourcePlural, item.metadata.name, payload)
+    }
+
+    await loadStationCards()
+    await appendQslAuditLog({
+      action: '清理本台卡片旧图片字段',
+      resourceType: 'station-card',
+      resourceName: 'station-cards',
+      detail: `清理旧 imageUrl 字段=${legacyItems.length}`,
+    })
+    feedback.value = `已清理 ${legacyItems.length} 条本台卡片旧图片字段。`
+  } catch (error) {
+    feedback.value = `清理旧图片字段失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    saving.value = false
+  }
+}
+
+onMounted(() => {
+  void loadStationCards()
+  void loadAttachmentOptions()
+})
 </script>
 
 <template>
   <div class="qsl-grid qsl-grid--two">
-    <VCard title="本台卡片上传">
+    <VCard title="本台卡片配置">
       <div class="qsl-form">
         <label class="qsl-field">
           <span class="qsl-field__label">卡片版本（Card_Version）</span>
@@ -375,14 +578,20 @@ onMounted(loadStationCards)
         </label>
 
         <label class="qsl-field">
-          <span class="qsl-field__label">卡片图片</span>
-          <div class="qsl-input-shell">
-            <input
-              ref="cardFileInputRef"
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              @change="onCardFileChange"
+          <span class="qsl-field__label">已选附件图片</span>
+          <div class="qsl-selected-attachment">
+            <img
+              v-if="selectedAttachment"
+              :src="selectedAttachment.thumbnailUrl || selectedAttachment.permalink"
+              :alt="`${selectedAttachment.displayName} 预览`"
             />
+            <div v-else class="qsl-selected-attachment__empty">未选择</div>
+            <div>
+              <p>{{ selectedAttachment?.displayName || '请从右侧附件库图片中选择' }}</p>
+              <small v-if="selectedAttachment">
+                {{ selectedAttachment.mediaType }}，{{ formatFileSize(selectedAttachment.size) }}
+              </small>
+            </div>
           </div>
         </label>
 
@@ -402,10 +611,51 @@ onMounted(loadStationCards)
 
         <div class="qsl-actions">
           <VButton type="secondary" :disabled="loading || saving" @click="addStationCard">新增卡片版本</VButton>
+          <VButton type="secondary" :disabled="loading || saving" @click="cleanupLegacyImageData">清理旧图片字段</VButton>
           <VButton :disabled="loading || saving" @click="saveStationCard">保存卡片配置</VButton>
         </div>
       </div>
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
+    </VCard>
+
+    <VCard title="附件库图片">
+      <div class="qsl-attachment-toolbar">
+        <div class="qsl-input-shell">
+          <input v-model.trim="attachmentKeyword" type="search" placeholder="按附件名称搜索" @keyup.enter="loadAttachmentOptions" />
+        </div>
+        <VButton size="sm" type="secondary" :disabled="loadingAttachments" @click="loadAttachmentOptions">刷新</VButton>
+      </div>
+
+      <div class="qsl-attachment-upload">
+        <div class="qsl-input-shell">
+          <input
+            ref="attachmentUploadInputRef"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            @change="onAttachmentUploadFileChange"
+          />
+        </div>
+        <VButton size="sm" :disabled="uploadingAttachment || !attachmentUploadFile" @click="uploadAttachment">
+          上传到附件库
+        </VButton>
+      </div>
+
+      <div v-if="attachmentOptions.length" class="qsl-attachment-grid">
+        <button
+          v-for="attachment in attachmentOptions"
+          :key="attachment.name"
+          type="button"
+          class="qsl-attachment-option"
+          :class="{ selected: selectedAttachment?.name === attachment.name }"
+          :disabled="loadingAttachments || uploadingAttachment"
+          @click="selectAttachment(attachment)"
+        >
+          <img :src="attachment.thumbnailUrl || attachment.permalink" :alt="`${attachment.displayName} 预览`" />
+          <span>{{ attachment.displayName }}</span>
+          <small>{{ formatFileSize(attachment.size) }}</small>
+        </button>
+      </div>
+      <VEmpty v-else title="暂无附件库图片" message="请先上传图片，或刷新附件库。" />
     </VCard>
 
     <VCard title="卡片版本列表">
@@ -420,10 +670,11 @@ onMounted(loadStationCards)
           @drop.prevent="onCardDrop(card.id)"
           @dragend="onCardDragEnd"
         >
-          <img :src="card.previewUrl" :alt="`${card.versionName} 预览`" class="qsl-card-preview" />
+          <img v-if="card.previewUrl" :src="card.previewUrl" :alt="`${card.versionName} 预览`" class="qsl-card-preview" />
+          <div v-else class="qsl-card-preview qsl-card-preview--empty">缺少附件</div>
           <div class="qsl-card-meta">
             <p><strong>版本：</strong>{{ card.versionName }}</p>
-            <p><strong>文件：</strong>{{ card.fileName }}</p>
+            <p><strong>附件：</strong>{{ card.attachmentDisplayName || card.attachmentName || '未选择' }}</p>
             <p><strong>可用库存：</strong>{{ card.availableInventory }}</p>
             <p><strong>版本总量：</strong>{{ card.versionTotal }}</p>
             <p><strong>已使用：</strong>{{ getUsedCount(card.versionName) }}</p>
@@ -469,6 +720,9 @@ onMounted(loadStationCards)
             <template v-else>
               <div class="qsl-card-list__button-row">
                 <VButton size="xs" type="secondary" :disabled="loading || saving" @click="startInventoryEdit(card)">编辑库存</VButton>
+                <VButton size="xs" type="secondary" :disabled="loading || saving" @click="applySelectedAttachmentToCard(card)">
+                  使用已选图片
+                </VButton>
                 <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeStationCard(card.id)">删除</VButton>
               </div>
             </template>
@@ -476,12 +730,107 @@ onMounted(loadStationCards)
         </li>
       </ul>
 
-      <VEmpty v-else title="暂无卡片版本" message="请先上传卡片图片并创建版本。" />
+      <VEmpty v-else title="暂无卡片版本" message="请先选择附件库图片并创建版本。" />
     </VCard>
   </div>
 </template>
 
 <style scoped lang="scss">
+.qsl-attachment-toolbar,
+.qsl-attachment-upload {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.qsl-selected-attachment {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 72px;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.qsl-selected-attachment img,
+.qsl-selected-attachment__empty {
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #eef2f7;
+}
+
+.qsl-selected-attachment img {
+  object-fit: contain;
+}
+
+.qsl-selected-attachment__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.qsl-selected-attachment p,
+.qsl-selected-attachment small {
+  margin: 0;
+  word-break: break-word;
+}
+
+.qsl-attachment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.qsl-attachment-option {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  text-align: left;
+  cursor: pointer;
+}
+
+.qsl-attachment-option.selected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+
+.qsl-attachment-option img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #eef2f7;
+}
+
+.qsl-attachment-option span {
+  min-height: 32px;
+  font-size: 12px;
+  line-height: 16px;
+  word-break: break-word;
+}
+
+.qsl-attachment-option small {
+  color: #6b7280;
+  font-size: 11px;
+}
+
 .qsl-card-list {
   display: flex;
   flex-direction: column;
@@ -501,10 +850,20 @@ onMounted(loadStationCards)
 
 .qsl-card-preview {
   width: 92px;
-  height: 64px;
-  object-fit: cover;
+  height: 92px;
+  object-fit: contain;
   border-radius: 6px;
   border: 1px solid #e5e7eb;
+  background: #eef2f7;
+}
+
+.qsl-card-preview--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-size: 12px;
+  text-align: center;
 }
 
 .qsl-card-meta {
@@ -526,7 +885,7 @@ onMounted(loadStationCards)
   gap: 8px;
   align-items: stretch;
   justify-self: end;
-  width: 200px;
+  width: 260px;
   margin-top: 6px;
 }
 
@@ -534,6 +893,7 @@ onMounted(loadStationCards)
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .qsl-inventory-edit {
@@ -573,7 +933,7 @@ onMounted(loadStationCards)
 
 @media (max-width: 1500px) {
   .qsl-card-list__actions {
-    width: 170px;
+    width: 220px;
   }
 }
 </style>

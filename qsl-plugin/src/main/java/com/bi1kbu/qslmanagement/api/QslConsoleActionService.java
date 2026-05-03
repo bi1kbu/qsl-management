@@ -202,8 +202,9 @@ public class QslConsoleActionService {
                         "QSL-422-0001", "该申请已处理，不能重复审批"));
                 }
 
+                var currentReason = status.getReviewReason() == null ? "" : status.getReviewReason().trim();
                 var normalizedReason = reason == null || reason.isBlank()
-                    ? (approved ? "审批通过并自动创建EYEBALL卡片记录" : "审批拒绝")
+                    ? (currentReason.isBlank() ? (approved ? "" : "审批拒绝") : currentReason)
                     : reason.trim();
                 status.setReviewStatus(approved ? "已通过" : "已拒绝");
                 status.setReviewReason(normalizedReason);

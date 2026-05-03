@@ -19,8 +19,12 @@ public class StationCard extends QslBaseExtension<StationCard.StationCardSpec, S
     @Data
     public static class StationCardSpec {
         private String cardVersion;
-        private String imageUrl;
+        private String imageAttachmentName;
+        private String imageAttachmentDisplayName;
+        private String imagePermalink;
+        private String imageThumbnailUrl;
         private String imageMediaType;
+        private Integer imageSize;
         private Integer availableInventory;
         private Integer versionTotal;
         private Integer sortOrder;

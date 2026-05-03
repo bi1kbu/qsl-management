@@ -287,7 +287,7 @@ public class QslPublicCardPageRenderService {
               <section class="qsl-card">
                 <header class="qsl-header">
                   <h1 class="qsl-title">QSL 前台查询</h1>
-                  <p class="qsl-desc">支持按呼号查询公开通联与卡片状态，数据来自 QSL 管理插件公开接口。</p>
+                  <p class="qsl-desc">支持按呼号查询公开通联与卡片状态。</p>
                 </header>
 
                 <form id="qsl-search-form" class="qsl-form">

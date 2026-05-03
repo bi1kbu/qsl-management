@@ -9,7 +9,8 @@ import static org.mockito.Mockito.when;
 import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
-import com.bi1kbu.qslmanagement.front.QslPublicExchangePageRenderService;
+import com.bi1kbu.qslmanagement.front.QslPublicOfflineExchangePageRenderService;
+import com.bi1kbu.qslmanagement.front.QslPublicOnlineExchangePageRenderService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -22,13 +23,13 @@ class QslPublicExchangePageEndpointTest {
     void shouldRenderOnlineExchangePageHtml() {
         var rateLimitService = mock(QslPublicRateLimitService.class);
         var publicApiService = mock(QslPublicApiService.class);
-        var renderService = mock(QslPublicExchangePageRenderService.class);
+        var renderService = mock(QslPublicOnlineExchangePageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.renderOnline("BI1KBU", "ONLINE", true, "embed-001"))
+        when(renderService.render("BI1KBU", "ONLINE", true, "embed-001"))
             .thenReturn("<html><body>线上换卡页</body></html>");
 
-        var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicOnlineExchangePageEndpoint(rateLimitService, publicApiService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -39,22 +40,22 @@ class QslPublicExchangePageEndpointTest {
             .expectBody(String.class)
             .isEqualTo("<html><body>线上换卡页</body></html>");
 
-        verify(renderService).renderOnline("BI1KBU", "ONLINE", true, "embed-001");
+        verify(renderService).render("BI1KBU", "ONLINE", true, "embed-001");
     }
 
     @Test
     void shouldRenderOnlineExchangePageByCardIdHtml() {
         var rateLimitService = mock(QslPublicRateLimitService.class);
         var publicApiService = mock(QslPublicApiService.class);
-        var renderService = mock(QslPublicExchangePageRenderService.class);
+        var renderService = mock(QslPublicOnlineExchangePageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
         when(publicApiService.getOnlineExchangePagePrefill("C1002", "BI1KBU"))
             .thenReturn(Mono.just(new QslPublicApiService.PublicCardPagePrefill("C1002", "BI1KBU", "后端回填")));
-        when(renderService.renderOnline("BI1KBU", "后端回填", true, "embed-004"))
+        when(renderService.render("BI1KBU", "后端回填", true, "embed-004"))
             .thenReturn("<html><body>线上换卡页-按卡片回填</body></html>");
 
-        var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicOnlineExchangePageEndpoint(rateLimitService, publicApiService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -66,20 +67,20 @@ class QslPublicExchangePageEndpointTest {
             .isEqualTo("<html><body>线上换卡页-按卡片回填</body></html>");
 
         verify(publicApiService).getOnlineExchangePagePrefill("C1002", "BI1KBU");
-        verify(renderService).renderOnline("BI1KBU", "后端回填", true, "embed-004");
+        verify(renderService).render("BI1KBU", "后端回填", true, "embed-004");
     }
 
     @Test
     void shouldRenderOfflineExchangePageHtml() {
         var rateLimitService = mock(QslPublicRateLimitService.class);
         var publicApiService = mock(QslPublicApiService.class);
-        var renderService = mock(QslPublicExchangePageRenderService.class);
+        var renderService = mock(QslPublicOfflineExchangePageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002"))
+        when(renderService.render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002"))
             .thenReturn("<html><body>线下换卡页</body></html>");
 
-        var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicOfflineExchangePageEndpoint(rateLimitService, publicApiService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -91,22 +92,22 @@ class QslPublicExchangePageEndpointTest {
             .isEqualTo("<html><body>线下换卡页</body></html>");
 
         verify(publicApiService, never()).getPublicStationContact();
-        verify(renderService).renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002");
+        verify(renderService).render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002");
     }
 
     @Test
     void shouldRenderOfflineExchangePageByCardIdHtml() {
         var rateLimitService = mock(QslPublicRateLimitService.class);
         var publicApiService = mock(QslPublicApiService.class);
-        var renderService = mock(QslPublicExchangePageRenderService.class);
+        var renderService = mock(QslPublicOfflineExchangePageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
         when(publicApiService.getOfflineExchangePagePrefill("C1001"))
             .thenReturn(Mono.just(new QslPublicApiService.PublicOfflineExchangePagePrefill("C1001", "BI1KBU", "202604ACT01", "")));
-        when(renderService.renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003"))
+        when(renderService.render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003"))
             .thenReturn("<html><body>线下换卡页-按卡片回填</body></html>");
 
-        var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicOfflineExchangePageEndpoint(rateLimitService, publicApiService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -119,14 +120,14 @@ class QslPublicExchangePageEndpointTest {
 
         verify(publicApiService).getOfflineExchangePagePrefill("C1001");
         verify(publicApiService, never()).getPublicStationContact();
-        verify(renderService).renderOffline("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003");
+        verify(renderService).render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003");
     }
 
     @Test
-    void shouldRenderErrorHtmlWhenRateLimited() {
+    void shouldRenderOnlineErrorHtmlWhenRateLimited() {
         var rateLimitService = mock(QslPublicRateLimitService.class);
         var publicApiService = mock(QslPublicApiService.class);
-        var renderService = mock(QslPublicExchangePageRenderService.class);
+        var renderService = mock(QslPublicOnlineExchangePageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(
             Mono.error(new QslApiException(HttpStatus.TOO_MANY_REQUESTS, "QSL-429-0001", "请求过于频繁，请稍后再试"))
@@ -134,7 +135,7 @@ class QslPublicExchangePageEndpointTest {
         when(renderService.renderError("请求过于频繁，请稍后再试", false))
             .thenReturn("<html><body>限流</body></html>");
 
-        var endpoint = new QslPublicExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicOnlineExchangePageEndpoint(rateLimitService, publicApiService, renderService);
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()

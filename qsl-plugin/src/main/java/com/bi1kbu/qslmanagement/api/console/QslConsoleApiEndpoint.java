@@ -127,13 +127,15 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> approveExchangeRequest(ServerRequest request) {
         var requestName = request.pathVariable("name");
         return ensureAuthenticated(request)
-            .flatMap(authenticatedOperator -> actionService.reviewExchangeRequest(
-                requestName,
-                true,
-                "审批通过并自动创建EYEBALL卡片记录",
-                authenticatedOperator.name(),
-                authenticatedOperator.clientIp()
-            ))
+            .flatMap(authenticatedOperator -> request.bodyToMono(ExchangeRejectRequest.class)
+                .defaultIfEmpty(new ExchangeRejectRequest(""))
+                .flatMap(payload -> actionService.reviewExchangeRequest(
+                    requestName,
+                    true,
+                    payload.reason(),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

@@ -8,8 +8,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
+import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.ReactiveExtensionClient;
 
@@ -126,5 +129,93 @@ class QslConsoleActionServiceValidationTest {
             "admin",
             "127.0.0.1"
         );
+    }
+
+    @Test
+    void shouldKeepExistingReviewReasonWhenReasonBlank() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            notificationMailService
+        );
+
+        var exchangeRequest = new ExchangeRequest();
+        exchangeRequest.setMetadata(QslApiSupport.createMetadata("exchange-request-1"));
+        var spec = new ExchangeRequest.ExchangeRequestSpec();
+        spec.setCallSign("BI1KBU");
+        exchangeRequest.setSpec(spec);
+        var status = new ExchangeRequest.ExchangeRequestStatus();
+        status.setReviewStatus("待审核");
+        status.setReviewReason("人工预先填写说明");
+        exchangeRequest.setStatus(status);
+
+        when(client.fetch(eq(ExchangeRequest.class), eq("exchange-request-1")))
+            .thenReturn(Mono.just(exchangeRequest));
+        when(client.update(any(ExchangeRequest.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendExchangeReviewIfEnabled(any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.reviewExchangeRequest(
+            "exchange-request-1",
+            false,
+            "",
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("人工预先填写说明", result.reason());
+    }
+
+    @Test
+    void shouldKeepApproveReviewReasonBlankWhenReasonBlankAndNoExistingReason() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            notificationMailService
+        );
+
+        var exchangeRequest = new ExchangeRequest();
+        exchangeRequest.setMetadata(QslApiSupport.createMetadata("exchange-request-1"));
+        var spec = new ExchangeRequest.ExchangeRequestSpec();
+        spec.setCallSign("BI1KBU");
+        exchangeRequest.setSpec(spec);
+        var status = new ExchangeRequest.ExchangeRequestStatus();
+        status.setReviewStatus("待审核");
+        status.setReviewReason("");
+        exchangeRequest.setStatus(status);
+
+        var systemSetting = new SystemSetting();
+        systemSetting.setMetadata(QslApiSupport.createMetadata("qsl-system-setting-default"));
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setCardRecordSequence(1000);
+        systemSetting.setSpec(settingSpec);
+
+        when(client.fetch(eq(ExchangeRequest.class), eq("exchange-request-1")))
+            .thenReturn(Mono.just(exchangeRequest));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty());
+        when(client.update(any(ExchangeRequest.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.create(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendExchangeReviewIfEnabled(any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.reviewExchangeRequest(
+            "exchange-request-1",
+            true,
+            "",
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("已通过", result.reviewStatus());
+        assertEquals("", result.reason());
     }
 }

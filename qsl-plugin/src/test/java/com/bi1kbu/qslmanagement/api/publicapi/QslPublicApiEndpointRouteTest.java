@@ -121,8 +121,7 @@ class QslPublicApiEndpointRouteTest {
             new QslPublicApiService.PublicStationCardItem(
                 "station-card-001",
                 "2026春季版",
-                "data:image/png;base64,AA==",
-                "image/png",
+                "/upload/card-thumbnail.png",
                 500,
                 300,
                 12,
@@ -142,6 +141,7 @@ class QslPublicApiEndpointRouteTest {
             .expectBody()
             .jsonPath("$.code").isEqualTo("QSL-0000")
             .jsonPath("$.data[0].cardVersion").isEqualTo("2026春季版")
+            .jsonPath("$.data[0].previewUrl").isEqualTo("/upload/card-thumbnail.png")
             .jsonPath("$.data[0].versionTotal").isEqualTo(500)
             .jsonPath("$.data[0].remainingInventory").isEqualTo(288);
     }

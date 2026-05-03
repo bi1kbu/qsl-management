@@ -7,12 +7,17 @@ import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import com.bi1kbu.qslmanagement.extension.model.StationCard;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
+import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -23,9 +28,12 @@ import run.halo.app.extension.ReactiveExtensionClient;
 @Service
 public class QslPublicApiService {
 
+    private static final Logger log = LoggerFactory.getLogger(QslPublicApiService.class);
     private static final ListOptions EMPTY_OPTIONS = ListOptions.builder().build();
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("metadata.creationTimestamp"));
     private static final String STATION_PROFILE_NAME = "qsl-station-profile-default";
+    private static final String SYSTEM_SETTING_NAME = "qsl-system-setting-default";
+    private static final int STATION_CARD_CACHE_SECONDS = 30;
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$");
     private static final Pattern TELEPHONE_PATTERN = Pattern.compile("^[0-9+\\-\\s]{0,30}$");
@@ -34,10 +42,19 @@ public class QslPublicApiService {
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
+    private final QslConsoleActionService consoleActionService;
+    private final AtomicReference<StationCardCacheEntry> stationCardCache = new AtomicReference<>(
+        new StationCardCacheEntry(List.of(), Instant.EPOCH)
+    );
 
-    public QslPublicApiService(ReactiveExtensionClient client, QslAuditService qslAuditService) {
+    public QslPublicApiService(
+        ReactiveExtensionClient client,
+        QslAuditService qslAuditService,
+        QslConsoleActionService consoleActionService
+    ) {
         this.client = client;
         this.qslAuditService = qslAuditService;
+        this.consoleActionService = consoleActionService;
     }
 
     public Mono<PublicQsoQueryResult> listPublicRecords(String callSign, String sceneType) {
@@ -183,6 +200,21 @@ public class QslPublicApiService {
                         "匿名用户",
                         clientIp
                     ).thenReturn(created))
+                    .flatMap(created -> requiresExchangeReview()
+                        .flatMap(requiresReview -> {
+                            if (requiresReview) {
+                                return Mono.just(created);
+                            }
+                            return consoleActionService.reviewExchangeRequest(
+                                    created.getMetadata().getName(),
+                                    true,
+                                    "系统自动审批通过",
+                                    "系统自动审批",
+                                    clientIp
+                                )
+                                .then(client.fetch(ExchangeRequest.class, created.getMetadata().getName())
+                                    .defaultIfEmpty(created));
+                        }))
                     .flatMap(created -> getPublicStationContact()
                         .map(contact -> new PublicExchangeSubmitResult(
                             created.getMetadata().getName(),
@@ -191,6 +223,17 @@ public class QslPublicApiService {
                             nullToEmpty(contact.stationAddress()),
                             QslApiSupport.nowText()
                         )));
+            });
+    }
+
+    private Mono<Boolean> requiresExchangeReview() {
+        return client.fetch(SystemSetting.class, SYSTEM_SETTING_NAME)
+            .map(systemSetting -> systemSetting.getSpec() == null
+                || !Boolean.FALSE.equals(systemSetting.getSpec().getRequiresExchangeReview()))
+            .defaultIfEmpty(Boolean.TRUE)
+            .onErrorResume(error -> {
+                log.warn("读取换卡审核开关失败，使用需要审核默认值。message={}", error.getMessage());
+                return Mono.just(Boolean.TRUE);
             });
     }
 
@@ -211,13 +254,30 @@ public class QslPublicApiService {
     }
 
     public Mono<List<PublicStationCardItem>> listPublicStationCards() {
+        var cached = stationCardCache.get();
+        if (Instant.now().isBefore(cached.expireAt())) {
+            return Mono.just(cached.items());
+        }
+
         return loadCardVersionUsedCounts()
             .flatMap(usedCounts -> client.listAll(StationCard.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .filter(stationCard -> stationCard.getMetadata() != null && stationCard.getSpec() != null)
                 .map(stationCard -> toPublicStationCardItem(stationCard, usedCounts))
                 .filter(item -> !item.cardVersion().isBlank())
                 .collectSortedList(Comparator.comparingInt(PublicStationCardItem::sortOrder)
-                    .thenComparing(PublicStationCardItem::cardVersion, String.CASE_INSENSITIVE_ORDER)));
+                    .thenComparing(PublicStationCardItem::cardVersion, String.CASE_INSENSITIVE_ORDER)))
+            .doOnNext(items -> stationCardCache.set(new StationCardCacheEntry(
+                List.copyOf(items),
+                Instant.now().plusSeconds(STATION_CARD_CACHE_SECONDS)
+            )))
+            .onErrorResume(error -> {
+                var fallback = stationCardCache.get();
+                if (!fallback.items().isEmpty()) {
+                    log.warn("读取公开卡片版本失败，返回上一次成功缓存。message={}", error.getMessage());
+                    return Mono.just(fallback.items());
+                }
+                return Mono.error(error);
+            });
     }
 
     public Mono<List<PublicOfflineActivityItem>> listPublicOfflineActivities() {
@@ -483,11 +543,13 @@ public class QslPublicApiService {
         var cardVersion = nullToEmpty(spec.getCardVersion()).trim();
         var usedCount = usedCounts.getOrDefault(normalizeVersionKey(cardVersion), 0);
         var availableInventory = safeInventoryTotal(spec.getAvailableInventory());
+        var previewUrl = nullToEmpty(spec.getImageThumbnailUrl()).isBlank()
+            ? nullToEmpty(spec.getImagePermalink())
+            : nullToEmpty(spec.getImageThumbnailUrl());
         return new PublicStationCardItem(
             nullToEmpty(stationCard.getMetadata().getName()),
             cardVersion,
-            nullToEmpty(spec.getImageUrl()),
-            nullToEmpty(spec.getImageMediaType()),
+            previewUrl,
             safeInventoryTotal(spec.getVersionTotal()),
             availableInventory,
             usedCount,
@@ -745,14 +807,16 @@ public class QslPublicApiService {
     public record PublicStationCardItem(
         String cardId,
         String cardVersion,
-        String imageUrl,
-        String imageMediaType,
+        String previewUrl,
         int versionTotal,
         int availableInventory,
         int usedCount,
         int remainingInventory,
         int sortOrder
     ) {
+    }
+
+    private record StationCardCacheEntry(List<PublicStationCardItem> items, Instant expireAt) {
     }
 
     public record PublicOfflineExchangeConfirmCommand(

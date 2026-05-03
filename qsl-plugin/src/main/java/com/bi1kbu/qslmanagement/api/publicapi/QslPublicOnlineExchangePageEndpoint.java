@@ -7,7 +7,7 @@ import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
-import com.bi1kbu.qslmanagement.front.QslPublicExchangePageRenderService;
+import com.bi1kbu.qslmanagement.front.QslPublicOnlineExchangePageRenderService;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.RouterFunction;
@@ -18,16 +18,16 @@ import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
 
 @Component
-public class QslPublicExchangePageEndpoint implements CustomEndpoint {
+public class QslPublicOnlineExchangePageEndpoint implements CustomEndpoint {
 
     private final QslPublicRateLimitService publicRateLimitService;
     private final QslPublicApiService publicApiService;
-    private final QslPublicExchangePageRenderService pageRenderService;
+    private final QslPublicOnlineExchangePageRenderService pageRenderService;
 
-    public QslPublicExchangePageEndpoint(
+    public QslPublicOnlineExchangePageEndpoint(
         QslPublicRateLimitService publicRateLimitService,
         QslPublicApiService publicApiService,
-        QslPublicExchangePageRenderService pageRenderService
+        QslPublicOnlineExchangePageRenderService pageRenderService
     ) {
         this.publicRateLimitService = publicRateLimitService;
         this.publicApiService = publicApiService;
@@ -37,9 +37,7 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
     @Override
     public RouterFunction<ServerResponse> endpoint() {
         return route(GET("/ONLINE_EYEBALL"), this::renderOnlineExchangePageByQuery)
-            .andRoute(GET("/ONLINE_EYEBALL/{cardId}"), this::renderOnlineExchangePageByCardId)
-            .andRoute(GET("/EYEBALL"), this::renderOfflineExchangePageByQuery)
-            .andRoute(GET("/EYEBALL/{cardId}"), this::renderOfflineExchangePageByCardId);
+            .andRoute(GET("/ONLINE_EYEBALL/{cardId}"), this::renderOnlineExchangePageByCardId);
     }
 
     @Override
@@ -55,10 +53,8 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
         var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("exchange-online-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.renderOnline(callSign, remarks, embed, embedId)))
-            .flatMap(html -> ServerResponse.ok()
-                .contentType(MediaType.TEXT_HTML)
-                .bodyValue(html))
+            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, remarks, embed, embedId)))
+            .flatMap(this::html)
             .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(pageRenderService.renderError(error.getMessage(), embed)));
@@ -73,62 +69,17 @@ public class QslPublicExchangePageEndpoint implements CustomEndpoint {
 
         return publicRateLimitService.checkLimit("exchange-online-page", clientIp)
             .then(publicApiService.getOnlineExchangePagePrefill(cardId, callSign))
-            .map(prefill -> pageRenderService.renderOnline(prefill.callSign(), prefill.remarks(), embed, embedId))
-            .flatMap(html -> ServerResponse.ok()
-                .contentType(MediaType.TEXT_HTML)
-                .bodyValue(html))
+            .map(prefill -> pageRenderService.render(prefill.callSign(), prefill.remarks(), embed, embedId))
+            .flatMap(this::html)
             .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(pageRenderService.renderError(error.getMessage(), embed)));
     }
 
-    private Mono<ServerResponse> renderOfflineExchangePageByQuery(ServerRequest request) {
-        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
-        var callSign = queryParam(request, "callSign", "cs");
-        var cardId = queryParam(request, "cardId", "cid");
-        var activityId = queryParam(request, "activityId", "aid");
-        var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
-        var embedId = queryParam(request, "embedId", "eid");
-
-        return publicRateLimitService.checkLimit("exchange-offline-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.renderOffline(
-                callSign,
-                cardId,
-                activityId,
-                "",
-                embed,
-                embedId
-            )))
-            .flatMap(html -> ServerResponse.ok()
-                .contentType(MediaType.TEXT_HTML)
-                .bodyValue(html))
-            .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
-                .contentType(MediaType.TEXT_HTML)
-                .bodyValue(pageRenderService.renderError(error.getMessage(), embed)));
-    }
-
-    private Mono<ServerResponse> renderOfflineExchangePageByCardId(ServerRequest request) {
-        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
-        var cardId = request.pathVariable("cardId");
-        var embed = parseEmbedFlag(request.queryParam("embed").orElse(""));
-        var embedId = queryParam(request, "embedId", "eid");
-
-        return publicRateLimitService.checkLimit("exchange-offline-page", clientIp)
-            .then(publicApiService.getOfflineExchangePagePrefill(cardId))
-            .map(prefill -> pageRenderService.renderOffline(
-                prefill.callSign(),
-                prefill.cardId(),
-                prefill.activityId(),
-                "",
-                embed,
-                embedId
-            ))
-            .flatMap(html -> ServerResponse.ok()
-                .contentType(MediaType.TEXT_HTML)
-                .bodyValue(html))
-            .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
-                .contentType(MediaType.TEXT_HTML)
-                .bodyValue(pageRenderService.renderError(error.getMessage(), embed)));
+    private Mono<ServerResponse> html(String html) {
+        return ServerResponse.ok()
+            .contentType(MediaType.TEXT_HTML)
+            .bodyValue(html);
     }
 
     private boolean parseEmbedFlag(String value) {

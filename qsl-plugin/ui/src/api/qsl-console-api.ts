@@ -186,9 +186,10 @@ export async function updateMailReceiveDate(
   return response.data.data
 }
 
-export async function approveExchangeRequest(requestName: string): Promise<ExchangeReviewResult> {
+export async function approveExchangeRequest(requestName: string, reason = ''): Promise<ExchangeReviewResult> {
   const response = await axiosInstance.post<ApiResult<ExchangeReviewResult>>(
     `${consoleApiBase}/exchange-requests/${encodeURIComponent(requestName)}/approve`,
+    { reason },
   )
   return response.data.data
 }

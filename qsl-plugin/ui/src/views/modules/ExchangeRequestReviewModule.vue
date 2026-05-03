@@ -152,12 +152,14 @@ const updateReviewStatus = async (
   pendingId.value = row.id
   try {
     if (status === '已通过') {
-      await approveExchangeRequest(row.id)
+      await approveExchangeRequest(row.id, reason)
     } else {
       await rejectExchangeRequest(row.id, reason)
     }
 
     await loadRows()
+    reviewReasonEditingId.value = ''
+    reviewReasonDraft.value = ''
     feedback.value = `${row.callSign} 的换卡申请已${status}。`
   } catch (error) {
     feedback.value = `处理换卡申请失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -167,11 +169,13 @@ const updateReviewStatus = async (
 }
 
 const approve = async (row: ExchangeRequestItem) => {
-  await updateReviewStatus(row, '已通过', '审批通过并自动创建EYEBALL卡片记录')
+  const reason = reviewReasonEditingId.value === row.id ? reviewReasonDraft.value.trim() : row.reviewReason.trim()
+  await updateReviewStatus(row, '已通过', reason)
 }
 
 const reject = async (row: ExchangeRequestItem) => {
-  await updateReviewStatus(row, '已拒绝', '审批拒绝')
+  const reason = reviewReasonEditingId.value === row.id ? reviewReasonDraft.value.trim() : row.reviewReason.trim()
+  await updateReviewStatus(row, '已拒绝', reason)
 }
 
 const sendReviewMail = async (row: ExchangeRequestItem) => {
@@ -313,6 +317,7 @@ const deleteEditingRequest = async () => {
 const startReviewReasonEdit = (row: ExchangeRequestItem) => {
   reviewReasonEditingId.value = row.id
   reviewReasonDraft.value = row.reviewReason
+  expandedId.value = row.id
 }
 
 const cancelReviewReasonEdit = () => {
@@ -425,6 +430,14 @@ onMounted(loadRows)
                 <td @click.stop>
                   <div class="qsl-actions qsl-actions--tight">
                     <VButton
+                      size="xs"
+                      type="secondary"
+                      :disabled="savingReviewReasonId === row.id || loading"
+                      @click="startReviewReasonEdit(row)"
+                    >
+                      审核说明
+                    </VButton>
+                    <VButton
                       v-if="row.status === '待审核'"
                       size="xs"
                       type="secondary"
@@ -478,14 +491,6 @@ onMounted(loadRows)
                     <div class="qsl-detail-full qsl-review-reason-editor" @click.stop>
                       <div class="qsl-review-reason-editor__header">
                         <strong>审核说明：</strong>
-                        <VButton
-                          v-if="reviewReasonEditingId !== row.id"
-                          size="xs"
-                          :disabled="savingReviewReasonId === row.id || loading"
-                          @click="startReviewReasonEdit(row)"
-                        >
-                          编辑
-                        </VButton>
                       </div>
                       <template v-if="reviewReasonEditingId === row.id">
                         <div class="qsl-input-shell qsl-input-shell--textarea">

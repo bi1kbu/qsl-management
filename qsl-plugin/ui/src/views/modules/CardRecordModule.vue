@@ -95,8 +95,6 @@ interface QsoRecordItem {
 
 interface StationCardSpec {
   cardVersion: string
-  imageUrl: string
-  imageMediaType: string
   remarks: string
   sortOrder?: number
   availableInventory?: number

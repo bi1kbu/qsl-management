@@ -604,8 +604,12 @@ public class QslImportExportJobService {
                 (record, row) -> {
                     var spec = record.getSpec() == null ? new StationCard.StationCardSpec() : record.getSpec();
                     spec.setCardVersion(value(row, "cardVersion"));
-                    spec.setImageUrl(value(row, "imageUrl"));
+                    spec.setImageAttachmentName(value(row, "imageAttachmentName"));
+                    spec.setImageAttachmentDisplayName(value(row, "imageAttachmentDisplayName"));
+                    spec.setImagePermalink(value(row, "imagePermalink"));
+                    spec.setImageThumbnailUrl(value(row, "imageThumbnailUrl"));
                     spec.setImageMediaType(value(row, "imageMediaType"));
+                    spec.setImageSize(parseInteger(value(row, "imageSize")));
                     spec.setAvailableInventory(parseInteger(value(row, "availableInventory")));
                     spec.setVersionTotal(parseInteger(value(row, "versionTotal")));
                     spec.setSortOrder(parseInteger(value(row, "sortOrder")));
@@ -1123,8 +1127,12 @@ public class QslImportExportJobService {
                     return csvRow(
                         record.getMetadata().getName(),
                         spec == null ? "" : nullToEmpty(spec.getCardVersion()),
-                        spec == null ? "" : nullToEmpty(spec.getImageUrl()),
+                        spec == null ? "" : nullToEmpty(spec.getImageAttachmentName()),
+                        spec == null ? "" : nullToEmpty(spec.getImageAttachmentDisplayName()),
+                        spec == null ? "" : nullToEmpty(spec.getImagePermalink()),
+                        spec == null ? "" : nullToEmpty(spec.getImageThumbnailUrl()),
                         spec == null ? "" : nullToEmpty(spec.getImageMediaType()),
+                        spec == null ? "" : integerToText(spec.getImageSize()),
                         spec == null ? "" : integerToText(spec.getAvailableInventory()),
                         spec == null ? "" : integerToText(spec.getVersionTotal()),
                         spec == null ? "" : integerToText(spec.getSortOrder()),
@@ -1136,8 +1144,12 @@ public class QslImportExportJobService {
                 .map(rows -> renderCsv(dataset, List.of(
                     "id",
                     "cardVersion",
-                    "imageUrl",
+                    "imageAttachmentName",
+                    "imageAttachmentDisplayName",
+                    "imagePermalink",
+                    "imageThumbnailUrl",
                     "imageMediaType",
+                    "imageSize",
                     "availableInventory",
                     "versionTotal",
                     "sortOrder",

@@ -99,7 +99,7 @@ Halo 官方资料核验日期：2026-05-02
 4. `cardRecordSequence`：卡片编号序列。
 5. `receiveRecordSequence`：收卡编号序列。
 
-通信地址、本台设备、本台卡片分别落在 `StationProfile`、`StationEquipment`、`StationCard` 扩展资源中。备份导入导出必须覆盖上述配置资源，`all` 导出需同时包含业务数据与配置数据。
+通信地址、本台设备、本台卡片分别落在 `StationProfile`、`StationEquipment`、`StationCard` 扩展资源中。本台卡片图案不直接写入 `StationCard`，必须先进入 Halo 附件库，`StationCard` 仅保存附件名称、访问地址与缩略图地址等引用信息；旧版 `imageUrl` base64 字段不再兼容，后台提供清理操作用于覆盖删除旧图片字段。备份导入导出必须覆盖上述配置资源，`all` 导出需同时包含业务数据与配置数据。
 
 ### 3.4 通联业务
 
@@ -115,12 +115,12 @@ Halo 官方资料核验日期：2026-05-02
 
 线上换卡业务包含换卡申请审核、创建卡片、制卡签发、发信确认、送达确认。
 
-1. 前台匿名提交线上换卡申请写入 `ExchangeRequest`，`sceneType=ONLINE_EYEBALL`；公开表单先填写呼号，再从本台卡片版本列表选择最多两张卡片，页面按 `StationCard.spec.sortOrder` 展示卡片图案、版本号、版本总量和库存余量，随后选择“个人地址”或“卡片局地址”，地址类型默认不选。
+1. 前台匿名提交线上换卡申请写入 `ExchangeRequest`，`sceneType=ONLINE_EYEBALL`；公开表单先填写呼号，再从本台卡片版本列表选择最多两张卡片，页面按 `StationCard.spec.sortOrder` 展示卡片预览缩略图、版本号、版本总量和库存余量，公开卡片版本列表使用短缓存并在 Extension 查询短暂失败时回退到上一次成功结果，随后选择“个人地址”或“卡片局地址”，地址类型默认不选。
 2. 个人地址模式填写姓名、电话、邮编、通信地址，电子邮箱可选；卡片局地址模式从 `BureauEntry` 候选选择已有卡片局，或填写新的卡片局名称、邮编、地址。新的卡片局仅随本次申请保存，不由匿名接口写入卡片局管理主数据。
-3. 同一呼号存在 `ONLINE_EYEBALL` 待审核换卡申请时，公开提交接口拒绝再次提交；待后台审核通过或审核拒绝后，才允许该呼号再次提交。
+3. 同一呼号存在 `ONLINE_EYEBALL` 待审核换卡申请时，公开提交接口拒绝再次提交；待后台审核通过或审核拒绝后，才允许该呼号再次提交。当 `SystemSetting.spec.requiresExchangeReview=false` 时，公开提交成功后立即执行系统自动审批，审核说明固定为“系统自动审批通过”。
 4. 线上换卡提交校验通过并成功写入 `ExchangeRequest` 后，提交接口返回本站通信地址，前台在成功提示中展示寄送信息。
 5. 后台审核通过后自动创建 `ONLINE_EYEBALL` 场景卡片，并把 `ExchangeRequest.spec.cardVersion` 写入新建 `CardRecord.spec.cardVersion`；同时根据申请中的个人地址或卡片局地址复用/创建地址资源，并写入 `CardRecord.spec.addressEntryName`。
-6. 换卡申请审核在同意或拒绝后显示“发送邮件通知”和“修改”操作；展开申请详情后可单独编辑审核说明。当 `SystemSetting.spec.autoNotifyOnExchangeReviewed=true` 时，审核同意或拒绝后自动发送审核结果邮件。邮件通知面向 `ExchangeRequest.spec.email`，无邮箱时按跳过处理；修改操作可调整申请信息与审核状态，并可删除本条换卡申请记录。
+6. 换卡申请审核在同意或拒绝后显示“发送邮件通知”和“修改”操作；操作区提供“审核说明”按钮，审核前后均可编辑说明。手动同意时审核说明为空则保持为空，已有说明时以人工填写内容为准；手动拒绝时说明为空则默认“审批拒绝”。当 `SystemSetting.spec.autoNotifyOnExchangeReviewed=true` 时，审核同意或拒绝后自动发送审核结果邮件。邮件通知面向 `ExchangeRequest.spec.email`，无邮箱时按跳过处理；修改操作可调整申请信息与审核状态，并可删除本条换卡申请记录。
 7. 后续流程复用创建卡片、制卡签发、发信确认、送达确认组件。
 
 ### 3.6 线下换卡业务
@@ -158,6 +158,8 @@ Halo 官方资料核验日期：2026-05-02
 | 线上换卡申请 | `/apis/api.qsl-management.halo.run/v1alpha1/ONLINE_EYEBALL`、`/apis/api.qsl-management.halo.run/v1alpha1/ONLINE_EYEBALL/{cardId}` | `[qsl-online-exchange-card]` |
 | 线下换卡确认 | `/apis/api.qsl-management.halo.run/v1alpha1/EYEBALL`、`/apis/api.qsl-management.halo.run/v1alpha1/EYEBALL/{cardId}` | `[qsl-offline-exchange-card]` |
 | 公开签收 | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public`、`/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/{cardId}` | `[qsl-receipt-card]` |
+
+线上换卡与线下换卡公开页面的服务端 endpoint 与渲染服务必须分离实现；两者路径可同属 `api.qsl-management.halo.run/v1alpha1`，但页面字段、脚本、提交逻辑不再通过同一个模板的场景开关复用。
 
 当前公开数据接口：
 
