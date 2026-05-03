@@ -99,7 +99,7 @@ Halo 官方资料核验日期：2026-05-02
 4. `cardRecordSequence`：卡片编号序列。
 5. `receiveRecordSequence`：收卡编号序列。
 
-通信地址、本台设备、本台卡片分别落在 `StationProfile`、`StationEquipment`、`StationCard` 扩展资源中。本台卡片图案不直接写入 `StationCard`，必须先进入 Halo 附件库，`StationCard` 仅保存附件名称、访问地址与缩略图地址等引用信息；旧版 `imageUrl` base64 字段不再兼容，后台提供清理操作用于覆盖删除旧图片字段。备份导入导出必须覆盖上述配置资源，`all` 导出需同时包含业务数据与配置数据。
+通信地址、本台设备、本台卡片分别落在 `StationProfile`、`StationEquipment`、`StationCard` 扩展资源中。本台卡片图案不直接写入 `StationCard`，必须通过后台图片选择入口打开 Halo 附件库弹窗，在弹窗内上传或选择图片后写入附件引用；`StationCard` 仅保存附件名称、访问地址与缩略图地址等引用信息；旧版 `imageUrl` base64 字段不再兼容，后台不再提供旧图片字段清理入口。备份导入导出必须覆盖上述配置资源，`all` 导出需同时包含业务数据与配置数据。
 
 ### 3.4 通联业务
 

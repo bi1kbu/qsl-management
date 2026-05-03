@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { VButton, VCard, VEmpty } from '@halo-dev/components'
+import { VButton, VCard, VEmpty, VModal } from '@halo-dev/components'
 import { consoleApiClient, type Attachment } from '@halo-dev/api-client'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   createExtension,
   createResourceName,
@@ -39,6 +39,15 @@ interface StationCardVersion {
   createdAt: string
 }
 
+type AttachmentPickerTarget =
+  | {
+      type: 'new'
+    }
+  | {
+      type: 'card'
+      cardId: number
+    }
+
 const stationCards = ref<StationCardVersion[]>([])
 const attachmentOptions = ref<AttachmentOption[]>([])
 const loading = ref(false)
@@ -52,6 +61,8 @@ const attachmentKeyword = ref('')
 const attachmentUploadFile = ref<File | null>(null)
 const attachmentUploadInputRef = ref<HTMLInputElement | null>(null)
 const selectedAttachment = ref<AttachmentOption | null>(null)
+const attachmentPickerVisible = ref(false)
+const attachmentPickerTarget = ref<AttachmentPickerTarget | null>(null)
 const feedback = ref('')
 const draggingCardId = ref<number | null>(null)
 const cardUsageCounter = ref<Record<string, number>>({})
@@ -74,10 +85,6 @@ interface StationCardSpec {
   versionTotal: number
   sortOrder: number
   remarks: string
-}
-
-interface LegacyStationCardSpec extends StationCardSpec {
-  imageUrl?: string
 }
 
 interface CardRecordSpec {
@@ -120,6 +127,15 @@ const getUsedCount = (versionName: string): number => {
 const getRemainingCount = (card: StationCardVersion): number => {
   return Math.max(card.availableInventory - getUsedCount(card.versionName), 0)
 }
+
+const attachmentPickerTitle = computed(() => {
+  const target = attachmentPickerTarget.value
+  if (target?.type === 'card') {
+    const card = stationCards.value.find((item) => item.id === target.cardId)
+    return `选择附件库图片${card ? `：${card.versionName}` : ''}`
+  }
+  return '选择附件库图片'
+})
 
 const refreshCardUsageCounter = async () => {
   const records = await listExtensions<CardRecordSpec>(cardRecordPlural)
@@ -217,22 +233,16 @@ const uploadAttachment = async () => {
       return
     }
     attachmentOptions.value = [option, ...attachmentOptions.value.filter((item) => item.name !== option.name)]
-    selectedAttachment.value = option
     attachmentUploadFile.value = null
     if (attachmentUploadInputRef.value) {
       attachmentUploadInputRef.value.value = ''
     }
-    feedback.value = `已上传并选中附件：${option.displayName}`
+    selectAttachment(option)
   } catch (error) {
     feedback.value = `上传附件失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     uploadingAttachment.value = false
   }
-}
-
-const selectAttachment = (attachment: AttachmentOption) => {
-  selectedAttachment.value = attachment
-  feedback.value = `已选择附件：${attachment.displayName}`
 }
 
 const applyAttachmentToCard = (card: StationCardVersion, attachment: AttachmentOption) => {
@@ -245,13 +255,49 @@ const applyAttachmentToCard = (card: StationCardVersion, attachment: AttachmentO
   card.previewUrl = attachment.thumbnailUrl || attachment.permalink
 }
 
-const applySelectedAttachmentToCard = (card: StationCardVersion) => {
-  if (!selectedAttachment.value) {
-    feedback.value = '请先在附件库图片中选择一张图片。'
+const closeAttachmentPicker = () => {
+  attachmentPickerVisible.value = false
+  attachmentPickerTarget.value = null
+  attachmentUploadFile.value = null
+  if (attachmentUploadInputRef.value) {
+    attachmentUploadInputRef.value.value = ''
+  }
+}
+
+const openAttachmentPicker = async (target: AttachmentPickerTarget) => {
+  attachmentPickerTarget.value = target
+  attachmentPickerVisible.value = true
+  if (!attachmentOptions.value.length) {
+    await loadAttachmentOptions()
+  }
+}
+
+const selectAttachment = (attachment: AttachmentOption) => {
+  const target = attachmentPickerTarget.value
+  if (target?.type === 'card') {
+    const card = stationCards.value.find((item) => item.id === target.cardId)
+    if (!card) {
+      feedback.value = '未找到要更换图片的卡片版本。'
+      closeAttachmentPicker()
+      return
+    }
+    applyAttachmentToCard(card, attachment)
+    feedback.value = `已为版本 ${card.versionName} 更换附件图片。请点击“保存卡片配置”完成持久化。`
+    closeAttachmentPicker()
     return
   }
-  applyAttachmentToCard(card, selectedAttachment.value)
-  feedback.value = `已为版本 ${card.versionName} 更换附件图片。请点击“保存卡片配置”完成持久化。`
+  selectedAttachment.value = attachment
+  feedback.value = `已选择新增卡片图案：${attachment.displayName}`
+  closeAttachmentPicker()
+}
+
+const isAttachmentSelected = (attachment: AttachmentOption): boolean => {
+  const target = attachmentPickerTarget.value
+  if (target?.type === 'card') {
+    const card = stationCards.value.find((item) => item.id === target.cardId)
+    return card?.attachmentName === attachment.name
+  }
+  return selectedAttachment.value?.name === attachment.name
 }
 
 const toCard = (extension: QslExtension<StationCardSpec>, index: number): StationCardVersion => {
@@ -508,58 +554,6 @@ const saveStationCard = async () => {
   }
 }
 
-const cleanupLegacyImageData = async () => {
-  saving.value = true
-  try {
-    const currentRemote = await listExtensions<LegacyStationCardSpec>(resourcePlural)
-    const legacyItems = currentRemote.filter((item) => typeof item.spec?.imageUrl === 'string' && item.spec.imageUrl.trim())
-    if (!legacyItems.length) {
-      feedback.value = '未发现需要清理的旧图片字段。'
-      return
-    }
-
-    for (const item of legacyItems) {
-      const spec = item.spec
-      const payload: QslExtension<StationCardSpec> = {
-        apiVersion: qslApiVersion,
-        kind: resourceKind,
-        metadata: {
-          name: item.metadata.name,
-          version: item.metadata.version,
-        },
-        spec: {
-          cardVersion: spec?.cardVersion ?? '',
-          imageAttachmentName: spec?.imageAttachmentName ?? '',
-          imageAttachmentDisplayName: spec?.imageAttachmentDisplayName ?? '',
-          imagePermalink: spec?.imagePermalink ?? '',
-          imageThumbnailUrl: spec?.imageThumbnailUrl ?? '',
-          imageMediaType: spec?.imageMediaType ?? '',
-          imageSize: safeInventoryTotal(spec?.imageSize),
-          availableInventory: safeInventoryTotal(spec?.availableInventory),
-          versionTotal: safeInventoryTotal(spec?.versionTotal),
-          sortOrder: safeInventoryTotal(spec?.sortOrder),
-          remarks: spec?.remarks ?? '',
-        },
-        status: item.status,
-      }
-      await updateExtension(resourcePlural, item.metadata.name, payload)
-    }
-
-    await loadStationCards()
-    await appendQslAuditLog({
-      action: '清理本台卡片旧图片字段',
-      resourceType: 'station-card',
-      resourceName: 'station-cards',
-      detail: `清理旧 imageUrl 字段=${legacyItems.length}`,
-    })
-    feedback.value = `已清理 ${legacyItems.length} 条本台卡片旧图片字段。`
-  } catch (error) {
-    feedback.value = `清理旧图片字段失败：${error instanceof Error ? error.message : '未知错误'}`
-  } finally {
-    saving.value = false
-  }
-}
-
 onMounted(() => {
   void loadStationCards()
   void loadAttachmentOptions()
@@ -577,9 +571,14 @@ onMounted(() => {
           </div>
         </label>
 
-        <label class="qsl-field">
+        <div class="qsl-field">
           <span class="qsl-field__label">已选附件图片</span>
-          <div class="qsl-selected-attachment">
+          <button
+            type="button"
+            class="qsl-selected-attachment qsl-selected-attachment--button"
+            :disabled="loading || saving"
+            @click="openAttachmentPicker({ type: 'new' })"
+          >
             <img
               v-if="selectedAttachment"
               :src="selectedAttachment.thumbnailUrl || selectedAttachment.permalink"
@@ -587,13 +586,14 @@ onMounted(() => {
             />
             <div v-else class="qsl-selected-attachment__empty">未选择</div>
             <div>
-              <p>{{ selectedAttachment?.displayName || '请从右侧附件库图片中选择' }}</p>
+              <p>{{ selectedAttachment?.displayName || '点击从附件库选择或上传图片' }}</p>
               <small v-if="selectedAttachment">
                 {{ selectedAttachment.mediaType }}，{{ formatFileSize(selectedAttachment.size) }}
               </small>
+              <small v-else>支持从附件库选择，也可在弹窗内上传后直接使用。</small>
             </div>
-          </div>
-        </label>
+          </button>
+        </div>
 
         <label class="qsl-field">
           <span class="qsl-field__label">可用库存</span>
@@ -611,51 +611,10 @@ onMounted(() => {
 
         <div class="qsl-actions">
           <VButton type="secondary" :disabled="loading || saving" @click="addStationCard">新增卡片版本</VButton>
-          <VButton type="secondary" :disabled="loading || saving" @click="cleanupLegacyImageData">清理旧图片字段</VButton>
           <VButton :disabled="loading || saving" @click="saveStationCard">保存卡片配置</VButton>
         </div>
       </div>
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
-    </VCard>
-
-    <VCard title="附件库图片">
-      <div class="qsl-attachment-toolbar">
-        <div class="qsl-input-shell">
-          <input v-model.trim="attachmentKeyword" type="search" placeholder="按附件名称搜索" @keyup.enter="loadAttachmentOptions" />
-        </div>
-        <VButton size="sm" type="secondary" :disabled="loadingAttachments" @click="loadAttachmentOptions">刷新</VButton>
-      </div>
-
-      <div class="qsl-attachment-upload">
-        <div class="qsl-input-shell">
-          <input
-            ref="attachmentUploadInputRef"
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            @change="onAttachmentUploadFileChange"
-          />
-        </div>
-        <VButton size="sm" :disabled="uploadingAttachment || !attachmentUploadFile" @click="uploadAttachment">
-          上传到附件库
-        </VButton>
-      </div>
-
-      <div v-if="attachmentOptions.length" class="qsl-attachment-grid">
-        <button
-          v-for="attachment in attachmentOptions"
-          :key="attachment.name"
-          type="button"
-          class="qsl-attachment-option"
-          :class="{ selected: selectedAttachment?.name === attachment.name }"
-          :disabled="loadingAttachments || uploadingAttachment"
-          @click="selectAttachment(attachment)"
-        >
-          <img :src="attachment.thumbnailUrl || attachment.permalink" :alt="`${attachment.displayName} 预览`" />
-          <span>{{ attachment.displayName }}</span>
-          <small>{{ formatFileSize(attachment.size) }}</small>
-        </button>
-      </div>
-      <VEmpty v-else title="暂无附件库图片" message="请先上传图片，或刷新附件库。" />
     </VCard>
 
     <VCard title="卡片版本列表">
@@ -720,8 +679,13 @@ onMounted(() => {
             <template v-else>
               <div class="qsl-card-list__button-row">
                 <VButton size="xs" type="secondary" :disabled="loading || saving" @click="startInventoryEdit(card)">编辑库存</VButton>
-                <VButton size="xs" type="secondary" :disabled="loading || saving" @click="applySelectedAttachmentToCard(card)">
-                  使用已选图片
+                <VButton
+                  size="xs"
+                  type="secondary"
+                  :disabled="loading || saving"
+                  @click="openAttachmentPicker({ type: 'card', cardId: card.id })"
+                >
+                  更换图片
                 </VButton>
                 <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeStationCard(card.id)">删除</VButton>
               </div>
@@ -733,6 +697,58 @@ onMounted(() => {
       <VEmpty v-else title="暂无卡片版本" message="请先选择附件库图片并创建版本。" />
     </VCard>
   </div>
+
+  <VModal
+    v-model:visible="attachmentPickerVisible"
+    :title="attachmentPickerTitle"
+    :width="860"
+    mount-to-body
+    @close="closeAttachmentPicker"
+  >
+    <div class="qsl-attachment-picker">
+      <div class="qsl-attachment-toolbar">
+        <div class="qsl-input-shell">
+          <input v-model.trim="attachmentKeyword" type="search" placeholder="按附件名称搜索" @keyup.enter="loadAttachmentOptions" />
+        </div>
+        <VButton size="sm" type="secondary" :disabled="loadingAttachments" @click="loadAttachmentOptions">刷新</VButton>
+      </div>
+
+      <div class="qsl-attachment-upload">
+        <div class="qsl-input-shell">
+          <input
+            ref="attachmentUploadInputRef"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            @change="onAttachmentUploadFileChange"
+          />
+        </div>
+        <VButton size="sm" :disabled="uploadingAttachment || !attachmentUploadFile" @click="uploadAttachment">
+          上传并使用
+        </VButton>
+      </div>
+
+      <div v-if="attachmentOptions.length" class="qsl-attachment-grid">
+        <button
+          v-for="attachment in attachmentOptions"
+          :key="attachment.name"
+          type="button"
+          class="qsl-attachment-option"
+          :class="{ selected: isAttachmentSelected(attachment) }"
+          :disabled="loadingAttachments || uploadingAttachment"
+          @click="selectAttachment(attachment)"
+        >
+          <img :src="attachment.thumbnailUrl || attachment.permalink" :alt="`${attachment.displayName} 预览`" />
+          <span>{{ attachment.displayName }}</span>
+          <small>{{ formatFileSize(attachment.size) }}</small>
+        </button>
+      </div>
+      <VEmpty v-else title="暂无附件库图片" message="请先上传图片，或刷新附件库。" />
+    </div>
+
+    <template #footer>
+      <VButton :disabled="uploadingAttachment" @click="closeAttachmentPicker">取消</VButton>
+    </template>
+  </VModal>
 </template>
 
 <style scoped lang="scss">
@@ -750,11 +766,23 @@ onMounted(() => {
   grid-template-columns: 72px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
+  width: 100%;
   min-height: 72px;
   padding: 8px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #f9fafb;
+}
+
+.qsl-selected-attachment--button {
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.qsl-selected-attachment--button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .qsl-selected-attachment img,
@@ -782,6 +810,12 @@ onMounted(() => {
 .qsl-selected-attachment small {
   margin: 0;
   word-break: break-word;
+}
+
+.qsl-attachment-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .qsl-attachment-grid {
