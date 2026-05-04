@@ -355,6 +355,7 @@ public class QslPublicApiService {
                     spec.getPublicReceiptRemarks(),
                     command.remarks() == null ? "" : command.remarks().trim()
                 ));
+                QslCardStateTransitionSupport.applyReceiptConfirmedSideEffects(cardRecord);
                 return client.update(cardRecord);
             })
             .flatMap(updated -> qslAuditService.appendAuditLog(
@@ -467,6 +468,7 @@ public class QslPublicApiService {
                     cardRecord.getSpec().getPublicReceiptRemarks(),
                     command.remarks() == null ? "" : command.remarks().trim()
                 ));
+                QslCardStateTransitionSupport.applyReceiptConfirmedSideEffects(cardRecord);
                 return client.update(cardRecord);
             })
             .flatMap(updated -> qslAuditService.appendAuditLog(

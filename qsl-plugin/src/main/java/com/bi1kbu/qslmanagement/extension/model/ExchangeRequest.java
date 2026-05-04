@@ -37,5 +37,9 @@ public class ExchangeRequest extends QslBaseExtension<ExchangeRequest.ExchangeRe
         private String reviewReason;
         private String reviewedBy;
         private String reviewedAt;
+        private String reviewMailStatus;
+        private String reviewMailSentAt;
+        private String reviewMailLastError;
+        private String reviewMailTargetEmail;
     }
 }

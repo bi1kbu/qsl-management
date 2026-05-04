@@ -95,7 +95,7 @@ Halo 官方资料核验日期：2026-05-02
 
 1. `guestQueryPerMinute`：匿名公开接口每分钟限流阈值。
 2. `requiresExchangeReview`：线上换卡申请是否需要审核。
-3. `autoNotifyOnCardCreated`、`autoNotifyOnCardSent`、`autoNotifyOnCardReceived`、`autoNotifyOnExchangeReviewed`：制卡、发卡、收卡、线上换卡审核节点邮件自动通知开关；邮件通知策略支持向 `StationProfile.spec.myEmail` 发送测试邮件，测试数据中对方呼号等字段临时使用本台资料，卡片类型固定为 `EYEBALL`，卡片编号固定为 `C0001`。通知备注来源为：制卡/发卡使用卡片备注，收卡回执使用签收备注，线上换卡审核使用审核说明。
+3. `qsoAutoNotifyOnCardCreated/qsoAutoNotifyOnCardSent/qsoAutoNotifyOnCardReceived`、`onlineAutoNotifyOnCardCreated/onlineAutoNotifyOnCardSent/onlineAutoNotifyOnCardReceived/onlineAutoNotifyOnExchangeReviewed`、`offlineAutoNotifyOnCardReceived`：按通联、线上换卡、线下换卡拆分的邮件自动通知开关。旧的 `autoNotifyOnCardCreated/autoNotifyOnCardSent/autoNotifyOnCardReceived/autoNotifyOnExchangeReviewed` 仅作为已有配置读取兜底。邮件通知策略支持向 `StationProfile.spec.myEmail` 发送测试邮件，测试数据中对方呼号等字段临时使用本台资料，卡片类型固定为 `EYEBALL`，卡片编号固定为 `C0001`。通知备注来源为：制卡/发卡使用卡片备注，收卡回执使用签收备注，线上换卡审核使用审核说明。
 4. `cardRecordSequence`：卡片编号序列。
 5. `receiveRecordSequence`：收卡编号序列。
 
@@ -108,7 +108,7 @@ Halo 官方资料核验日期：2026-05-02
 1. 通联日志支持 `QSO/SWL` 场景切换，字段落在 `QsoRecord.spec`。
 2. 创建卡片必须关联 QSO/SWL 记录，候选列表排除已写入 `CardRecord.spec.qsoRecordName` 的记录；若选择“不创建卡片”，写入不占用 `C{序号}` 的占位 `CardRecord`，该记录后续不再出现在候选列表中。卡片记录清单支持编辑与删除；编辑占位记录并保存时会重新分配正式卡片编号。
 3. 制卡签发只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，不显示“不创建卡片”的无编号占位记录；确认制卡更新 `CardRecord.spec.cardIssued/cardIssuedAt`，信封打印或打包状态使用 `envelopePrinted`。
-4. 发信确认只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，调用控制台接口更新 `cardSent/sentAt`，并可触发发卡邮件通知。
+4. 发信确认只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，调用控制台接口更新 `cardSent/sentAt`，并可触发发卡邮件通知；通联业务只要 `cardSent=true`，系统会联动补齐 `cardIssued/cardIssuedAt/envelopePrinted`。
 5. 送达确认只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，调用控制台接口按 `callSign + cardType + sceneType` 匹配卡片；未匹配时按业务规则自动补建记录。
 
 ### 3.5 线上换卡业务
@@ -119,8 +119,8 @@ Halo 官方资料核验日期：2026-05-02
 2. 个人地址模式填写姓名、电话、邮编、通信地址，电子邮箱可选；卡片局地址模式从 `BureauEntry` 候选选择已有卡片局，或填写新的卡片局名称、邮编、地址。新的卡片局仅随本次申请保存，不由匿名接口写入卡片局管理主数据。
 3. 同一呼号存在 `ONLINE_EYEBALL` 待审核换卡申请时，公开提交接口拒绝再次提交；待后台审核通过或审核拒绝后，才允许该呼号再次提交。当 `SystemSetting.spec.requiresExchangeReview=false` 时，公开提交成功后立即执行系统自动审批，审核说明固定为“系统自动审批通过”。
 4. 线上换卡提交校验通过并成功写入 `ExchangeRequest` 后，提交接口返回本站通信地址，前台在成功提示中展示寄送信息。
-5. 后台审核通过后自动创建 `ONLINE_EYEBALL` 场景卡片，并把 `ExchangeRequest.spec.cardVersion` 写入新建 `CardRecord.spec.cardVersion`；同时根据申请中的个人地址或卡片局地址复用/创建地址资源，并写入 `CardRecord.spec.addressEntryName`。
-6. 换卡申请审核在同意或拒绝后显示“发送邮件通知”和“修改”操作；操作区提供“审核说明”按钮，审核前后均可编辑说明。手动同意时审核说明为空则保持为空，已有说明时以人工填写内容为准；手动拒绝时说明为空则默认“审批拒绝”。当 `SystemSetting.spec.autoNotifyOnExchangeReviewed=true` 时，审核同意或拒绝后自动发送审核结果邮件。邮件通知面向 `ExchangeRequest.spec.email`，无邮箱时按跳过处理；修改操作可调整申请信息与审核状态，并可删除本条换卡申请记录。
+5. 后台审核通过后自动创建 `ONLINE_EYEBALL` 场景卡片，并把 `ExchangeRequest.spec.cardVersion` 写入新建 `CardRecord.spec.cardVersion`；同时根据申请中的个人地址或卡片局地址复用/创建地址资源，并写入 `CardRecord.spec.addressEntryName`。审核通过只代表申请通过与我方待发卡，不代表我方已收到对方卡片，新建卡片的 `cardReceived=false`。
+6. 换卡申请审核在同意或拒绝后显示“发送邮件通知”和“修改”操作；操作区提供“审核说明”按钮，审核前后均可编辑说明。手动同意时审核说明为空则保持为空，已有说明时以人工填写内容为准；手动拒绝时说明为空则默认“审批拒绝”。当 `SystemSetting.spec.onlineAutoNotifyOnExchangeReviewed=true` 时，审核同意或拒绝后自动发送审核结果邮件。邮件通知面向 `ExchangeRequest.spec.email`，发送结果写入 `ExchangeRequest.status.reviewMailStatus/reviewMailSentAt/reviewMailLastError/reviewMailTargetEmail`；状态为 `SENT` 时，服务端跳过重复发送，后台按钮禁用。无邮箱时按跳过处理；修改操作可调整申请信息与审核状态，并可删除本条换卡申请记录。
 7. 后续流程复用创建卡片、制卡签发、发信确认、送达确认组件。
 
 ### 3.6 线下换卡业务
@@ -129,7 +129,7 @@ Halo 官方资料核验日期：2026-05-02
 
 1. 创建活动写入 `OfflineActivity`。
 2. 线下创建卡片可关联 `offlineActivityName`，允许先生成待填写呼号的活动卡片。
-3. 线下送达确认允许补录呼号并触发对应状态变化。
+3. 线下送达确认允许补录呼号并触发对应状态变化；前台线下换卡确认提交成功后同步写入 `cardSent=true`，使线下换卡业务送达确认中的发卡状态显示为“是”。线下换卡业务收到对方“已签收”动作时，如果尚未发卡，会联动补齐 `cardSent/sentAt`。
 4. 线下换卡公开页面不在 HTML 中直接暴露本站通信地址、收件人、电话或邮箱；匿名提交校验通过并成功写入后，提交接口才返回本站通信地址用于寄送提示。
 
 ### 3.7 收卡业务
@@ -139,6 +139,7 @@ Halo 官方资料核验日期：2026-05-02
 1. 三类收卡菜单复用送达确认组件，以 `sceneType` 限定业务范围。
 2. 收卡编号写入 `CardRecord.spec.receivedRecordCodes`，允许同一卡片关联多个收卡编号。
 3. 收卡业务提供基本确认、已收卡片、批量编辑与单条编辑能力；修改收卡日期时会同步重新赋予收卡编号。
+4. 线上换卡业务收到对方“已签收”动作时，如果未制卡、未打包或未发卡，会联动补齐 `cardIssued/cardIssuedAt/envelopePrinted/cardSent/sentAt`；通联业务和线上换卡业务只要 `cardSent=true`，也会联动补齐制卡和打包状态。状态机被批量编辑为否或空时，对应时间、邮件状态、邮件时间和邮件错误同步置空。
 
 ### 3.8 审计与数据
 
@@ -223,10 +224,12 @@ python -m cardprint.cli ui online
 当前在线桥接代码事实：
 
 1. 默认地址为 `http://localhost:8090`，但配置中可传入其他 `base_url`。
-2. 读取 `card-records` 生成卡片/信封队列。
+2. 读取 `card-records` 生成卡片/信封队列，卡片打印会按 `CardRecord.spec.qsoRecordName` 额外读取 `qso-records` 并注入 `qsoInfo`。
 3. 信封打印会额外读取 `station-profiles`、`address-book-entries`、`bureau-entries` 做本台地址和收件地址补全。
-4. 卡片版本以 `station-cards` 为准。
-5. 打印状态通过人工确认回写 `CardRecord.spec.cardIssued/cardIssuedAt` 或 `envelopePrinted`。
+4. 卡片版本以 `station-cards` 为准，并按 `sortOrder` 与版本号排序。
+5. 卡片二维码拼接支持 `qrcode.path_mappings` 短路径映射，在线打印配置页可在站点地址下方配置线下换卡、线上换卡、签收确认三类短路径；默认将公开页面长路径映射为 `/EYEBALL`、`/ONLINE_EYEBALL`、`/rp` 后再追加卡片 ID 与 `cs` 参数。
+6. 在线打印工具登录并拉取卡片版本时只补齐空白本台通信地址字段，不覆盖已有本台姓名、电话、邮编、地址。
+7. 打印状态通过人工确认回写 `CardRecord.spec.cardIssued/cardIssuedAt` 或 `envelopePrinted`，`cardIssuedAt` 使用 `yyyy-MM-dd HH:mm:ss` 文本格式；回写会同步刷新 `CardRecord.status.flowStatus`，并按后台状态联动规则补齐或清理相关状态字段。
 
 ## 7. 当前一致性说明
 

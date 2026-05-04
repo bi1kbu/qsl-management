@@ -487,6 +487,89 @@ const normalizeCardRecordStatus = (status?: Partial<CardRecordStatus>): CardReco
   }
 }
 
+const nowText = (): string => {
+  return new Date().toLocaleString('zh-CN', { hour12: false })
+}
+
+const normalizeSceneType = (sceneType?: string, cardType?: string): CardRecordSpec['sceneType'] => {
+  const normalizedScene = (sceneType ?? '').trim().toUpperCase()
+  if (['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL'].includes(normalizedScene)) {
+    return normalizedScene as CardRecordSpec['sceneType']
+  }
+  const normalizedCardType = (cardType ?? '').trim().toUpperCase()
+  if (normalizedCardType === 'SWL') {
+    return 'SWL'
+  }
+  if (normalizedCardType === 'EYEBALL') {
+    return 'EYEBALL'
+  }
+  return 'QSO'
+}
+
+const clearCreatedMailState = (spec: CardRecordSpec) => {
+  spec.createdMailStatus = ''
+  spec.createdMailSentAt = ''
+  spec.createdMailLastError = ''
+}
+
+const clearSentMailState = (spec: CardRecordSpec) => {
+  spec.sentMailStatus = ''
+  spec.sentMailSentAt = ''
+  spec.sentMailLastError = ''
+}
+
+const clearReceivedMailState = (spec: CardRecordSpec) => {
+  spec.receivedMailStatus = ''
+  spec.receivedMailSentAt = ''
+  spec.receivedMailLastError = ''
+}
+
+const applyStateConsistency = (spec: CardRecordSpec) => {
+  const sceneType = normalizeSceneType(spec.sceneType, spec.cardType)
+  if (spec.cardSent && (sceneType === 'QSO' || sceneType === 'SWL' || sceneType === 'ONLINE_EYEBALL')) {
+    if (!spec.cardIssued) {
+      spec.cardIssued = true
+      spec.cardIssuedAt = nowText()
+    } else if (!spec.cardIssuedAt) {
+      spec.cardIssuedAt = nowText()
+    }
+    spec.envelopePrinted = true
+  }
+  if (spec.receiptConfirmed && (sceneType === 'EYEBALL' || sceneType === 'ONLINE_EYEBALL')) {
+    if (!spec.cardSent) {
+      spec.cardSent = true
+      spec.sentAt = nowText()
+    } else if (!spec.sentAt) {
+      spec.sentAt = nowText()
+    }
+  }
+  if (spec.receiptConfirmed && sceneType === 'ONLINE_EYEBALL') {
+    if (!spec.cardIssued) {
+      spec.cardIssued = true
+      spec.cardIssuedAt = nowText()
+    } else if (!spec.cardIssuedAt) {
+      spec.cardIssuedAt = nowText()
+    }
+    spec.envelopePrinted = true
+  }
+  if (!spec.cardIssued) {
+    spec.cardIssuedAt = ''
+    clearCreatedMailState(spec)
+  }
+  if (!spec.envelopePrinted) {
+    clearCreatedMailState(spec)
+  }
+  if (!spec.cardSent) {
+    spec.sentAt = ''
+    clearSentMailState(spec)
+  }
+  if (!spec.cardReceived) {
+    spec.receivedAt = ''
+    spec.receivedRecordCodes = ''
+    clearReceivedMailState(spec)
+  }
+}
+
 const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): CardMutationItem => {
   const spec = normalizeCardRecordSpec(extension.spec)
   const status = normalizeCardRecordStatus(extension.status)
@@ -707,7 +790,7 @@ const selectAddressByOption = (value: string) => {
 }
 
 const buildSpecFromEditForm = (current: CardRecordSpec): CardRecordSpec => {
-  return {
+  const nextSpec: CardRecordSpec = {
     ...current,
     callSign: editForm.callSign.trim().toUpperCase(),
     cardType: editForm.cardType,
@@ -738,6 +821,8 @@ const buildSpecFromEditForm = (current: CardRecordSpec): CardRecordSpec => {
     receivedMailSentAt: editForm.receivedMailSentAt.trim(),
     receivedMailLastError: editForm.receivedMailLastError.trim(),
   }
+  applyStateConsistency(nextSpec)
+  return nextSpec
 }
 
 const saveEdit = async () => {
@@ -943,6 +1028,7 @@ const applyBatchField = (
     default:
       break
   }
+  applyStateConsistency(nextSpec)
 
   return { nextSpec, nextStatus }
 }

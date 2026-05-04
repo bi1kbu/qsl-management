@@ -101,7 +101,9 @@ interface StationCardSpec {
 }
 
 interface SystemSettingSpec {
-  autoNotifyOnCardCreated: boolean
+  autoNotifyOnCardCreated?: boolean
+  qsoAutoNotifyOnCardCreated?: boolean
+  onlineAutoNotifyOnCardCreated?: boolean
   cardRecordSequence: number
 }
 
@@ -242,7 +244,10 @@ const realtimeEnabled = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
-const autoNotifyOnCardCreated = ref(false)
+const autoNotifyOnCardCreated = ref({
+  qso: false,
+  online: false,
+})
 const batchEditField = ref('')
 const batchEditValue = ref('')
 let realtimeTimer: ReturnType<typeof setInterval> | null = null
@@ -627,6 +632,8 @@ const CARD_SEQUENCE_START = 1000
 const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
   return {
     autoNotifyOnCardCreated: false,
+    qsoAutoNotifyOnCardCreated: false,
+    onlineAutoNotifyOnCardCreated: false,
     cardRecordSequence: CARD_SEQUENCE_START,
   }
 }
@@ -950,7 +957,22 @@ const loadCardVersions = async () => {
 
 const loadSystemSetting = async () => {
   const extension = await getExtensionOrNull<SystemSettingSpec>(systemSettingPlural, systemSettingName)
-  autoNotifyOnCardCreated.value = Boolean(extension?.spec?.autoNotifyOnCardCreated)
+  const legacyCreated = Boolean(extension?.spec?.autoNotifyOnCardCreated)
+  autoNotifyOnCardCreated.value = {
+    qso: extension?.spec?.qsoAutoNotifyOnCardCreated ?? legacyCreated,
+    online: extension?.spec?.onlineAutoNotifyOnCardCreated ?? legacyCreated,
+  }
+}
+
+const shouldAutoSendCreatedMail = (sceneType?: string, cardType?: string): boolean => {
+  const normalized = normalizeSceneType(sceneType, cardType)
+  if (normalized === 'ONLINE_EYEBALL') {
+    return autoNotifyOnCardCreated.value.online
+  }
+  if (normalized === 'QSO' || normalized === 'SWL') {
+    return autoNotifyOnCardCreated.value.qso
+  }
+  return false
 }
 
 const loadPageData = async () => {
@@ -1646,7 +1668,7 @@ const saveCardRecord = async () => {
     })
 
     await loadCardRecords({ silent: true })
-    if (autoNotifyOnCardCreated.value) {
+    if (shouldAutoSendCreatedMail(createdRecord.spec?.sceneType, createdRecord.spec?.cardType)) {
       try {
         await sendNotificationMail({
           cardRecordName: createdRecord.metadata.name,

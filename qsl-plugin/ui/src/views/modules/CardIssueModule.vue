@@ -595,6 +595,9 @@ const selectAddressRow = async (row: CardIssueAddressRow) => {
         addressEntryName: row.id,
         mailTargetEmail: row.sourceType === 'ADDRESS' ? row.email.trim() : '',
         envelopePrinted: addressChanged ? false : cardRow.spec.envelopePrinted,
+        createdMailStatus: addressChanged ? '' : cardRow.spec.createdMailStatus,
+        createdMailSentAt: addressChanged ? '' : cardRow.spec.createdMailSentAt,
+        createdMailLastError: addressChanged ? '' : cardRow.spec.createdMailLastError,
       }
 
       const nextStatus: CardRecordStatus = {
@@ -1159,6 +1162,7 @@ onMounted(loadSourceData)
                     确认打包
                   </VButton>
                   <VButton
+                    class="qsl-mail-action"
                     size="xs"
                     type="secondary"
                     :disabled="
@@ -1210,6 +1214,11 @@ onMounted(loadSourceData)
 </template>
 
 <style scoped lang="scss">
+:deep(.qsl-mail-action:not(:disabled)) {
+  color: #ea580c !important;
+  font-weight: 600;
+}
+
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;

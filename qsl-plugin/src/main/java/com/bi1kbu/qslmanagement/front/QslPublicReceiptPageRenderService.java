@@ -321,7 +321,7 @@ public class QslPublicReceiptPageRenderService {
               <section class="qsl-card">
                 <header class="qsl-header">
                   <h1 class="qsl-title">QSL 卡片签收</h1>
-                  <p class="qsl-desc">请填写呼号与卡片编号提交签收，签收后将回写卡片签收状态。</p>
+                  <p class="qsl-desc">请填写呼号与卡片编号，并提交签收。</p>
                 </header>
 
                 <form id="qsl-receipt-form">
@@ -342,7 +342,6 @@ public class QslPublicReceiptPageRenderService {
                   <div class="qsl-actions">
                     <button id="qsl-submit-button" class="qsl-button" type="submit">提交签收</button>
                   </div>
-                  <p class="qsl-hint">说明：签收提交接口为 POST，页面仅负责参数预填与提交。</p>
                   <p id="qsl-submit-error" class="qsl-error"></p>
                 </form>
 

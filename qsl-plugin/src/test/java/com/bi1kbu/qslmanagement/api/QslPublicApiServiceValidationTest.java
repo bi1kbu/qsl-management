@@ -2,6 +2,7 @@ package com.bi1kbu.qslmanagement.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -297,5 +298,57 @@ class QslPublicApiServiceValidationTest {
         var error = assertThrows(QslApiException.class, () -> service.confirmReceipt(command, "127.0.0.1").block());
         assertEquals("QSL-400-0001", error.getCode());
         assertEquals(400, error.getStatus().value());
+    }
+
+    @Test
+    void shouldMarkCardSentWhenOfflineExchangeConfirmed() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+
+        var cardRecord = new CardRecord();
+        cardRecord.setMetadata(QslApiSupport.createMetadata("C1001"));
+        var spec = new CardRecord.CardRecordSpec();
+        spec.setSceneType("EYEBALL");
+        spec.setCallSign("");
+        spec.setOfflineActivityName("ACT001");
+        spec.setCardSent(Boolean.FALSE);
+        spec.setSentAt("");
+        spec.setReceiptConfirmed(Boolean.FALSE);
+        spec.setPublicReceiptRemarks("");
+        cardRecord.setSpec(spec);
+
+        var stationProfile = new StationProfile();
+        var profileSpec = new StationProfile.StationProfileSpec();
+        profileSpec.setMyAddress("北京市测试路1号");
+        profileSpec.setMyEmail("bi1kbu@example.test");
+        stationProfile.setSpec(profileSpec);
+
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(cardRecord));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(client.fetch(eq(StationProfile.class), anyString())).thenReturn(Mono.just(stationProfile));
+
+        var service = new QslPublicApiService(
+            client,
+            auditService,
+            Mockito.mock(QslConsoleActionService.class)
+        );
+
+        var command = new QslPublicApiService.PublicOfflineExchangeConfirmCommand(
+            "BI1KBU",
+            "C1001",
+            "ACT001",
+            "现场确认"
+        );
+
+        var result = service.confirmOfflineExchange(command, "127.0.0.1").block();
+
+        assertEquals("C1001", result.cardRecordName());
+        assertEquals("BI1KBU", cardRecord.getSpec().getCallSign());
+        assertEquals(Boolean.TRUE, cardRecord.getSpec().getCardSent());
+        assertTrue(cardRecord.getSpec().getSentAt().matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}"));
+        assertEquals(Boolean.TRUE, cardRecord.getSpec().getReceiptConfirmed());
+        assertEquals("现场确认", cardRecord.getSpec().getPublicReceiptRemarks());
+        verify(client).update(cardRecord);
     }
 }

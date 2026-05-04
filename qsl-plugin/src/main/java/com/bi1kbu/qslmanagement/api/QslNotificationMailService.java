@@ -136,14 +136,16 @@ public class QslNotificationMailService {
         String operator,
         String clientIp
     ) {
-        return loadSystemSetting()
-            .flatMap(systemSetting -> {
-                if (!scene.isAutoEnabled(systemSetting)) {
-                    return Mono.empty();
-                }
-                return sendSingle(cardRecordName, scene.code, operator, clientIp, "自动触发")
-                    .then();
-            })
+        return fetchOr404(CardRecord.class, cardRecordName)
+            .flatMap(cardRecord -> loadSystemSetting()
+                .flatMap(systemSetting -> {
+                    var spec = ensureCardRecordSpec(cardRecord);
+                    if (!scene.isAutoEnabled(systemSetting, spec)) {
+                        return Mono.empty();
+                    }
+                    return sendSceneMail(cardRecord, scene, operator, clientIp, "自动触发")
+                        .then();
+                }))
             .onErrorResume(error -> Mono.empty());
     }
 
@@ -154,7 +156,8 @@ public class QslNotificationMailService {
     ) {
         return loadSystemSetting()
             .flatMap(systemSetting -> {
-                if (!Boolean.TRUE.equals(systemSetting.getAutoNotifyOnExchangeReviewed())) {
+                if (!isSettingEnabled(systemSetting.getOnlineAutoNotifyOnExchangeReviewed(),
+                    systemSetting.getAutoNotifyOnExchangeReviewed())) {
                     return Mono.empty();
                 }
                 return sendExchangeReviewMail(requestName, operator, clientIp, "自动触发")
@@ -224,16 +227,26 @@ public class QslNotificationMailService {
         return fetchOr404(ExchangeRequest.class, requestName.trim())
             .flatMap(exchangeRequest -> {
                 var spec = exchangeRequest.getSpec();
-                var status = exchangeRequest.getStatus();
-                var reviewStatus = status == null ? "" : StringUtils.defaultString(status.getReviewStatus()).trim();
+                var status = ensureExchangeRequestStatus(exchangeRequest);
+                var reviewStatus = StringUtils.defaultString(status.getReviewStatus()).trim();
                 if (StringUtils.isBlank(reviewStatus) || "待审核".equals(reviewStatus)) {
                     return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "QSL-422-0001", "换卡申请尚未审核，不能发送审核结果通知"));
                 }
 
+                if (MAIL_STATUS_SENT.equalsIgnoreCase(StringUtils.defaultString(status.getReviewMailStatus()))) {
+                    return Mono.just(new ExchangeReviewMailSendResult(
+                        exchangeRequest.getMetadata().getName(),
+                        MAIL_STATUS_SKIPPED,
+                        "审核通知邮件已发送，已跳过。",
+                        StringUtils.defaultString(status.getReviewMailTargetEmail()),
+                        StringUtils.defaultString(status.getReviewMailSentAt())
+                    ));
+                }
+
                 var targetEmail = spec == null ? "" : StringUtils.defaultString(spec.getEmail()).trim();
                 if (StringUtils.isBlank(targetEmail)) {
-                    return auditExchangeReviewMail(
+                    return persistExchangeReviewMailStatusAndAudit(
                         exchangeRequest,
                         MAIL_STATUS_SKIPPED,
                         "申请未配置电子邮箱，已跳过。",
@@ -248,7 +261,7 @@ public class QslNotificationMailService {
                 var sentAt = QslApiSupport.nowText();
                 return subscribeTarget(targetEmail, EXCHANGE_REVIEW_REASON_TYPE, EXCHANGE_REQUEST_KIND)
                     .then(emitExchangeReviewReason(exchangeRequest, targetEmail, safeOperator(operator), sentAt))
-                    .then(auditExchangeReviewMail(
+                    .then(persistExchangeReviewMailStatusAndAudit(
                         exchangeRequest,
                         MAIL_STATUS_SENT,
                         "发送成功。",
@@ -258,7 +271,7 @@ public class QslNotificationMailService {
                         clientIp,
                         source
                     ))
-                    .onErrorResume(error -> auditExchangeReviewMail(
+                    .onErrorResume(error -> persistExchangeReviewMailStatusAndAudit(
                         exchangeRequest,
                         MAIL_STATUS_FAILED,
                         "发送失败：" + shortError(error),
@@ -588,7 +601,7 @@ public class QslNotificationMailService {
         ).then();
     }
 
-    private Mono<ExchangeReviewMailSendResult> auditExchangeReviewMail(
+    private Mono<ExchangeReviewMailSendResult> persistExchangeReviewMailStatusAndAudit(
         ExchangeRequest exchangeRequest,
         String status,
         String message,
@@ -598,26 +611,40 @@ public class QslNotificationMailService {
         String clientIp,
         String source
     ) {
+        var requestStatus = ensureExchangeRequestStatus(exchangeRequest);
+        requestStatus.setReviewMailStatus(status);
+        requestStatus.setReviewMailSentAt(MAIL_STATUS_SENT.equals(status) ? sentAt : "");
+        requestStatus.setReviewMailLastError(MAIL_STATUS_FAILED.equals(status) ? message : "");
+        if (StringUtils.isNotBlank(targetEmail)) {
+            requestStatus.setReviewMailTargetEmail(targetEmail);
+        }
+        exchangeRequest.setStatus(requestStatus);
+
         var requestName = exchangeRequest.getMetadata().getName();
         var safeSource = StringUtils.isBlank(source) ? "手动触发" : source.trim();
         var detail = "来源=" + safeSource
             + "；状态=" + status
             + "；目标邮箱=" + (StringUtils.isBlank(targetEmail) ? "未配置" : targetEmail)
             + "；消息=" + message;
-        return qslAuditService.appendAuditLog(
-            "换卡审核邮件通知",
-            "exchange-request",
-            requestName,
-            detail,
-            safeOperator(operator),
-            clientIp
-        ).thenReturn(new ExchangeReviewMailSendResult(
-            requestName,
-            status,
-            message,
-            StringUtils.defaultString(targetEmail),
-            StringUtils.defaultString(sentAt)
-        ));
+        return client.update(exchangeRequest)
+            .flatMap(updated -> qslAuditService.appendAuditLog(
+                "换卡审核邮件通知",
+                "exchange-request",
+                requestName,
+                detail,
+                safeOperator(operator),
+                clientIp
+            ).thenReturn(updated))
+            .map(updated -> {
+                var updatedStatus = ensureExchangeRequestStatus(updated);
+                return new ExchangeReviewMailSendResult(
+                    requestName,
+                    status,
+                    message,
+                    StringUtils.defaultString(updatedStatus.getReviewMailTargetEmail()),
+                    StringUtils.defaultString(updatedStatus.getReviewMailSentAt())
+                );
+            });
     }
 
     private Mono<String> resolveTargetEmailByBindingAddress(String addressEntryName) {
@@ -681,6 +708,23 @@ public class QslNotificationMailService {
         spec.setMailTargetEmail("");
         cardRecord.setSpec(spec);
         return spec;
+    }
+
+    private ExchangeRequest.ExchangeRequestStatus ensureExchangeRequestStatus(ExchangeRequest exchangeRequest) {
+        if (exchangeRequest.getStatus() != null) {
+            return exchangeRequest.getStatus();
+        }
+        var status = new ExchangeRequest.ExchangeRequestStatus();
+        status.setReviewStatus("待审核");
+        status.setReviewReason("");
+        status.setReviewedBy("");
+        status.setReviewedAt("");
+        status.setReviewMailStatus("");
+        status.setReviewMailSentAt("");
+        status.setReviewMailLastError("");
+        status.setReviewMailTargetEmail("");
+        exchangeRequest.setStatus(status);
+        return status;
     }
 
     private String safeOperator(String operator) {
@@ -805,13 +849,67 @@ public class QslNotificationMailService {
             }
         }
 
-        boolean isAutoEnabled(SystemSetting.SystemSettingSpec spec) {
+        boolean isAutoEnabled(SystemSetting.SystemSettingSpec systemSetting, CardRecord.CardRecordSpec spec) {
+            var sceneType = normalizeSceneType(spec.getSceneType(), spec.getCardType());
             return switch (this) {
-                case CARD_CREATED -> Boolean.TRUE.equals(spec.getAutoNotifyOnCardCreated());
-                case CARD_SENT -> Boolean.TRUE.equals(spec.getAutoNotifyOnCardSent());
-                case CARD_RECEIVED -> Boolean.TRUE.equals(spec.getAutoNotifyOnCardReceived());
+                case CARD_CREATED -> {
+                    if ("ONLINE_EYEBALL".equals(sceneType)) {
+                        yield isSettingEnabled(systemSetting.getOnlineAutoNotifyOnCardCreated(),
+                            systemSetting.getAutoNotifyOnCardCreated());
+                    }
+                    if ("QSO".equals(sceneType) || "SWL".equals(sceneType)) {
+                        yield isSettingEnabled(systemSetting.getQsoAutoNotifyOnCardCreated(),
+                            systemSetting.getAutoNotifyOnCardCreated());
+                    }
+                    yield false;
+                }
+                case CARD_SENT -> {
+                    if ("ONLINE_EYEBALL".equals(sceneType)) {
+                        yield isSettingEnabled(systemSetting.getOnlineAutoNotifyOnCardSent(),
+                            systemSetting.getAutoNotifyOnCardSent());
+                    }
+                    if ("QSO".equals(sceneType) || "SWL".equals(sceneType)) {
+                        yield isSettingEnabled(systemSetting.getQsoAutoNotifyOnCardSent(),
+                            systemSetting.getAutoNotifyOnCardSent());
+                    }
+                    yield false;
+                }
+                case CARD_RECEIVED -> {
+                    if ("ONLINE_EYEBALL".equals(sceneType)) {
+                        yield isSettingEnabled(systemSetting.getOnlineAutoNotifyOnCardReceived(),
+                            systemSetting.getAutoNotifyOnCardReceived());
+                    }
+                    if ("EYEBALL".equals(sceneType)) {
+                        yield isSettingEnabled(systemSetting.getOfflineAutoNotifyOnCardReceived(),
+                            systemSetting.getAutoNotifyOnCardReceived());
+                    }
+                    if ("QSO".equals(sceneType) || "SWL".equals(sceneType)) {
+                        yield isSettingEnabled(systemSetting.getQsoAutoNotifyOnCardReceived(),
+                            systemSetting.getAutoNotifyOnCardReceived());
+                    }
+                    yield false;
+                }
             };
         }
+
+        private static String normalizeSceneType(String sceneType, String cardType) {
+            var normalizedSceneType = StringUtils.defaultString(sceneType).trim().toUpperCase(Locale.ROOT);
+            if (!normalizedSceneType.isBlank()) {
+                return normalizedSceneType;
+            }
+            var normalizedCardType = StringUtils.defaultString(cardType).trim().toUpperCase(Locale.ROOT);
+            if ("SWL".equals(normalizedCardType)) {
+                return "SWL";
+            }
+            if ("EYEBALL".equals(normalizedCardType)) {
+                return "EYEBALL";
+            }
+            return "QSO";
+        }
+    }
+
+    private static boolean isSettingEnabled(Boolean sceneSetting, Boolean legacySetting) {
+        return sceneSetting == null ? Boolean.TRUE.equals(legacySetting) : Boolean.TRUE.equals(sceneSetting);
     }
 
     public enum TestMailScene {

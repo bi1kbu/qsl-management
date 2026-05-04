@@ -6,6 +6,8 @@ import { approveExchangeRequest, notifyExchangeRequest, rejectExchangeRequest } 
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 
+type MailStatus = '' | 'SENT' | 'SKIPPED' | 'FAILED'
+
 interface ExchangeRequestSpec {
   sceneType: 'ONLINE_EYEBALL' | 'QSO' | 'SWL' | 'EYEBALL'
   callSign: string
@@ -25,6 +27,10 @@ interface ExchangeRequestStatus {
   reviewReason: string
   reviewedBy: string
   reviewedAt: string
+  reviewMailStatus: MailStatus
+  reviewMailSentAt: string
+  reviewMailLastError: string
+  reviewMailTargetEmail: string
 }
 
 interface ExchangeRequestItem {
@@ -45,6 +51,10 @@ interface ExchangeRequestItem {
   reviewReason: string
   reviewedBy: string
   reviewedAt: string
+  reviewMailStatus: MailStatus
+  reviewMailSentAt: string
+  reviewMailLastError: string
+  reviewMailTargetEmail: string
 }
 
 const rows = ref<ExchangeRequestItem[]>([])
@@ -104,6 +114,10 @@ const normalizeStatus = (status?: Partial<ExchangeRequestStatus>): ExchangeReque
     reviewReason: status?.reviewReason ?? '',
     reviewedBy: status?.reviewedBy ?? '',
     reviewedAt: status?.reviewedAt ?? '',
+    reviewMailStatus: (status?.reviewMailStatus ?? '') as MailStatus,
+    reviewMailSentAt: status?.reviewMailSentAt ?? '',
+    reviewMailLastError: status?.reviewMailLastError ?? '',
+    reviewMailTargetEmail: status?.reviewMailTargetEmail ?? '',
   }
 }
 
@@ -128,6 +142,23 @@ const toRow = (extension: QslExtension<ExchangeRequestSpec, ExchangeRequestStatu
     reviewReason: status.reviewReason,
     reviewedBy: status.reviewedBy,
     reviewedAt: status.reviewedAt,
+    reviewMailStatus: status.reviewMailStatus,
+    reviewMailSentAt: status.reviewMailSentAt,
+    reviewMailLastError: status.reviewMailLastError,
+    reviewMailTargetEmail: status.reviewMailTargetEmail,
+  }
+}
+
+const resolveMailStatusText = (status: MailStatus): string => {
+  switch (status) {
+    case 'SENT':
+      return '邮件已发送'
+    case 'SKIPPED':
+      return '邮件已跳过'
+    case 'FAILED':
+      return '邮件失败'
+    default:
+      return '未发送'
   }
 }
 
@@ -249,6 +280,10 @@ const saveEdit = async () => {
       reviewReason: editForm.reviewReason.trim(),
       reviewedBy: editForm.reviewedBy.trim(),
       reviewedAt: editForm.reviewedAt.trim(),
+      reviewMailStatus: target.reviewMailStatus,
+      reviewMailSentAt: target.reviewMailSentAt,
+      reviewMailLastError: target.reviewMailLastError,
+      reviewMailTargetEmail: target.reviewMailTargetEmail,
     }
 
     await updateExtension<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural, target.id, {
@@ -333,6 +368,10 @@ const saveReviewReason = async (row: ExchangeRequestItem) => {
       reviewReason: reviewReasonDraft.value.trim(),
       reviewedBy: row.reviewedBy,
       reviewedAt: row.reviewedAt,
+      reviewMailStatus: row.reviewMailStatus,
+      reviewMailSentAt: row.reviewMailSentAt,
+      reviewMailLastError: row.reviewMailLastError,
+      reviewMailTargetEmail: row.reviewMailTargetEmail,
     }
 
     await updateExtension<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural, row.id, {
@@ -457,13 +496,20 @@ onMounted(loadRows)
                     </VButton>
                     <VButton
                       v-if="row.status !== '待审核'"
+                      class="qsl-mail-action"
                       size="xs"
                       type="secondary"
-                      :disabled="notifyingId === row.id || pendingId === row.id || loading"
+                      :disabled="row.reviewMailStatus === 'SENT' || notifyingId === row.id || pendingId === row.id || loading"
                       @click="sendReviewMail(row)"
                     >
                       发送邮件通知
                     </VButton>
+                    <VTag
+                      v-if="row.reviewMailStatus"
+                      :theme="row.reviewMailStatus === 'SENT' ? 'secondary' : row.reviewMailStatus === 'FAILED' ? 'danger' : 'default'"
+                    >
+                      {{ resolveMailStatusText(row.reviewMailStatus) }}
+                    </VTag>
                     <VButton
                       v-if="row.status !== '待审核'"
                       size="xs"
@@ -488,6 +534,12 @@ onMounted(loadRows)
                     <p class="qsl-detail-full"><strong>收件地址：</strong>{{ row.address || '-' }}</p>
                     <p class="qsl-detail-full"><strong>申请备注：</strong>{{ row.remarks || '-' }}</p>
                     <p><strong>审核人：</strong>{{ row.reviewedBy || '-' }}</p>
+                    <p><strong>审核通知：</strong>{{ resolveMailStatusText(row.reviewMailStatus) }}</p>
+                    <p><strong>通知时间：</strong>{{ row.reviewMailSentAt || '-' }}</p>
+                    <p class="qsl-detail-full"><strong>通知邮箱：</strong>{{ row.reviewMailTargetEmail || '-' }}</p>
+                    <p v-if="row.reviewMailLastError" class="qsl-detail-full">
+                      <strong>通知错误：</strong>{{ row.reviewMailLastError }}
+                    </p>
                     <div class="qsl-detail-full qsl-review-reason-editor" @click.stop>
                       <div class="qsl-review-reason-editor__header">
                         <strong>审核说明：</strong>
@@ -645,6 +697,11 @@ onMounted(loadRows)
 </template>
 
 <style scoped lang="scss">
+:deep(.qsl-mail-action:not(:disabled)) {
+  color: #ea580c !important;
+  font-weight: 600;
+}
+
 .qsl-table-empty {
   text-align: center;
   color: #6b7280;

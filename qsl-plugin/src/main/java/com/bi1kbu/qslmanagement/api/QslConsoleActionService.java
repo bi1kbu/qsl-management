@@ -61,11 +61,12 @@ public class QslConsoleActionService {
                 var spec = ensureCardRecordSpec(cardRecord);
                 spec.setCardSent(Boolean.TRUE);
                 spec.setSentAt(QslApiSupport.nowText());
+                QslCardStateTransitionSupport.applyCardSentSideEffects(spec);
 
                 var status = cardRecord.getStatus() == null
                     ? new CardRecord.CardRecordStatus()
                     : cardRecord.getStatus();
-                status.setFlowStatus("已发信");
+                status.setFlowStatus(QslCardStateTransitionSupport.resolveFlowStatus(spec));
                 cardRecord.setStatus(status);
                 return client.update(cardRecord);
             })
@@ -307,7 +308,7 @@ public class QslConsoleActionService {
         return createAutoQso(callSign, qsoRemarks)
             .flatMap(qsoRecord -> createCardRecord(callSign, cardType, qsoRecord.getMetadata().getName(),
                 QslApiSupport.appendRemark(qsoRemarks, mapReceiptRemark(receiptRemarks)), sceneType, cardSent, receivedRecordCode,
-                "自动生成", "", "", receivedAt));
+                "自动生成", "", "", receivedAt, true));
     }
 
     private Mono<QsoRecord> createAutoQso(String callSign, String remarks) {
@@ -362,13 +363,14 @@ public class QslConsoleActionService {
                 "",
                 cardVersion,
                 binding.addressEntryName(),
-                binding.mailTargetEmail()
+                binding.mailTargetEmail(),
+                false
             ));
     }
 
     private Mono<CardRecord> createEyeballCard(String callSign, String remarks, String sceneType, boolean sent, String receivedRecordCode,
         String receivedAt) {
-        return createCardRecord(callSign, "EYEBALL", "", remarks, sceneType, sent, receivedRecordCode, "自动生成", "", "", receivedAt);
+        return createCardRecord(callSign, "EYEBALL", "", remarks, sceneType, sent, receivedRecordCode, "自动生成", "", "", receivedAt, true);
     }
 
     private Mono<ExchangeAddressBinding> resolveExchangeAddressBinding(ExchangeRequest exchangeRequest) {
@@ -498,7 +500,8 @@ public class QslConsoleActionService {
             cardVersion,
             addressEntryName,
             mailTargetEmail,
-            QslApiSupport.nowText()
+            QslApiSupport.nowText(),
+            true
         );
     }
 
@@ -513,7 +516,37 @@ public class QslConsoleActionService {
         String cardVersion,
         String addressEntryName,
         String mailTargetEmail,
-        String receivedAt
+        boolean cardReceived
+    ) {
+        return createCardRecord(
+            callSign,
+            cardType,
+            qsoRecordName,
+            remarks,
+            sceneType,
+            sent,
+            receivedRecordCode,
+            cardVersion,
+            addressEntryName,
+            mailTargetEmail,
+            QslApiSupport.nowText(),
+            cardReceived
+        );
+    }
+
+    private Mono<CardRecord> createCardRecord(
+        String callSign,
+        String cardType,
+        String qsoRecordName,
+        String remarks,
+        String sceneType,
+        boolean sent,
+        String receivedRecordCode,
+        String cardVersion,
+        String addressEntryName,
+        String mailTargetEmail,
+        String receivedAt,
+        boolean cardReceived
     ) {
         return nextCardRecordName()
             .flatMap(resourceName -> {
@@ -539,11 +572,11 @@ public class QslConsoleActionService {
                 spec.setCardSent(sent);
                 spec.setCardIssued(Boolean.FALSE);
                 spec.setEnvelopePrinted(Boolean.FALSE);
-                spec.setCardReceived(Boolean.TRUE);
+                spec.setCardReceived(cardReceived);
                 spec.setReceiptConfirmed(Boolean.FALSE);
                 spec.setCardIssuedAt("");
                 spec.setSentAt(sent ? QslApiSupport.nowText() : "");
-                spec.setReceivedAt(defaultIfBlank(receivedAt, QslApiSupport.nowText()));
+                spec.setReceivedAt(cardReceived ? defaultIfBlank(receivedAt, QslApiSupport.nowText()) : "");
                 spec.setCreatedMailStatus("");
                 spec.setCreatedMailSentAt("");
                 spec.setCreatedMailLastError("");
@@ -558,7 +591,7 @@ public class QslConsoleActionService {
                 cardRecord.setSpec(spec);
 
                 var status = new CardRecord.CardRecordStatus();
-                status.setFlowStatus("已收卡片");
+                status.setFlowStatus(QslCardStateTransitionSupport.resolveFlowStatus(spec));
                 cardRecord.setStatus(status);
 
                 return client.create(cardRecord);
@@ -842,6 +875,14 @@ public class QslConsoleActionService {
         spec.setAutoNotifyOnCardSent(Boolean.FALSE);
         spec.setAutoNotifyOnCardReceived(Boolean.FALSE);
         spec.setAutoNotifyOnExchangeReviewed(Boolean.FALSE);
+        spec.setQsoAutoNotifyOnCardCreated(Boolean.FALSE);
+        spec.setQsoAutoNotifyOnCardSent(Boolean.FALSE);
+        spec.setQsoAutoNotifyOnCardReceived(Boolean.FALSE);
+        spec.setOnlineAutoNotifyOnCardCreated(Boolean.FALSE);
+        spec.setOnlineAutoNotifyOnCardSent(Boolean.FALSE);
+        spec.setOnlineAutoNotifyOnCardReceived(Boolean.FALSE);
+        spec.setOnlineAutoNotifyOnExchangeReviewed(Boolean.FALSE);
+        spec.setOfflineAutoNotifyOnCardReceived(Boolean.FALSE);
         spec.setCardRecordSequence(CARD_SEQUENCE_START);
         spec.setReceiveRecordSequence(RECEIVE_SEQUENCE_START);
         return spec;

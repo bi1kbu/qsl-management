@@ -90,6 +90,14 @@ class QslImportExportJobServiceTest {
         spec.setAutoNotifyOnCardSent(Boolean.TRUE);
         spec.setAutoNotifyOnCardReceived(Boolean.FALSE);
         spec.setAutoNotifyOnExchangeReviewed(Boolean.TRUE);
+        spec.setQsoAutoNotifyOnCardCreated(Boolean.TRUE);
+        spec.setQsoAutoNotifyOnCardSent(Boolean.FALSE);
+        spec.setQsoAutoNotifyOnCardReceived(Boolean.TRUE);
+        spec.setOnlineAutoNotifyOnCardCreated(Boolean.FALSE);
+        spec.setOnlineAutoNotifyOnCardSent(Boolean.TRUE);
+        spec.setOnlineAutoNotifyOnCardReceived(Boolean.FALSE);
+        spec.setOnlineAutoNotifyOnExchangeReviewed(Boolean.TRUE);
+        spec.setOfflineAutoNotifyOnCardReceived(Boolean.TRUE);
         spec.setCardRecordSequence(1000);
         spec.setReceiveRecordSequence(12);
         setting.setSpec(spec);
@@ -103,7 +111,7 @@ class QslImportExportJobServiceTest {
         assertEquals("export-job-1.csv", payload.fileName());
         var csv = new String(payload.content(), StandardCharsets.UTF_8);
         assertEquals(true, csv.contains("id#system-setting,guestQueryPerMinute,requiresExchangeReview"));
-        assertEquals(true, csv.contains("qsl-system-setting-default,30,true,false,true,false,true,1000,12"));
+        assertEquals(true, csv.contains("qsl-system-setting-default,30,true,false,true,false,true,true,false,true,false,true,false,true,true,1000,12"));
     }
 
     @Test

@@ -484,6 +484,10 @@ public class QslImportExportJobService {
                     status.setReviewReason(value(row, "reviewReason"));
                     status.setReviewedBy(value(row, "reviewedBy"));
                     status.setReviewedAt(value(row, "reviewedAt"));
+                    status.setReviewMailStatus(value(row, "reviewMailStatus"));
+                    status.setReviewMailSentAt(value(row, "reviewMailSentAt"));
+                    status.setReviewMailLastError(value(row, "reviewMailLastError"));
+                    status.setReviewMailTargetEmail(value(row, "reviewMailTargetEmail"));
                     record.setStatus(status);
                 }
             );
@@ -554,6 +558,14 @@ public class QslImportExportJobService {
                     spec.setAutoNotifyOnCardSent(parseBoolean(value(row, "autoNotifyOnCardSent")));
                     spec.setAutoNotifyOnCardReceived(parseBoolean(value(row, "autoNotifyOnCardReceived")));
                     spec.setAutoNotifyOnExchangeReviewed(parseBoolean(value(row, "autoNotifyOnExchangeReviewed")));
+                    spec.setQsoAutoNotifyOnCardCreated(parseBoolean(value(row, "qsoAutoNotifyOnCardCreated")));
+                    spec.setQsoAutoNotifyOnCardSent(parseBoolean(value(row, "qsoAutoNotifyOnCardSent")));
+                    spec.setQsoAutoNotifyOnCardReceived(parseBoolean(value(row, "qsoAutoNotifyOnCardReceived")));
+                    spec.setOnlineAutoNotifyOnCardCreated(parseBoolean(value(row, "onlineAutoNotifyOnCardCreated")));
+                    spec.setOnlineAutoNotifyOnCardSent(parseBoolean(value(row, "onlineAutoNotifyOnCardSent")));
+                    spec.setOnlineAutoNotifyOnCardReceived(parseBoolean(value(row, "onlineAutoNotifyOnCardReceived")));
+                    spec.setOnlineAutoNotifyOnExchangeReviewed(parseBoolean(value(row, "onlineAutoNotifyOnExchangeReviewed")));
+                    spec.setOfflineAutoNotifyOnCardReceived(parseBoolean(value(row, "offlineAutoNotifyOnCardReceived")));
                     spec.setCardRecordSequence(parseInteger(value(row, "cardRecordSequence")));
                     spec.setReceiveRecordSequence(parseInteger(value(row, "receiveRecordSequence")));
                     record.setSpec(spec);
@@ -926,7 +938,11 @@ public class QslImportExportJobService {
                         status == null ? "" : nullToEmpty(status.getReviewStatus()),
                         status == null ? "" : nullToEmpty(status.getReviewReason()),
                         status == null ? "" : nullToEmpty(status.getReviewedBy()),
-                        status == null ? "" : nullToEmpty(status.getReviewedAt())
+                        status == null ? "" : nullToEmpty(status.getReviewedAt()),
+                        status == null ? "" : nullToEmpty(status.getReviewMailStatus()),
+                        status == null ? "" : nullToEmpty(status.getReviewMailSentAt()),
+                        status == null ? "" : nullToEmpty(status.getReviewMailLastError()),
+                        status == null ? "" : nullToEmpty(status.getReviewMailTargetEmail())
                     );
                 })
                 .collectList()
@@ -945,7 +961,11 @@ public class QslImportExportJobService {
                     "reviewStatus",
                     "reviewReason",
                     "reviewedBy",
-                    "reviewedAt"
+                    "reviewedAt",
+                    "reviewMailStatus",
+                    "reviewMailSentAt",
+                    "reviewMailLastError",
+                    "reviewMailTargetEmail"
                 ), rows));
             case "offline-activity" -> client.listAll(OfflineActivity.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
@@ -1046,6 +1066,14 @@ public class QslImportExportJobService {
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnCardSent()),
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnCardReceived()),
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnExchangeReviewed()),
+                        spec == null ? "" : boolToText(spec.getQsoAutoNotifyOnCardCreated()),
+                        spec == null ? "" : boolToText(spec.getQsoAutoNotifyOnCardSent()),
+                        spec == null ? "" : boolToText(spec.getQsoAutoNotifyOnCardReceived()),
+                        spec == null ? "" : boolToText(spec.getOnlineAutoNotifyOnCardCreated()),
+                        spec == null ? "" : boolToText(spec.getOnlineAutoNotifyOnCardSent()),
+                        spec == null ? "" : boolToText(spec.getOnlineAutoNotifyOnCardReceived()),
+                        spec == null ? "" : boolToText(spec.getOnlineAutoNotifyOnExchangeReviewed()),
+                        spec == null ? "" : boolToText(spec.getOfflineAutoNotifyOnCardReceived()),
                         spec == null ? "" : integerToText(spec.getCardRecordSequence()),
                         spec == null ? "" : integerToText(spec.getReceiveRecordSequence()),
                         status == null ? "" : nullToEmpty(status.getLastModifiedBy()),
@@ -1061,6 +1089,14 @@ public class QslImportExportJobService {
                     "autoNotifyOnCardSent",
                     "autoNotifyOnCardReceived",
                     "autoNotifyOnExchangeReviewed",
+                    "qsoAutoNotifyOnCardCreated",
+                    "qsoAutoNotifyOnCardSent",
+                    "qsoAutoNotifyOnCardReceived",
+                    "onlineAutoNotifyOnCardCreated",
+                    "onlineAutoNotifyOnCardSent",
+                    "onlineAutoNotifyOnCardReceived",
+                    "onlineAutoNotifyOnExchangeReviewed",
+                    "offlineAutoNotifyOnCardReceived",
                     "cardRecordSequence",
                     "receiveRecordSequence",
                     "lastModifiedBy",

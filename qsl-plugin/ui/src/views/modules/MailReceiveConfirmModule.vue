@@ -505,6 +505,85 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
   }
 }
 
+const clearCreatedMailState = (spec: CardRecordSpec) => {
+  spec.createdMailStatus = ''
+  spec.createdMailSentAt = ''
+  spec.createdMailLastError = ''
+}
+
+const clearSentMailState = (spec: CardRecordSpec) => {
+  spec.sentMailStatus = ''
+  spec.sentMailSentAt = ''
+  spec.sentMailLastError = ''
+}
+
+const clearReceivedMailState = (spec: CardRecordSpec) => {
+  spec.receivedMailStatus = ''
+  spec.receivedMailSentAt = ''
+  spec.receivedMailLastError = ''
+}
+
+const applyCardSentSideEffects = (spec: CardRecordSpec) => {
+  if (!spec.cardSent) {
+    return
+  }
+  const sceneType = normalizeSceneType(spec.sceneType, spec.cardType)
+  if (sceneType === 'QSO' || sceneType === 'SWL' || sceneType === 'ONLINE_EYEBALL') {
+    if (!spec.cardIssued) {
+      spec.cardIssued = true
+      spec.cardIssuedAt = nowText()
+    } else if (!spec.cardIssuedAt) {
+      spec.cardIssuedAt = nowText()
+    }
+    spec.envelopePrinted = true
+  }
+}
+
+const applyReceiptConfirmedSideEffects = (spec: CardRecordSpec) => {
+  if (!spec.receiptConfirmed) {
+    return
+  }
+  const sceneType = normalizeSceneType(spec.sceneType, spec.cardType)
+  if (sceneType === 'EYEBALL' || sceneType === 'ONLINE_EYEBALL') {
+    if (!spec.cardSent) {
+      spec.cardSent = true
+      spec.sentAt = nowText()
+    } else if (!spec.sentAt) {
+      spec.sentAt = nowText()
+    }
+  }
+  if (sceneType === 'ONLINE_EYEBALL') {
+    if (!spec.cardIssued) {
+      spec.cardIssued = true
+      spec.cardIssuedAt = nowText()
+    } else if (!spec.cardIssuedAt) {
+      spec.cardIssuedAt = nowText()
+    }
+    spec.envelopePrinted = true
+  }
+}
+
+const applyStateCleanup = (spec: CardRecordSpec) => {
+  applyCardSentSideEffects(spec)
+  applyReceiptConfirmedSideEffects(spec)
+  if (!spec.cardIssued) {
+    spec.cardIssuedAt = ''
+    clearCreatedMailState(spec)
+  }
+  if (!spec.envelopePrinted) {
+    clearCreatedMailState(spec)
+  }
+  if (!spec.cardSent) {
+    spec.sentAt = ''
+    clearSentMailState(spec)
+  }
+  if (!spec.cardReceived) {
+    spec.receivedAt = ''
+    spec.receivedRecordCodes = ''
+    clearReceivedMailState(spec)
+  }
+}
+
 const toReceiveResult = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): ReceiveResult => {
   const spec = normalizeCardRecordSpec(extension.spec)
   const status = extension.status
@@ -725,6 +804,7 @@ const saveSingleEdit = async () => {
       receivedRemarks: singleEditForm.receivedRemarks.trim(),
       receivedAt: nextReceived ? target.spec.receivedAt || nowText() : '',
     }
+    applyStateCleanup(nextSpec)
 
     await updateExtension<CardRecordSpec>(resourcePlural, target.resourceName, {
       apiVersion: qslApiVersion,
@@ -820,6 +900,7 @@ const applyHistoryBatchEdit = async () => {
         receivedRemarks: batchEditField.value === 'receiptRemarks' ? nextValue : item.spec.receivedRemarks,
         receivedAt: nextReceived ? item.spec.receivedAt || nowText() : '',
       }
+      applyStateCleanup(nextSpec)
 
       await updateExtension<CardRecordSpec>(resourcePlural, item.resourceName, {
         apiVersion: qslApiVersion,
@@ -1042,6 +1123,7 @@ onMounted(() => {
         <div class="qsl-actions">
           <VButton type="secondary" :disabled="submitting" @click="submitReceive">确认收信</VButton>
           <VButton
+            class="qsl-mail-action"
             type="secondary"
             :disabled="batchSendingReceivedMail || !selectedHistoryCount"
             @click="batchSendReceivedMail"
@@ -1298,6 +1380,7 @@ onMounted(() => {
                     结束收卡
                   </VButton>
                   <VButton
+                    class="qsl-mail-action"
                     size="xs"
                     type="secondary"
                     :disabled="
@@ -1360,6 +1443,11 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
+:deep(.qsl-mail-action:not(:disabled)) {
+  color: #ea580c !important;
+  font-weight: 600;
+}
+
 .qsl-tab-panel-placeholder {
   display: none;
 }

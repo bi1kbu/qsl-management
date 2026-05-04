@@ -58,6 +58,14 @@ public class QslManagementPlugin extends BasePlugin {
                 spec.setAutoNotifyOnCardSent(Boolean.FALSE);
                 spec.setAutoNotifyOnCardReceived(Boolean.FALSE);
                 spec.setAutoNotifyOnExchangeReviewed(Boolean.FALSE);
+                spec.setQsoAutoNotifyOnCardCreated(Boolean.FALSE);
+                spec.setQsoAutoNotifyOnCardSent(Boolean.FALSE);
+                spec.setQsoAutoNotifyOnCardReceived(Boolean.FALSE);
+                spec.setOnlineAutoNotifyOnCardCreated(Boolean.FALSE);
+                spec.setOnlineAutoNotifyOnCardSent(Boolean.FALSE);
+                spec.setOnlineAutoNotifyOnCardReceived(Boolean.FALSE);
+                spec.setOnlineAutoNotifyOnExchangeReviewed(Boolean.FALSE);
+                spec.setOfflineAutoNotifyOnCardReceived(Boolean.FALSE);
                 spec.setCardRecordSequence(1000);
                 spec.setReceiveRecordSequence(0);
                 systemSetting.setSpec(spec);

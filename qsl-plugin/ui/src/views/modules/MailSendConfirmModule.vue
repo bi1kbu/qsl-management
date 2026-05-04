@@ -354,6 +354,42 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
   }
 }
 
+const clearCreatedMailState = (spec: CardRecordSpec) => {
+  spec.createdMailStatus = ''
+  spec.createdMailSentAt = ''
+  spec.createdMailLastError = ''
+}
+
+const clearSentMailState = (spec: CardRecordSpec) => {
+  spec.sentMailStatus = ''
+  spec.sentMailSentAt = ''
+  spec.sentMailLastError = ''
+}
+
+const applyCardSentSideEffects = (spec: CardRecordSpec) => {
+  if (!spec.cardSent) {
+    spec.sentAt = ''
+    clearSentMailState(spec)
+    return
+  }
+  const sceneType = normalizeSceneType(spec.sceneType, spec.cardType)
+  if (sceneType === 'QSO' || sceneType === 'SWL' || sceneType === 'ONLINE_EYEBALL') {
+    if (!spec.cardIssued) {
+      spec.cardIssued = true
+      spec.cardIssuedAt = nowText()
+    } else if (!spec.cardIssuedAt) {
+      spec.cardIssuedAt = nowText()
+    }
+    spec.envelopePrinted = true
+  }
+  if (!spec.cardIssued) {
+    clearCreatedMailState(spec)
+  }
+  if (!spec.envelopePrinted) {
+    clearCreatedMailState(spec)
+  }
+}
+
 const toRow = (extension: QslExtension<CardRecordSpec>): SendConfirmItem => {
   const spec = normalizeCardRecordSpec(extension.spec)
   const cardPrintAt = spec.cardDate && spec.cardTime ? `${spec.cardDate} ${spec.cardTime}` : '未制卡'
@@ -468,6 +504,7 @@ const saveEdit = async () => {
           ? editForm.sentAt.trim() || target.spec.sentAt || nowText()
           : '',
     }
+    applyCardSentSideEffects(nextSpec)
 
     await updateExtension<CardRecordSpec>(resourcePlural, target.resourceName, {
       apiVersion: qslApiVersion,
@@ -609,6 +646,7 @@ const applyHistoryBatchEdit = async () => {
         cardSent: nextSent,
         sentAt: nextSentAt,
       }
+      applyCardSentSideEffects(nextSpec)
 
       await updateExtension<CardRecordSpec>(resourcePlural, item.resourceName, {
         apiVersion: qslApiVersion,
@@ -753,6 +791,7 @@ onMounted(() => {
 
       <div v-if="isConfirmTab" class="qsl-actions">
         <VButton
+          class="qsl-mail-action"
           size="sm"
           type="secondary"
           :disabled="batchSendingSentMail || !selectedHistoryCount"
@@ -931,6 +970,7 @@ onMounted(() => {
                     确认发信
                   </VButton>
                   <VButton
+                    class="qsl-mail-action"
                     size="xs"
                     type="secondary"
                     :disabled="
@@ -987,6 +1027,11 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
+:deep(.qsl-mail-action:not(:disabled)) {
+  color: #ea580c !important;
+  font-weight: 600;
+}
+
 .qsl-send-confirm-tabs {
   margin-bottom: 12px;
 }

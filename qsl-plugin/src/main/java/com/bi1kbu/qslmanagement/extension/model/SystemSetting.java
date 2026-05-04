@@ -24,6 +24,14 @@ public class SystemSetting extends QslBaseExtension<SystemSetting.SystemSettingS
         private Boolean autoNotifyOnCardSent;
         private Boolean autoNotifyOnCardReceived;
         private Boolean autoNotifyOnExchangeReviewed;
+        private Boolean qsoAutoNotifyOnCardCreated;
+        private Boolean qsoAutoNotifyOnCardSent;
+        private Boolean qsoAutoNotifyOnCardReceived;
+        private Boolean onlineAutoNotifyOnCardCreated;
+        private Boolean onlineAutoNotifyOnCardSent;
+        private Boolean onlineAutoNotifyOnCardReceived;
+        private Boolean onlineAutoNotifyOnExchangeReviewed;
+        private Boolean offlineAutoNotifyOnCardReceived;
         private Integer cardRecordSequence;
         private Integer receiveRecordSequence;
     }
