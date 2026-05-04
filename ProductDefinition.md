@@ -210,6 +210,7 @@ Halo 官方资料核验日期：2026-05-02
 | `address-bureau` | 地址管理、卡片局管理 | 无 |
 | `equipment-catalog` | 设备库维护 | 无 |
 | `import-export` | 导入导出 | 查询、审核、地址、设备读取；编辑依赖相关写权限 |
+| `card-print-tool` | 本地卡片打印工具令牌授权 | 通信地址/本台卡片读取、卡片记录编辑、通联读取、地址/卡片局读取、线下换卡活动读取 |
 
 RBAC 模板实际落点：`qsl-plugin/src/main/resources/extensions/qsl-menu-role-templates.yaml`。
 
@@ -226,10 +227,12 @@ python -m cardprint.cli ui online
 1. 默认地址为 `http://localhost:8090`，但配置中可传入其他 `base_url`。
 2. 读取 `card-records` 生成卡片/信封队列，卡片打印会按 `CardRecord.spec.qsoRecordName` 额外读取 `qso-records` 并注入 `qsoInfo`。
 3. 信封打印会额外读取 `station-profiles`、`address-book-entries`、`bureau-entries` 做本台地址和收件地址补全。
-4. 卡片版本以 `station-cards` 为准，并按 `sortOrder` 与版本号排序。
+4. 卡片版本以 `station-cards` 为准；本地打印工具通过公开接口 `GET /apis/api.qsl-management.halo.run/v1alpha1/exchange-online/-/station-cards` 拉取版本列表，并按 `sortOrder` 与版本号排序，不从 `card-records` 反推。
 5. 卡片二维码拼接支持 `qrcode.path_mappings` 短路径映射，在线打印配置页可在站点地址下方配置线下换卡、线上换卡、签收确认三类短路径；默认将公开页面长路径映射为 `/EYEBALL`、`/ONLINE_EYEBALL`、`/rp` 后再追加卡片 ID 与 `cs` 参数。
-6. 在线打印工具登录并拉取卡片版本时只补齐空白本台通信地址字段，不覆盖已有本台姓名、电话、邮编、地址。
+6. 在线打印工具登录并拉取卡片版本时使用后台线程执行网络请求，只补齐空白本台通信地址字段，不覆盖已有本台姓名、电话、邮编、地址；受保护接口返回登录页或 HTML 时明确提示认证或权限问题，不静默解析为空数据。
 7. 打印状态通过人工确认回写 `CardRecord.spec.cardIssued/cardIssuedAt` 或 `envelopePrinted`，`cardIssuedAt` 使用 `yyyy-MM-dd HH:mm:ss` 文本格式；回写会同步刷新 `CardRecord.status.flowStatus`，并按后台状态联动规则补齐或清理相关状态字段。
+
+线下换卡业务不需要打包、制卡邮件流程和收件地址展示；后台线下换卡制卡签发页面只保留确认制卡，线下换卡创建卡片的批量编辑允许修改制卡状态。
 
 ## 7. 当前一致性说明
 

@@ -346,7 +346,7 @@ const selectedCardVersionHasConfiguredInventory = computed(() => {
   return Boolean(cardVersionInventoryConfiguredMap.value[key])
 })
 const batchEditFields = computed(() => {
-  return [
+  const fields = [
     {
       value: 'cardType',
       label: '卡片类型',
@@ -367,6 +367,21 @@ const batchEditFields = computed(() => {
     { value: 'cardDate', label: '卡片日期', inputType: 'date' },
     { value: 'businessRemarks', label: '业务备注', inputType: 'textarea', placeholder: '输入业务备注' },
     { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
+  ] as const
+  if (!isOfflineExchangeScene.value) {
+    return fields
+  }
+  return [
+    ...fields,
+    {
+      value: 'cardIssued',
+      label: '制卡状态',
+      inputType: 'select',
+      options: [
+        { label: '是', value: 'true' },
+        { label: '否', value: 'false' },
+      ],
+    },
   ] as const
 })
 
@@ -1291,6 +1306,29 @@ const toHistoryItem = (row: Record<string, unknown>): CardRecordItem => {
   return row as unknown as CardRecordItem
 }
 
+const resolveBatchBoolean = (value: string): boolean => {
+  return ['true', '1', 'yes', 'y', 'on', '是'].includes(value.trim().toLowerCase())
+}
+
+const applyBatchCardIssuedState = (spec: CardRecordSpec, value: string): CardRecordSpec => {
+  const cardIssued = resolveBatchBoolean(value)
+  if (cardIssued) {
+    return {
+      ...spec,
+      cardIssued: true,
+      cardIssuedAt: spec.cardIssuedAt || nowText(),
+    }
+  }
+  return {
+    ...spec,
+    cardIssued: false,
+    cardIssuedAt: '',
+    createdMailStatus: '',
+    createdMailSentAt: '',
+    createdMailLastError: '',
+  }
+}
+
 const applyHistoryBatchEdit = async () => {
   if (!selectedHistoryNames.value.length) {
     feedback.value = '请先选择要批量编辑的历史记录。'
@@ -1325,6 +1363,9 @@ const applyHistoryBatchEdit = async () => {
         businessRemarks: batchEditField.value === 'businessRemarks' ? nextValue : item.spec.businessRemarks,
         cardRemarks: batchEditField.value === 'cardRemarks' ? nextValue : item.spec.cardRemarks,
       }
+      const persistedSpec = batchEditField.value === 'cardIssued'
+        ? applyBatchCardIssuedState(nextSpec, nextValue)
+        : nextSpec
 
       await updateExtension<CardRecordSpec>(resourcePlural, item.resourceName, {
         apiVersion: qslApiVersion,
@@ -1333,7 +1374,7 @@ const applyHistoryBatchEdit = async () => {
           name: item.resourceName,
           version: item.metadataVersion,
         },
-        spec: nextSpec,
+        spec: persistedSpec,
       })
     }
 

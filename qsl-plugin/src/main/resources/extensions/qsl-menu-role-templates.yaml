@@ -526,6 +526,34 @@ rules:
 apiVersion: v1alpha1
 kind: Role
 metadata:
+  name: qsl-management-offline-activity-view
+  labels:
+    halo.run/role-template: "true"
+    halo.run/hidden: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 工具权限"
+    rbac.authorization.halo.run/display-name: "线下换卡活动（只读）"
+rules:
+  - apiGroups: [ "qsl-management.halo.run" ]
+    resources: [ "offline-activities" ]
+    verbs: [ "get", "list" ]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-card-print-tool
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 工具权限"
+    rbac.authorization.halo.run/display-name: "卡片打印工具"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-print-tool:use"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-station-profile-view","qsl-management-card-record-edit","qsl-management-qso-record-view","qsl-management-address-bureau-view","qsl-management-offline-activity-view"]'
+rules: []
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
   name: qsl-management-public-view
   labels:
     halo.run/role-template: "true"

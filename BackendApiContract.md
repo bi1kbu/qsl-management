@@ -1,6 +1,6 @@
 # QSL 管理插件后端 API 合同
 
-更新时间：2026-05-02
+更新时间：2026-05-05
 适用插件：`qsl-management`
 目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.24 官方文档核验
 API 版本：`v1alpha1`
@@ -12,7 +12,7 @@ API 版本：`v1alpha1`
 
 ## 2. 官方依据
 
-核验日期：2026-05-02
+核验日期：2026-05-05
 
 1. Halo Extension、自定义模型与自动 CRUD
    https://docs.halo.run/developer-guide/plugin/api-reference/server/extension
@@ -41,6 +41,7 @@ API 版本：`v1alpha1`
 3. 前台公开 API 聚合到 `anonymous`，允许匿名访问，但叠加限流与输入校验。
 4. 服务端鉴权是安全边界；前端菜单权限仅用于导航与展示。
 5. RBAC `rules.resources` 使用实际资源段，例如 `card-records`、`mail-send-confirms`、`exchange-online/requests`。
+6. 本地卡片打印工具使用汇总权限模板 `qsl-management-card-print-tool`（显示名“卡片打印工具”），通过 `rbac.authorization.halo.run/dependencies` 引用通信地址/本台卡片只读、卡片记录编辑、通联记录只读、地址/卡片局只读权限，便于为个人令牌一次性授权。
 
 ## 5. 扩展资源自动 CRUD
 
@@ -63,7 +64,7 @@ API 版本：`v1alpha1`
 | 本台设备 | `StationEquipment` | `station-equipments` | `station-profile` |
 | 本台卡片 | `StationCard` | `station-cards` | `station-profile` |
 | 通联日志 | `QsoRecord` | `qso-records` | `qso-record` |
-| 卡片记录 | `CardRecord` | `card-records` | `card-record`、`card-issue`、`card-mutation` 等按菜单复用 |
+| 卡片记录 | `CardRecord` | `card-records` | `card-record`、`card-issue`、`card-mutation`、`card-print-tool` 等按菜单或工具复用 |
 | 换卡申请 | `ExchangeRequest` | `exchange-requests` | `exchange-request-review` |
 | 线下活动 | `OfflineActivity` | `offline-activities` | `exchange-request-review` |
 | 地址管理 | `AddressBookEntry` | `address-book-entries` | `address-bureau` |

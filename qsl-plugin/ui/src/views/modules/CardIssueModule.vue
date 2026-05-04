@@ -151,6 +151,13 @@ const shouldLoadOfflineActivities = computed(() => {
 const showAssociationColumns = computed(() => {
   return normalizedSceneTypes.value.some((item) => item === 'QSO' || item === 'SWL')
 })
+const isOfflineExchangeScene = computed(() => {
+  return normalizedSceneTypes.value.length === 1 && normalizedSceneTypes.value[0] === 'EYEBALL'
+})
+const showAddressSection = computed(() => !isOfflineExchangeScene.value)
+const cardInfoColumnCount = computed(() => {
+  return 9 + (showAssociationColumns.value ? 2 : 0) + (showAddressSection.value ? 1 : 0)
+})
 
 interface CardIssueAddressRow {
   id: string
@@ -217,6 +224,9 @@ const normalizedAddressLookupKeyword = computed(() => addressLookupInput.value.t
 const hasAddressKeyword = computed(() => normalizedAddressLookupKeyword.value.length > 0)
 
 const allAddressRows = computed(() => {
+  if (!showAddressSection.value) {
+    return []
+  }
   return [...addressRows.value, ...bureauRows.value]
 })
 
@@ -322,6 +332,9 @@ const pendingIssueCardRows = computed(() => {
     const matchesActivity = activityFilter.value
       ? (item.spec.offlineActivityName || '') === activityFilter.value
       : true
+    if (isOfflineExchangeScene.value) {
+      return matchesActivity && !item.cardIssued
+    }
     return matchesActivity && (!item.cardIssued || !item.envelopePrinted || item.spec.createdMailStatus !== 'SENT')
   })
 })
@@ -481,8 +494,8 @@ const loadSourceData = async () => {
   try {
     const [cards, addresses, bureaus, qsos] = await Promise.all([
       listExtensions<CardRecordSpec, CardRecordStatus>(cardRecordPlural),
-      listExtensions<AddressBookSpec>(addressBookPlural),
-      listExtensions<BureauSpec>(bureauPlural),
+      showAddressSection.value ? listExtensions<AddressBookSpec>(addressBookPlural) : Promise.resolve([]),
+      showAddressSection.value ? listExtensions<BureauSpec>(bureauPlural) : Promise.resolve([]),
       showAssociationColumns.value ? listExtensions<QsoRecordSpec>(qsoRecordPlural) : Promise.resolve([]),
     ])
     let activityExtensions: QslExtension<OfflineActivitySpec>[] = []
@@ -519,7 +532,8 @@ const loadSourceData = async () => {
       feedback.value = ''
     } else {
       const qsoFeedback = showAssociationColumns.value ? `，关联QSO ${matchedQsoRows.value.length} 条` : ''
-      feedback.value = `查询完成：未制卡卡片 ${matchedCardRows.value.length} 条${qsoFeedback}，地址候选 ${matchedAddressRows.value.length} 条。`
+      const addressFeedback = showAddressSection.value ? `，地址候选 ${matchedAddressRows.value.length} 条` : ''
+      feedback.value = `查询完成：未制卡卡片 ${matchedCardRows.value.length} 条${qsoFeedback}${addressFeedback}。`
     }
   } catch (error) {
     feedback.value = `加载制卡签发数据失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -902,7 +916,7 @@ onMounted(loadSourceData)
           </div>
         </label>
 
-        <label class="qsl-field">
+        <label v-if="showAddressSection" class="qsl-field">
           <span class="qsl-field__label">地址查询（呼号/卡片局）</span>
           <div class="qsl-input-shell">
             <input
@@ -931,8 +945,10 @@ onMounted(loadSourceData)
         <VButton :disabled="loading || issuing || !hasKeyword || !matchedCardRows.length" @click="confirmCardIssue">
           确认制卡
         </VButton>
-        <VButton :disabled="loading || issuing || !selectedAddressId" @click="clearSelectedAddress">清空已选地址</VButton>
-        <span v-if="selectedAddressRow" class="qsl-selected-address">
+        <VButton v-if="showAddressSection" :disabled="loading || issuing || !selectedAddressId" @click="clearSelectedAddress">
+          清空已选地址
+        </VButton>
+        <span v-if="showAddressSection && selectedAddressRow" class="qsl-selected-address">
           已选地址：{{ selectedAddressRow.id }}
           <template v-if="selectedAddressRow.sourceType === 'ADDRESS'">（{{ selectedAddressRow.callSign || '-' }}）</template>
           <template v-else>（{{ selectedAddressRow.bureauName || '-' }}）</template>
@@ -957,7 +973,7 @@ onMounted(loadSourceData)
               <th>发卡</th>
               <th>收卡</th>
               <th>签收</th>
-              <th>绑定地址编号</th>
+              <th v-if="showAddressSection">绑定地址编号</th>
             </tr>
           </thead>
           <tbody>
@@ -973,13 +989,13 @@ onMounted(loadSourceData)
               <td>{{ item.cardSent ? '是' : '否' }}</td>
               <td>{{ item.cardReceived ? '是' : '否' }}</td>
               <td>{{ item.receiptConfirmed ? '是' : '否' }}</td>
-              <td>{{ item.addressEntryName || '-' }}</td>
+              <td v-if="showAddressSection">{{ item.addressEntryName || '-' }}</td>
             </tr>
             <tr v-if="!hasKeyword">
-              <td :colspan="showAssociationColumns ? 12 : 10" class="qsl-table-empty">请输入呼号进行查询。</td>
+              <td :colspan="cardInfoColumnCount" class="qsl-table-empty">请输入呼号进行查询。</td>
             </tr>
             <tr v-else-if="!matchedCardRows.length">
-              <td :colspan="showAssociationColumns ? 12 : 10" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
+              <td :colspan="cardInfoColumnCount" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
             </tr>
           </tbody>
         </table>
@@ -1052,7 +1068,7 @@ onMounted(loadSourceData)
       </div>
     </VCard>
 
-    <VCard title="收件地址">
+    <VCard v-if="showAddressSection" title="收件地址">
       <div class="qsl-table-wrap">
         <table class="qsl-table">
           <thead>
@@ -1147,6 +1163,7 @@ onMounted(loadSourceData)
                     确认制卡
                   </VButton>
                   <VButton
+                    v-if="!isOfflineExchangeScene"
                     size="xs"
                     type="secondary"
                     :disabled="
@@ -1162,6 +1179,7 @@ onMounted(loadSourceData)
                     确认打包
                   </VButton>
                   <VButton
+                    v-if="!isOfflineExchangeScene"
                     class="qsl-mail-action"
                     size="xs"
                     type="secondary"
@@ -1179,6 +1197,7 @@ onMounted(loadSourceData)
                     发送制卡邮件
                   </VButton>
                   <VButton
+                    v-if="!isOfflineExchangeScene"
                     size="xs"
                     type="secondary"
                     :disabled="
@@ -1195,7 +1214,7 @@ onMounted(loadSourceData)
                     不发邮件
                   </VButton>
                   <VTag
-                    v-if="item.spec.createdMailStatus === 'SENT' || item.spec.createdMailStatus === 'FAILED'"
+                    v-if="!isOfflineExchangeScene && (item.spec.createdMailStatus === 'SENT' || item.spec.createdMailStatus === 'FAILED')"
                     :theme="item.spec.createdMailStatus === 'SENT' ? 'secondary' : 'danger'"
                   >
                     {{ resolveMailStatusText(item.spec.createdMailStatus) }}

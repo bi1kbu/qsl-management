@@ -66,6 +66,23 @@ class QslRoleTemplateContractTest {
     }
 
     @Test
+    void shouldProvideCardPrintToolRoleTemplate() throws IOException {
+        var docs = loadRoleDocs();
+
+        assertRoleDependsOn(
+            docs,
+            "qsl-management-card-print-tool",
+            "qsl-management-station-profile-view",
+            "qsl-management-card-record-edit",
+            "qsl-management-qso-record-view",
+            "qsl-management-address-bureau-view",
+            "qsl-management-offline-activity-view"
+        );
+        assertHasRule(loadRules(), "qsl-management.halo.run", "offline-activities", "get");
+        assertHasRule(loadRules(), "qsl-management.halo.run", "offline-activities", "list");
+    }
+
+    @Test
     void shouldNotUsePluginPrefixInResources() throws IOException {
         var rules = loadRules();
         var hasPrefixedResource = rules.stream()
@@ -86,6 +103,29 @@ class QslRoleTemplateContractTest {
         });
 
         assertTrue(matched, "缺少 anonymous 聚合角色：" + roleName);
+    }
+
+    private void assertRoleDependsOn(List<Map<String, Object>> docs, String roleName, String... dependencies) {
+        var matched = docs.stream().anyMatch(doc -> {
+            var metadata = toMap(doc.get("metadata"));
+            if (!roleName.equals(stringValue(metadata.get("name")))) {
+                return false;
+            }
+            var labels = toMap(metadata.get("labels"));
+            if (!"true".equals(stringValue(labels.get("halo.run/role-template")))) {
+                return false;
+            }
+            var annotations = toMap(metadata.get("annotations"));
+            var rawDependencies = stringValue(annotations.get("rbac.authorization.halo.run/dependencies"));
+            for (var dependency : dependencies) {
+                if (!rawDependencies.contains("\"" + dependency + "\"")) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        assertTrue(matched, "缺少权限模板或依赖不完整：" + roleName);
     }
 
     private void assertHasRule(List<RoleRule> rules, String apiGroup, String resource, String verb) {
