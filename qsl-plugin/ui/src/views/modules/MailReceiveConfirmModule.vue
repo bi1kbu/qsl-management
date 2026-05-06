@@ -181,7 +181,7 @@ const receivedCodeMigrationForm = reactive({
   receivedRecordCode: '',
   targetCardRecordName: '',
 })
-const activityFilter = ref('')
+const selectedOfflineActivity = ref('')
 const offlineActivities = ref<OfflineActivitySpec[]>([])
 
 const resourcePlural = 'card-records'
@@ -238,8 +238,8 @@ const availableCardTypes = computed<CardRecordSpec['cardType'][]>(() => {
 
 const filteredResults = computed(() => {
   const actionableResults = results.value.filter((item) => !item.spec.cardReceived || item.spec.receivedMailStatus !== 'SENT')
-  const filteredByActivity = showOfflineActivity.value && activityFilter.value
-    ? actionableResults.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
+  const filteredByActivity = showOfflineActivity.value && selectedOfflineActivity.value
+    ? actionableResults.filter((item) => (item.spec.offlineActivityName || '') === selectedOfflineActivity.value)
     : actionableResults
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
@@ -257,8 +257,8 @@ const filteredResults = computed(() => {
 
 const filteredReceivedResults = computed(() => {
   const receivedResults = results.value.filter((item) => item.spec.cardReceived)
-  const filteredByActivity = showOfflineActivity.value && activityFilter.value
-    ? receivedResults.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
+  const filteredByActivity = showOfflineActivity.value && selectedOfflineActivity.value
+    ? receivedResults.filter((item) => (item.spec.offlineActivityName || '') === selectedOfflineActivity.value)
     : receivedResults
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
@@ -278,8 +278,8 @@ const filteredReceivedResults = computed(() => {
 })
 
 const filteredBatchResults = computed(() => {
-  const filteredByActivity = showOfflineActivity.value && activityFilter.value
-    ? results.value.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
+  const filteredByActivity = showOfflineActivity.value && selectedOfflineActivity.value
+    ? results.value.filter((item) => (item.spec.offlineActivityName || '') === selectedOfflineActivity.value)
     : results.value
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
@@ -302,7 +302,7 @@ const activeHistoryResults = computed(() => {
   return activeFunctionTab.value === 'batch' ? filteredBatchResults.value : filteredResults.value
 })
 
-const activityFilterOptions = computed(() => {
+const offlineActivityOptions = computed(() => {
   if (!showOfflineActivity.value) {
     return []
   }
@@ -467,7 +467,6 @@ const applyHistorySearch = () => {
 const resetHistorySearch = () => {
   historyKeyword.value = ''
   historyKeywordInput.value = ''
-  activityFilter.value = ''
   syncHistoryQuery.value = false
   currentPage.value = 1
 }
@@ -741,6 +740,11 @@ const submitReceive = async () => {
   if (!receivedDate) {
     return
   }
+  const offlineActivityName = showOfflineActivity.value ? selectedOfflineActivity.value.trim() : ''
+  if (showOfflineActivity.value && !offlineActivityName) {
+    feedback.value = '请选择收卡归属活动。'
+    return
+  }
 
   submitting.value = true
   try {
@@ -750,7 +754,7 @@ const submitReceive = async () => {
       sceneType: resolveSceneTypeByCardType(form.cardType),
       receiptRemarks: form.receiptRemarks.trim(),
       receivedDate,
-      offlineActivityName: showOfflineActivity.value ? activityFilter.value.trim() : '',
+      offlineActivityName,
     })
 
     await appendQslAuditLog({
@@ -779,6 +783,11 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
   if (!receivedDate) {
     return
   }
+  const offlineActivityName = item.spec.offlineActivityName || (showOfflineActivity.value ? selectedOfflineActivity.value.trim() : '')
+  if (showOfflineActivity.value && !offlineActivityName) {
+    feedback.value = '请选择收卡归属活动。'
+    return
+  }
   pendingReceiveRowName.value = item.resourceName
   try {
     const result = await confirmMailReceive({
@@ -787,7 +796,7 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
       sceneType: resolveSceneTypeByCardType(item.cardType),
       receiptRemarks: '',
       receivedDate,
-      offlineActivityName: item.spec.offlineActivityName || (showOfflineActivity.value ? activityFilter.value.trim() : ''),
+      offlineActivityName,
     })
     await appendQslAuditLog({
       action: '确认收卡',
@@ -811,7 +820,7 @@ const selectRowForQuery = (item: ReceiveResult) => {
   }
   form.callSign = keyword
   if (item.spec.offlineActivityName?.trim()) {
-    activityFilter.value = item.spec.offlineActivityName.trim()
+    selectedOfflineActivity.value = item.spec.offlineActivityName.trim()
   }
   historyKeyword.value = keyword
   historyKeywordInput.value = keyword
@@ -1290,6 +1299,16 @@ onMounted(() => {
             </div>
           </label>
 
+          <label v-if="showOfflineActivity" class="qsl-field">
+            <span class="qsl-field__label">收卡归属活动</span>
+            <div class="qsl-input-shell">
+              <select v-model="selectedOfflineActivity">
+                <option value="">请选择活动</option>
+                <option v-for="item in offlineActivityOptions" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </div>
+          </label>
+
           <label class="qsl-field qsl-field--full">
             <span class="qsl-field__label">签收备注（Receipt_Remarks）</span>
             <div class="qsl-input-shell qsl-input-shell--textarea">
@@ -1413,18 +1432,6 @@ onMounted(() => {
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
 
-      <div v-if="showOfflineActivity" class="qsl-form-inline">
-        <label class="qsl-field qsl-field--inline">
-          <span class="qsl-field__label">活动筛选</span>
-          <div class="qsl-input-shell">
-            <select v-model="activityFilter">
-              <option value="">全部活动</option>
-              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </div>
-        </label>
-      </div>
-
       <div v-if="receivedCodeMigrationSource" class="qsl-single-edit">
         <div class="qsl-single-edit__header">
           <strong>迁移收卡编号</strong>
@@ -1539,18 +1546,6 @@ onMounted(() => {
         @toggle-all="toggleAllFilteredHistorySelection"
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
-
-      <div v-if="showOfflineActivity" class="qsl-form-inline">
-        <label class="qsl-field qsl-field--inline">
-          <span class="qsl-field__label">活动筛选</span>
-          <div class="qsl-input-shell">
-            <select v-model="activityFilter">
-              <option value="">全部活动</option>
-              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </div>
-        </label>
-      </div>
 
       <div class="qsl-actions">
         <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>

@@ -99,6 +99,10 @@ public class QslConsoleActionService {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "卡片类型不支持"));
         }
         var sceneType = normalizeSceneType(command.sceneType(), cardType);
+        var offlineActivityName = defaultIfBlank(command.offlineActivityName(), "").trim();
+        if ("EYEBALL".equals(sceneType) && "EYEBALL".equals(cardType) && offlineActivityName.isBlank()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "收卡归属活动不能为空"));
+        }
         final String receivedDate;
         try {
             receivedDate = normalizeReceivedDate(command.receivedDate());
@@ -109,7 +113,8 @@ public class QslConsoleActionService {
 
         return reserveNextReceivedRecordCode(receivedDate)
             .flatMap(receivedRecordCode -> client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
-                .filter(cardRecord -> matchPendingReceiveCardRecord(cardRecord, callSign, cardType, sceneType))
+                .filter(cardRecord -> matchPendingReceiveCardRecord(cardRecord, callSign, cardType, sceneType,
+                    offlineActivityName))
                 .sort(Comparator.comparingInt(QslConsoleActionService::cardRecordSequence)
                     .thenComparing(QslConsoleActionService::cardRecordName))
                 .next()
@@ -124,7 +129,7 @@ public class QslConsoleActionService {
                         receivedRecordCode
                     )))
                 .switchIfEmpty(createAutoReceiveResult(callSign, cardType, sceneType, command.receiptRemarks(), receivedRecordCode,
-                    receivedAt, command.offlineActivityName())))
+                    receivedAt, offlineActivityName)))
             .flatMap(result -> qslAuditService.appendAuditLog(
                 "确认收信",
                 "card-record",
@@ -826,9 +831,15 @@ public class QslConsoleActionService {
     }
 
     private boolean matchPendingReceiveCardRecord(CardRecord cardRecord, String callSign, String cardType,
-        String sceneType) {
+        String sceneType, String offlineActivityName) {
         if (!matchCardRecord(cardRecord, callSign, cardType, sceneType)) {
             return false;
+        }
+        if ("EYEBALL".equals(sceneType) && "EYEBALL".equals(cardType)) {
+            var currentActivityName = defaultIfBlank(cardRecord.getSpec().getOfflineActivityName(), "").trim();
+            if (!offlineActivityName.equals(currentActivityName)) {
+                return false;
+            }
         }
         return !Boolean.TRUE.equals(cardRecord.getSpec().getCardReceived());
     }

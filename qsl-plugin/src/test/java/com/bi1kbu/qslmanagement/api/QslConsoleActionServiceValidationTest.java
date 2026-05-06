@@ -146,6 +146,67 @@ class QslConsoleActionServiceValidationTest {
     }
 
     @Test
+    void shouldRequireOfflineActivityWhenConfirmingOfflineEyeballReceive() {
+        var service = new QslConsoleActionService(
+            mock(ReactiveExtensionClient.class),
+            mock(QslAuditService.class),
+            mock(QslNotificationMailService.class)
+        );
+
+        var error = assertThrows(QslApiException.class, () -> service.confirmMailReceive(
+            new QslConsoleActionService.MailReceiveConfirmCommand(
+                "BI1KBU",
+                "EYEBALL",
+                "EYEBALL",
+                "已收到",
+                "2026-05-06",
+                ""
+            ),
+            "admin",
+            "127.0.0.1"
+        ).block());
+
+        assertEquals("QSL-400-0001", error.getCode());
+        assertEquals("收卡归属活动不能为空", error.getMessage());
+    }
+
+    @Test
+    void shouldMatchOfflineReceiveByActivityName() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(client, auditService, notificationMailService);
+        var otherActivity = createCardRecord("C1001", "BI1KBU", "EYEBALL", "EYEBALL", false, "ACT002");
+        var matchedActivity = createCardRecord("C1002", "BI1KBU", "EYEBALL", "EYEBALL", false, "ACT001");
+        var systemSetting = createSystemSetting();
+
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(otherActivity, matchedActivity));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendIfEnabled(any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.confirmMailReceive(
+            new QslConsoleActionService.MailReceiveConfirmCommand(
+                "BI1KBU",
+                "EYEBALL",
+                "EYEBALL",
+                "已收到",
+                "2026-05-06",
+                "ACT001"
+            ),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("C1002", result.cardRecordName());
+        assertEquals(Boolean.FALSE, otherActivity.getSpec().getCardReceived());
+        assertEquals(Boolean.TRUE, matchedActivity.getSpec().getCardReceived());
+    }
+
+    @Test
     void shouldMigrateReceivedRecordCodeToTargetCardRecord() {
         var client = mock(ReactiveExtensionClient.class);
         var auditService = mock(QslAuditService.class);
@@ -383,6 +444,11 @@ class QslConsoleActionServiceValidationTest {
 
     private static CardRecord createCardRecord(String name, String callSign, String cardType, String sceneType,
         Boolean cardReceived) {
+        return createCardRecord(name, callSign, cardType, sceneType, cardReceived, "");
+    }
+
+    private static CardRecord createCardRecord(String name, String callSign, String cardType, String sceneType,
+        Boolean cardReceived, String offlineActivityName) {
         var cardRecord = new CardRecord();
         cardRecord.setMetadata(QslApiSupport.createMetadata(name));
         var spec = new CardRecord.CardRecordSpec();
@@ -390,6 +456,7 @@ class QslConsoleActionServiceValidationTest {
         spec.setCardType(cardType);
         spec.setSceneType(sceneType);
         spec.setCardReceived(cardReceived);
+        spec.setOfflineActivityName(offlineActivityName);
         cardRecord.setSpec(spec);
         return cardRecord;
     }
