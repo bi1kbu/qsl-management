@@ -218,7 +218,13 @@ public class QslPublicCardPageRenderService {
               }
               .qsl-overview-item--featured {
                 grid-column: 1 / -1;
-                min-height: 108px;
+                min-height: 90px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+              }
+              .qsl-overview-item--featured .qsl-overview-value {
+                text-align: center;
               }
               .qsl-overview-item--progress::before {
                 content: "";
