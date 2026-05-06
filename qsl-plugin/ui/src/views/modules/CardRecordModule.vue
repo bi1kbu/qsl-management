@@ -2059,6 +2059,8 @@ onBeforeUnmount(() => {
                     :remark-fields="{
                       businessRemarks: toHistoryItem(row).spec.businessRemarks,
                       cardRemarks: toHistoryItem(row).spec.cardRemarks,
+                      receivedRemarks: toHistoryItem(row).spec.receivedRemarks,
+                      publicReceiptRemarks: toHistoryItem(row).spec.publicReceiptRemarks,
                     }"
                     empty-text="无"
                   />

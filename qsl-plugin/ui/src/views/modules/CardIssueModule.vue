@@ -319,10 +319,12 @@ const remarkRows = computed(() => {
     const createdRemark = item.createdRemarks?.trim() || '-'
     const cardRemark = item.spec.cardRemarks?.trim() || '-'
     const businessRemark = item.businessRemarks?.trim() || '-'
+    const publicReceiptRemark = item.spec.publicReceiptRemarks?.trim() || '-'
     return [
       { type: '创建备注', content: `${prefix} ${createdRemark}` },
       { type: '卡片备注', content: `${prefix} ${cardRemark}` },
       { type: '业务备注', content: `${prefix} ${businessRemark}` },
+      { type: '线下换卡确认备注', content: `${prefix} ${publicReceiptRemark}` },
     ]
   })
 })

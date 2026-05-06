@@ -117,6 +117,9 @@ const showOfflineActivity = computed(() => {
   return normalizedSceneTypes.value.includes('EYEBALL')
     && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
 })
+const rememberedReceiveDateKey = computed(() => {
+  return `qsl:mail-receive:received-date:${normalizedSceneTypes.value.join('-')}:${props.defaultCardType}`
+})
 
 const resolveSceneTypeByCardType = (cardType: CardRecordSpec['cardType']): SceneType => {
   if (cardType === 'QSO' && normalizedSceneTypes.value.includes('QSO')) {
@@ -177,6 +180,37 @@ const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
 const offlineActivityPlural = 'offline-activities'
 
+const readRememberedReceivedDate = (): string => {
+  try {
+    return window.sessionStorage.getItem(rememberedReceiveDateKey.value) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+const rememberReceivedDate = (value: string) => {
+  try {
+    if (value) {
+      window.sessionStorage.setItem(rememberedReceiveDateKey.value, value)
+    } else {
+      window.sessionStorage.removeItem(rememberedReceiveDateKey.value)
+    }
+  } catch {
+    // 浏览器禁用 sessionStorage 时仅保留当前组件内的表单值。
+  }
+}
+
+const requireReceivedDate = (): string => {
+  const receivedDate = form.receivedDate.trim()
+  if (!receivedDate) {
+    window.alert('请先填写收卡日期。')
+    feedback.value = '请先填写收卡日期。'
+    return ''
+  }
+  rememberReceivedDate(receivedDate)
+  return receivedDate
+}
+
 const availableCardTypes = computed<CardRecordSpec['cardType'][]>(() => {
   const options: CardRecordSpec['cardType'][] = []
   if (normalizedSceneTypes.value.includes('QSO')) {
@@ -229,6 +263,7 @@ const filteredReceivedResults = computed(() => {
       item.cardType.toUpperCase().includes(keyword) ||
       item.spec.receivedRecordCodes.toUpperCase().includes(keyword) ||
       item.spec.receivedRemarks.toUpperCase().includes(keyword) ||
+      item.spec.publicReceiptRemarks.toUpperCase().includes(keyword) ||
       (showOfflineActivity.value && (item.spec.offlineActivityName || '').toUpperCase().includes(keyword))
     )
   })
@@ -249,6 +284,7 @@ const filteredBatchResults = computed(() => {
       item.cardType.toUpperCase().includes(keyword) ||
       item.spec.receivedRecordCodes.toUpperCase().includes(keyword) ||
       item.spec.receivedRemarks.toUpperCase().includes(keyword) ||
+      item.spec.publicReceiptRemarks.toUpperCase().includes(keyword) ||
       (showOfflineActivity.value && (item.spec.offlineActivityName || '').toUpperCase().includes(keyword))
     )
   })
@@ -384,6 +420,13 @@ watch(pageSize, () => {
 })
 
 watch(
+  () => form.receivedDate,
+  (value) => {
+    rememberReceivedDate(value.trim())
+  },
+)
+
+watch(
   availableCardTypes,
   (types) => {
     if (!types.includes(form.cardType)) {
@@ -465,6 +508,14 @@ const formatReceivedRecordCodes = (codes?: string): string => {
     .filter(Boolean)
     .join(', ')
   return normalized || '-'
+}
+
+const resolveReceiveRemarkText = (item: ReceiveResult): string => {
+  const remarks = [
+    item.spec.receivedRemarks?.trim() ?? '',
+    item.spec.publicReceiptRemarks?.trim() ?? '',
+  ].filter(Boolean)
+  return remarks.length ? remarks.join('\n') : '-'
 }
 
 const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec => {
@@ -656,6 +707,10 @@ const submitReceive = async () => {
     feedback.value = '对方呼号不能为空。'
     return
   }
+  const receivedDate = requireReceivedDate()
+  if (!receivedDate) {
+    return
+  }
 
   submitting.value = true
   try {
@@ -664,7 +719,7 @@ const submitReceive = async () => {
       cardType: form.cardType,
       sceneType: resolveSceneTypeByCardType(form.cardType),
       receiptRemarks: form.receiptRemarks.trim(),
-      receivedDate: form.receivedDate.trim(),
+      receivedDate,
     })
 
     await appendQslAuditLog({
@@ -677,7 +732,6 @@ const submitReceive = async () => {
     await loadResults({ silent: true })
     feedback.value = `收信确认完成：${result.callSign || callSign}（收卡编号：${result.receivedRecordCode || '-'}）`
     form.callSign = ''
-    form.receivedDate = ''
     form.receiptRemarks = ''
   } catch (error) {
     feedback.value = `收信确认失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -690,6 +744,10 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
   if (item.spec.cardReceived) {
     return
   }
+  const receivedDate = requireReceivedDate()
+  if (!receivedDate) {
+    return
+  }
   pendingReceiveRowName.value = item.resourceName
   try {
     const result = await confirmMailReceive({
@@ -697,7 +755,7 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
       cardType: item.cardType,
       sceneType: resolveSceneTypeByCardType(item.cardType),
       receiptRemarks: '',
-      receivedDate: '',
+      receivedDate,
     })
     await appendQslAuditLog({
       action: '确认收卡',
@@ -1064,6 +1122,7 @@ const batchSendReceivedMail = async () => {
 }
 
 onMounted(() => {
+  form.receivedDate = readRememberedReceivedDate()
   Promise.all([loadResults(), loadOfflineActivities()])
 })
 </script>
@@ -1251,7 +1310,7 @@ onMounted(() => {
               <td>{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType }}</td>
               <td>{{ formatReceivedRecordCodes(item.spec.receivedRecordCodes) }}</td>
-              <td>{{ item.spec.receivedRemarks || '-' }}</td>
+              <td class="qsl-pre-line">{{ resolveReceiveRemarkText(item) }}</td>
             </tr>
             <tr v-if="!pagedReceivedResults.length">
               <td colspan="5" class="qsl-table-empty">暂无已收卡片记录。</td>
@@ -1344,7 +1403,7 @@ onMounted(() => {
               </td>
               <td v-if="showOfflineActivity">{{ item.spec.offlineActivityName || '-' }}</td>
               <td>{{ formatReceivedRecordCodes(item.spec.receivedRecordCodes) }}</td>
-              <td>{{ item.spec.receivedRemarks || '-' }}</td>
+              <td class="qsl-pre-line">{{ resolveReceiveRemarkText(item) }}</td>
               <td>
                 <div v-if="isBatchTab" class="qsl-actions qsl-actions--tight">
                   <VButton
@@ -1464,6 +1523,10 @@ onMounted(() => {
 
 .qsl-row-clickable {
   cursor: pointer;
+}
+
+.qsl-pre-line {
+  white-space: pre-line;
 }
 
 .qsl-single-edit {

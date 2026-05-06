@@ -11,6 +11,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -108,7 +109,9 @@ public class QslConsoleActionService {
 
         return reserveNextReceivedRecordCode(receivedDate)
             .flatMap(receivedRecordCode -> client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
-                .filter(cardRecord -> matchCardRecord(cardRecord, callSign, cardType, sceneType))
+                .filter(cardRecord -> matchPendingReceiveCardRecord(cardRecord, callSign, cardType, sceneType))
+                .sort(Comparator.comparingInt(QslConsoleActionService::cardRecordSequence)
+                    .thenComparing(QslConsoleActionService::cardRecordName))
                 .next()
                 .flatMap(cardRecord -> updateReceivedCardRecord(cardRecord, command.receiptRemarks(), receivedRecordCode, receivedAt)
                     .map(updatedCard -> new MailReceiveConfirmResult(
@@ -718,6 +721,33 @@ public class QslConsoleActionService {
             && currentSceneType.equalsIgnoreCase(sceneType);
     }
 
+    private boolean matchPendingReceiveCardRecord(CardRecord cardRecord, String callSign, String cardType,
+        String sceneType) {
+        if (!matchCardRecord(cardRecord, callSign, cardType, sceneType)) {
+            return false;
+        }
+        return !Boolean.TRUE.equals(cardRecord.getSpec().getCardReceived());
+    }
+
+    private static int cardRecordSequence(CardRecord cardRecord) {
+        var matcher = CARD_NAME_PATTERN.matcher(cardRecordName(cardRecord));
+        if (!matcher.matches()) {
+            return Integer.MAX_VALUE;
+        }
+        try {
+            return Integer.parseInt(matcher.group(1));
+        } catch (RuntimeException error) {
+            return Integer.MAX_VALUE;
+        }
+    }
+
+    private static String cardRecordName(CardRecord cardRecord) {
+        if (cardRecord == null || cardRecord.getMetadata() == null || cardRecord.getMetadata().getName() == null) {
+            return "";
+        }
+        return cardRecord.getMetadata().getName().trim();
+    }
+
     private boolean isFormalCardRecordName(String resourceName) {
         return resourceName != null && CARD_NAME_PATTERN.matcher(resourceName.trim()).matches();
     }
@@ -807,7 +837,7 @@ public class QslConsoleActionService {
 
     private String normalizeReceivedDate(String receivedDate) {
         if (receivedDate == null || receivedDate.isBlank()) {
-            return "";
+            throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "收卡日期不能为空");
         }
         try {
             return LocalDate.parse(receivedDate.trim(), DateTimeFormatter.ISO_LOCAL_DATE)

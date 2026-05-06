@@ -13,7 +13,7 @@ export interface MailReceiveConfirmPayload {
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
   sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   receiptRemarks: string
-  receivedDate?: string
+  receivedDate: string
 }
 
 export interface MailReceiveConfirmResult {
