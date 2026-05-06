@@ -16,8 +16,8 @@ spec:
   homepage: https://github.com/bi1kbu/qsl-management#readme
   repo: https://github.com/bi1kbu/qsl-management
   issues: https://github.com/bi1kbu/qsl-management/issues
-  displayName: "QSL 管理系统"
-  description: "面向业余无线电场景的 QSO/QSL 全流程管理插件"
+  displayName: "业余无线电 QSL卡片管理系统"
+  description: "业余无线电系列插件(1)：业余无线电QSL卡片管理系统，用于QSO记录、QSL收发卡、线上EYEBALL收发卡、线下EYEBALL收发卡等场景的全流程管理系统"
   license:
     - name: "GPL-3.0"
       url: "https://github.com/bi1kbu/qsl-management/blob/main/LICENSE"
