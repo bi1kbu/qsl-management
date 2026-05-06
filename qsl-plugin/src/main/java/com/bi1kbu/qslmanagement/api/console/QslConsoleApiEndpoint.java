@@ -50,6 +50,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/mail-send-confirms/{cardRecordName}/confirm"), this::confirmMailSend)
             .andRoute(POST("/mail-receive-confirms/confirm"), this::confirmMailReceive)
             .andRoute(POST("/mail-receive-confirms/{cardRecordName}/received-date"), this::updateMailReceiveDate)
+            .andRoute(POST("/mail-receive-confirms/{cardRecordName}/received-record-code/migrate"),
+                this::migrateReceivedRecordCode)
             .andRoute(POST("/exchange-requests/{name}/approve"), this::approveExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/reject"), this::rejectExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
@@ -117,6 +119,24 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                 .flatMap(payload -> actionService.updateMailReceiveDate(
                     cardRecordName,
                     payload.receivedDate(),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> migrateReceivedRecordCode(ServerRequest request) {
+        var cardRecordName = request.pathVariable("cardRecordName");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(ReceivedRecordCodeMigrateRequest.class)
+                .defaultIfEmpty(new ReceivedRecordCodeMigrateRequest("", ""))
+                .flatMap(payload -> actionService.migrateReceivedRecordCode(
+                    cardRecordName,
+                    new QslConsoleActionService.ReceivedRecordCodeMigrateCommand(
+                        payload.receivedRecordCode(),
+                        payload.targetCardRecordName()
+                    ),
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp()
                 )))
@@ -349,6 +369,9 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     }
 
     private record ReceivedDateUpdateRequest(String receivedDate) {
+    }
+
+    private record ReceivedRecordCodeMigrateRequest(String receivedRecordCode, String targetCardRecordName) {
     }
 
     private record ExchangeRejectRequest(String reason) {

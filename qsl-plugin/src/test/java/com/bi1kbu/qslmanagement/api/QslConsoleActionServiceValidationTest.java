@@ -144,6 +144,77 @@ class QslConsoleActionServiceValidationTest {
     }
 
     @Test
+    void shouldMigrateReceivedRecordCodeToTargetCardRecord() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            mock(QslNotificationMailService.class)
+        );
+        var source = createCardRecord("C1001", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", true);
+        source.getSpec().setReceivedRecordCodes("R0001-20260506, R0002-20260506");
+        source.getSpec().setReceivedAt("2026-05-06 10:00:00");
+        source.getSpec().setReceivedMailStatus("SENT");
+        var target = createCardRecord("C1002", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", false);
+
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(source));
+        when(client.fetch(eq(CardRecord.class), eq("C1002"))).thenReturn(Mono.just(target));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.migrateReceivedRecordCode(
+            "C1001",
+            new QslConsoleActionService.ReceivedRecordCodeMigrateCommand("R0001-20260506", "C1002"),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("C1001", result.sourceCardRecordName());
+        assertEquals("C1002", result.targetCardRecordName());
+        assertEquals("R0001-20260506", result.receivedRecordCode());
+        assertEquals("R0002-20260506", source.getSpec().getReceivedRecordCodes());
+        assertEquals(Boolean.TRUE, source.getSpec().getCardReceived());
+        assertEquals("", source.getSpec().getReceivedMailStatus());
+        assertEquals("R0001-20260506", target.getSpec().getReceivedRecordCodes());
+        assertEquals(Boolean.TRUE, target.getSpec().getCardReceived());
+        assertEquals("", target.getSpec().getReceivedMailStatus());
+    }
+
+    @Test
+    void shouldClearSourceReceivedStateWhenLastReceivedRecordCodeMigrated() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            mock(QslNotificationMailService.class)
+        );
+        var source = createCardRecord("C1001", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", true);
+        source.getSpec().setReceivedRecordCodes("R0001-20260506");
+        source.getSpec().setReceivedAt("2026-05-06 10:00:00");
+        var target = createCardRecord("C1002", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", false);
+
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(source));
+        when(client.fetch(eq(CardRecord.class), eq("C1002"))).thenReturn(Mono.just(target));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        service.migrateReceivedRecordCode(
+            "C1001",
+            new QslConsoleActionService.ReceivedRecordCodeMigrateCommand("R0001-20260506", "C1002"),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("", source.getSpec().getReceivedRecordCodes());
+        assertEquals(Boolean.FALSE, source.getSpec().getCardReceived());
+        assertEquals("", source.getSpec().getReceivedAt());
+        assertEquals("R0001-20260506", target.getSpec().getReceivedRecordCodes());
+        assertEquals(Boolean.TRUE, target.getSpec().getCardReceived());
+    }
+
+    @Test
     void shouldRejectReviewWhenExchangeAlreadyProcessed() {
         var client = mock(ReactiveExtensionClient.class);
         var service = new QslConsoleActionService(

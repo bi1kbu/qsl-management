@@ -5,6 +5,7 @@ import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
   batchSendNotificationMail,
   confirmMailReceive,
+  migrateReceivedRecordCode,
   sendNotificationMail,
   type MailReceiveConfirmResult,
   updateMailReceiveDate,
@@ -166,12 +167,18 @@ const batchEditField = ref('')
 const batchEditValue = ref('')
 const editingResourceName = ref('')
 const savingSingleEdit = ref(false)
+const migratingResourceName = ref('')
+const savingReceivedCodeMigration = ref(false)
 const singleEditForm = reactive({
   cardType: props.defaultCardType,
   cardReceivedState: 'UNRECEIVED',
   receiptConfirmedState: 'UNCONFIRMED',
   receivedDate: '',
   receivedRemarks: '',
+})
+const receivedCodeMigrationForm = reactive({
+  receivedRecordCode: '',
+  targetCardRecordName: '',
 })
 const activityFilter = ref('')
 const offlineActivities = ref<OfflineActivitySpec[]>([])
@@ -328,6 +335,18 @@ const isBatchTab = computed(() => activeFunctionTab.value === 'batch')
 const singleEditTarget = computed(() => {
   return results.value.find((item) => item.resourceName === editingResourceName.value) ?? null
 })
+const receivedCodeMigrationSource = computed(() => {
+  return results.value.find((item) => item.resourceName === migratingResourceName.value) ?? null
+})
+const receivedCodeMigrationTargetOptions = computed(() => {
+  return results.value
+    .filter((item) => item.resourceName !== migratingResourceName.value)
+    .filter((item) => isFormalCardRecordName(item.resourceName))
+    .map((item) => ({
+      value: item.resourceName,
+      label: `${item.resourceName} / ${item.callSign || '-'} / ${item.cardType}`,
+    }))
+})
 const batchEditFields = [
   {
     value: 'cardType',
@@ -390,6 +409,9 @@ watch(results, () => {
   selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => nameSet.has(name))
   if (editingResourceName.value && !nameSet.has(editingResourceName.value)) {
     editingResourceName.value = ''
+  }
+  if (migratingResourceName.value && !nameSet.has(migratingResourceName.value)) {
+    migratingResourceName.value = ''
   }
 })
 
@@ -508,6 +530,13 @@ const formatReceivedRecordCodes = (codes?: string): string => {
     .filter(Boolean)
     .join(', ')
   return normalized || '-'
+}
+
+const parseReceivedRecordCodes = (codes?: string): string[] => {
+  return (codes ?? '')
+    .split(',')
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean)
 }
 
 const resolveReceiveRemarkText = (item: ReceiveResult): string => {
@@ -833,6 +862,64 @@ const cancelSingleEdit = () => {
   singleEditForm.receivedDate = ''
   singleEditForm.receivedRemarks = ''
   feedback.value = '已取消单条编辑。'
+}
+
+const startReceivedCodeMigration = (item: ReceiveResult) => {
+  const codes = parseReceivedRecordCodes(item.spec.receivedRecordCodes)
+  if (!codes.length) {
+    feedback.value = '该卡片没有可迁移的收卡编号。'
+    return
+  }
+  migratingResourceName.value = item.resourceName
+  receivedCodeMigrationForm.receivedRecordCode = codes[0]
+  receivedCodeMigrationForm.targetCardRecordName = ''
+  feedback.value = `正在迁移收卡编号：${item.resourceName}`
+}
+
+const cancelReceivedCodeMigration = () => {
+  migratingResourceName.value = ''
+  receivedCodeMigrationForm.receivedRecordCode = ''
+  receivedCodeMigrationForm.targetCardRecordName = ''
+  feedback.value = '已取消收卡编号迁移。'
+}
+
+const saveReceivedCodeMigration = async () => {
+  const source = receivedCodeMigrationSource.value
+  if (!source) {
+    feedback.value = '未找到源卡片，请刷新清单后重试。'
+    return
+  }
+  const receivedRecordCode = receivedCodeMigrationForm.receivedRecordCode.trim().toUpperCase()
+  const targetCardRecordName = receivedCodeMigrationForm.targetCardRecordName.trim().toUpperCase()
+  if (!receivedRecordCode) {
+    feedback.value = '请选择要迁移的收卡编号。'
+    return
+  }
+  if (!isFormalCardRecordName(targetCardRecordName)) {
+    feedback.value = '请填写正式目标卡片ID，例如 C1001。'
+    return
+  }
+  if (targetCardRecordName === source.resourceName.toUpperCase()) {
+    feedback.value = '目标卡片不能与源卡片相同。'
+    return
+  }
+
+  savingReceivedCodeMigration.value = true
+  try {
+    const result = await migrateReceivedRecordCode(source.resourceName, {
+      receivedRecordCode,
+      targetCardRecordName,
+    })
+    await loadResults({ silent: true })
+    migratingResourceName.value = ''
+    receivedCodeMigrationForm.receivedRecordCode = ''
+    receivedCodeMigrationForm.targetCardRecordName = ''
+    feedback.value = `${result.message}：${result.receivedRecordCode}，${result.sourceCardRecordName} -> ${result.targetCardRecordName}`
+  } catch (error) {
+    feedback.value = `迁移收卡编号失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    savingReceivedCodeMigration.value = false
+  }
 }
 
 const saveSingleEdit = async () => {
@@ -1293,6 +1380,54 @@ onMounted(() => {
         </label>
       </div>
 
+      <div v-if="receivedCodeMigrationSource" class="qsl-single-edit">
+        <div class="qsl-single-edit__header">
+          <strong>迁移收卡编号</strong>
+          <span class="qsl-muted">源卡片：{{ receivedCodeMigrationSource.resourceName }}</span>
+        </div>
+        <div class="qsl-form-grid">
+          <label class="qsl-field">
+            <span class="qsl-field__label">收卡编号</span>
+            <div class="qsl-input-shell">
+              <select v-model="receivedCodeMigrationForm.receivedRecordCode">
+                <option
+                  v-for="code in parseReceivedRecordCodes(receivedCodeMigrationSource.spec.receivedRecordCodes)"
+                  :key="code"
+                  :value="code"
+                >
+                  {{ code }}
+                </option>
+              </select>
+            </div>
+          </label>
+          <label class="qsl-field">
+            <span class="qsl-field__label">目标卡片ID</span>
+            <div class="qsl-input-shell">
+              <input
+                v-model="receivedCodeMigrationForm.targetCardRecordName"
+                list="qsl-received-code-targets"
+                placeholder="例如 C1001"
+              />
+              <datalist id="qsl-received-code-targets">
+                <option
+                  v-for="item in receivedCodeMigrationTargetOptions"
+                  :key="item.value"
+                  :value="item.value"
+                >
+                  {{ item.label }}
+                </option>
+              </datalist>
+            </div>
+          </label>
+        </div>
+        <div class="qsl-actions">
+          <VButton type="secondary" :disabled="savingReceivedCodeMigration" @click="saveReceivedCodeMigration">
+            确认迁移
+          </VButton>
+          <VButton :disabled="savingReceivedCodeMigration" @click="cancelReceivedCodeMigration">取消迁移</VButton>
+        </div>
+      </div>
+
       <div class="qsl-table-wrap">
         <table class="qsl-table">
           <thead>
@@ -1302,6 +1437,7 @@ onMounted(() => {
               <th>卡片类型</th>
               <th>收卡编号</th>
               <th>收卡确认备注</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -1311,9 +1447,21 @@ onMounted(() => {
               <td>{{ item.cardType }}</td>
               <td>{{ formatReceivedRecordCodes(item.spec.receivedRecordCodes) }}</td>
               <td class="qsl-pre-line">{{ resolveReceiveRemarkText(item) }}</td>
+              <td>
+                <div class="qsl-actions qsl-actions--tight">
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="savingReceivedCodeMigration || !parseReceivedRecordCodes(item.spec.receivedRecordCodes).length"
+                    @click="startReceivedCodeMigration(item)"
+                  >
+                    {{ migratingResourceName === item.resourceName ? '正在迁移' : '迁移编号' }}
+                  </VButton>
+                </div>
+              </td>
             </tr>
             <tr v-if="!pagedReceivedResults.length">
-              <td colspan="5" class="qsl-table-empty">暂无已收卡片记录。</td>
+              <td colspan="6" class="qsl-table-empty">暂无已收卡片记录。</td>
             </tr>
           </tbody>
         </table>

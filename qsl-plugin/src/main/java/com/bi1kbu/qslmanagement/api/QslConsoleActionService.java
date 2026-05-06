@@ -192,6 +192,74 @@ public class QslConsoleActionService {
             ).thenReturn(result));
     }
 
+    public Mono<ReceivedRecordCodeMigrateResult> migrateReceivedRecordCode(String sourceCardRecordName,
+        ReceivedRecordCodeMigrateCommand command, String operator, String clientIp) {
+        if (!isFormalCardRecordName(sourceCardRecordName)) {
+            return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "QSL-422-0001", "源卡片必须是正式卡片编号"));
+        }
+        var targetCardRecordName = command.targetCardRecordName() == null
+            ? ""
+            : command.targetCardRecordName().trim().toUpperCase();
+        if (!isFormalCardRecordName(targetCardRecordName)) {
+            return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "QSL-422-0001", "目标卡片必须是正式卡片编号"));
+        }
+        if (sourceCardRecordName.trim().equalsIgnoreCase(targetCardRecordName)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST,
+                "QSL-400-0001", "目标卡片不能与源卡片相同"));
+        }
+        var receivedRecordCode = normalizeReceivedRecordCode(command.receivedRecordCode());
+        if (!isFormalReceivedRecordCode(receivedRecordCode)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST,
+                "QSL-400-0001", "收卡编号格式必须为 R0001-20260506"));
+        }
+
+        return Mono.zip(
+                fetchOr404(CardRecord.class, sourceCardRecordName.trim().toUpperCase()),
+                fetchOr404(CardRecord.class, targetCardRecordName)
+            )
+            .flatMap(tuple -> {
+                var source = tuple.getT1();
+                var target = tuple.getT2();
+                var sourceSpec = ensureCardRecordSpec(source);
+                var targetSpec = ensureCardRecordSpec(target);
+                var sourceCodes = receivedRecordCodeSet(sourceSpec.getReceivedRecordCodes());
+                var targetCodes = receivedRecordCodeSet(targetSpec.getReceivedRecordCodes());
+                if (!sourceCodes.contains(receivedRecordCode)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "源卡片未包含该收卡编号"));
+                }
+                if (targetCodes.contains(receivedRecordCode)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "目标卡片已包含该收卡编号"));
+                }
+
+                sourceCodes.remove(receivedRecordCode);
+                targetCodes.add(receivedRecordCode);
+                applyReceivedRecordCodes(source, sourceSpec, sourceCodes, false, "");
+                applyReceivedRecordCodes(target, targetSpec, targetCodes, true,
+                    resolveReceivedAtFromRecordCode(receivedRecordCode));
+
+                return client.update(target)
+                    .then(client.update(source))
+                    .thenReturn(new ReceivedRecordCodeMigrateResult(
+                        source.getMetadata().getName(),
+                        target.getMetadata().getName(),
+                        receivedRecordCode,
+                        "已迁移收卡编号"
+                    ));
+            })
+            .flatMap(result -> qslAuditService.appendAuditLog(
+                "迁移收卡编号",
+                "card-record",
+                result.sourceCardRecordName(),
+                "收卡编号：" + result.receivedRecordCode() + "，目标卡片：" + result.targetCardRecordName(),
+                safeOperator(operator),
+                clientIp
+            ).thenReturn(result));
+    }
+
     public Mono<ExchangeReviewResult> reviewExchangeRequest(String requestName, boolean approved, String reason,
         String operator, String clientIp) {
         return fetchOr404(ExchangeRequest.class, requestName)
@@ -946,11 +1014,66 @@ public class QslConsoleActionService {
         return String.join(", ", codes);
     }
 
+    private LinkedHashSet<String> receivedRecordCodeSet(String current) {
+        var codes = new LinkedHashSet<String>();
+        if (current != null && !current.isBlank()) {
+            Arrays.stream(current.split(","))
+                .map(this::normalizeReceivedRecordCode)
+                .filter(item -> !item.isBlank())
+                .forEach(codes::add);
+        }
+        return codes;
+    }
+
+    private void applyReceivedRecordCodes(CardRecord cardRecord, CardRecord.CardRecordSpec spec,
+        LinkedHashSet<String> codes, boolean forceReceived, String fallbackReceivedAt) {
+        var joinedCodes = String.join(", ", codes);
+        spec.setReceivedRecordCodes(joinedCodes);
+        spec.setCardReceived(forceReceived || !codes.isEmpty());
+        if (Boolean.TRUE.equals(spec.getCardReceived())) {
+            spec.setReceivedAt(defaultIfBlank(spec.getReceivedAt(), defaultIfBlank(fallbackReceivedAt, QslApiSupport.nowText())));
+        } else {
+            spec.setReceivedAt("");
+        }
+        clearReceivedMailState(spec);
+
+        var status = cardRecord.getStatus() == null
+            ? new CardRecord.CardRecordStatus()
+            : cardRecord.getStatus();
+        status.setFlowStatus(QslCardStateTransitionSupport.resolveFlowStatus(spec));
+        cardRecord.setStatus(status);
+    }
+
     private String normalizeReceivedRecordCode(String code) {
         if (code == null || code.isBlank()) {
             return "";
         }
         return code.trim().toUpperCase();
+    }
+
+    private boolean isFormalReceivedRecordCode(String code) {
+        return code != null && RECEIVED_RECORD_PATTERN.matcher(code.trim()).matches();
+    }
+
+    private String resolveReceivedAtFromRecordCode(String receivedRecordCode) {
+        var matcher = RECEIVED_RECORD_PATTERN.matcher(normalizeReceivedRecordCode(receivedRecordCode));
+        if (!matcher.matches()) {
+            return QslApiSupport.nowText();
+        }
+        try {
+            var normalizedDate = LocalDate.parse(receivedRecordCode.substring(receivedRecordCode.length() - 8),
+                    DateTimeFormatter.BASIC_ISO_DATE)
+                .format(DateTimeFormatter.ISO_LOCAL_DATE);
+            return resolveReceivedAt(normalizedDate);
+        } catch (RuntimeException error) {
+            return QslApiSupport.nowText();
+        }
+    }
+
+    private void clearReceivedMailState(CardRecord.CardRecordSpec spec) {
+        spec.setReceivedMailStatus("");
+        spec.setReceivedMailSentAt("");
+        spec.setReceivedMailLastError("");
     }
 
     private String rewriteReceivedRecordCodeDate(String code, String datePart) {
@@ -1007,6 +1130,20 @@ public class QslConsoleActionService {
         String message,
         String handledAt,
         String receivedRecordCode
+    ) {
+    }
+
+    public record ReceivedRecordCodeMigrateCommand(
+        String receivedRecordCode,
+        String targetCardRecordName
+    ) {
+    }
+
+    public record ReceivedRecordCodeMigrateResult(
+        String sourceCardRecordName,
+        String targetCardRecordName,
+        String receivedRecordCode,
+        String message
     ) {
     }
 
