@@ -3,6 +3,7 @@ package com.bi1kbu.qslmanagement.api;
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -34,24 +35,27 @@ public class QslOverviewService {
     }
 
     private OverviewSummary buildSummary(long qsoTotal, List<CardRecord> cardRecords) {
-        long cardTotal = cardRecords.size();
-        long eyeballTotal = cardRecords.stream()
+        var filteredCardRecords = cardRecords.stream()
+            .filter(this::includeInCardStatistics)
+            .toList();
+        long cardTotal = filteredCardRecords.size();
+        long eyeballTotal = filteredCardRecords.stream()
             .filter(cardRecord -> cardRecord.getSpec() != null)
             .filter(cardRecord -> "EYEBALL".equalsIgnoreCase(defaultString(cardRecord.getSpec().getCardType())))
             .count();
-        long sentTotal = cardRecords.stream()
+        long sentTotal = filteredCardRecords.stream()
             .filter(cardRecord -> cardRecord.getSpec() != null)
             .filter(cardRecord -> Boolean.TRUE.equals(cardRecord.getSpec().getCardSent()))
             .count();
-        long pendingSendTotal = cardRecords.stream()
+        long pendingSendTotal = filteredCardRecords.stream()
             .filter(cardRecord -> cardRecord.getSpec() != null)
             .filter(cardRecord -> !Boolean.TRUE.equals(cardRecord.getSpec().getCardSent()))
             .count();
-        long deliverySignedTotal = cardRecords.stream()
+        long deliverySignedTotal = filteredCardRecords.stream()
             .filter(cardRecord -> cardRecord.getSpec() != null)
             .filter(cardRecord -> Boolean.TRUE.equals(cardRecord.getSpec().getReceiptConfirmed()))
             .count();
-        long receivedTotal = cardRecords.stream()
+        long receivedTotal = filteredCardRecords.stream()
             .filter(cardRecord -> cardRecord.getSpec() != null)
             .filter(cardRecord -> Boolean.TRUE.equals(cardRecord.getSpec().getCardReceived()))
             .count();
@@ -69,5 +73,15 @@ public class QslOverviewService {
     private String defaultString(String value) {
         return value == null ? "" : value;
     }
-}
 
+    private boolean includeInCardStatistics(CardRecord cardRecord) {
+        if (cardRecord == null || cardRecord.getSpec() == null) {
+            return false;
+        }
+        var sceneType = defaultString(cardRecord.getSpec().getSceneType())
+            .trim()
+            .toUpperCase(Locale.ROOT);
+        var callSign = defaultString(cardRecord.getSpec().getCallSign()).trim();
+        return !("EYEBALL".equals(sceneType) && callSign.isBlank());
+    }
+}
