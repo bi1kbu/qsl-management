@@ -95,14 +95,15 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private Mono<ServerResponse> confirmMailReceive(ServerRequest request) {
         return ensureAuthenticated(request)
             .flatMap(authenticatedOperator -> request.bodyToMono(MailReceiveConfirmRequest.class)
-                .switchIfEmpty(Mono.just(new MailReceiveConfirmRequest("", "QSO", "", "", "")))
+                .switchIfEmpty(Mono.just(new MailReceiveConfirmRequest("", "QSO", "", "", "", "")))
                 .flatMap(payload -> actionService.confirmMailReceive(
                     new QslConsoleActionService.MailReceiveConfirmCommand(
                         payload.callSign(),
                         payload.cardType(),
                         payload.sceneType(),
                         payload.receiptRemarks(),
-                        payload.receivedDate()
+                        payload.receivedDate(),
+                        payload.offlineActivityName()
                     ),
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp()
@@ -364,7 +365,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         String cardType,
         String sceneType,
         String receiptRemarks,
-        String receivedDate
+        String receivedDate,
+        String offlineActivityName
     ) {
     }
 

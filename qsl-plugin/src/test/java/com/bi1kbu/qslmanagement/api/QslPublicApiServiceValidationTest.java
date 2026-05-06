@@ -324,6 +324,7 @@ class QslPublicApiServiceValidationTest {
         stationProfile.setSpec(profileSpec);
 
         when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(cardRecord));
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty());
         when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
         when(client.fetch(eq(StationProfile.class), anyString())).thenReturn(Mono.just(stationProfile));
@@ -350,5 +351,138 @@ class QslPublicApiServiceValidationTest {
         assertEquals(Boolean.TRUE, cardRecord.getSpec().getReceiptConfirmed());
         assertEquals("现场确认", cardRecord.getSpec().getPublicReceiptRemarks());
         verify(client).update(cardRecord);
+    }
+
+    @Test
+    void shouldMoveOfflineTemporaryReceivedCodeToActivatedCardWhenActivityMatches() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+
+        var activatedCard = new CardRecord();
+        activatedCard.setMetadata(QslApiSupport.createMetadata("C1001"));
+        var activatedSpec = new CardRecord.CardRecordSpec();
+        activatedSpec.setSceneType("EYEBALL");
+        activatedSpec.setCallSign("");
+        activatedSpec.setOfflineActivityName("ACT001");
+        activatedSpec.setCardSent(Boolean.FALSE);
+        activatedSpec.setSentAt("");
+        activatedSpec.setReceiptConfirmed(Boolean.FALSE);
+        activatedSpec.setPublicReceiptRemarks("");
+        activatedSpec.setReceivedRecordCodes("");
+        activatedSpec.setCardReceived(Boolean.FALSE);
+        activatedSpec.setReceivedAt("");
+        activatedCard.setSpec(activatedSpec);
+
+        var temporaryCard = new CardRecord();
+        temporaryCard.setMetadata(QslApiSupport.createMetadata("C2001"));
+        var temporarySpec = new CardRecord.CardRecordSpec();
+        temporarySpec.setSceneType("EYEBALL");
+        temporarySpec.setCallSign("BI1KBU");
+        temporarySpec.setOfflineActivityName("ACT001");
+        temporarySpec.setCardReceived(Boolean.TRUE);
+        temporarySpec.setReceivedAt("2026-05-06 10:00:00");
+        temporarySpec.setReceivedRecordCodes("R0001-20260506");
+        temporarySpec.setReceivedMailStatus("SENT");
+        temporarySpec.setBusinessRemarks("自动创建EYEBALL卡片");
+        temporaryCard.setSpec(temporarySpec);
+
+        var stationProfile = new StationProfile();
+        var profileSpec = new StationProfile.StationProfileSpec();
+        profileSpec.setMyAddress("北京市测试路1号");
+        profileSpec.setMyEmail("bi1kbu@example.test");
+        stationProfile.setSpec(profileSpec);
+
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(activatedCard));
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(temporaryCard));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.delete(any(CardRecord.class))).thenReturn(Mono.empty());
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(client.fetch(eq(StationProfile.class), anyString())).thenReturn(Mono.just(stationProfile));
+
+        var service = new QslPublicApiService(
+            client,
+            auditService,
+            Mockito.mock(QslConsoleActionService.class)
+        );
+
+        var result = service.confirmOfflineExchange(
+            new QslPublicApiService.PublicOfflineExchangeConfirmCommand(
+                "BI1KBU",
+                "C1001",
+                "ACT001",
+                "现场确认"
+            ),
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("C1001", result.cardRecordName());
+        assertEquals("BI1KBU", activatedCard.getSpec().getCallSign());
+        assertEquals(Boolean.TRUE, activatedCard.getSpec().getCardReceived());
+        assertEquals("R0001-20260506", activatedCard.getSpec().getReceivedRecordCodes());
+        assertEquals("2026-05-06 10:00:00", activatedCard.getSpec().getReceivedAt());
+        verify(client, times(1)).update(activatedCard);
+        verify(client, times(1)).delete(temporaryCard);
+    }
+
+    @Test
+    void shouldNotMoveOfflineTemporaryReceivedCodeWhenActivityDiffers() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+
+        var activatedCard = new CardRecord();
+        activatedCard.setMetadata(QslApiSupport.createMetadata("C1001"));
+        var activatedSpec = new CardRecord.CardRecordSpec();
+        activatedSpec.setSceneType("EYEBALL");
+        activatedSpec.setCallSign("");
+        activatedSpec.setOfflineActivityName("ACT001");
+        activatedSpec.setCardSent(Boolean.FALSE);
+        activatedSpec.setReceiptConfirmed(Boolean.FALSE);
+        activatedSpec.setPublicReceiptRemarks("");
+        activatedSpec.setReceivedRecordCodes("");
+        activatedSpec.setCardReceived(Boolean.FALSE);
+        activatedCard.setSpec(activatedSpec);
+
+        var temporaryCard = new CardRecord();
+        temporaryCard.setMetadata(QslApiSupport.createMetadata("C2001"));
+        var temporarySpec = new CardRecord.CardRecordSpec();
+        temporarySpec.setSceneType("EYEBALL");
+        temporarySpec.setCallSign("BI1KBU");
+        temporarySpec.setOfflineActivityName("ACT002");
+        temporarySpec.setCardReceived(Boolean.TRUE);
+        temporarySpec.setReceivedAt("2026-05-06 10:00:00");
+        temporarySpec.setReceivedRecordCodes("R0001-20260506");
+        temporaryCard.setSpec(temporarySpec);
+
+        var stationProfile = new StationProfile();
+        stationProfile.setSpec(new StationProfile.StationProfileSpec());
+
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(activatedCard));
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(temporaryCard));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(client.fetch(eq(StationProfile.class), anyString())).thenReturn(Mono.just(stationProfile));
+
+        var service = new QslPublicApiService(
+            client,
+            auditService,
+            Mockito.mock(QslConsoleActionService.class)
+        );
+
+        service.confirmOfflineExchange(
+            new QslPublicApiService.PublicOfflineExchangeConfirmCommand(
+                "BI1KBU",
+                "C1001",
+                "ACT001",
+                "现场确认"
+            ),
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("", activatedCard.getSpec().getReceivedRecordCodes());
+        assertEquals(Boolean.FALSE, activatedCard.getSpec().getCardReceived());
+        assertEquals("R0001-20260506", temporaryCard.getSpec().getReceivedRecordCodes());
+        assertEquals(Boolean.TRUE, temporaryCard.getSpec().getCardReceived());
+        verify(client, times(1)).update(any(CardRecord.class));
+        verify(client, times(0)).delete(any(CardRecord.class));
     }
 }

@@ -10,7 +10,7 @@ import {
   type MailReceiveConfirmResult,
   updateMailReceiveDate,
 } from '../../api/qsl-console-api'
-import { listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
+import { deleteExtension, listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
@@ -167,6 +167,7 @@ const batchEditField = ref('')
 const batchEditValue = ref('')
 const editingResourceName = ref('')
 const savingSingleEdit = ref(false)
+const deletingSingleEdit = ref(false)
 const migratingResourceName = ref('')
 const savingReceivedCodeMigration = ref(false)
 const singleEditForm = reactive({
@@ -749,6 +750,7 @@ const submitReceive = async () => {
       sceneType: resolveSceneTypeByCardType(form.cardType),
       receiptRemarks: form.receiptRemarks.trim(),
       receivedDate,
+      offlineActivityName: showOfflineActivity.value ? activityFilter.value.trim() : '',
     })
 
     await appendQslAuditLog({
@@ -785,6 +787,7 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
       sceneType: resolveSceneTypeByCardType(item.cardType),
       receiptRemarks: '',
       receivedDate,
+      offlineActivityName: item.spec.offlineActivityName || (showOfflineActivity.value ? activityFilter.value.trim() : ''),
     })
     await appendQslAuditLog({
       action: '确认收卡',
@@ -979,6 +982,35 @@ const saveSingleEdit = async () => {
     feedback.value = `保存单条编辑失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     savingSingleEdit.value = false
+  }
+}
+
+const deleteSingleEdit = async () => {
+  const target = singleEditTarget.value
+  if (!target) {
+    feedback.value = '未找到要删除的记录，请刷新清单后重试。'
+    return
+  }
+  if (!window.confirm(`确认删除卡片记录 ${target.resourceName}？删除后不可恢复。`)) {
+    return
+  }
+
+  deletingSingleEdit.value = true
+  try {
+    await deleteExtension(resourcePlural, target.resourceName)
+    await appendQslAuditLog({
+      action: '删除收信确认记录',
+      resourceType: 'card-record',
+      resourceName: target.resourceName,
+      detail: `删除卡片记录：${target.resourceName}，呼号：${target.callSign || '-'}`,
+    })
+    await loadResults({ silent: true })
+    editingResourceName.value = ''
+    feedback.value = `已删除记录：${target.resourceName}`
+  } catch (error) {
+    feedback.value = `删除记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    deletingSingleEdit.value = false
   }
 }
 
@@ -1345,8 +1377,21 @@ onMounted(() => {
             </label>
           </div>
           <div class="qsl-actions">
-            <VButton type="secondary" :disabled="savingSingleEdit" @click="saveSingleEdit">保存编辑</VButton>
-            <VButton :disabled="savingSingleEdit" @click="cancelSingleEdit">取消编辑</VButton>
+            <VButton
+              type="secondary"
+              :disabled="savingSingleEdit || deletingSingleEdit"
+              @click="saveSingleEdit"
+            >
+              保存编辑
+            </VButton>
+            <VButton
+              type="danger"
+              :disabled="savingSingleEdit || deletingSingleEdit"
+              @click="deleteSingleEdit"
+            >
+              删除本条记录
+            </VButton>
+            <VButton :disabled="savingSingleEdit || deletingSingleEdit" @click="cancelSingleEdit">取消编辑</VButton>
           </div>
         </div>
       </template>

@@ -123,7 +123,8 @@ public class QslConsoleActionService {
                         receivedAt,
                         receivedRecordCode
                     )))
-                .switchIfEmpty(createAutoReceiveResult(callSign, cardType, sceneType, command.receiptRemarks(), receivedRecordCode, receivedAt)))
+                .switchIfEmpty(createAutoReceiveResult(callSign, cardType, sceneType, command.receiptRemarks(), receivedRecordCode,
+                    receivedAt, command.offlineActivityName())))
             .flatMap(result -> qslAuditService.appendAuditLog(
                 "确认收信",
                 "card-record",
@@ -331,7 +332,8 @@ public class QslConsoleActionService {
         String sceneType,
         String receiptRemarks,
         String receivedRecordCode,
-        String receivedAt
+        String receivedAt,
+        String offlineActivityName
     ) {
         return switch (cardType) {
             case "QSO" -> createAutoQsoAndCard(callSign, "异常QSO记录，无法找到原始通信QSO",
@@ -361,7 +363,8 @@ public class QslConsoleActionService {
                     sceneType,
                     false,
                     receivedRecordCode,
-                    receivedAt)
+                    receivedAt,
+                    offlineActivityName)
                 .map(card -> new MailReceiveConfirmResult(
                     card.getMetadata().getName(),
                     callSign,
@@ -440,8 +443,9 @@ public class QslConsoleActionService {
     }
 
     private Mono<CardRecord> createEyeballCard(String callSign, String remarks, String sceneType, boolean sent, String receivedRecordCode,
-        String receivedAt) {
-        return createCardRecord(callSign, "EYEBALL", "", remarks, sceneType, sent, receivedRecordCode, "自动生成", "", "", receivedAt, true);
+        String receivedAt, String offlineActivityName) {
+        return createCardRecord(callSign, "EYEBALL", "", remarks, sceneType, sent, receivedRecordCode, "自动生成", "", "",
+            receivedAt, true, offlineActivityName);
     }
 
     private Mono<ExchangeAddressBinding> resolveExchangeAddressBinding(ExchangeRequest exchangeRequest) {
@@ -619,6 +623,38 @@ public class QslConsoleActionService {
         String receivedAt,
         boolean cardReceived
     ) {
+        return createCardRecord(
+            callSign,
+            cardType,
+            qsoRecordName,
+            remarks,
+            sceneType,
+            sent,
+            receivedRecordCode,
+            cardVersion,
+            addressEntryName,
+            mailTargetEmail,
+            receivedAt,
+            cardReceived,
+            ""
+        );
+    }
+
+    private Mono<CardRecord> createCardRecord(
+        String callSign,
+        String cardType,
+        String qsoRecordName,
+        String remarks,
+        String sceneType,
+        boolean sent,
+        String receivedRecordCode,
+        String cardVersion,
+        String addressEntryName,
+        String mailTargetEmail,
+        String receivedAt,
+        boolean cardReceived,
+        String offlineActivityName
+    ) {
         return nextCardRecordName()
             .flatMap(resourceName -> {
                 var cardRecord = new CardRecord();
@@ -630,7 +666,7 @@ public class QslConsoleActionService {
                 spec.setSceneType(normalizeSceneType(sceneType, cardType));
                 spec.setCardVersion(defaultIfBlank(cardVersion, "自动生成"));
                 spec.setQsoRecordName(qsoRecordName);
-                spec.setOfflineActivityName("");
+                spec.setOfflineActivityName(defaultIfBlank(offlineActivityName, ""));
                 spec.setAddressEntryName(defaultIfBlank(addressEntryName, ""));
                 spec.setCardDate(QslApiSupport.utcDate());
                 spec.setCardTime(QslApiSupport.utcTime());
@@ -1118,7 +1154,8 @@ public class QslConsoleActionService {
         String cardType,
         String sceneType,
         String receiptRemarks,
-        String receivedDate
+        String receivedDate,
+        String offlineActivityName
     ) {
     }
 

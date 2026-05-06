@@ -27,7 +27,7 @@ class QslConsoleActionServiceValidationTest {
         );
 
         var error = assertThrows(QslApiException.class, () -> service.confirmMailReceive(
-            new QslConsoleActionService.MailReceiveConfirmCommand("  ", "QSO", "", "", ""),
+            new QslConsoleActionService.MailReceiveConfirmCommand("  ", "QSO", "", "", "", ""),
             "admin",
             "127.0.0.1"
         ).block());
@@ -45,7 +45,7 @@ class QslConsoleActionServiceValidationTest {
         );
 
         var error = assertThrows(QslApiException.class, () -> service.confirmMailReceive(
-            new QslConsoleActionService.MailReceiveConfirmCommand("BI1KBU", "INVALID", "", "", ""),
+            new QslConsoleActionService.MailReceiveConfirmCommand("BI1KBU", "INVALID", "", "", "", ""),
             "admin",
             "127.0.0.1"
         ).block());
@@ -63,7 +63,7 @@ class QslConsoleActionServiceValidationTest {
         );
 
         var error = assertThrows(QslApiException.class, () -> service.confirmMailReceive(
-            new QslConsoleActionService.MailReceiveConfirmCommand("BI1KBU", "QSO", "QSO", "", ""),
+            new QslConsoleActionService.MailReceiveConfirmCommand("BI1KBU", "QSO", "QSO", "", "", ""),
             "admin",
             "127.0.0.1"
         ).block());
@@ -97,7 +97,8 @@ class QslConsoleActionServiceValidationTest {
                 "EYEBALL",
                 "ONLINE_EYEBALL",
                 "已收到",
-                "2026-05-06"
+                "2026-05-06",
+                ""
             ),
             "admin",
             "127.0.0.1"
@@ -132,7 +133,8 @@ class QslConsoleActionServiceValidationTest {
                 "EYEBALL",
                 "ONLINE_EYEBALL",
                 "已收到",
-                "2026-05-06"
+                "2026-05-06",
+                ""
             ),
             "admin",
             "127.0.0.1"

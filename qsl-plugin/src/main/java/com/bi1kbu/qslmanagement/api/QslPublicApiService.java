@@ -11,6 +11,7 @@ import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -21,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.ReactiveExtensionClient;
@@ -356,7 +358,8 @@ public class QslPublicApiService {
                     command.remarks() == null ? "" : command.remarks().trim()
                 ));
                 QslCardStateTransitionSupport.applyReceiptConfirmedSideEffects(cardRecord);
-                return client.update(cardRecord);
+                return mergeOfflineTemporaryReceivedCards(cardRecord, callSign, offlineActivityName)
+                    .flatMap(client::update);
             })
             .flatMap(updated -> qslAuditService.appendAuditLog(
                 "前台线下换卡确认",
@@ -412,6 +415,95 @@ public class QslPublicApiService {
                     prefillRemarks
                 ));
             });
+    }
+
+    private Mono<CardRecord> mergeOfflineTemporaryReceivedCards(CardRecord activatedCard, String callSign,
+        String offlineActivityName) {
+        var normalizedCallSign = QslApiSupport.normalizeCallSign(callSign);
+        var normalizedActivityName = nullToEmpty(offlineActivityName).trim();
+        if (normalizedCallSign.isBlank() || normalizedActivityName.isBlank()) {
+            return Mono.just(activatedCard);
+        }
+        var activatedCardName = activatedCard.getMetadata() == null ? "" : nullToEmpty(activatedCard.getMetadata().getName());
+        return client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .filter(cardRecord -> isMatchedOfflineTemporaryReceivedCard(
+                cardRecord,
+                activatedCardName,
+                normalizedCallSign,
+                normalizedActivityName
+            ))
+            .collectList()
+            .flatMap(temporaryCards -> {
+                if (temporaryCards.isEmpty()) {
+                    return Mono.just(activatedCard);
+                }
+                var targetSpec = activatedCard.getSpec();
+                var mergedCodes = receivedRecordCodeSet(targetSpec.getReceivedRecordCodes());
+                var firstReceivedAt = nullToEmpty(targetSpec.getReceivedAt()).trim();
+                for (var temporaryCard : temporaryCards) {
+                    var temporarySpec = temporaryCard.getSpec();
+                    receivedRecordCodeSet(temporarySpec.getReceivedRecordCodes()).forEach(mergedCodes::add);
+                    if (firstReceivedAt.isBlank()) {
+                        firstReceivedAt = nullToEmpty(temporarySpec.getReceivedAt()).trim();
+                    }
+                }
+                targetSpec.setReceivedRecordCodes(String.join(", ", mergedCodes));
+                targetSpec.setCardReceived(!mergedCodes.isEmpty());
+                if (!mergedCodes.isEmpty()) {
+                    targetSpec.setReceivedAt(firstReceivedAt.isBlank() ? QslApiSupport.nowText() : firstReceivedAt);
+                }
+                clearReceivedMailState(targetSpec);
+                var targetStatus = activatedCard.getStatus() == null
+                    ? new CardRecord.CardRecordStatus()
+                    : activatedCard.getStatus();
+                targetStatus.setFlowStatus(QslCardStateTransitionSupport.resolveFlowStatus(targetSpec));
+                activatedCard.setStatus(targetStatus);
+
+                return Flux.fromIterable(temporaryCards)
+                    .concatMap(this::deleteOfflineTemporaryReceivedCard)
+                    .then(Mono.just(activatedCard));
+            });
+    }
+
+    private boolean isMatchedOfflineTemporaryReceivedCard(CardRecord cardRecord, String activatedCardName,
+        String callSign, String offlineActivityName) {
+        if (cardRecord == null || cardRecord.getSpec() == null || cardRecord.getMetadata() == null) {
+            return false;
+        }
+        var cardRecordName = nullToEmpty(cardRecord.getMetadata().getName()).trim();
+        if (cardRecordName.isBlank() || cardRecordName.equalsIgnoreCase(activatedCardName)) {
+            return false;
+        }
+        var spec = cardRecord.getSpec();
+        return "EYEBALL".equals(normalizeSceneType(spec.getSceneType()))
+            && callSign.equals(QslApiSupport.normalizeCallSign(spec.getCallSign()))
+            && offlineActivityName.equals(nullToEmpty(spec.getOfflineActivityName()).trim())
+            && Boolean.TRUE.equals(spec.getCardReceived())
+            && !receivedRecordCodeSet(spec.getReceivedRecordCodes()).isEmpty();
+    }
+
+    private Mono<CardRecord> deleteOfflineTemporaryReceivedCard(CardRecord temporaryCard) {
+        return client.delete(temporaryCard).thenReturn(temporaryCard);
+    }
+
+    private LinkedHashSet<String> receivedRecordCodeSet(String receivedRecordCodes) {
+        var codes = new LinkedHashSet<String>();
+        if (receivedRecordCodes == null || receivedRecordCodes.isBlank()) {
+            return codes;
+        }
+        for (var code : receivedRecordCodes.split(",")) {
+            var normalized = code == null ? "" : code.trim().toUpperCase(Locale.ROOT);
+            if (!normalized.isBlank()) {
+                codes.add(normalized);
+            }
+        }
+        return codes;
+    }
+
+    private void clearReceivedMailState(CardRecord.CardRecordSpec spec) {
+        spec.setReceivedMailStatus("");
+        spec.setReceivedMailSentAt("");
+        spec.setReceivedMailLastError("");
     }
 
     public Mono<PublicCardPagePrefill> getOnlineExchangePagePrefill(String cardId, String callSign) {

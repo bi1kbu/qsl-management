@@ -122,11 +122,12 @@ API 版本：`v1alpha1`
   "cardType": "QSO",
   "sceneType": "QSO",
   "receivedDate": "2026-05-02",
-  "receiptRemarks": "签收备注"
+  "receiptRemarks": "签收备注",
+  "offlineActivityName": "202604ACT01"
 }
 ```
 
-`cardType` 允许：`QSO`、`SWL`、`EYEBALL`。`sceneType` 允许：`QSO`、`SWL`、`ONLINE_EYEBALL`、`EYEBALL`。`receivedDate` 必填，格式为 `yyyy-MM-dd`，用于生成收卡编号日期段并写入收卡时间；不填返回 `QSL-400-0001`，不再默认使用当前日期时间。同一呼号、卡片类型和场景存在多条卡片记录时，服务端只在未完成收卡的正式卡片记录中匹配，并按卡片编号序号从小到大绑定；更早记录已收卡后，后续确认才流转到下一条记录。
+`cardType` 允许：`QSO`、`SWL`、`EYEBALL`。`sceneType` 允许：`QSO`、`SWL`、`ONLINE_EYEBALL`、`EYEBALL`。`receivedDate` 必填，格式为 `yyyy-MM-dd`，用于生成收卡编号日期段并写入收卡时间；不填返回 `QSL-400-0001`，不再默认使用当前日期时间。同一呼号、卡片类型和场景存在多条卡片记录时，服务端只在未完成收卡的正式卡片记录中匹配，并按卡片编号序号从小到大绑定；更早记录已收卡后，后续确认才流转到下一条记录。`offlineActivityName` 仅用于线下换卡收卡；找不到旧卡片时自动创建的临时收卡卡片会记录该活动 ID，供后续前台线下换卡确认按同活动自动合并，合并时收卡编号原样迁移到旧卡片并删除临时卡片。
 
 修改收卡日期：
 

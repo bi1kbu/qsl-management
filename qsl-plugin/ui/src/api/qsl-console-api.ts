@@ -14,6 +14,7 @@ export interface MailReceiveConfirmPayload {
   sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   receiptRemarks: string
   receivedDate: string
+  offlineActivityName?: string
 }
 
 export interface MailReceiveConfirmResult {
