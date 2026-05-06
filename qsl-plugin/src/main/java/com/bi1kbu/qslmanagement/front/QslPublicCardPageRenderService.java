@@ -202,7 +202,7 @@ public class QslPublicCardPageRenderService {
               }
               .qsl-overview {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+                grid-template-columns: repeat(2, minmax(0, 1fr));
                 gap: 10px;
                 margin-bottom: 14px;
               }
@@ -211,16 +211,38 @@ public class QslPublicCardPageRenderService {
                 border-radius: 8px;
                 background: #f9fafb;
                 padding: 10px;
+                min-height: 72px;
+                box-sizing: border-box;
+                position: relative;
+                overflow: hidden;
+              }
+              .qsl-overview-item--featured {
+                grid-column: 1 / -1;
+                min-height: 108px;
+              }
+              .qsl-overview-item--progress::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                width: calc(var(--progress, 0) * 100%);
+                background: linear-gradient(90deg, rgba(37, 99, 235, 0.2), rgba(59, 130, 246, 0.12));
+                pointer-events: none;
               }
               .qsl-overview-label {
                 color: #6b7280;
                 font-size: 12px;
+                position: relative;
+                z-index: 1;
               }
               .qsl-overview-value {
                 margin-top: 4px;
                 color: #111827;
-                font-size: 18px;
+                font-size: var(--value-font-size, 18px);
                 font-weight: 700;
+                line-height: 1.15;
+                position: relative;
+                z-index: 1;
+                white-space: nowrap;
               }
               .qsl-section {
                 margin-top: 12px;
@@ -402,19 +424,62 @@ public class QslPublicCardPageRenderService {
                 };
 
                 const renderOverview = (summary) => {
+                  const cardTotal = Number(summary.cardTotal ?? 0);
+                  const toRatio = (value) => {
+                    const current = Number(value ?? 0);
+                    if (!Number.isFinite(current) || !Number.isFinite(cardTotal) || cardTotal <= 0) {
+                      return 0;
+                    }
+                    const ratio = current / cardTotal;
+                    return Math.max(0, Math.min(1, ratio));
+                  };
+                  const resolveValueFontSize = (value, featured) => {
+                    const textLength = String(value ?? "").length;
+                    if (featured) {
+                      if (textLength <= 4) {
+                        return 36;
+                      }
+                      if (textLength <= 6) {
+                        return 32;
+                      }
+                      if (textLength <= 8) {
+                        return 28;
+                      }
+                      return 24;
+                    }
+                    if (textLength <= 4) {
+                      return 24;
+                    }
+                    if (textLength <= 6) {
+                      return 22;
+                    }
+                    if (textLength <= 8) {
+                      return 20;
+                    }
+                    return 18;
+                  };
                   const items = [
-                    { label: "QSO 总数", value: summary.qsoTotal ?? 0 },
-                    { label: "眼球总数", value: summary.eyeballTotal ?? 0 },
-                    { label: "卡片总数", value: summary.cardTotal ?? 0 },
-                    { label: "待发卡片", value: summary.pendingSendTotal ?? 0 },
-                    { label: "已发卡片", value: summary.sentTotal ?? 0 },
-                    { label: "发卡签收", value: summary.deliverySignedTotal ?? 0 },
-                    { label: "已收卡片", value: summary.receivedTotal ?? 0 }
+                    { key: "cardTotal", label: "卡片总数", value: summary.cardTotal ?? 0, progress: false },
+                    { key: "qsoTotal", label: "QSO 总数", value: summary.qsoTotal ?? 0, progress: false },
+                    { key: "eyeballTotal", label: "眼球总数", value: summary.eyeballTotal ?? 0, progress: false },
+                    { key: "sentTotal", label: "已发卡片", value: summary.sentTotal ?? 0, progress: true },
+                    { key: "pendingSendTotal", label: "待发卡片", value: summary.pendingSendTotal ?? 0, progress: true },
+                    { key: "deliverySignedTotal", label: "发卡签收", value: summary.deliverySignedTotal ?? 0, progress: true },
+                    { key: "receivedTotal", label: "已收卡片", value: summary.receivedTotal ?? 0, progress: true }
                   ];
                   overview.innerHTML = items
                     .map(
-                      (item) =>
-                        `<article class="qsl-overview-item"><div class="qsl-overview-label">${item.label}</div><div class="qsl-overview-value">${item.value}</div></article>`
+                      (item, index) => {
+                        const featured = index === 0;
+                        const ratio = item.progress ? toRatio(item.value) : 0;
+                        const classes = [
+                          "qsl-overview-item",
+                          featured ? "qsl-overview-item--featured" : "",
+                          item.progress ? "qsl-overview-item--progress" : ""
+                        ].filter(Boolean).join(" ");
+                        const valueFontSize = resolveValueFontSize(item.value, featured);
+                        return `<article class="${classes}" style="--progress:${ratio};--value-font-size:${valueFontSize}px;"><div class="qsl-overview-label">${item.label}</div><div class="qsl-overview-value">${item.value}</div></article>`;
+                      }
                     )
                     .join("");
                   notifyParentHeight();
