@@ -59,6 +59,11 @@ interface OfflineActivitySpec {
   activityName: string
 }
 
+interface OfflineActivityOption {
+  resourceName: string
+  activityName: string
+}
+
 interface ReceiveResult {
   resourceName: string
   metadataVersion?: number | null
@@ -182,7 +187,7 @@ const receivedCodeMigrationForm = reactive({
   targetCardRecordName: '',
 })
 const selectedOfflineActivity = ref('')
-const offlineActivities = ref<OfflineActivitySpec[]>([])
+const offlineActivities = ref<OfflineActivityOption[]>([])
 
 const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
@@ -306,20 +311,11 @@ const offlineActivityOptions = computed(() => {
   if (!showOfflineActivity.value) {
     return []
   }
-  const fromRecords = new Set<string>()
-  results.value.forEach((item) => {
-    const value = (item.spec.offlineActivityName || '').trim()
-    if (value) {
-      fromRecords.add(value)
-    }
+  return [...offlineActivities.value].sort((a, b) => {
+    const left = a.activityName || a.resourceName
+    const right = b.activityName || b.resourceName
+    return left.localeCompare(right, 'zh-CN')
   })
-  offlineActivities.value.forEach((item) => {
-    const value = (item.activityName || '').trim()
-    if (value) {
-      fromRecords.add(value)
-    }
-  })
-  return Array.from(fromRecords).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 })
 
 const allFilteredSelected = computed(() => {
@@ -457,6 +453,15 @@ watch(
     }
   },
   { immediate: true },
+)
+
+watch(
+  offlineActivityOptions,
+  (options) => {
+    if (selectedOfflineActivity.value && !options.some((item) => item.resourceName === selectedOfflineActivity.value)) {
+      selectedOfflineActivity.value = ''
+    }
+  },
 )
 
 const applyHistorySearch = () => {
@@ -723,8 +728,9 @@ const loadOfflineActivities = async () => {
   try {
     const extensions = await listExtensions<OfflineActivitySpec>(offlineActivityPlural)
     offlineActivities.value = extensions.map((item) => ({
+      resourceName: item.metadata.name,
       activityName: item.spec?.activityName ?? '',
-    }))
+    })).filter((item) => item.resourceName.trim())
   } catch {
     offlineActivities.value = []
   }
@@ -1304,7 +1310,9 @@ onMounted(() => {
             <div class="qsl-input-shell">
               <select v-model="selectedOfflineActivity">
                 <option value="">请选择活动</option>
-                <option v-for="item in offlineActivityOptions" :key="item" :value="item">{{ item }}</option>
+                <option v-for="item in offlineActivityOptions" :key="item.resourceName" :value="item.resourceName">
+                  {{ item.activityName || item.resourceName }}
+                </option>
               </select>
             </div>
           </label>
