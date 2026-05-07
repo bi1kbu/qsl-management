@@ -23,19 +23,19 @@ class QslRoleTemplateContractTest {
         var rules = loadRules();
 
         // QslOverviewConsoleEndpoint
-        assertHasRule(rules, "console.api.qsl-management.halo.run", "overview", "get");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "overview", "get");
 
         // QslConsoleApiEndpoint
-        assertHasRule(rules, "console.api.qsl-management.halo.run", "reports", "get");
-        assertHasRule(rules, "console.api.qsl-management.halo.run", "mail-send-confirms", "create");
-        assertHasRule(rules, "console.api.qsl-management.halo.run", "mail-receive-confirms", "create");
-        assertHasRule(rules, "console.api.qsl-management.halo.run", "exchange-requests", "create");
-        assertHasRule(rules, "console.api.qsl-management.halo.run", "notification-mails", "create");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "reports", "get");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "mail-send-confirms", "create");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "mail-receive-confirms", "create");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "exchange-requests", "create");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "notification-mails", "create");
 
-        assertHasRule(rules, "console.api.qsl-management.halo.run", "imports", "create");
-        assertHasRule(rules, "console.api.qsl-management.halo.run", "imports", "get");
-        assertHasRule(rules, "console.api.qsl-management.halo.run", "exports", "create");
-        assertHasRule(rules, "console.api.qsl-management.halo.run", "exports", "get");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "imports", "create");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "imports", "get");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "exports", "create");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "exports", "get");
     }
 
     @Test
@@ -43,18 +43,18 @@ class QslRoleTemplateContractTest {
         var rules = loadRules();
 
         // QslPublicApiEndpoint + QslOverviewPublicEndpoint
-        assertHasRule(rules, "api.qsl-management.halo.run", "qso-public", "get");
-        assertHasRule(rules, "api.qsl-management.halo.run", "ONLINE_EYEBALL", "get");
-        assertHasRule(rules, "api.qsl-management.halo.run", "EYEBALL", "get");
-        assertHasRule(rules, "api.qsl-management.halo.run", "exchange-online/bureaus", "get");
-        assertHasRule(rules, "api.qsl-management.halo.run", "exchange-online/station-cards", "get");
-        assertHasRule(rules, "api.qsl-management.halo.run", "exchange-offline/activities", "get");
-        assertHasRule(rules, "api.qsl-management.halo.run", "exchange-online/requests", "create");
-        assertHasRule(rules, "api.qsl-management.halo.run", "exchange-offline/confirm", "create");
-        assertHasRule(rules, "api.qsl-management.halo.run", "receipt-public/confirm", "create");
-        assertHasRule(rules, "api.qsl-management.halo.run", "receipt-public", "get");
-        assertHasRule(rules, "api.qsl-management.halo.run", "overview-public", "get");
-        assertHasRule(rules, "api.qsl-management.halo.run", "cards", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "qso-public", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "ONLINE_EYEBALL", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "EYEBALL", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "exchange-online/bureaus", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "exchange-online/station-cards", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "exchange-offline/activities", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "exchange-online/requests", "create");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "exchange-offline/confirm", "create");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "receipt-public/confirm", "create");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "receipt-public", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "overview-public", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "cards", "get");
     }
 
     @Test
@@ -78,8 +78,8 @@ class QslRoleTemplateContractTest {
             "qsl-management-address-bureau-view",
             "qsl-management-offline-activity-view"
         );
-        assertHasRule(loadRules(), "qsl-management.halo.run", "offline-activities", "get");
-        assertHasRule(loadRules(), "qsl-management.halo.run", "offline-activities", "list");
+        assertHasRule(loadRules(), "qsl-management.bi1kbu.com", "offline-activities", "get");
+        assertHasRule(loadRules(), "qsl-management.bi1kbu.com", "offline-activities", "list");
     }
 
     @Test

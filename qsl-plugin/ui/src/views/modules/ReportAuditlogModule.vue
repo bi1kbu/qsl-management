@@ -62,7 +62,7 @@ const regenerate = async () => {
   loading.value = true
   try {
     const response = await axiosInstance.get<ApiResult<OverviewSummary>>(
-      '/apis/console.api.qsl-management.halo.run/v1alpha1/reports/summary',
+      '/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/reports/summary',
     )
     applySummary(response.data?.data)
     lastGeneratedAt.value = nowText()

@@ -58,7 +58,7 @@ public class QslCardEmbedContentTransformer {
 
     private String buildEmbedBlock(String callSign, String embedId) {
         var uriBuilder = UriComponentsBuilder
-            .fromPath("/apis/api.qsl-management.halo.run/v1alpha1/cards/page")
+            .fromPath("/apis/api.qsl-management.bi1kbu.com/v1alpha1/cards/page")
             .queryParam("embed", "1")
             .queryParam("eid", embedId);
         if (!callSign.isBlank()) {

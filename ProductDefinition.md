@@ -138,7 +138,7 @@ Halo 官方资料核验日期：2026-05-02
 
 1. 三类收卡菜单复用送达确认组件，以 `sceneType` 限定业务范围。
 2. 收卡编号写入 `CardRecord.spec.receivedRecordCodes`，允许同一卡片关联多个收卡编号。
-3. 收卡业务提供基本确认、已收卡片、批量编辑与单条编辑能力；基本功能的“确认收信”和清单内“确认收卡”必须使用页面上方填写的收卡日期，未填写日期时前端弹窗提示且服务端拒绝提交，不再默认使用当前日期；该日期在本次浏览会话内按收卡子菜单记忆，提交后不清空。同一呼号、卡片类型和场景存在多条卡片记录时，收卡确认只匹配未完成收卡的正式卡片记录，并按卡片编号序号从小到大绑定；更早记录完成收卡后才绑定下一条。修改收卡日期时会同步重新赋予收卡编号。已收卡片清单支持将指定收卡编号从源卡片迁移到其他正式卡片 ID 的收卡清单中，迁移后按源/目标剩余编号同步维护收卡状态与收卡邮件状态。
+3. 收卡业务提供基本确认、已收卡片、批量编辑与单条编辑能力；基本功能的“确认收信”和清单内“确认收卡”必须使用页面上方填写的收卡日期，未填写日期时前端弹窗提示且服务端拒绝提交，不再默认使用当前日期；该日期在本次浏览会话内按收卡子菜单记忆，提交后不清空。同一呼号、卡片类型和场景存在多条卡片记录时，收卡确认只匹配未结束收卡的正式卡片记录，并按卡片编号序号从小到大绑定；已收卡但尚未点击“结束收卡”的记录继续追加收卡编号，结束后才绑定下一条。修改收卡日期时会同步重新赋予收卡编号。已收卡片清单支持将指定收卡编号从源卡片迁移到其他正式卡片 ID 的收卡清单中，迁移后按源/目标剩余编号同步维护收卡状态与收卡邮件状态。
 4. 线上换卡业务收到对方“已签收”动作时，如果未制卡、未打包或未发卡，会联动补齐 `cardIssued/cardIssuedAt/envelopePrinted/cardSent/sentAt`；通联业务和线上换卡业务只要 `cardSent=true`，也会联动补齐制卡和打包状态。状态机被批量编辑为否或空时，对应时间、邮件状态、邮件时间和邮件错误同步置空。
 
 ### 3.8 审计与数据
@@ -150,18 +150,18 @@ Halo 官方资料核验日期：2026-05-02
 
 ## 4. 前台公开能力
 
-公开接口 API Group：`api.qsl-management.halo.run/v1alpha1`。
+公开接口 API Group：`api.qsl-management.bi1kbu.com/v1alpha1`。
 
 当前公开页面与短码：
 
 | 能力 | 公开页面 | 短码 |
 | --- | --- | --- |
-| 公开查询 | `/apis/api.qsl-management.halo.run/v1alpha1/cards/page` | `[qsl-card]` |
-| 线上换卡申请 | `/apis/api.qsl-management.halo.run/v1alpha1/ONLINE_EYEBALL`、`/apis/api.qsl-management.halo.run/v1alpha1/ONLINE_EYEBALL/{cardId}` | `[qsl-online-exchange-card]` |
-| 线下换卡确认 | `/apis/api.qsl-management.halo.run/v1alpha1/EYEBALL`、`/apis/api.qsl-management.halo.run/v1alpha1/EYEBALL/{cardId}` | `[qsl-offline-exchange-card]` |
-| 公开签收 | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public`、`/apis/api.qsl-management.halo.run/v1alpha1/receipt-public/{cardId}` | `[qsl-receipt-card]` |
+| 公开查询 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/cards/page` | `[qsl-card]` |
+| 线上换卡申请 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL/{cardId}` | `[qsl-online-exchange-card]` |
+| 线下换卡确认 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL/{cardId}` | `[qsl-offline-exchange-card]` |
+| 公开签收 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public/{cardId}` | `[qsl-receipt-card]` |
 
-线上换卡与线下换卡公开页面的服务端 endpoint 与渲染服务必须分离实现；两者路径可同属 `api.qsl-management.halo.run/v1alpha1`，但页面字段、脚本、提交逻辑不再通过同一个模板的场景开关复用。
+线上换卡与线下换卡公开页面的服务端 endpoint 与渲染服务必须分离实现；两者路径可同属 `api.qsl-management.bi1kbu.com/v1alpha1`，但页面字段、脚本、提交逻辑不再通过同一个模板的场景开关复用。
 
 当前公开数据接口：
 
@@ -228,7 +228,7 @@ python -m cardprint.cli ui online
 1. 默认地址为 `http://localhost:8090`，但配置中可传入其他 `base_url`。
 2. 读取 `card-records` 生成卡片/信封队列，卡片打印会按 `CardRecord.spec.qsoRecordName` 额外读取 `qso-records` 并注入 `qsoInfo`。
 3. 信封打印会额外读取 `station-profiles`、`address-book-entries`、`bureau-entries` 做本台地址和收件地址补全。
-4. 卡片版本以 `station-cards` 为准；本地打印工具通过公开接口 `GET /apis/api.qsl-management.halo.run/v1alpha1/exchange-online/-/station-cards` 拉取版本列表，并按 `sortOrder` 与版本号排序，不从 `card-records` 反推。
+4. 卡片版本以 `station-cards` 为准；本地打印工具通过公开接口 `GET /apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` 拉取版本列表，并按 `sortOrder` 与版本号排序，不从 `card-records` 反推。
 5. 卡片二维码拼接支持 `qrcode.path_mappings` 短路径映射，在线打印配置页可在站点地址下方配置线下换卡、线上换卡、签收确认三类短路径；默认将公开页面长路径映射为 `/EYEBALL`、`/ONLINE_EYEBALL`、`/rp` 后再追加卡片 ID 与 `cs` 参数。
 6. 在线打印工具登录并拉取卡片版本时使用后台线程执行网络请求，只补齐空白本台通信地址字段，不覆盖已有本台姓名、电话、邮编、地址；受保护接口返回登录页或 HTML 时明确提示认证或权限问题，不静默解析为空数据。
 7. 打印状态通过人工确认回写 `CardRecord.spec.cardIssued/cardIssuedAt` 或 `envelopePrinted`，`cardIssuedAt` 使用 `yyyy-MM-dd HH:mm:ss` 文本格式；回写会同步刷新 `CardRecord.status.flowStatus`，并按后台状态联动规则补齐或清理相关状态字段。

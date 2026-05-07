@@ -1,6 +1,6 @@
 import { axiosInstance } from '@halo-dev/api-client'
 
-const consoleApiBase = '/apis/console.api.qsl-management.halo.run/v1alpha1'
+const consoleApiBase = '/apis/console.api.qsl-management.bi1kbu.com/v1alpha1'
 
 interface ApiResult<T> {
   code: string

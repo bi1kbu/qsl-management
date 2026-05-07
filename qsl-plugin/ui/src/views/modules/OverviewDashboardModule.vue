@@ -62,7 +62,7 @@ const loadSummary = async () => {
   loading.value = true
   try {
     const response = await axiosInstance.get<ApiResult<OverviewSummary>>(
-      '/apis/console.api.qsl-management.halo.run/v1alpha1/overview/summary',
+      '/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/overview/summary',
     )
     applySummary(response.data?.data)
     updatedAt.value = nowText()

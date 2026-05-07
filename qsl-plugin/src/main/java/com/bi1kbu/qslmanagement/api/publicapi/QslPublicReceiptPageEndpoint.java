@@ -42,7 +42,7 @@ public class QslPublicReceiptPageEndpoint implements CustomEndpoint {
 
     @Override
     public GroupVersion groupVersion() {
-        return GroupVersion.parseAPIVersion("api.qsl-management.halo.run/v1alpha1");
+        return GroupVersion.parseAPIVersion("api.qsl-management.bi1kbu.com/v1alpha1");
     }
 
     private Mono<ServerResponse> renderReceiptPageByQuery(ServerRequest request) {

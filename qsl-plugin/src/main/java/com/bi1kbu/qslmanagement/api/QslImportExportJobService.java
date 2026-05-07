@@ -255,7 +255,7 @@ public class QslImportExportJobService {
         status.setErrorLines(errorLines);
         status.setErrorReportPath(errorLines.isEmpty()
             ? ""
-            : "/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/"
+            : "/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/imports/jobs/"
             + job.getMetadata().getName() + "/errors/download");
         status.setFinishedAt(QslApiSupport.nowText());
         job.setStatus(status);
@@ -269,7 +269,7 @@ public class QslImportExportJobService {
         status.setStatus("失败");
         status.setFailedCount(Math.max(status.getFailedCount() == null ? 0L : status.getFailedCount(), 1L));
         status.setErrorLines(errorLines);
-        status.setErrorReportPath("/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/"
+        status.setErrorReportPath("/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/imports/jobs/"
             + job.getMetadata().getName() + "/errors/download");
         status.setFinishedAt(QslApiSupport.nowText());
         job.setStatus(status);

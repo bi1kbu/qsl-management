@@ -24,7 +24,7 @@ class QslCardEmbedContentTransformerTest {
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("/apis/api.qsl-management.halo.run/v1alpha1/cards/page?embed=1&eid=qsl-card-"));
+        assertTrue(transformed.contains("/apis/api.qsl-management.bi1kbu.com/v1alpha1/cards/page?embed=1&eid=qsl-card-"));
         assertTrue(transformed.contains("data-qsl-embed-id=\"qsl-card-"));
         assertTrue(transformed.contains("window.__qslCardEmbedResizeBound"));
     }

@@ -1,7 +1,7 @@
 import { axiosInstance } from '@halo-dev/api-client'
 import { isAxiosError } from 'axios'
 
-const QSL_GROUP_VERSION = 'qsl-management.halo.run/v1alpha1'
+const QSL_GROUP_VERSION = 'qsl-management.bi1kbu.com/v1alpha1'
 const QSL_EXTENSION_BASE_PATH = `/apis/${QSL_GROUP_VERSION}`
 
 export interface QslMetadata {

@@ -30,7 +30,7 @@ public class QslNotificationMailService {
     private static final String MAIL_STATUS_SKIPPED = "SKIPPED";
     private static final String SYSTEM_SETTING_NAME = "qsl-system-setting-default";
     private static final String STATION_PROFILE_NAME = "qsl-station-profile-default";
-    private static final String QSL_API_VERSION = "qsl-management.halo.run/v1alpha1";
+    private static final String QSL_API_VERSION = "qsl-management.bi1kbu.com/v1alpha1";
     private static final String CARD_RECORD_KIND = "CardRecord";
     private static final String EXCHANGE_REQUEST_KIND = "ExchangeRequest";
     private static final String EXCHANGE_REVIEW_REASON_TYPE = "qsl-exchange-reviewed";

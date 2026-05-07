@@ -110,12 +110,13 @@ class QslConsoleActionServiceValidationTest {
     }
 
     @Test
-    void shouldSkipReceivedCardRecordWhenBindingMailReceive() {
+    void shouldSkipClosedReceivedCardRecordWhenBindingMailReceive() {
         var client = mock(ReactiveExtensionClient.class);
         var auditService = mock(QslAuditService.class);
         var notificationMailService = mock(QslNotificationMailService.class);
         var service = new QslConsoleActionService(client, auditService, notificationMailService);
         var older = createCardRecord("C1001", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", true);
+        older.getSpec().setReceivedMailStatus("PENDING");
         var newer = createCardRecord("C1002", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", false);
         var systemSetting = createSystemSetting();
 
@@ -204,6 +205,45 @@ class QslConsoleActionServiceValidationTest {
         assertEquals("C1002", result.cardRecordName());
         assertEquals(Boolean.FALSE, otherActivity.getSpec().getCardReceived());
         assertEquals(Boolean.TRUE, matchedActivity.getSpec().getCardReceived());
+    }
+
+    @Test
+    void shouldAppendReceivedRecordCodeToOpenReceivedCardRecordWhenTargetMissing() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(client, auditService, notificationMailService);
+        var target = createCardRecord("C1001", "BM2EMV", "EYEBALL", "ONLINE_EYEBALL", true);
+        target.getSpec().setReceivedRecordCodes("R0001-20260506");
+        target.getSpec().setReceivedMailStatus("");
+        var systemSetting = createSystemSetting();
+
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(target));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendIfEnabled(any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.confirmMailReceive(
+            new QslConsoleActionService.MailReceiveConfirmCommand(
+                "BM2EMV",
+                "EYEBALL",
+                "ONLINE_EYEBALL",
+                "第二张来卡",
+                "2026-05-07",
+                ""
+            ),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("C1001", result.cardRecordName());
+        assertEquals("R0002-20260507", result.receivedRecordCode());
+        assertEquals("R0001-20260506, R0002-20260507", target.getSpec().getReceivedRecordCodes());
+        assertEquals(Boolean.TRUE, target.getSpec().getCardReceived());
+        verify(client, org.mockito.Mockito.never()).create(any(CardRecord.class));
     }
 
     @Test

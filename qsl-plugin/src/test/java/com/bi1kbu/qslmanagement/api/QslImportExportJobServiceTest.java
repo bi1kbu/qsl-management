@@ -235,7 +235,7 @@ class QslImportExportJobServiceTest {
         assertEquals(1, storedJob.getStatus().getErrorLines().size());
         assertEquals(true, storedJob.getStatus().getErrorLines().get(0).contains("qso-fail"));
         assertEquals(
-            "/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/"
+            "/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/imports/jobs/"
                 + storedJob.getMetadata().getName() + "/errors/download",
             storedJob.getStatus().getErrorReportPath()
         );

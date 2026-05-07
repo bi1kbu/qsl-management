@@ -8,7 +8,7 @@ import run.halo.app.extension.GVK;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @GVK(
-    group = "qsl-management.halo.run",
+    group = "qsl-management.bi1kbu.com",
     version = "v1alpha1",
     kind = "QsoRecord",
     plural = "qso-records",

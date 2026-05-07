@@ -64,10 +64,10 @@ https://github.com/bi1kbu/qsl-management/releases
 
 | 能力 | 默认路径 |
 | --- | --- |
-| 公开查询 | `/apis/api.qsl-management.halo.run/v1alpha1/cards/page` |
-| 线上换卡申请 | `/apis/api.qsl-management.halo.run/v1alpha1/ONLINE_EYEBALL` |
-| 线下换卡确认 | `/apis/api.qsl-management.halo.run/v1alpha1/EYEBALL` |
-| 公开签收 | `/apis/api.qsl-management.halo.run/v1alpha1/receipt-public` |
+| 公开查询 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/cards/page` |
+| 线上换卡申请 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL` |
+| 线下换卡确认 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL` |
+| 公开签收 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public` |
 
 公开页面也支持通过 Halo 内容短码嵌入：
 

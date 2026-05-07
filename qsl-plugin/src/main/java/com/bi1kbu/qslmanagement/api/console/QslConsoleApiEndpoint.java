@@ -70,7 +70,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
 
     @Override
     public GroupVersion groupVersion() {
-        return GroupVersion.parseAPIVersion("console.api.qsl-management.halo.run/v1alpha1");
+        return GroupVersion.parseAPIVersion("console.api.qsl-management.bi1kbu.com/v1alpha1");
     }
 
     private Mono<ServerResponse> reportSummary(ServerRequest request) {

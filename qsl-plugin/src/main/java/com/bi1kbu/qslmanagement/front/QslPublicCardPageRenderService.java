@@ -377,7 +377,7 @@ public class QslPublicCardPageRenderService {
 
             <script>
               (() => {
-                const API_BASE = "/apis/api.qsl-management.halo.run/v1alpha1";
+                const API_BASE = "/apis/api.qsl-management.bi1kbu.com/v1alpha1";
                 const EMBED_MODE = __EMBED_MODE__;
                 const EMBED_ID = "__EMBED_ID__";
                 const state = {

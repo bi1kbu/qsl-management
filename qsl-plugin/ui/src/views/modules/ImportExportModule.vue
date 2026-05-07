@@ -542,7 +542,7 @@ const runExportExecute = async () => {
     })
 
     const fallbackName = createdJob.spec?.outputFile || `${createdJob.metadata.name}.${format}`
-    exportBlobUrl.value = `/apis/console.api.qsl-management.halo.run/v1alpha1/exports/jobs/${encodeURIComponent(
+    exportBlobUrl.value = `/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/exports/jobs/${encodeURIComponent(
       createdJob.metadata.name,
     )}/download`
     exportFileName.value = fallbackName

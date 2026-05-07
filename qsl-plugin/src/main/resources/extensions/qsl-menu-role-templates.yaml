@@ -10,7 +10,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:overview-dashboard:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-qso-record-view","qsl-management-card-record-view","qsl-management-mail-send-confirm-view","qsl-management-mail-receive-confirm-view"]'
 rules:
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "overview" ]
     verbs: [ "get", "list" ]
 ---
@@ -26,7 +26,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:overview-dashboard:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-overview-dashboard-view"]'
 rules:
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "overview" ]
     verbs: [ "get", "list" ]
 ---
@@ -42,7 +42,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:system-settings:view"]'
     rbac.authorization.halo.run/dependencies: '[]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "system-settings" ]
     verbs: [ "get", "list" ]
 ---
@@ -58,10 +58,10 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:system-settings:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-system-settings-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "system-settings" ]
     verbs: [ "create", "update", "patch", "delete" ]
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "notification-mails" ]
     verbs: [ "create" ]
 ---
@@ -77,7 +77,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:station-profile:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-equipment-catalog-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "station-profiles", "station-equipments", "station-cards" ]
     verbs: [ "get", "list" ]
 ---
@@ -93,7 +93,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:station-profile:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-station-profile-view","qsl-management-equipment-catalog-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "station-profiles", "station-equipments", "station-cards" ]
     verbs: [ "create", "update", "patch", "delete" ]
 ---
@@ -109,7 +109,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:qso-record:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-equipment-catalog-view","qsl-management-station-profile-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "qso-records" ]
     verbs: [ "get", "list" ]
 ---
@@ -125,7 +125,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:qso-record:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-qso-record-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "qso-records" ]
     verbs: [ "create", "update", "patch", "delete" ]
 ---
@@ -141,7 +141,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-record:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-qso-record-view","qsl-management-station-profile-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "card-records" ]
     verbs: [ "get", "list" ]
 ---
@@ -157,10 +157,10 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-record:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view","qsl-management-qso-record-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "card-records" ]
     verbs: [ "create", "update", "patch", "delete" ]
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "notification-mails" ]
     verbs: [ "create" ]
 ---
@@ -176,7 +176,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-mutation:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view","qsl-management-qso-record-view","qsl-management-address-bureau-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "card-records", "qso-records", "address-book-entries" ]
     verbs: [ "get", "list" ]
 ---
@@ -192,10 +192,10 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-mutation:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-mutation-view","qsl-management-card-record-edit","qsl-management-qso-record-view","qsl-management-address-bureau-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "card-records" ]
     verbs: [ "get", "list", "update", "patch", "delete" ]
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "qso-records", "address-book-entries" ]
     verbs: [ "get", "list" ]
 ---
@@ -211,10 +211,10 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:mail-send-confirm:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "card-records" ]
     verbs: [ "get", "list" ]
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "mail-send-confirms" ]
     verbs: [ "get", "list" ]
 ---
@@ -230,13 +230,13 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:mail-send-confirm:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-mail-send-confirm-view","qsl-management-card-record-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "card-records" ]
     verbs: [ "update", "patch" ]
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "mail-send-confirms" ]
     verbs: [ "create" ]
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "notification-mails" ]
     verbs: [ "create" ]
 ---
@@ -252,7 +252,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:mail-receive-confirm:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view","qsl-management-qso-record-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "qso-records", "card-records" ]
     verbs: [ "get", "list" ]
 ---
@@ -268,13 +268,13 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:mail-receive-confirm:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-mail-receive-confirm-view","qsl-management-card-record-view","qsl-management-qso-record-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "qso-records", "card-records" ]
     verbs: [ "create", "update", "patch" ]
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "mail-receive-confirms" ]
     verbs: [ "create" ]
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "notification-mails" ]
     verbs: [ "create" ]
 ---
@@ -290,7 +290,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:exchange-request-review:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-address-bureau-view","qsl-management-card-record-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "exchange-requests", "offline-activities" ]
     verbs: [ "get", "list" ]
 ---
@@ -306,16 +306,16 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:exchange-request-review:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-exchange-request-review-view","qsl-management-card-record-edit"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "exchange-requests", "offline-activities" ]
     verbs: [ "update", "patch" ]
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "offline-activities" ]
     verbs: [ "create", "delete" ]
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "card-records" ]
     verbs: [ "create" ]
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "exchange-requests" ]
     verbs: [ "create" ]
 ---
@@ -331,7 +331,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:qso-query:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-qso-record-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "qso-records" ]
     verbs: [ "get", "list" ]
 ---
@@ -347,7 +347,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:qso-query:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-qso-query-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "qso-records" ]
     verbs: [ "get", "list" ]
 ---
@@ -363,7 +363,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-query:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "card-records" ]
     verbs: [ "get", "list" ]
 ---
@@ -379,7 +379,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:card-query:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-query-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "card-records" ]
     verbs: [ "get", "list" ]
 ---
@@ -395,10 +395,10 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:report-auditlog:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-qso-query-view","qsl-management-card-query-view","qsl-management-exchange-request-review-view","qsl-management-mail-send-confirm-view","qsl-management-mail-receive-confirm-view"]'
 rules:
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "reports" ]
     verbs: [ "get", "list" ]
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "qsl-audit-logs" ]
     verbs: [ "get", "list" ]
 ---
@@ -414,10 +414,10 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:report-auditlog:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-report-auditlog-view"]'
 rules:
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "reports" ]
     verbs: [ "get", "list" ]
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "qsl-audit-logs" ]
     verbs: [ "get", "list" ]
 ---
@@ -433,7 +433,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:address-bureau:view"]'
     rbac.authorization.halo.run/dependencies: '[]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "address-book-entries", "bureau-entries" ]
     verbs: [ "get", "list" ]
 ---
@@ -449,7 +449,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:address-bureau:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-address-bureau-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "address-book-entries", "bureau-entries" ]
     verbs: [ "create", "update", "patch", "delete" ]
 ---
@@ -465,7 +465,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:equipment-catalog:view"]'
     rbac.authorization.halo.run/dependencies: '[]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "equipment-catalog-entries" ]
     verbs: [ "get", "list" ]
 ---
@@ -481,7 +481,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:equipment-catalog:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-equipment-catalog-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "equipment-catalog-entries" ]
     verbs: [ "create", "update", "patch", "delete" ]
 ---
@@ -497,10 +497,10 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:import-export:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-qso-query-view","qsl-management-card-query-view","qsl-management-exchange-request-review-view","qsl-management-address-bureau-view","qsl-management-equipment-catalog-view"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "import-export-jobs" ]
     verbs: [ "get", "list" ]
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "imports", "exports" ]
     verbs: [ "get", "list" ]
 ---
@@ -516,10 +516,10 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:import-export:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-import-export-view","qsl-management-qso-record-edit","qsl-management-card-record-edit","qsl-management-exchange-request-review-edit","qsl-management-address-bureau-edit","qsl-management-equipment-catalog-edit"]'
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "import-export-jobs" ]
     verbs: [ "create", "update", "patch" ]
-  - apiGroups: [ "console.api.qsl-management.halo.run" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "imports", "exports" ]
     verbs: [ "create", "get", "list" ]
 ---
@@ -534,7 +534,7 @@ metadata:
     rbac.authorization.halo.run/module: "QSL 工具权限"
     rbac.authorization.halo.run/display-name: "线下换卡活动（只读）"
 rules:
-  - apiGroups: [ "qsl-management.halo.run" ]
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "offline-activities" ]
     verbs: [ "get", "list" ]
 ---
@@ -563,7 +563,7 @@ metadata:
     rbac.authorization.halo.run/module: "QSL 公共接口权限"
     rbac.authorization.halo.run/display-name: "QSL 公共查询（匿名）"
 rules:
-  - apiGroups: [ "api.qsl-management.halo.run" ]
+  - apiGroups: [ "api.qsl-management.bi1kbu.com" ]
     resources: [ "qso-public", "overview-public", "cards", "receipt-public", "ONLINE_EYEBALL", "EYEBALL", "exchange-online/bureaus", "exchange-online/station-cards", "exchange-offline/activities" ]
     verbs: [ "get", "list" ]
 ---
@@ -579,7 +579,7 @@ metadata:
     rbac.authorization.halo.run/module: "QSL 公共接口权限"
     rbac.authorization.halo.run/display-name: "QSL 公共提交（匿名）"
 rules:
-  - apiGroups: [ "api.qsl-management.halo.run" ]
+  - apiGroups: [ "api.qsl-management.bi1kbu.com" ]
     resources: [ "exchange-online/requests", "exchange-offline/confirm", "receipt-public/confirm" ]
     verbs: [ "create" ]
 

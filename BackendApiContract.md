@@ -29,10 +29,10 @@ API 版本：`v1alpha1`
 
 | API 分组 | group/version | 基础路径 | 范围 |
 | --- | --- | --- | --- |
-| 扩展资源自动 CRUD | `qsl-management.halo.run/v1alpha1` | `/apis/qsl-management.halo.run/v1alpha1` | 后台持久化资源 |
-| 控制台自定义 API | `console.api.qsl-management.halo.run/v1alpha1` | `/apis/console.api.qsl-management.halo.run/v1alpha1` | 后台聚合与动作接口 |
-| 前台公开 API | `api.qsl-management.halo.run/v1alpha1` | `/apis/api.qsl-management.halo.run/v1alpha1` | 匿名页面、查询、申请、确认 |
-| 个人中心 API | `uc.api.qsl-management.halo.run/v1alpha1` | 无当前实现 | 预留 |
+| 扩展资源自动 CRUD | `qsl-management.bi1kbu.com/v1alpha1` | `/apis/qsl-management.bi1kbu.com/v1alpha1` | 后台持久化资源 |
+| 控制台自定义 API | `console.api.qsl-management.bi1kbu.com/v1alpha1` | `/apis/console.api.qsl-management.bi1kbu.com/v1alpha1` | 后台聚合与动作接口 |
+| 前台公开 API | `api.qsl-management.bi1kbu.com/v1alpha1` | `/apis/api.qsl-management.bi1kbu.com/v1alpha1` | 匿名页面、查询、申请、确认 |
+| 个人中心 API | `uc.api.qsl-management.bi1kbu.com/v1alpha1` | 无当前实现 | 预留 |
 
 ## 4. 认证与鉴权
 
@@ -55,7 +55,7 @@ API 版本：`v1alpha1`
 | PUT | `/{plural}/{name}` | 全量更新 |
 | DELETE | `/{plural}/{name}` | 删除 |
 
-基础路径均为 `/apis/qsl-management.halo.run/v1alpha1`。列表查询参数遵循 Halo Extension 通用参数，如 `page`、`size`、`sort`、`labelSelector`、`fieldSelector`。
+基础路径均为 `/apis/qsl-management.bi1kbu.com/v1alpha1`。列表查询参数遵循 Halo Extension 通用参数，如 `page`、`size`、`sort`、`labelSelector`、`fieldSelector`。
 
 | 资源 | Kind | Plural | 权限节点 |
 | --- | --- | --- | --- |
@@ -75,7 +75,7 @@ API 版本：`v1alpha1`
 
 ## 6. 控制台自定义 API
 
-基础路径：`/apis/console.api.qsl-management.halo.run/v1alpha1`
+基础路径：`/apis/console.api.qsl-management.bi1kbu.com/v1alpha1`
 
 ### 6.1 总览与报表
 
@@ -128,7 +128,7 @@ API 版本：`v1alpha1`
 }
 ```
 
-`cardType` 允许：`QSO`、`SWL`、`EYEBALL`。`sceneType` 允许：`QSO`、`SWL`、`ONLINE_EYEBALL`、`EYEBALL`。`receivedDate` 必填，格式为 `yyyy-MM-dd`，用于生成收卡编号日期段并写入收卡时间；不填返回 `QSL-400-0001`，不再默认使用当前日期时间。同一呼号、卡片类型和场景存在多条卡片记录时，服务端只在未完成收卡的正式卡片记录中匹配，并按卡片编号序号从小到大绑定；更早记录已收卡后，后续确认才流转到下一条记录。清单行内“确认收卡”会提交 `targetCardRecordName`，服务端在指定卡片记录上追加新的收卡编号，允许同一卡片保存多个收卡编号。线下换卡收卡的 `offlineActivityName` 必填，服务端按同呼号、同卡片类型、同场景、同关联活动匹配待收卡记录；找不到旧卡片时自动创建的临时收卡卡片会记录该活动 ID，供后续前台线下换卡确认按同活动自动合并，合并时收卡编号原样迁移到旧卡片并删除临时卡片。
+`cardType` 允许：`QSO`、`SWL`、`EYEBALL`。`sceneType` 允许：`QSO`、`SWL`、`ONLINE_EYEBALL`、`EYEBALL`。`receivedDate` 必填，格式为 `yyyy-MM-dd`，用于生成收卡编号日期段并写入收卡时间；不填返回 `QSL-400-0001`，不再默认使用当前日期时间。同一呼号、卡片类型和场景存在多条卡片记录时，服务端只在未结束收卡的正式卡片记录中匹配，并按卡片编号序号从小到大绑定；已收卡但尚未点击“结束收卡”的记录仍可继续追加收卡编号，结束后后续确认才流转到下一条记录。清单行内“确认收卡”会提交 `targetCardRecordName`，服务端在指定卡片记录上追加新的收卡编号，允许同一卡片保存多个收卡编号。线下换卡收卡的 `offlineActivityName` 必填，服务端按同呼号、同卡片类型、同场景、同关联活动匹配待收卡记录；找不到旧卡片时自动创建的临时收卡卡片会记录该活动 ID，供后续前台线下换卡确认按同活动自动合并，合并时收卡编号原样迁移到旧卡片并删除临时卡片。
 
 修改收卡日期：
 
@@ -215,7 +215,7 @@ API 版本：`v1alpha1`
 
 ## 7. 前台公开 API 与页面
 
-基础路径：`/apis/api.qsl-management.halo.run/v1alpha1`
+基础路径：`/apis/api.qsl-management.bi1kbu.com/v1alpha1`
 
 ### 7.1 公开接口
 

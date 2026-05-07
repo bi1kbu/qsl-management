@@ -88,10 +88,10 @@ $precheckBody = @"
 "@
 
 $scenarios = @(
-    @{ Name = "控制台报表读取"; Method = "GET"; Path = "/apis/console.api.qsl-management.halo.run/v1alpha1/reports/summary"; Body = ""; AnonymousExpected = @(401); ReadExpected = @(200); EditExpected = @(200) },
-    @{ Name = "导入预检（编辑权限）"; Method = "POST"; Path = "/apis/console.api.qsl-management.halo.run/v1alpha1/imports/precheck"; Body = $precheckBody; AnonymousExpected = @(401); ReadExpected = @(403); EditExpected = @(200, 400) },
-    @{ Name = "导入任务读取（只读权限）"; Method = "GET"; Path = "/apis/console.api.qsl-management.halo.run/v1alpha1/imports/jobs/$ImportJobName"; Body = ""; AnonymousExpected = @(401); ReadExpected = @(200, 404); EditExpected = @(200, 404) },
-    @{ Name = "公开总览读取"; Method = "GET"; Path = "/apis/api.qsl-management.halo.run/v1alpha1/overview-public/summary"; Body = ""; AnonymousExpected = @(200); ReadExpected = @(200); EditExpected = @(200) }
+    @{ Name = "控制台报表读取"; Method = "GET"; Path = "/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/reports/summary"; Body = ""; AnonymousExpected = @(401); ReadExpected = @(200); EditExpected = @(200) },
+    @{ Name = "导入预检（编辑权限）"; Method = "POST"; Path = "/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/imports/precheck"; Body = $precheckBody; AnonymousExpected = @(401); ReadExpected = @(403); EditExpected = @(200, 400) },
+    @{ Name = "导入任务读取（只读权限）"; Method = "GET"; Path = "/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/imports/jobs/$ImportJobName"; Body = ""; AnonymousExpected = @(401); ReadExpected = @(200, 404); EditExpected = @(200, 404) },
+    @{ Name = "公开总览读取"; Method = "GET"; Path = "/apis/api.qsl-management.bi1kbu.com/v1alpha1/overview-public/summary"; Body = ""; AnonymousExpected = @(200); ReadExpected = @(200); EditExpected = @(200) }
 )
 
 $results = @()

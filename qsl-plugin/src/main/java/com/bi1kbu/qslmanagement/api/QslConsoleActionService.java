@@ -896,7 +896,17 @@ public class QslConsoleActionService {
                 return false;
             }
         }
-        return !Boolean.TRUE.equals(cardRecord.getSpec().getCardReceived());
+        return !isReceiveClosed(cardRecord.getSpec());
+    }
+
+    private boolean isReceiveClosed(CardRecord.CardRecordSpec spec) {
+        if (!Boolean.TRUE.equals(spec.getCardReceived())) {
+            return false;
+        }
+        var receivedMailStatus = defaultIfBlank(spec.getReceivedMailStatus(), "").trim().toUpperCase();
+        return "PENDING".equals(receivedMailStatus)
+            || "SENT".equals(receivedMailStatus)
+            || "FAILED".equals(receivedMailStatus);
     }
 
     private static int cardRecordSequence(CardRecord cardRecord) {
