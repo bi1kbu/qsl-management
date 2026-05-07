@@ -45,8 +45,8 @@ public class QslImportExportJobService {
     private static final Logger log = LoggerFactory.getLogger(QslImportExportJobService.class);
     private static final String FORMAT_CSV = "csv";
     private static final String FORMAT_ZIP = "zip";
-    private static final String STRATEGY_SKIP = "skip";
     private static final String STRATEGY_OVERWRITE = "overwrite";
+    private static final String STRATEGY_SKIP = "skip";
     private static final String DATASET_ALL = "all";
     private static final List<String> DATASET_EXPORT_ORDER = List.of(
         "qso-record",
@@ -419,6 +419,11 @@ public class QslImportExportJobService {
                     spec.setRstRcvd(value(row, "rstRcvd"));
                     spec.setRemarks(value(row, "remarks"));
                     record.setSpec(spec);
+
+                    var status = record.getStatus() == null ? new QsoRecord.QsoRecordStatus() : record.getStatus();
+                    status.setAutoCreated(parseBoolean(value(row, "autoCreated")));
+                    status.setSource(value(row, "source"));
+                    record.setStatus(status);
                 }
             );
             case "card-record" -> importRows(
@@ -436,6 +441,8 @@ public class QslImportExportJobService {
                     spec.setCardDate(value(row, "cardDate"));
                     spec.setCardTime(value(row, "cardTime"));
                     spec.setBusinessRemarks(value(row, "businessRemarks"));
+                    spec.setCreatedRemarks(value(row, "createdRemarks"));
+                    spec.setSentRemarks(value(row, "sentRemarks"));
                     spec.setReceivedRemarks(value(row, "receivedRemarks"));
                     spec.setPublicReceiptRemarks(value(row, "publicReceiptRemarks"));
                     spec.setCardRemarks(value(row, "cardRemarks"));
@@ -459,12 +466,17 @@ public class QslImportExportJobService {
                     spec.setMailTargetEmail(value(row, "mailTargetEmail"));
                     spec.setReceivedRecordCodes(value(row, "receivedRecordCodes"));
                     record.setSpec(spec);
+
+                    var status = record.getStatus() == null ? new CardRecord.CardRecordStatus() : record.getStatus();
+                    status.setFlowStatus(value(row, "flowStatus"));
+                    record.setStatus(status);
                 }
             );
             case "exchange-request-review" -> importRows(
                 dataset, rows, strategy, "exchange-request", ExchangeRequest.class, ExchangeRequest::new, dryRun,
                 (record, row) -> {
                     var spec = record.getSpec() == null ? new ExchangeRequest.ExchangeRequestSpec() : record.getSpec();
+                    spec.setSceneType(defaultIfBlank(value(row, "sceneType"), "QSO"));
                     spec.setCallSign(value(row, "callSign"));
                     spec.setCardVersion(value(row, "cardVersion"));
                     spec.setUseBureau(parseBoolean(value(row, "useBureau")));
@@ -521,6 +533,12 @@ public class QslImportExportJobService {
                     spec.setEmail(value(row, "email"));
                     spec.setAddressRemarks(value(row, "addressRemarks"));
                     record.setSpec(spec);
+
+                    var status = record.getStatus() == null
+                        ? new AddressBookEntry.AddressBookStatus()
+                        : record.getStatus();
+                    status.setSyncStatus(value(row, "syncStatus"));
+                    record.setStatus(status);
                 }
             );
             case "bureau-management" -> importRows(
@@ -533,6 +551,10 @@ public class QslImportExportJobService {
                     spec.setAddress(value(row, "address"));
                     spec.setAddressRemarks(value(row, "addressRemarks"));
                     record.setSpec(spec);
+
+                    var status = record.getStatus() == null ? new BureauEntry.BureauStatus() : record.getStatus();
+                    status.setSyncStatus(value(row, "syncStatus"));
+                    record.setStatus(status);
                 }
             );
             case "equipment-catalog" -> importRows(
@@ -546,6 +568,12 @@ public class QslImportExportJobService {
                     spec.setValue(value(row, "value"));
                     spec.setRemarks(value(row, "remarks"));
                     record.setSpec(spec);
+
+                    var status = record.getStatus() == null
+                        ? new EquipmentCatalogEntry.EquipmentCatalogStatus()
+                        : record.getStatus();
+                    status.setEnabled(parseBoolean(value(row, "enabled")));
+                    record.setStatus(status);
                 }
             );
             case "system-setting" -> importRows(
@@ -798,6 +826,7 @@ public class QslImportExportJobService {
             case "qso-record" -> client.listAll(QsoRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
                     var spec = record.getSpec();
+                    var status = record.getStatus();
                     return csvRow(
                         record.getMetadata().getName(),
                         spec == null ? "" : nullToEmpty(spec.getCallSign()),
@@ -818,7 +847,9 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getQth()),
                         spec == null ? "" : nullToEmpty(spec.getRstSent()),
                         spec == null ? "" : nullToEmpty(spec.getRstRcvd()),
-                        spec == null ? "" : nullToEmpty(spec.getRemarks())
+                        spec == null ? "" : nullToEmpty(spec.getRemarks()),
+                        status == null ? "false" : boolToText(status.getAutoCreated()),
+                        status == null ? "" : nullToEmpty(status.getSource())
                     );
                 })
                 .collectList()
@@ -842,11 +873,14 @@ public class QslImportExportJobService {
                     "qth",
                     "rstSent",
                     "rstRcvd",
-                    "remarks"
+                    "remarks",
+                    "autoCreated",
+                    "source"
                 ), rows));
             case "card-record" -> client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
                     var spec = record.getSpec();
+                    var status = record.getStatus();
                     return csvRow(
                         record.getMetadata().getName(),
                         spec == null ? "" : nullToEmpty(spec.getCallSign()),
@@ -859,6 +893,8 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getCardDate()),
                         spec == null ? "" : nullToEmpty(spec.getCardTime()),
                         spec == null ? "" : nullToEmpty(spec.getBusinessRemarks()),
+                        spec == null ? "" : nullToEmpty(spec.getCreatedRemarks()),
+                        spec == null ? "" : nullToEmpty(spec.getSentRemarks()),
                         spec == null ? "" : nullToEmpty(spec.getReceivedRemarks()),
                         spec == null ? "" : nullToEmpty(spec.getPublicReceiptRemarks()),
                         spec == null ? "" : nullToEmpty(spec.getCardRemarks()),
@@ -880,7 +916,8 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getReceivedMailSentAt()),
                         spec == null ? "" : nullToEmpty(spec.getReceivedMailLastError()),
                         spec == null ? "" : nullToEmpty(spec.getMailTargetEmail()),
-                        spec == null ? "" : nullToEmpty(spec.getReceivedRecordCodes())
+                        spec == null ? "" : nullToEmpty(spec.getReceivedRecordCodes()),
+                        status == null ? "" : nullToEmpty(status.getFlowStatus())
                     );
                 })
                 .collectList()
@@ -896,6 +933,8 @@ public class QslImportExportJobService {
                     "cardDate",
                     "cardTime",
                     "businessRemarks",
+                    "createdRemarks",
+                    "sentRemarks",
                     "receivedRemarks",
                     "publicReceiptRemarks",
                     "cardRemarks",
@@ -917,7 +956,8 @@ public class QslImportExportJobService {
                     "receivedMailSentAt",
                     "receivedMailLastError",
                     "mailTargetEmail",
-                    "receivedRecordCodes"
+                    "receivedRecordCodes",
+                    "flowStatus"
                 ), rows));
             case "exchange-request-review" -> client.listAll(ExchangeRequest.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
@@ -925,6 +965,7 @@ public class QslImportExportJobService {
                     var status = record.getStatus();
                     return csvRow(
                         record.getMetadata().getName(),
+                        spec == null ? "" : nullToEmpty(spec.getSceneType()),
                         spec == null ? "" : nullToEmpty(spec.getCallSign()),
                         spec == null ? "" : nullToEmpty(spec.getCardVersion()),
                         spec == null ? "false" : boolToText(spec.getUseBureau()),
@@ -948,6 +989,7 @@ public class QslImportExportJobService {
                 .collectList()
                 .map(rows -> renderCsv(dataset, List.of(
                     "id",
+                    "sceneType",
                     "callSign",
                     "cardVersion",
                     "useBureau",
@@ -994,6 +1036,7 @@ public class QslImportExportJobService {
             case "address-management" -> client.listAll(AddressBookEntry.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
                     var spec = record.getSpec();
+                    var status = record.getStatus();
                     return csvRow(
                         record.getMetadata().getName(),
                         spec == null ? "" : nullToEmpty(spec.getCallSign()),
@@ -1002,7 +1045,8 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getPostalCode()),
                         spec == null ? "" : nullToEmpty(spec.getAddress()),
                         spec == null ? "" : nullToEmpty(spec.getEmail()),
-                        spec == null ? "" : nullToEmpty(spec.getAddressRemarks())
+                        spec == null ? "" : nullToEmpty(spec.getAddressRemarks()),
+                        status == null ? "" : nullToEmpty(status.getSyncStatus())
                     );
                 })
                 .collectList()
@@ -1014,18 +1058,21 @@ public class QslImportExportJobService {
                     "postalCode",
                     "address",
                     "email",
-                    "addressRemarks"
+                    "addressRemarks",
+                    "syncStatus"
                 ), rows));
             case "bureau-management" -> client.listAll(BureauEntry.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
                     var spec = record.getSpec();
+                    var status = record.getStatus();
                     return csvRow(
                         record.getMetadata().getName(),
                         spec == null ? "" : nullToEmpty(spec.getBureauName()),
                         spec == null ? "" : nullToEmpty(spec.getTelephone()),
                         spec == null ? "" : nullToEmpty(spec.getPostalCode()),
                         spec == null ? "" : nullToEmpty(spec.getAddress()),
-                        spec == null ? "" : nullToEmpty(spec.getAddressRemarks())
+                        spec == null ? "" : nullToEmpty(spec.getAddressRemarks()),
+                        status == null ? "" : nullToEmpty(status.getSyncStatus())
                     );
                 })
                 .collectList()
@@ -1035,16 +1082,19 @@ public class QslImportExportJobService {
                     "telephone",
                     "postalCode",
                     "address",
-                    "addressRemarks"
+                    "addressRemarks",
+                    "syncStatus"
                 ), rows));
             case "equipment-catalog" -> client.listAll(EquipmentCatalogEntry.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
                     var spec = record.getSpec();
+                    var status = record.getStatus();
                     return csvRow(
                         record.getMetadata().getName(),
                         spec == null ? "" : nullToEmpty(spec.getType()),
                         spec == null ? "" : nullToEmpty(spec.getValue()),
-                        spec == null ? "" : nullToEmpty(spec.getRemarks())
+                        spec == null ? "" : nullToEmpty(spec.getRemarks()),
+                        status == null ? "false" : boolToText(status.getEnabled())
                     );
                 })
                 .collectList()
@@ -1052,7 +1102,8 @@ public class QslImportExportJobService {
                     "id",
                     "type",
                     "value",
-                    "remarks"
+                    "remarks",
+                    "enabled"
                 ), rows));
             case "system-setting" -> client.listAll(SystemSetting.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
@@ -1300,7 +1351,7 @@ public class QslImportExportJobService {
 
     private String normalizeImportStrategy(String strategy) {
         if (isBlank(strategy)) {
-            return STRATEGY_SKIP;
+            return STRATEGY_OVERWRITE;
         }
         return strategy.trim().toLowerCase(Locale.ROOT);
     }

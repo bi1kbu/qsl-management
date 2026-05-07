@@ -51,7 +51,7 @@ interface ZipImportItem {
 }
 
 const importForm = reactive({
-  strategy: 'skip' as 'skip' | 'overwrite',
+  strategy: 'overwrite' as 'skip' | 'overwrite',
 })
 
 const importFile = ref<File | null>(null)
@@ -612,8 +612,8 @@ onBeforeUnmount(() => {
               <span class="qsl-field__label">重复处理策略</span>
               <div class="qsl-input-shell">
                 <select v-model="importForm.strategy">
-                  <option value="skip">跳过重复</option>
                   <option value="overwrite">覆盖重复</option>
+                  <option value="skip">跳过重复</option>
                 </select>
               </div>
             </label>
