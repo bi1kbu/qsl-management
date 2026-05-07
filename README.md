@@ -7,13 +7,20 @@
 ## 主要能力
 
 - 通联业务：维护 QSO/SWL 记录，创建卡片，制卡签发，发信确认，送达确认。
+- <img width="3429" height="1665" alt="image" src="https://github.com/user-attachments/assets/77d2854b-9ff4-49e7-a930-55f034a96613" />
 - 线上换卡业务：公开提交换卡申请，后台审核，自动创建卡片，制卡、发卡、送达流转。
+- <img width="1116" height="1350" alt="image" src="https://github.com/user-attachments/assets/b24a1d1e-c687-479d-8067-4e0928c7b2fd" />
 - 线下换卡业务：创建活动，批量创建活动卡片，线下制卡，公开确认，送达确认。
+- <img width="3426" height="966" alt="image" src="https://github.com/user-attachments/assets/400245aa-ff99-4c24-aa5a-a3da2178457d" />
 - 收卡业务：通联收卡、线上换卡收卡、线下换卡收卡，支持收卡编号、收卡日期、编号迁移和已收卡片清单。
 - 配置管理：系统参数、通知策略、通信地址、本台设备、本台卡片、卡片局、地址和设备库。
+- <img width="3431" height="1839" alt="image" src="https://github.com/user-attachments/assets/e9a49343-e0ed-4c8f-8ef3-b3ac0073142b" />
 - 公开页面：公开查询、线上换卡申请、线下换卡确认、公开签收。
+- <img width="1128" height="1116" alt="image" src="https://github.com/user-attachments/assets/b3311a10-37d8-44de-93ef-39a1c1fb7baa" />
 - 邮件通知：按业务场景配置自动或手动通知，支持测试邮件。
+- <img width="1938" height="990" alt="image" src="https://github.com/user-attachments/assets/735c13d0-212d-4052-ac9a-f7470f9bb3ab" />
 - 数据能力：审计日志、统计报表、备份导入导出。
+- <img width="1389" height="891" alt="image" src="https://github.com/user-attachments/assets/d2550617-f7a9-4173-a725-9b9b5c353a9d" />
 - 本地打印工具：通过 `tools/CardPrint` 对接插件接口，支持卡片、信封、打包确认和二维码路径映射。
 
 ## 插件安装
@@ -53,7 +60,7 @@ https://github.com/bi1kbu/qsl-management/releases
 
 ## 公开页面
 
-插件提供以下公开页面与接口能力：
+插件提供以下公开页面与接口能力（建议通过带参数重定向或反向代理缩短链接使用）：
 
 | 能力 | 默认路径 |
 | --- | --- |
