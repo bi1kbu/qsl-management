@@ -17,6 +17,7 @@ import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vu
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import { buildQsoResourceName } from '../../utils/resource-name'
+import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 interface QsoRecordSpec {
   sceneType: 'QSO' | 'SWL'
@@ -84,6 +85,7 @@ interface StationProfileSpec {
 
 type OpponentCatalogType = 'RIG' | 'ANT' | 'PWR'
 type SceneType = 'QSO' | 'SWL'
+type QsoHistorySortKey = 'resourceName' | 'sceneType' | 'callSign' | 'date' | 'time' | 'timezone' | 'freq' | 'mode'
 
 const props = withDefaults(
   defineProps<{
@@ -150,6 +152,8 @@ const batchEditField = ref('')
 const batchEditValue = ref('')
 const stationProfileMyName = ref('')
 const deletingResourceName = ref('')
+const historySortKey = ref<QsoHistorySortKey>('resourceName')
+const historySortDirection = ref<QslSortDirection>('asc')
 
 const availableSceneTypes = computed<SceneType[]>(() => {
   const deduplicated = Array.from(new Set(props.sceneTypes.map((item) => normalizeSceneType(item))))
@@ -159,14 +163,14 @@ const availableSceneTypes = computed<SceneType[]>(() => {
 const isSwlMode = computed(() => form.sceneType === 'SWL')
 
 const historyColumns = [
-  { key: 'resourceName', label: '通联记录编号' },
-  { key: 'sceneType', label: '类型' },
-  { key: 'callSign', label: '对方呼号' },
-  { key: 'date', label: '日期' },
-  { key: 'time', label: '时间' },
-  { key: 'timezone', label: '时区' },
-  { key: 'freq', label: '频率' },
-  { key: 'mode', label: '模式' },
+  { key: 'resourceName', label: '通联记录编号', sortable: true },
+  { key: 'sceneType', label: '类型', sortable: true },
+  { key: 'callSign', label: '对方呼号', sortable: true },
+  { key: 'date', label: '日期', sortable: true },
+  { key: 'time', label: '时间', sortable: true },
+  { key: 'timezone', label: '时区', sortable: true },
+  { key: 'freq', label: '频率', sortable: true },
+  { key: 'mode', label: '模式', sortable: true },
 ]
 
 const resourcePlural = 'qso-records'
@@ -260,6 +264,30 @@ const filteredHistory = computed(() => {
   return filteredByScene.filter((item) => item.callSign.toUpperCase().includes(callSign))
 })
 
+const compareHistoryRows = (left: QsoRecordItem, right: QsoRecordItem, key: QsoHistorySortKey): number => {
+  if (key === 'callSign') {
+    return compareCallSign(left.callSign, right.callSign)
+  }
+  return compareText(left[key], right[key])
+}
+
+const sortedFilteredHistory = computed(() => {
+  return [...filteredHistory.value].sort((left, right) => {
+    return applySortDirection(compareHistoryRows(left, right, historySortKey.value), historySortDirection.value)
+  })
+})
+
+const toggleHistorySort = (key: string) => {
+  const nextKey = key as QsoHistorySortKey
+  if (historySortKey.value === nextKey) {
+    historySortDirection.value = historySortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    historySortKey.value = nextKey
+    historySortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
+
 const allFilteredSelected = computed(() => {
   if (!filteredHistory.value.length) {
     return false
@@ -276,7 +304,7 @@ const totalPages = computed(() => {
 })
 const pagedFilteredHistory = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return filteredHistory.value.slice(start, start + pageSize.value)
+  return sortedFilteredHistory.value.slice(start, start + pageSize.value)
 })
 
 const syncUtcNow = () => {
@@ -1221,8 +1249,11 @@ onMounted(() => {
         :batch-edit-enabled="false"
         :show-batch-toggle="false"
         :show-toolbar="false"
+        :sort-key="historySortKey"
+        :sort-direction="historySortDirection"
         empty-text="暂无历史记录。"
         @update:selected-keys="(value) => (selectedHistoryNames = value)"
+        @sort="toggleHistorySort"
       >
         <template #cell-freq="{ row }">
           {{ toHistoryItem(row).freq || '未填频率' }}

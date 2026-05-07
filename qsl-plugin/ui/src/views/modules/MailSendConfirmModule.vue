@@ -8,6 +8,8 @@ import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 interface CardRecordSpec {
   callSign: string
@@ -66,6 +68,14 @@ interface OfflineActivitySpec {
 }
 
 type SceneType = 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+type SendSortKey =
+  | 'resourceName'
+  | 'callSign'
+  | 'cardType'
+  | 'cardPrintAt'
+  | 'envelopePrintAt'
+  | 'offlineActivityName'
+  | 'cardRemarks'
 
 const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
 
@@ -147,6 +157,8 @@ const batchEditField = ref('')
 const batchEditValue = ref('')
 const activityFilter = ref('')
 const offlineActivities = ref<OfflineActivitySpec[]>([])
+const sortKey = ref<SendSortKey>('resourceName')
+const sortDirection = ref<QslSortDirection>('asc')
 
 const editForm = reactive({
   callSign: '',
@@ -180,6 +192,36 @@ const filteredRows = computed(() => {
     )
   })
 })
+
+const compareSendRows = (left: SendConfirmItem, right: SendConfirmItem, key: SendSortKey): number => {
+  switch (key) {
+    case 'callSign':
+      return compareCallSign(left.callSign, right.callSign)
+    case 'offlineActivityName':
+      return compareText(left.spec.offlineActivityName || '', right.spec.offlineActivityName || '')
+    case 'cardRemarks':
+      return compareText(left.spec.cardRemarks || left.spec.businessRemarks, right.spec.cardRemarks || right.spec.businessRemarks)
+    default:
+      return compareText(left[key], right[key])
+  }
+}
+
+const sortedRows = computed(() => {
+  return [...filteredRows.value].sort((left, right) => {
+    return applySortDirection(compareSendRows(left, right, sortKey.value), sortDirection.value)
+  })
+})
+
+const toggleSort = (key: string) => {
+  const nextKey = key as SendSortKey
+  if (sortKey.value === nextKey) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = nextKey
+    sortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
 
 const activityFilterOptions = computed(() => {
   const activitySet = new Set<string>()
@@ -239,7 +281,7 @@ const totalPages = computed(() => {
 })
 const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return filteredRows.value.slice(start, start + pageSize.value)
+  return sortedRows.value.slice(start, start + pageSize.value)
 })
 
 const isFormalCardRecordName = (resourceName: string): boolean => {
@@ -920,13 +962,13 @@ onMounted(() => {
           <thead>
             <tr>
               <th>选择</th>
-              <th>卡片ID</th>
-              <th>对方呼号</th>
-              <th>卡片类型</th>
-              <th>卡片打印日期</th>
-              <th>打包</th>
-              <th>关联活动</th>
-              <th>卡片备注</th>
+              <th><QslSortableHeader column-key="resourceName" label="卡片ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="callSign" label="对方呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardType" label="卡片类型" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardPrintAt" label="卡片打印日期" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="envelopePrintAt" label="打包" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardRemarks" label="卡片备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th>操作</th>
             </tr>
           </thead>

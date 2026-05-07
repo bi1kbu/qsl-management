@@ -12,6 +12,11 @@ import {
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import { buildAddressResourceName } from '../../utils/resource-name'
+import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import { applySortDirection, compareCallSign, compareNumber, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+
+type AddressSortKey = 'id' | 'callSign' | 'name' | 'telephone' | 'postalCode' | 'address' | 'email' | 'remarks'
+type PendingBindingSortKey = 'callSign' | 'unboundCount' | 'cardIdsText' | 'matchedAddressId'
 
 interface AddressBookSpec {
   callSign: string
@@ -107,6 +112,10 @@ const pendingBureauSelectedMap = reactive<Record<string, string>>({})
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
+const addressSortKey = ref<AddressSortKey>('id')
+const addressSortDirection = ref<QslSortDirection>('asc')
+const pendingSortKey = ref<PendingBindingSortKey>('callSign')
+const pendingSortDirection = ref<QslSortDirection>('asc')
 
 const resourcePlural = 'address-book-entries'
 const resourceKind = 'AddressBookEntry'
@@ -211,6 +220,47 @@ const filteredPendingBindings = computed(() => {
   })
 })
 
+const sortedRows = computed(() => {
+  return [...filteredRows.value].sort((left, right) => {
+    const result = addressSortKey.value === 'callSign'
+      ? compareCallSign(left.callSign, right.callSign)
+      : compareText(left[addressSortKey.value], right[addressSortKey.value])
+    return applySortDirection(result, addressSortDirection.value)
+  })
+})
+
+const sortedPendingBindings = computed(() => {
+  return [...filteredPendingBindings.value].sort((left, right) => {
+    const result = pendingSortKey.value === 'callSign'
+      ? compareCallSign(left.callSign, right.callSign)
+      : pendingSortKey.value === 'unboundCount'
+        ? compareNumber(left.unboundCount, right.unboundCount)
+        : compareText(left[pendingSortKey.value], right[pendingSortKey.value])
+    return applySortDirection(result, pendingSortDirection.value)
+  })
+})
+
+const toggleAddressSort = (key: string) => {
+  const nextKey = key as AddressSortKey
+  if (addressSortKey.value === nextKey) {
+    addressSortDirection.value = addressSortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    addressSortKey.value = nextKey
+    addressSortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
+
+const togglePendingSort = (key: string) => {
+  const nextKey = key as PendingBindingSortKey
+  if (pendingSortKey.value === nextKey) {
+    pendingSortDirection.value = pendingSortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    pendingSortKey.value = nextKey
+    pendingSortDirection.value = 'asc'
+  }
+}
+
 const totalPages = computed(() => {
   if (!filteredRows.value.length) {
     return 1
@@ -220,7 +270,7 @@ const totalPages = computed(() => {
 
 const pagedFilteredRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return filteredRows.value.slice(start, start + pageSize.value)
+  return sortedRows.value.slice(start, start + pageSize.value)
 })
 
 watch(filteredRows, () => {
@@ -896,14 +946,14 @@ onMounted(() => {
           <table class="qsl-table">
             <thead>
               <tr>
-                <th>地址编号</th>
-                <th>呼号</th>
-                <th>姓名</th>
-                <th>电话</th>
-                <th>邮编</th>
-                <th>地址</th>
-                <th>邮箱</th>
-                <th>地址备注</th>
+                <th><QslSortableHeader column-key="id" label="地址编号" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
+                <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
+                <th><QslSortableHeader column-key="name" label="姓名" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
+                <th><QslSortableHeader column-key="telephone" label="电话" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
+                <th><QslSortableHeader column-key="postalCode" label="邮编" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
+                <th><QslSortableHeader column-key="address" label="地址" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
+                <th><QslSortableHeader column-key="email" label="邮箱" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
+                <th><QslSortableHeader column-key="remarks" label="地址备注" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -954,15 +1004,15 @@ onMounted(() => {
           <thead>
             <tr>
               <th>序号</th>
-              <th>呼号</th>
-              <th>待绑定卡片数</th>
-              <th>涉及卡片</th>
-              <th>建议地址编号</th>
+              <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
+              <th><QslSortableHeader column-key="unboundCount" label="待绑定卡片数" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
+              <th><QslSortableHeader column-key="cardIdsText" label="涉及卡片" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
+              <th><QslSortableHeader column-key="matchedAddressId" label="建议地址编号" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(item, index) in filteredPendingBindings" :key="item.callSign">
+            <tr v-for="(item, index) in sortedPendingBindings" :key="item.callSign">
               <td>{{ index + 1 }}</td>
               <td>{{ item.callSign }}</td>
               <td>{{ item.unboundCount }}</td>

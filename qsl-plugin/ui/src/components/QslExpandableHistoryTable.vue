@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import QslSortableHeader from './QslSortableHeader.vue'
+import type { QslSortDirection } from '../utils/qsl-table-sort'
 
 interface HistoryTableColumn {
   key: string
   label: string
+  sortable?: boolean
 }
 
 const props = withDefaults(
@@ -17,18 +20,23 @@ const props = withDefaults(
     emptyText?: string
     showBatchToggle?: boolean
     showToolbar?: boolean
+    sortKey?: string
+    sortDirection?: QslSortDirection
   }>(),
   {
     rowKeyField: 'id',
     emptyText: '暂无数据。',
     showBatchToggle: true,
     showToolbar: true,
+    sortKey: '',
+    sortDirection: 'asc',
   },
 )
 
 const emit = defineEmits<{
   (event: 'update:selectedKeys', value: string[]): void
   (event: 'update:batchEditEnabled', value: boolean): void
+  (event: 'sort', value: string): void
 }>()
 
 const expandedRowKey = ref('')
@@ -150,7 +158,17 @@ const formatCellValue = (value: unknown): string => {
       <thead>
         <tr>
           <th class="qsl-select-col"></th>
-          <th v-for="column in columns" :key="column.key">{{ column.label }}</th>
+          <th v-for="column in columns" :key="column.key">
+            <QslSortableHeader
+              v-if="column.sortable"
+              :column-key="column.key"
+              :label="column.label"
+              :sort-key="sortKey"
+              :sort-direction="sortDirection"
+              @sort="emit('sort', $event)"
+            />
+            <template v-else>{{ column.label }}</template>
+          </th>
           <th>操作</th>
         </tr>
       </thead>

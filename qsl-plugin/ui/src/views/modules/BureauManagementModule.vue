@@ -11,7 +11,11 @@ import {
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslSortableHeader from '../../components/QslSortableHeader.vue'
 import { buildBureauResourceName } from '../../utils/resource-name'
+import { applySortDirection, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+
+type BureauSortKey = 'bureauName' | 'telephone' | 'postalCode' | 'address' | 'remarks'
 
 interface BureauSpec {
   bureauName: string
@@ -47,6 +51,8 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const editingId = ref('')
+const sortKey = ref<BureauSortKey>('bureauName')
+const sortDirection = ref<QslSortDirection>('asc')
 
 const resourcePlural = 'bureau-entries'
 const resourceKind = 'BureauEntry'
@@ -231,10 +237,27 @@ const totalPages = computed(() => {
   return Math.ceil(rows.value.length / pageSize.value)
 })
 
+const sortedRows = computed(() => {
+  return [...rows.value].sort((left, right) => {
+    return applySortDirection(compareText(left[sortKey.value], right[sortKey.value]), sortDirection.value)
+  })
+})
+
 const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return rows.value.slice(start, start + pageSize.value)
+  return sortedRows.value.slice(start, start + pageSize.value)
 })
+
+const toggleSort = (key: string) => {
+  const nextKey = key as BureauSortKey
+  if (sortKey.value === nextKey) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = nextKey
+    sortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
 
 watch(rows, () => {
   if (currentPage.value > totalPages.value) {
@@ -307,11 +330,11 @@ onMounted(loadRows)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th>名称</th>
-              <th>电话</th>
-              <th>邮编</th>
-              <th>地址</th>
-              <th>备注</th>
+              <th><QslSortableHeader column-key="bureauName" label="名称" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="telephone" label="电话" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="postalCode" label="邮编" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="address" label="地址" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="remarks" label="备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th>操作</th>
             </tr>
           </thead>

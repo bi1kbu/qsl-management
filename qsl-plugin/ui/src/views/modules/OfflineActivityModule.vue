@@ -10,6 +10,10 @@ import {
   updateExtension,
   type QslExtension,
 } from '../../api/qsl-extension-api'
+import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import { applySortDirection, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+
+type ActivitySortKey = 'resourceName' | 'activityName' | 'activityLocation' | 'activityDate' | 'activityTime' | 'cardRemarks'
 
 interface OfflineActivitySpec {
   activityName: string
@@ -39,6 +43,8 @@ const deletingName = ref('')
 const feedback = ref('')
 const keyword = ref('')
 const editingName = ref('')
+const sortKey = ref<ActivitySortKey>('resourceName')
+const sortDirection = ref<QslSortDirection>('asc')
 
 const form = reactive<OfflineActivitySpec>({
   activityName: '',
@@ -70,6 +76,29 @@ const filteredRows = computed(() => {
     return searchText.includes(normalized)
   })
 })
+
+const compareActivityRows = (left: OfflineActivityItem, right: OfflineActivityItem, key: ActivitySortKey): number => {
+  if (key === 'resourceName') {
+    return compareText(left.resourceName, right.resourceName)
+  }
+  return compareText(left.spec[key], right.spec[key])
+}
+
+const sortedRows = computed(() => {
+  return [...filteredRows.value].sort((left, right) => {
+    return applySortDirection(compareActivityRows(left, right, sortKey.value), sortDirection.value)
+  })
+})
+
+const toggleSort = (key: string) => {
+  const nextKey = key as ActivitySortKey
+  if (sortKey.value === nextKey) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = nextKey
+    sortDirection.value = 'asc'
+  }
+}
 
 const normalizeSpec = (spec?: Partial<OfflineActivitySpec>): OfflineActivitySpec => ({
   activityName: spec?.activityName ?? '',
@@ -331,17 +360,17 @@ onMounted(() => {
         <table class="qsl-table">
           <thead>
             <tr>
-              <th>活动ID</th>
-              <th>活动名称</th>
-              <th>活动地点</th>
-              <th>活动日期</th>
-              <th>活动时间</th>
-              <th>卡片备注</th>
+              <th><QslSortableHeader column-key="resourceName" label="活动ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="activityName" label="活动名称" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="activityLocation" label="活动地点" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="activityDate" label="活动日期" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="activityTime" label="活动时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardRemarks" label="卡片备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in filteredRows" :key="row.resourceName">
+            <tr v-for="row in sortedRows" :key="row.resourceName">
               <td>{{ row.resourceName }}</td>
               <td>{{ row.spec.activityName || '-' }}</td>
               <td>{{ row.spec.activityLocation || '-' }}</td>
@@ -361,7 +390,7 @@ onMounted(() => {
                 </div>
               </td>
             </tr>
-            <tr v-if="!filteredRows.length">
+            <tr v-if="!sortedRows.length">
               <td colspan="7" class="qsl-table-empty">暂无活动记录。</td>
             </tr>
           </tbody>

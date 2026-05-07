@@ -14,6 +14,8 @@ import { deleteExtension, listExtensions, qslApiVersion, updateExtension, type Q
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import { compareBoolean, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 interface CardRecordSpec {
   callSign: string
@@ -85,7 +87,6 @@ type ReceiveSortKey =
   | 'offlineActivityName'
   | 'receivedRecordCodes'
   | 'receivedRemarks'
-type ReceiveSortDirection = 'asc' | 'desc'
 
 const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
 
@@ -199,7 +200,7 @@ const receivedCodeMigrationForm = reactive({
 const selectedOfflineActivity = ref('')
 const offlineActivities = ref<OfflineActivityOption[]>([])
 const receiveSortKey = ref<ReceiveSortKey>('resourceName')
-const receiveSortDirection = ref<ReceiveSortDirection>('asc')
+const receiveSortDirection = ref<QslSortDirection>('asc')
 
 const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
@@ -418,42 +419,6 @@ const isFormalCardRecordName = (resourceName: string): boolean => {
   return /^C\d+$/i.test(resourceName.trim())
 }
 
-const compareText = (left: string, right: string): number => {
-  return left.localeCompare(right, 'zh-CN', {
-    numeric: true,
-    sensitivity: 'base',
-  })
-}
-
-const callsignCharRank = (char: string): number => {
-  const code = char.charCodeAt(0)
-  if (code >= 65 && code <= 90) {
-    return code - 65
-  }
-  if (code >= 48 && code <= 57) {
-    return 26 + code - 48
-  }
-  return 1000 + code
-}
-
-const compareCallSign = (left: string, right: string): number => {
-  const normalizedLeft = left.trim().toUpperCase()
-  const normalizedRight = right.trim().toUpperCase()
-  const length = Math.min(normalizedLeft.length, normalizedRight.length)
-  for (let index = 0; index < length; index += 1) {
-    const leftRank = callsignCharRank(normalizedLeft[index])
-    const rightRank = callsignCharRank(normalizedRight[index])
-    if (leftRank !== rightRank) {
-      return leftRank - rightRank
-    }
-  }
-  return normalizedLeft.length - normalizedRight.length
-}
-
-const compareBoolean = (left: boolean, right: boolean): number => {
-  return Number(left) - Number(right)
-}
-
 const compareReceiveRows = (left: ReceiveResult, right: ReceiveResult, key: ReceiveSortKey): number => {
   switch (key) {
     case 'resourceName':
@@ -491,13 +456,6 @@ const toggleReceiveSort = (key: ReceiveSortKey) => {
     receiveSortDirection.value = 'asc'
   }
   currentPage.value = 1
-}
-
-const receiveSortIndicator = (key: ReceiveSortKey): string => {
-  if (receiveSortKey.value !== key) {
-    return ''
-  }
-  return receiveSortDirection.value === 'asc' ? '↑' : '↓'
 }
 
 watch(results, () => {
@@ -1597,29 +1555,19 @@ onMounted(() => {
           <thead>
             <tr>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('resourceName')">
-                  卡片ID <span>{{ receiveSortIndicator('resourceName') }}</span>
-                </button>
+                <QslSortableHeader column-key="resourceName" label="卡片ID" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('callSign')">
-                  对方呼号 <span>{{ receiveSortIndicator('callSign') }}</span>
-                </button>
+                <QslSortableHeader column-key="callSign" label="对方呼号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('cardType')">
-                  卡片类型 <span>{{ receiveSortIndicator('cardType') }}</span>
-                </button>
+                <QslSortableHeader column-key="cardType" label="卡片类型" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('receivedRecordCodes')">
-                  收卡编号 <span>{{ receiveSortIndicator('receivedRecordCodes') }}</span>
-                </button>
+                <QslSortableHeader column-key="receivedRecordCodes" label="收卡编号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('receivedRemarks')">
-                  收卡确认备注 <span>{{ receiveSortIndicator('receivedRemarks') }}</span>
-                </button>
+                <QslSortableHeader column-key="receivedRemarks" label="收卡确认备注" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>操作</th>
             </tr>
@@ -1690,44 +1638,28 @@ onMounted(() => {
             <tr>
               <th>选择</th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('resourceName')">
-                  卡片ID <span>{{ receiveSortIndicator('resourceName') }}</span>
-                </button>
+                <QslSortableHeader column-key="resourceName" label="卡片ID" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('callSign')">
-                  对方呼号 <span>{{ receiveSortIndicator('callSign') }}</span>
-                </button>
+                <QslSortableHeader column-key="callSign" label="对方呼号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('cardType')">
-                  卡片类型 <span>{{ receiveSortIndicator('cardType') }}</span>
-                </button>
+                <QslSortableHeader column-key="cardType" label="卡片类型" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('cardReceived')">
-                  收卡状态 <span>{{ receiveSortIndicator('cardReceived') }}</span>
-                </button>
+                <QslSortableHeader column-key="cardReceived" label="收卡状态" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('cardSent')">
-                  发卡状态 <span>{{ receiveSortIndicator('cardSent') }}</span>
-                </button>
+                <QslSortableHeader column-key="cardSent" label="发卡状态" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th v-if="showOfflineActivity">
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('offlineActivityName')">
-                  关联活动 <span>{{ receiveSortIndicator('offlineActivityName') }}</span>
-                </button>
+                <QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('receivedRecordCodes')">
-                  收卡编号 <span>{{ receiveSortIndicator('receivedRecordCodes') }}</span>
-                </button>
+                <QslSortableHeader column-key="receivedRecordCodes" label="收卡编号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('receivedRemarks')">
-                  收卡确认备注 <span>{{ receiveSortIndicator('receivedRemarks') }}</span>
-                </button>
+                <QslSortableHeader column-key="receivedRemarks" label="收卡确认备注" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>操作</th>
             </tr>
@@ -1875,24 +1807,6 @@ onMounted(() => {
 
 .qsl-row-clickable {
   cursor: pointer;
-}
-
-.qsl-sort-header {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.qsl-sort-header span {
-  min-width: 1em;
-  color: #2563eb;
 }
 
 .qsl-pre-line {

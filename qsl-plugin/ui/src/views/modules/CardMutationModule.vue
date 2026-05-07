@@ -15,9 +15,19 @@ import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vu
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 type CardType = 'QSO' | 'SWL' | 'EYEBALL'
 type MailStatus = '' | 'PENDING' | 'SENT' | 'FAILED'
+type MutationSortKey =
+  | 'resourceName'
+  | 'callSign'
+  | 'cardType'
+  | 'offlineActivityName'
+  | 'cardVersion'
+  | 'cardDate'
+  | 'cardTime'
+  | 'addressEntryName'
 
 interface CardRecordSpec {
   callSign: string
@@ -132,6 +142,8 @@ const addressLookupKeyword = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
+const sortKey = ref<MutationSortKey>('resourceName')
+const sortDirection = ref<QslSortDirection>('asc')
 
 const editForm = reactive({
   callSign: '',
@@ -180,14 +192,14 @@ const batchMailStatusOptions: OptionItem[] = [
 ]
 
 const historyColumns = [
-  { key: 'resourceName', label: '卡片ID' },
-  { key: 'callSign', label: '对方呼号' },
-  { key: 'cardType', label: '卡片类型' },
-  { key: 'offlineActivityName', label: '关联活动' },
-  { key: 'cardVersion', label: '卡片版本' },
-  { key: 'cardDate', label: '日期' },
-  { key: 'cardTime', label: '时间' },
-  { key: 'addressEntryName', label: '绑定地址编号' },
+  { key: 'resourceName', label: '卡片ID', sortable: true },
+  { key: 'callSign', label: '对方呼号', sortable: true },
+  { key: 'cardType', label: '卡片类型', sortable: true },
+  { key: 'offlineActivityName', label: '关联活动', sortable: true },
+  { key: 'cardVersion', label: '卡片版本', sortable: true },
+  { key: 'cardDate', label: '日期', sortable: true },
+  { key: 'cardTime', label: '时间', sortable: true },
+  { key: 'addressEntryName', label: '绑定地址编号', sortable: true },
 ]
 
 const isBatchTab = computed(() => activeTab.value === 'batch')
@@ -214,6 +226,33 @@ const filteredRows = computed(() => {
     )
   })
 })
+
+const compareMutationRows = (left: CardMutationItem, right: CardMutationItem, key: MutationSortKey): number => {
+  if (key === 'callSign') {
+    return compareCallSign(left.callSign, right.callSign)
+  }
+  if (key === 'offlineActivityName') {
+    return compareText(left.spec.offlineActivityName || '', right.spec.offlineActivityName || '')
+  }
+  return compareText(left[key], right[key])
+}
+
+const sortedRows = computed(() => {
+  return [...filteredRows.value].sort((left, right) => {
+    return applySortDirection(compareMutationRows(left, right, sortKey.value), sortDirection.value)
+  })
+})
+
+const toggleSort = (key: string) => {
+  const nextKey = key as MutationSortKey
+  if (sortKey.value === nextKey) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = nextKey
+    sortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
 
 const activityFilterOptions = computed(() => {
   const activitySet = new Set<string>()
@@ -242,7 +281,7 @@ const totalPages = computed(() => {
 
 const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return filteredRows.value.slice(start, start + pageSize.value)
+  return sortedRows.value.slice(start, start + pageSize.value)
 })
 
 const filteredAddressOptions = computed(() => {
@@ -1446,8 +1485,11 @@ onMounted(() => {
         :batch-edit-enabled="false"
         :show-batch-toggle="false"
         :show-toolbar="false"
+        :sort-key="sortKey"
+        :sort-direction="sortDirection"
         empty-text="暂无卡片记录。"
         @update:selected-keys="(value) => (selectedHistoryNames = value)"
+        @sort="toggleSort"
       >
         <template #cell-callSign="{ row }">
           <span class="qsl-row-clickable" @click="selectHistoryRowForQuery(toHistoryItem(row))">

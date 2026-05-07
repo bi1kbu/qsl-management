@@ -19,6 +19,7 @@ import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vu
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 interface CardRecordSpec {
   callSign: string
@@ -126,6 +127,7 @@ interface OfflineActivityItem {
 
 type CardType = 'QSO' | 'SWL' | 'EYEBALL'
 type SceneType = 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+type CardHistorySortKey = 'resourceName' | 'callSign' | 'cardType' | 'cardDate' | 'cardTime' | 'cardVersion'
 
 const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
 
@@ -250,15 +252,17 @@ const autoNotifyOnCardCreated = ref({
 })
 const batchEditField = ref('')
 const batchEditValue = ref('')
+const historySortKey = ref<CardHistorySortKey>('resourceName')
+const historySortDirection = ref<QslSortDirection>('asc')
 let realtimeTimer: ReturnType<typeof setInterval> | null = null
 
 const historyColumns = [
-  { key: 'resourceName', label: '卡片记录编号' },
-  { key: 'callSign', label: '对方呼号' },
-  { key: 'cardType', label: '卡片类型' },
-  { key: 'cardDate', label: '卡片日期' },
-  { key: 'cardTime', label: '卡片时间' },
-  { key: 'cardVersion', label: '卡片版本' },
+  { key: 'resourceName', label: '卡片记录编号', sortable: true },
+  { key: 'callSign', label: '对方呼号', sortable: true },
+  { key: 'cardType', label: '卡片类型', sortable: true },
+  { key: 'cardDate', label: '卡片日期', sortable: true },
+  { key: 'cardTime', label: '卡片时间', sortable: true },
+  { key: 'cardVersion', label: '卡片版本', sortable: true },
 ]
 
 const resourcePlural = 'card-records'
@@ -440,6 +444,30 @@ const filteredRecords = computed(() => {
   })
 })
 
+const compareHistoryRows = (left: CardRecordItem, right: CardRecordItem, key: CardHistorySortKey): number => {
+  if (key === 'callSign') {
+    return compareCallSign(left.callSign, right.callSign)
+  }
+  return compareText(left[key], right[key])
+}
+
+const sortedFilteredRecords = computed(() => {
+  return [...filteredRecords.value].sort((left, right) => {
+    return applySortDirection(compareHistoryRows(left, right, historySortKey.value), historySortDirection.value)
+  })
+})
+
+const toggleHistorySort = (key: string) => {
+  const nextKey = key as CardHistorySortKey
+  if (historySortKey.value === nextKey) {
+    historySortDirection.value = historySortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    historySortKey.value = nextKey
+    historySortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
+
 const activityFilterOptions = computed(() => {
   const activitySet = new Set<string>()
   records.value.forEach((item) => {
@@ -470,7 +498,7 @@ const totalPages = computed(() => {
 })
 const pagedFilteredRecords = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return filteredRecords.value.slice(start, start + pageSize.value)
+  return sortedFilteredRecords.value.slice(start, start + pageSize.value)
 })
 
 watch(
@@ -2003,8 +2031,11 @@ onBeforeUnmount(() => {
         :batch-edit-enabled="false"
         :show-batch-toggle="false"
         :show-toolbar="false"
+        :sort-key="historySortKey"
+        :sort-direction="historySortDirection"
         empty-text="暂无卡片记录。"
         @update:selected-keys="(value) => (selectedHistoryNames = value)"
+        @sort="toggleHistorySort"
       >
         <template #cell-resourceName="{ row }">
           {{ isNoCardPlaceholder(toHistoryItem(row)) ? '' : toHistoryItem(row).resourceName }}

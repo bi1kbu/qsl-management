@@ -10,6 +10,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import { applySortDirection, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 type CatalogType = 'RIG' | 'ANT' | 'PWR' | 'MODE'
 
@@ -32,6 +33,7 @@ const feedback = ref('')
 const loading = ref(false)
 const submitting = ref(false)
 const allItems = ref<CatalogItem[]>([])
+const sortDirection = ref<QslSortDirection>('asc')
 
 const resourcePlural = 'equipment-catalog-entries'
 const resourceKind = 'EquipmentCatalogEntry'
@@ -44,8 +46,14 @@ const typeTabs: { key: CatalogType; label: string }[] = [
 ]
 
 const currentList = computed(() => {
-  return allItems.value.filter((item) => item.type === activeType.value)
+  return allItems.value
+    .filter((item) => item.type === activeType.value)
+    .sort((left, right) => applySortDirection(compareText(left.value, right.value), sortDirection.value))
 })
+
+const toggleSortDirection = () => {
+  sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+}
 
 const toItem = (extension: QslExtension<EquipmentCatalogSpec>): CatalogItem => {
   return {
@@ -154,6 +162,9 @@ onMounted(loadCatalog)
           <input v-model.trim="inputValue" type="text" placeholder="输入新条目" @keyup.enter="addItem" />
         </div>
         <VButton type="secondary" :disabled="loading || submitting" @click="addItem">新增条目</VButton>
+        <VButton :disabled="loading || submitting" @click="toggleSortDirection">
+          {{ sortDirection === 'asc' ? '名称升序' : '名称降序' }}
+        </VButton>
         <VButton :disabled="loading || submitting" @click="loadCatalog">刷新</VButton>
       </div>
 

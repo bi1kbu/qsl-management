@@ -5,8 +5,11 @@ import { deleteExtension, listExtensions, qslApiVersion, updateExtension, type Q
 import { approveExchangeRequest, notifyExchangeRequest, rejectExchangeRequest } from '../../api/qsl-console-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 type MailStatus = '' | 'SENT' | 'SKIPPED' | 'FAILED'
+type ExchangeSortKey = 'id' | 'callSign' | 'status' | 'reviewedAt'
 
 interface ExchangeRequestSpec {
   sceneType: 'ONLINE_EYEBALL' | 'QSO' | 'SWL' | 'EYEBALL'
@@ -71,6 +74,8 @@ const savingReviewReasonId = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
+const sortKey = ref<ExchangeSortKey>('id')
+const sortDirection = ref<QslSortDirection>('asc')
 
 const resourcePlural = 'exchange-requests'
 const resourceKind = 'ExchangeRequest'
@@ -412,10 +417,30 @@ const totalPages = computed(() => {
   return Math.ceil(rows.value.length / pageSize.value)
 })
 
+const sortedRows = computed(() => {
+  return [...rows.value].sort((left, right) => {
+    const result = sortKey.value === 'callSign'
+      ? compareCallSign(left.callSign, right.callSign)
+      : compareText(left[sortKey.value], right[sortKey.value])
+    return applySortDirection(result, sortDirection.value)
+  })
+})
+
 const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return rows.value.slice(start, start + pageSize.value)
+  return sortedRows.value.slice(start, start + pageSize.value)
 })
+
+const toggleSort = (key: string) => {
+  const nextKey = key as ExchangeSortKey
+  if (sortKey.value === nextKey) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = nextKey
+    sortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
 
 watch(rows, () => {
   if (currentPage.value > totalPages.value) {
@@ -440,10 +465,10 @@ onMounted(loadRows)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th>申请ID</th>
-              <th>呼号</th>
-              <th>状态</th>
-              <th>审核时间</th>
+              <th><QslSortableHeader column-key="id" label="申请ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="status" label="状态" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="reviewedAt" label="审核时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th>操作</th>
             </tr>
           </thead>

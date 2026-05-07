@@ -6,6 +6,8 @@ import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 import { summarizeCardRemark, type CardRemarkFields } from '../../utils/card-remark'
+import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import { applySortDirection, compareBoolean, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 interface CardRecordSpec {
   callSign: string
@@ -68,15 +70,24 @@ const filters = reactive({
 const quickReceiptOptions = ['全部', '待签收', '已签收', '已收'] as const
 type QuickReceiptOption = (typeof quickReceiptOptions)[number]
 
-const sortOptions = [
-  { label: '日期时间（新到旧）', value: 'datetime-desc' },
-  { label: '日期时间（旧到新）', value: 'datetime-asc' },
-  { label: '呼号（A-Z）', value: 'call-sign-asc' },
-] as const
-type SortOption = (typeof sortOptions)[number]['value']
+type CardQuerySortKey =
+  | 'id'
+  | 'callSign'
+  | 'cardType'
+  | 'offlineActivityName'
+  | 'cardVersion'
+  | 'datetime'
+  | 'cardIssued'
+  | 'envelopePrinted'
+  | 'cardSent'
+  | 'receiptConfirmed'
+  | 'cardReceived'
+  | 'receivedRecordCodes'
+  | 'remarksText'
 
 const quickReceipt = ref<QuickReceiptOption>('全部')
-const sortBy = ref<SortOption>('datetime-desc')
+const sortKey = ref<CardQuerySortKey>('datetime')
+const sortDirection = ref<QslSortDirection>('desc')
 const showAdvancedFilters = ref(false)
 const keywordInput = ref('')
 const currentPage = ref(1)
@@ -201,15 +212,39 @@ const activityFilterOptions = computed(() => {
 })
 
 const sortedRows = computed(() => {
-  const items = [...filteredRows.value]
-  if (sortBy.value === 'datetime-asc') {
-    return items.sort((a, b) => `${a.cardDate} ${a.cardTime}`.localeCompare(`${b.cardDate} ${b.cardTime}`))
-  }
-  if (sortBy.value === 'call-sign-asc') {
-    return items.sort((a, b) => a.callSign.localeCompare(b.callSign))
-  }
-  return items.sort((a, b) => `${b.cardDate} ${b.cardTime}`.localeCompare(`${a.cardDate} ${a.cardTime}`))
+  return [...filteredRows.value].sort((left, right) => {
+    let result = 0
+    switch (sortKey.value) {
+      case 'callSign':
+        result = compareCallSign(left.callSign, right.callSign)
+        break
+      case 'datetime':
+        result = compareText(`${left.cardDate} ${left.cardTime}`, `${right.cardDate} ${right.cardTime}`)
+        break
+      case 'cardIssued':
+      case 'envelopePrinted':
+      case 'cardSent':
+      case 'receiptConfirmed':
+      case 'cardReceived':
+        result = compareBoolean(left[sortKey.value], right[sortKey.value])
+        break
+      default:
+        result = compareText(left[sortKey.value], right[sortKey.value])
+    }
+    return applySortDirection(result, sortDirection.value)
+  })
 })
+
+const toggleSort = (key: string) => {
+  const nextKey = key as CardQuerySortKey
+  if (sortKey.value === nextKey) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = nextKey
+    sortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
 
 const totalPages = computed(() => {
   if (!sortedRows.value.length) {
@@ -269,7 +304,7 @@ const applyKeywordSearch = () => {
   currentPage.value = 1
 }
 
-watch([quickReceipt, sortBy], () => {
+watch(quickReceipt, () => {
   currentPage.value = 1
 })
 
@@ -338,7 +373,8 @@ const resetFilters = () => {
   filters.dateTo = ''
   filters.onlyWithRemarks = false
   quickReceipt.value = '全部'
-  sortBy.value = 'datetime-desc'
+  sortKey.value = 'datetime'
+  sortDirection.value = 'desc'
   expandedId.value = ''
   showAdvancedFilters.value = false
   currentPage.value = 1
@@ -369,15 +405,6 @@ onMounted(loadRows)
               <select v-model="quickReceipt">
                 <option v-for="option in quickReceiptOptions" :key="option" :value="option">
                   {{ option }}
-                </option>
-              </select>
-            </label>
-
-            <label class="qsl-filter-inline">
-              <span>排序：</span>
-              <select v-model="sortBy">
-                <option v-for="option in sortOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
                 </option>
               </select>
             </label>
@@ -487,19 +514,19 @@ onMounted(loadRows)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th>卡片ID</th>
-              <th>呼号</th>
-              <th>类型</th>
-              <th>活动</th>
-              <th>版本</th>
-              <th>日期时间</th>
-              <th>制卡</th>
-              <th>打包</th>
-              <th>已发</th>
-              <th>签收</th>
-              <th>已收</th>
-              <th>收卡编号</th>
-              <th>备注</th>
+              <th><QslSortableHeader column-key="id" label="卡片ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardType" label="类型" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="offlineActivityName" label="活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardVersion" label="版本" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="datetime" label="日期时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardIssued" label="制卡" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="envelopePrinted" label="打包" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardSent" label="已发" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="receiptConfirmed" label="签收" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardReceived" label="已收" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="receivedRecordCodes" label="收卡编号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="remarksText" label="备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
             </tr>
           </thead>
           <tbody>

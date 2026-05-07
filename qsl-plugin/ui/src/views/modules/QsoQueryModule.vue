@@ -4,6 +4,8 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
+import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 interface QsoRecordSpec {
   date: string
@@ -62,15 +64,11 @@ const filters = reactive({
 const quickModes = ['全部', 'SSB', 'CW', 'FT8', 'FM'] as const
 type QuickMode = (typeof quickModes)[number]
 
-const sortOptions = [
-  { label: '日期时间（新到旧）', value: 'datetime-desc' },
-  { label: '日期时间（旧到新）', value: 'datetime-asc' },
-  { label: '呼号（A-Z）', value: 'call-sign-asc' },
-] as const
-type SortOption = (typeof sortOptions)[number]['value']
+type QsoQuerySortKey = 'id' | 'callSign' | 'datetime' | 'freq' | 'mode' | 'qth'
 
 const quickMode = ref<QuickMode>('全部')
-const sortBy = ref<SortOption>('datetime-desc')
+const sortKey = ref<QsoQuerySortKey>('datetime')
+const sortDirection = ref<QslSortDirection>('desc')
 const showAdvancedFilters = ref(false)
 const expandedId = ref('')
 const keywordInput = ref('')
@@ -159,15 +157,26 @@ const filteredRows = computed(() => {
 })
 
 const sortedRows = computed(() => {
-  const items = [...filteredRows.value]
-  if (sortBy.value === 'datetime-asc') {
-    return items.sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
-  }
-  if (sortBy.value === 'call-sign-asc') {
-    return items.sort((a, b) => a.callSign.localeCompare(b.callSign))
-  }
-  return items.sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))
+  return [...filteredRows.value].sort((left, right) => {
+    const result = sortKey.value === 'callSign'
+      ? compareCallSign(left.callSign, right.callSign)
+      : sortKey.value === 'datetime'
+        ? compareText(`${left.date} ${left.time}`, `${right.date} ${right.time}`)
+        : compareText(left[sortKey.value], right[sortKey.value])
+    return applySortDirection(result, sortDirection.value)
+  })
 })
+
+const toggleSort = (key: string) => {
+  const nextKey = key as QsoQuerySortKey
+  if (sortKey.value === nextKey) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = nextKey
+    sortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
 
 const totalPages = computed(() => {
   if (!sortedRows.value.length) {
@@ -282,7 +291,8 @@ const resetFilters = () => {
   filters.qth = ''
   filters.onlyWithRemarks = false
   quickMode.value = '全部'
-  sortBy.value = 'datetime-desc'
+  sortKey.value = 'datetime'
+  sortDirection.value = 'desc'
   expandedId.value = ''
   showAdvancedFilters.value = false
   currentPage.value = 1
@@ -312,15 +322,6 @@ onMounted(loadRows)
               <span>模式：</span>
               <select v-model="quickMode">
                 <option v-for="mode in quickModes" :key="mode" :value="mode">{{ mode }}</option>
-              </select>
-            </label>
-
-            <label class="qsl-filter-inline">
-              <span>排序：</span>
-              <select v-model="sortBy">
-                <option v-for="option in sortOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
               </select>
             </label>
 
@@ -399,12 +400,12 @@ onMounted(loadRows)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th>QSO_ID</th>
-              <th>对方呼号</th>
-              <th>日期时间</th>
-              <th>频率</th>
-              <th>模式</th>
-              <th>位置</th>
+              <th><QslSortableHeader column-key="id" label="QSO_ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="callSign" label="对方呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="datetime" label="日期时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="freq" label="频率" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="mode" label="模式" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="qth" label="位置" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
             </tr>
           </thead>
           <tbody>

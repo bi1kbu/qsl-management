@@ -4,6 +4,8 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
+import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import { applySortDirection, compareCallSign, compareNumber, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 interface CardRecordSpec {
   callSign: string
@@ -27,6 +29,16 @@ interface ReceiveRecordRow {
   receivedRemarks: string
 }
 
+type ReceiveRecordSortKey =
+  | 'receiveRecordCode'
+  | 'cardId'
+  | 'callSign'
+  | 'cardType'
+  | 'offlineActivityName'
+  | 'receivedDate'
+  | 'receivedTime'
+  | 'receivedRemarks'
+
 const resourcePlural = 'card-records'
 const rows = ref<ReceiveRecordRow[]>([])
 const loading = ref(false)
@@ -34,6 +46,8 @@ const feedback = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
+const sortKey = ref<ReceiveRecordSortKey>('receiveRecordCode')
+const sortDirection = ref<QslSortDirection>('desc')
 
 const filters = reactive({
   keyword: '',
@@ -162,10 +176,32 @@ const totalPages = computed(() => {
   return Math.ceil(filteredRows.value.length / pageSize.value)
 })
 
+const sortedRows = computed(() => {
+  return [...filteredRows.value].sort((left, right) => {
+    const result = sortKey.value === 'callSign'
+      ? compareCallSign(left.callSign, right.callSign)
+      : sortKey.value === 'receiveRecordCode'
+        ? compareNumber(extractCodeSequence(left.receiveRecordCode), extractCodeSequence(right.receiveRecordCode))
+        : compareText(left[sortKey.value], right[sortKey.value])
+    return applySortDirection(result, sortDirection.value)
+  })
+})
+
 const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return filteredRows.value.slice(start, start + pageSize.value)
+  return sortedRows.value.slice(start, start + pageSize.value)
 })
+
+const toggleSort = (key: string) => {
+  const nextKey = key as ReceiveRecordSortKey
+  if (sortKey.value === nextKey) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = nextKey
+    sortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
 
 const applyKeywordSearch = () => {
   filters.keyword = keywordInput.value.trim()
@@ -265,14 +301,14 @@ onMounted(loadRows)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th>收卡编号</th>
-              <th>卡片ID</th>
-              <th>呼号</th>
-              <th>类型</th>
-              <th>活动</th>
-              <th>收卡日期</th>
-              <th>收卡时间</th>
-              <th>收卡确认备注</th>
+              <th><QslSortableHeader column-key="receiveRecordCode" label="收卡编号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardId" label="卡片ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="cardType" label="类型" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="offlineActivityName" label="活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="receivedDate" label="收卡日期" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="receivedTime" label="收卡时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th><QslSortableHeader column-key="receivedRemarks" label="收卡确认备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
             </tr>
           </thead>
           <tbody>

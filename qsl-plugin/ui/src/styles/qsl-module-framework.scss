@@ -577,6 +577,24 @@
   }
 }
 
+.qsl-sort-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.qsl-sort-header span {
+  min-width: 1em;
+  color: #2563eb;
+}
+
 .qsl-table-clickable-row {
   cursor: pointer;
 }

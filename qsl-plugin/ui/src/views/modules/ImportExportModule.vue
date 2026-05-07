@@ -23,8 +23,11 @@ import {
 } from '../../api/qsl-console-api'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import { applySortDirection, compareNumber, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 type ImportFileKind = 'none' | 'csv' | 'zip' | 'unsupported'
+type OperationSortKey = 'id' | 'time' | 'action' | 'dataset' | 'format' | 'detail' | 'status' | 'errorCount'
 
 interface OperationRecord {
   id: string
@@ -84,6 +87,8 @@ const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const jobPlural = 'import-export-jobs'
 const activeTab = ref<'import' | 'export' | 'jobs'>('import')
+const operationSortKey = ref<OperationSortKey>('time')
+const operationSortDirection = ref<QslSortDirection>('desc')
 
 const totalPages = computed(() => {
   if (!operationRecords.value.length) {
@@ -92,10 +97,30 @@ const totalPages = computed(() => {
   return Math.ceil(operationRecords.value.length / pageSize.value)
 })
 
+const sortedOperationRecords = computed(() => {
+  return [...operationRecords.value].sort((left, right) => {
+    const result = operationSortKey.value === 'errorCount'
+      ? compareNumber(left.errorCount, right.errorCount)
+      : compareText(left[operationSortKey.value], right[operationSortKey.value])
+    return applySortDirection(result, operationSortDirection.value)
+  })
+})
+
 const pagedOperationRecords = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return operationRecords.value.slice(start, start + pageSize.value)
+  return sortedOperationRecords.value.slice(start, start + pageSize.value)
 })
+
+const toggleOperationSort = (key: string) => {
+  const nextKey = key as OperationSortKey
+  if (operationSortKey.value === nextKey) {
+    operationSortDirection.value = operationSortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    operationSortKey.value = nextKey
+    operationSortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
 
 const resolvedCsvDataset = computed<DatasetValue | ''>(() => {
   return csvDetectedDataset.value || csvManualDataset.value
@@ -740,13 +765,13 @@ onBeforeUnmount(() => {
             <table class="qsl-table">
               <thead>
                 <tr>
-                  <th>任务ID</th>
-                  <th>时间</th>
-                  <th>类型</th>
-                  <th>数据集</th>
-                  <th>格式</th>
-                  <th>详情</th>
-                  <th>状态</th>
+                  <th><QslSortableHeader column-key="id" label="任务ID" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
+                  <th><QslSortableHeader column-key="time" label="时间" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
+                  <th><QslSortableHeader column-key="action" label="类型" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
+                  <th><QslSortableHeader column-key="dataset" label="数据集" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
+                  <th><QslSortableHeader column-key="format" label="格式" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
+                  <th><QslSortableHeader column-key="detail" label="详情" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
+                  <th><QslSortableHeader column-key="status" label="状态" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
                   <th>操作</th>
                 </tr>
               </thead>
