@@ -76,6 +76,16 @@ interface ReceiveResult {
 }
 
 type SceneType = 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+type ReceiveSortKey =
+  | 'resourceName'
+  | 'callSign'
+  | 'cardType'
+  | 'cardReceived'
+  | 'cardSent'
+  | 'offlineActivityName'
+  | 'receivedRecordCodes'
+  | 'receivedRemarks'
+type ReceiveSortDirection = 'asc' | 'desc'
 
 const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
 
@@ -188,6 +198,8 @@ const receivedCodeMigrationForm = reactive({
 })
 const selectedOfflineActivity = ref('')
 const offlineActivities = ref<OfflineActivityOption[]>([])
+const receiveSortKey = ref<ReceiveSortKey>('resourceName')
+const receiveSortDirection = ref<ReceiveSortDirection>('asc')
 
 const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
@@ -306,6 +318,11 @@ const filteredBatchResults = computed(() => {
 const activeHistoryResults = computed(() => {
   return activeFunctionTab.value === 'batch' ? filteredBatchResults.value : filteredResults.value
 })
+const sortedActiveHistoryResults = computed(() => {
+  const items = [...activeHistoryResults.value]
+  const direction = receiveSortDirection.value === 'asc' ? 1 : -1
+  return items.sort((left, right) => compareReceiveRows(left, right, receiveSortKey.value) * direction)
+})
 
 const offlineActivityOptions = computed(() => {
   if (!showOfflineActivity.value) {
@@ -383,22 +400,104 @@ const totalPages = computed(() => {
   return Math.ceil(activeHistoryResults.value.length / pageSize.value)
 })
 const totalReceivedPages = computed(() => {
-  if (!filteredReceivedResults.value.length) {
+  if (!sortedReceivedResults.value.length) {
     return 1
   }
-  return Math.ceil(filteredReceivedResults.value.length / pageSize.value)
+  return Math.ceil(sortedReceivedResults.value.length / pageSize.value)
 })
 const pagedFilteredResults = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return activeHistoryResults.value.slice(start, start + pageSize.value)
+  return sortedActiveHistoryResults.value.slice(start, start + pageSize.value)
 })
 const pagedReceivedResults = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return filteredReceivedResults.value.slice(start, start + pageSize.value)
+  return sortedReceivedResults.value.slice(start, start + pageSize.value)
 })
 
 const isFormalCardRecordName = (resourceName: string): boolean => {
   return /^C\d+$/i.test(resourceName.trim())
+}
+
+const compareText = (left: string, right: string): number => {
+  return left.localeCompare(right, 'zh-CN', {
+    numeric: true,
+    sensitivity: 'base',
+  })
+}
+
+const callsignCharRank = (char: string): number => {
+  const code = char.charCodeAt(0)
+  if (code >= 65 && code <= 90) {
+    return code - 65
+  }
+  if (code >= 48 && code <= 57) {
+    return 26 + code - 48
+  }
+  return 1000 + code
+}
+
+const compareCallSign = (left: string, right: string): number => {
+  const normalizedLeft = left.trim().toUpperCase()
+  const normalizedRight = right.trim().toUpperCase()
+  const length = Math.min(normalizedLeft.length, normalizedRight.length)
+  for (let index = 0; index < length; index += 1) {
+    const leftRank = callsignCharRank(normalizedLeft[index])
+    const rightRank = callsignCharRank(normalizedRight[index])
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank
+    }
+  }
+  return normalizedLeft.length - normalizedRight.length
+}
+
+const compareBoolean = (left: boolean, right: boolean): number => {
+  return Number(left) - Number(right)
+}
+
+const compareReceiveRows = (left: ReceiveResult, right: ReceiveResult, key: ReceiveSortKey): number => {
+  switch (key) {
+    case 'resourceName':
+      return compareText(left.resourceName, right.resourceName)
+    case 'callSign':
+      return compareCallSign(left.callSign, right.callSign)
+    case 'cardType':
+      return compareText(left.cardType, right.cardType)
+    case 'cardReceived':
+      return compareBoolean(left.spec.cardReceived, right.spec.cardReceived)
+    case 'cardSent':
+      return compareBoolean(left.spec.cardSent, right.spec.cardSent)
+    case 'offlineActivityName':
+      return compareText(left.spec.offlineActivityName || '', right.spec.offlineActivityName || '')
+    case 'receivedRecordCodes':
+      return compareText(formatReceivedRecordCodes(left.spec.receivedRecordCodes), formatReceivedRecordCodes(right.spec.receivedRecordCodes))
+    case 'receivedRemarks':
+      return compareText(resolveReceiveRemarkText(left), resolveReceiveRemarkText(right))
+    default:
+      return 0
+  }
+}
+
+const sortedReceivedResults = computed(() => {
+  const items = [...filteredReceivedResults.value]
+  const direction = receiveSortDirection.value === 'asc' ? 1 : -1
+  return items.sort((left, right) => compareReceiveRows(left, right, receiveSortKey.value) * direction)
+})
+
+const toggleReceiveSort = (key: ReceiveSortKey) => {
+  if (receiveSortKey.value === key) {
+    receiveSortDirection.value = receiveSortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    receiveSortKey.value = key
+    receiveSortDirection.value = 'asc'
+  }
+  currentPage.value = 1
+}
+
+const receiveSortIndicator = (key: ReceiveSortKey): string => {
+  if (receiveSortKey.value !== key) {
+    return ''
+  }
+  return receiveSortDirection.value === 'asc' ? '↑' : '↓'
 }
 
 watch(results, () => {
@@ -1497,11 +1596,31 @@ onMounted(() => {
         <table class="qsl-table">
           <thead>
             <tr>
-              <th>卡片ID</th>
-              <th>对方呼号</th>
-              <th>卡片类型</th>
-              <th>收卡编号</th>
-              <th>收卡确认备注</th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('resourceName')">
+                  卡片ID <span>{{ receiveSortIndicator('resourceName') }}</span>
+                </button>
+              </th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('callSign')">
+                  对方呼号 <span>{{ receiveSortIndicator('callSign') }}</span>
+                </button>
+              </th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('cardType')">
+                  卡片类型 <span>{{ receiveSortIndicator('cardType') }}</span>
+                </button>
+              </th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('receivedRecordCodes')">
+                  收卡编号 <span>{{ receiveSortIndicator('receivedRecordCodes') }}</span>
+                </button>
+              </th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('receivedRemarks')">
+                  收卡确认备注 <span>{{ receiveSortIndicator('receivedRemarks') }}</span>
+                </button>
+              </th>
               <th>操作</th>
             </tr>
           </thead>
@@ -1532,7 +1651,7 @@ onMounted(() => {
         </table>
       </div>
       <QslPaginationBar
-        :total="filteredReceivedResults.length"
+        :total="sortedReceivedResults.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
@@ -1570,14 +1689,46 @@ onMounted(() => {
           <thead>
             <tr>
               <th>选择</th>
-              <th>卡片ID</th>
-              <th>对方呼号</th>
-              <th>卡片类型</th>
-              <th>收卡状态</th>
-              <th>发卡状态</th>
-              <th v-if="showOfflineActivity">关联活动</th>
-              <th>收卡编号</th>
-              <th>收卡确认备注</th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('resourceName')">
+                  卡片ID <span>{{ receiveSortIndicator('resourceName') }}</span>
+                </button>
+              </th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('callSign')">
+                  对方呼号 <span>{{ receiveSortIndicator('callSign') }}</span>
+                </button>
+              </th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('cardType')">
+                  卡片类型 <span>{{ receiveSortIndicator('cardType') }}</span>
+                </button>
+              </th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('cardReceived')">
+                  收卡状态 <span>{{ receiveSortIndicator('cardReceived') }}</span>
+                </button>
+              </th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('cardSent')">
+                  发卡状态 <span>{{ receiveSortIndicator('cardSent') }}</span>
+                </button>
+              </th>
+              <th v-if="showOfflineActivity">
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('offlineActivityName')">
+                  关联活动 <span>{{ receiveSortIndicator('offlineActivityName') }}</span>
+                </button>
+              </th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('receivedRecordCodes')">
+                  收卡编号 <span>{{ receiveSortIndicator('receivedRecordCodes') }}</span>
+                </button>
+              </th>
+              <th>
+                <button class="qsl-sort-header" type="button" @click="toggleReceiveSort('receivedRemarks')">
+                  收卡确认备注 <span>{{ receiveSortIndicator('receivedRemarks') }}</span>
+                </button>
+              </th>
               <th>操作</th>
             </tr>
           </thead>
@@ -1724,6 +1875,24 @@ onMounted(() => {
 
 .qsl-row-clickable {
   cursor: pointer;
+}
+
+.qsl-sort-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.qsl-sort-header span {
+  min-width: 1em;
+  color: #2563eb;
 }
 
 .qsl-pre-line {
