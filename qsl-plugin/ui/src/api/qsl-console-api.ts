@@ -15,6 +15,7 @@ export interface MailReceiveConfirmPayload {
   receiptRemarks: string
   receivedDate: string
   offlineActivityName?: string
+  targetCardRecordName?: string
 }
 
 export interface MailReceiveConfirmResult {

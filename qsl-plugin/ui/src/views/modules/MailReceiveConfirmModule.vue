@@ -748,6 +748,7 @@ const submitReceive = async () => {
   }
   const offlineActivityName = showOfflineActivity.value ? selectedOfflineActivity.value.trim() : ''
   if (showOfflineActivity.value && !offlineActivityName) {
+    window.alert('请选择收卡归属活动。')
     feedback.value = '请选择收卡归属活动。'
     return
   }
@@ -782,16 +783,19 @@ const submitReceive = async () => {
 }
 
 const confirmReceiveForRow = async (item: ReceiveResult) => {
-  if (item.spec.cardReceived) {
-    return
-  }
   const receivedDate = requireReceivedDate()
   if (!receivedDate) {
     return
   }
-  const offlineActivityName = item.spec.offlineActivityName || (showOfflineActivity.value ? selectedOfflineActivity.value.trim() : '')
+  const offlineActivityName = showOfflineActivity.value ? selectedOfflineActivity.value.trim() : item.spec.offlineActivityName
   if (showOfflineActivity.value && !offlineActivityName) {
+    window.alert('请选择收卡归属活动。')
     feedback.value = '请选择收卡归属活动。'
+    return
+  }
+  const itemOfflineActivityName = item.spec.offlineActivityName.trim()
+  if (showOfflineActivity.value && itemOfflineActivityName && itemOfflineActivityName !== offlineActivityName) {
+    feedback.value = '所选收卡归属活动与当前记录关联活动不一致。'
     return
   }
   pendingReceiveRowName.value = item.resourceName
@@ -803,6 +807,7 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
       receiptRemarks: '',
       receivedDate,
       offlineActivityName,
+      targetCardRecordName: item.resourceName,
     })
     await appendQslAuditLog({
       action: '确认收卡',

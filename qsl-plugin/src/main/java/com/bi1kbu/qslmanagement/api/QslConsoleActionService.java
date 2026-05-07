@@ -110,26 +110,41 @@ public class QslConsoleActionService {
             return Mono.error(error);
         }
         var receivedAt = resolveReceivedAt(receivedDate);
+        var targetCardRecordName = defaultIfBlank(command.targetCardRecordName(), "").trim();
 
         return reserveNextReceivedRecordCode(receivedDate)
-            .flatMap(receivedRecordCode -> client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
-                .filter(cardRecord -> matchPendingReceiveCardRecord(cardRecord, callSign, cardType, sceneType,
-                    offlineActivityName))
-                .sort(Comparator.comparingInt(QslConsoleActionService::cardRecordSequence)
-                    .thenComparing(QslConsoleActionService::cardRecordName))
-                .next()
-                .flatMap(cardRecord -> updateReceivedCardRecord(cardRecord, command.receiptRemarks(), receivedRecordCode, receivedAt)
-                    .map(updatedCard -> new MailReceiveConfirmResult(
-                        updatedCard.getMetadata().getName(),
+            .flatMap(receivedRecordCode -> {
+                if (!targetCardRecordName.isBlank()) {
+                    return confirmTargetCardRecordReceive(
+                        targetCardRecordName,
                         callSign,
                         cardType,
-                        "匹配已有记录并标记已收卡片",
-                        "已将对应记录标记为 Card_Received=True。",
+                        sceneType,
+                        command.receiptRemarks(),
+                        receivedRecordCode,
                         receivedAt,
-                        receivedRecordCode
-                    )))
-                .switchIfEmpty(createAutoReceiveResult(callSign, cardType, sceneType, command.receiptRemarks(), receivedRecordCode,
-                    receivedAt, offlineActivityName)))
+                        offlineActivityName
+                    );
+                }
+                return client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                    .filter(cardRecord -> matchPendingReceiveCardRecord(cardRecord, callSign, cardType, sceneType,
+                        offlineActivityName))
+                    .sort(Comparator.comparingInt(QslConsoleActionService::cardRecordSequence)
+                        .thenComparing(QslConsoleActionService::cardRecordName))
+                    .next()
+                    .flatMap(cardRecord -> updateReceivedCardRecord(cardRecord, command.receiptRemarks(), receivedRecordCode, receivedAt)
+                        .map(updatedCard -> new MailReceiveConfirmResult(
+                            updatedCard.getMetadata().getName(),
+                            callSign,
+                            cardType,
+                            "匹配已有记录并标记已收卡片",
+                            "已将对应记录标记为 Card_Received=True。",
+                            receivedAt,
+                            receivedRecordCode
+                        )))
+                    .switchIfEmpty(createAutoReceiveResult(callSign, cardType, sceneType, command.receiptRemarks(), receivedRecordCode,
+                        receivedAt, offlineActivityName));
+            })
             .flatMap(result -> qslAuditService.appendAuditLog(
                 "确认收信",
                 "card-record",
@@ -144,6 +159,46 @@ public class QslConsoleActionService {
                 operator,
                 clientIp
             ).thenReturn(result));
+    }
+
+    private Mono<MailReceiveConfirmResult> confirmTargetCardRecordReceive(
+        String targetCardRecordName,
+        String callSign,
+        String cardType,
+        String sceneType,
+        String receiptRemarks,
+        String receivedRecordCode,
+        String receivedAt,
+        String offlineActivityName
+    ) {
+        if (!isFormalCardRecordName(targetCardRecordName)) {
+            return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "QSL-422-0001", "目标卡片必须是正式卡片编号"));
+        }
+        return fetchOr404(CardRecord.class, targetCardRecordName)
+            .flatMap(cardRecord -> {
+                if (!matchCardRecord(cardRecord, callSign, cardType, sceneType)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "目标卡片与收卡请求不匹配"));
+                }
+                if ("EYEBALL".equals(sceneType) && "EYEBALL".equals(cardType)) {
+                    var currentActivityName = defaultIfBlank(cardRecord.getSpec().getOfflineActivityName(), "").trim();
+                    if (!offlineActivityName.equals(currentActivityName)) {
+                        return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                            "QSL-422-0001", "目标卡片关联活动与收卡请求不匹配"));
+                    }
+                }
+                return updateReceivedCardRecord(cardRecord, receiptRemarks, receivedRecordCode, receivedAt)
+                    .map(updatedCard -> new MailReceiveConfirmResult(
+                        updatedCard.getMetadata().getName(),
+                        callSign,
+                        cardType,
+                        "确认指定卡片收卡",
+                        "已在指定卡片记录中追加收卡编号。",
+                        receivedAt,
+                        receivedRecordCode
+                    ));
+            });
     }
 
     public Mono<MailReceiveConfirmResult> updateMailReceiveDate(String cardRecordName, String receivedDate,
@@ -1166,8 +1221,13 @@ public class QslConsoleActionService {
         String sceneType,
         String receiptRemarks,
         String receivedDate,
-        String offlineActivityName
+        String offlineActivityName,
+        String targetCardRecordName
     ) {
+        public MailReceiveConfirmCommand(String callSign, String cardType, String sceneType, String receiptRemarks,
+            String receivedDate, String offlineActivityName) {
+            this(callSign, cardType, sceneType, receiptRemarks, receivedDate, offlineActivityName, "");
+        }
     }
 
     public record MailReceiveConfirmResult(

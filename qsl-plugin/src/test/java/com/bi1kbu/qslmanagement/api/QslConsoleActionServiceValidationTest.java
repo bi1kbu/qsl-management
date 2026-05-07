@@ -207,6 +207,46 @@ class QslConsoleActionServiceValidationTest {
     }
 
     @Test
+    void shouldAppendReceivedRecordCodeToTargetCardRecord() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(client, auditService, notificationMailService);
+        var target = createCardRecord("C1001", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", true);
+        target.getSpec().setReceivedRecordCodes("R0001-20260506");
+        var systemSetting = createSystemSetting();
+
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(target));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(target));
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendIfEnabled(any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.confirmMailReceive(
+            new QslConsoleActionService.MailReceiveConfirmCommand(
+                "BI1KBU",
+                "EYEBALL",
+                "ONLINE_EYEBALL",
+                "第二张来卡",
+                "2026-05-07",
+                "",
+                "C1001"
+            ),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("C1001", result.cardRecordName());
+        assertEquals("R0002-20260507", result.receivedRecordCode());
+        assertEquals("R0001-20260506, R0002-20260507", target.getSpec().getReceivedRecordCodes());
+        assertEquals(Boolean.TRUE, target.getSpec().getCardReceived());
+        assertEquals("", target.getSpec().getReceivedMailStatus());
+    }
+
+    @Test
     void shouldMigrateReceivedRecordCodeToTargetCardRecord() {
         var client = mock(ReactiveExtensionClient.class);
         var auditService = mock(QslAuditService.class);
