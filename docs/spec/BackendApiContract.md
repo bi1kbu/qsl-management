@@ -4,7 +4,7 @@
 适用插件：`qsl-management`
 目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.24 官方文档核验
 API 版本：`v1alpha1`
-代码核验范围：`qsl-plugin/src/main/java`、`qsl-plugin/src/main/resources/extensions/qsl-menu-role-templates.yaml`
+代码核验范围：`src/main/java`、`src/main/resources/extensions/qsl-menu-role-templates.yaml`
 
 ## 1. 目标与范围
 
@@ -321,3 +321,4 @@ API 版本：`v1alpha1`
 4. 线下活动使用 `OfflineActivity` 持久化。
 5. 通知邮件接口已落地在 `/notification-mails/send` 与 `/notification-mails/batch-send`。
 6. RBAC 模板已覆盖控制台 CustomEndpoint、扩展资源 CRUD 与公开匿名接口。
+

@@ -107,27 +107,25 @@ python -m cardprint.cli ui online
 构建插件：
 
 ```powershell
-cd qsl-plugin
 .\gradlew.bat build
 ```
 
 构建完成后，JAR 产物位于：
 
 ```text
-qsl-plugin/build/libs
+build/libs
 ```
 
 本地启动 Halo 联调：
 
 ```powershell
-cd qsl-plugin
 .\gradlew.bat haloServer
 ```
 
 前端开发：
 
 ```powershell
-cd qsl-plugin/ui
+cd ui
 pnpm install
 pnpm dev
 ```
@@ -135,15 +133,16 @@ pnpm dev
 ## 项目结构
 
 ```text
-qsl-plugin/     Halo 插件后端、控制台前端、扩展模型、权限模板
+src/            Halo 插件后端、扩展模型、权限模板
+ui/             Halo 控制台前端
 tools/CardPrint 本地卡片打印工具
 docs/spec       项目信息结构化文档
 ```
 
 关键文档：
 
-- `ProductDefinition.md`：产品定义与业务流程
-- `BackendApiContract.md`：后台、公开 API 合同
+- `docs/spec/ProductDefinition.md`：产品定义与业务流程
+- `docs/spec/BackendApiContract.md`：后台、公开 API 合同
 - `docs/spec/项目信息结构化清单.md`：结构化项目索引
 
 ## 版本说明
@@ -151,8 +150,8 @@ docs/spec       项目信息结构化文档
 插件版本以以下两个文件为准：
 
 ```text
-qsl-plugin/src/main/resources/plugin.yaml
-qsl-plugin/gradle.properties
+src/main/resources/plugin.yaml
+gradle.properties
 ```
 
 正式打包前需同步递增两处版本号。

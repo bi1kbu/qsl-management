@@ -1,7 +1,7 @@
 # QSL 卡片管理系统产品定义
 
 更新时间：2026-05-02
-代码核验范围：`qsl-plugin` 后端、控制台前端、RBAC 模板与 `tools/CardPrint` 在线打印桥接
+代码核验范围：`插件工程根目录` 后端、控制台前端、RBAC 模板与 `tools/CardPrint` 在线打印桥接
 Halo 官方资料核验日期：2026-05-02
 
 ## 1. 产品一句话定义
@@ -14,7 +14,7 @@ Halo 官方资料核验日期：2026-05-02
 
 入口路由：`/qsl`，当前代码会重定向到第一个可用模块。
 
-当前一级菜单按 `qsl-plugin/ui/src/index.ts` 与 `qsl-plugin/ui/src/constants/menu-modules.ts` 生效：
+当前一级菜单按 `ui/src/index.ts` 与 `ui/src/constants/menu-modules.ts` 生效：
 
 1. 总览
 2. 配置
@@ -213,7 +213,7 @@ Halo 官方资料核验日期：2026-05-02
 | `import-export` | 导入导出 | 查询、审核、地址、设备读取；编辑依赖相关写权限 |
 | `card-print-tool` | 本地卡片打印工具令牌授权 | 通信地址/本台卡片读取、卡片记录编辑、通联读取、地址/卡片局读取、线下换卡活动读取 |
 
-RBAC 模板实际落点：`qsl-plugin/src/main/resources/extensions/qsl-menu-role-templates.yaml`。
+RBAC 模板实际落点：`src/main/resources/extensions/qsl-menu-role-templates.yaml`。
 
 ## 6. 本地打印工具
 
@@ -238,5 +238,6 @@ python -m cardprint.cli ui online
 ## 7. 当前一致性说明
 
 1. 本文件已按 2026-05-02 代码事实同步。
-2. 若本文件与 `qsl-plugin` 代码不一致，以代码事实为准，并在同次改动中更新本文档。
-3. 若后续新增 API、权限节点、模型字段、菜单或打印桥接契约，必须同步更新本文件、`BackendApiContract.md` 与 `docs/spec/项目信息结构化清单.md`。
+2. 若本文件与 `插件工程根目录` 代码不一致，以代码事实为准，并在同次改动中更新本文档。
+3. 若后续新增 API、权限节点、模型字段、菜单或打印桥接契约，必须同步更新本文件、`docs/spec/BackendApiContract.md` 与 `docs/spec/项目信息结构化清单.md`。
+
