@@ -15,11 +15,16 @@ interface StationCardSpec {
   availableInventory?: number
 }
 
+interface CardRecordSpec {
+  cardVersion?: string
+}
+
 interface StationCardOption {
   value: string
   label: string
   sortOrder: number
   availableInventory: number
+  remainingInventory: number
 }
 
 interface ParsedBh6syxRow extends Bh6syxImportRowPayload {
@@ -45,7 +50,9 @@ const missingHeaders = ref<string[]>([])
 const importResult = ref<Bh6syxImportResult | null>(null)
 
 const selectedRows = computed(() => parsedRows.value.filter((row) => row.included))
-const canImport = computed(() => selectedRows.value.length > 0 && defaultCardVersion.value.trim().length > 0)
+const canImport = computed(
+  () => selectedRows.value.length > 0 && defaultCardVersion.value.trim().length > 0,
+)
 
 const normalizeCell = (value: SheetCell): string => {
   if (value == null) {
@@ -54,20 +61,51 @@ const normalizeCell = (value: SheetCell): string => {
   return String(value).trim()
 }
 
+const splitCardVersions = (value: string): string[] => {
+  return value
+    .replace(/，/g, ',')
+    .replace(/、/g, ',')
+    .replace(/；/g, ',')
+    .replace(/;/g, ',')
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+}
+
 const loadStationCards = async () => {
-  const extensions = await listExtensions<StationCardSpec>('station-cards')
+  const [extensions, cardRecords] = await Promise.all([
+    listExtensions<StationCardSpec>('station-cards'),
+    listExtensions<CardRecordSpec>('card-records'),
+  ])
+  const usedCounter: Record<string, number> = {}
+  for (const cardRecord of cardRecords) {
+    for (const version of splitCardVersions(cardRecord.spec?.cardVersion ?? '')) {
+      const key = version.toUpperCase()
+      usedCounter[key] = (usedCounter[key] ?? 0) + 1
+    }
+  }
   stationCardOptions.value = extensions
     .map((extension: QslExtension<StationCardSpec>) => {
       const cardVersion = extension.spec?.cardVersion?.trim() || extension.metadata.name
+      const availableInventory = Number(extension.spec?.availableInventory ?? 0)
+      const safeInventory =
+        Number.isFinite(availableInventory) && availableInventory > 0
+          ? Math.floor(availableInventory)
+          : 0
+      const usedCount = usedCounter[cardVersion.toUpperCase()] ?? 0
       return {
         value: cardVersion,
         label: cardVersion,
         sortOrder: Number(extension.spec?.sortOrder ?? 0),
-        availableInventory: Number(extension.spec?.availableInventory ?? 0),
+        availableInventory: safeInventory,
+        remainingInventory: Math.max(safeInventory - usedCount, 0),
       }
     })
     .filter((item) => item.value)
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, 'zh-CN'))
+    .sort(
+      (left, right) =>
+        left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, 'zh-CN'),
+    )
   if (!defaultCardVersion.value && stationCardOptions.value.length) {
     defaultCardVersion.value = stationCardOptions.value[0].value
   }
@@ -90,12 +128,44 @@ const buildHeaderIndex = (headerRow: string[]): Record<string, number> => {
   }, {})
 }
 
-const getByHeader = (row: string[], headerIndex: Record<string, number>, header: string): string => {
+const getByHeader = (
+  row: string[],
+  headerIndex: Record<string, number>,
+  header: string,
+): string => {
   const index = headerIndex[header]
   if (index == null) {
     return ''
   }
   return row[index]?.trim() || ''
+}
+
+const compactAddressText = (value: string): string => value.replace(/\s+/g, '')
+
+const normalizeBh6syxAddress = (qth: string, address: string): string => {
+  const rawAddress = address.trim()
+  const rawQth = qth.trim()
+  if (!rawAddress || !rawQth) {
+    return rawAddress
+  }
+  const compactQth = compactAddressText(rawQth)
+  if (!compactQth || !compactAddressText(rawAddress).startsWith(compactQth)) {
+    return rawAddress
+  }
+  let consumed = 0
+  let compactIndex = 0
+  for (const char of rawAddress) {
+    consumed += char.length
+    if (/\s/.test(char)) {
+      continue
+    }
+    compactIndex += char.length
+    if (compactIndex >= compactQth.length) {
+      break
+    }
+  }
+  const suffix = rawAddress.slice(consumed).trim()
+  return suffix || rawAddress
 }
 
 const applyDefaultCardVersion = () => {
@@ -134,6 +204,8 @@ const parseWorkbookRows = (rows: string[][]) => {
       skippedByStatus += 1
       return
     }
+    const qth = getByHeader(row, headerIndex, '对方QTH')
+    const address = getByHeader(row, headerIndex, '对方地址')
     nextRows.push({
       sourceRowNumber: headerRowIndex + offset + 2,
       included: true,
@@ -142,7 +214,7 @@ const parseWorkbookRows = (rows: string[][]) => {
       remarks: getByHeader(row, headerIndex, '对方备注'),
       recipientName: getByHeader(row, headerIndex, '对方收件人'),
       telephone: getByHeader(row, headerIndex, '对方电话'),
-      address: getByHeader(row, headerIndex, '对方地址'),
+      address: normalizeBh6syxAddress(qth, address),
       postalCode: getByHeader(row, headerIndex, '对方邮编'),
       email: getByHeader(row, headerIndex, '邮箱'),
       cardVersion: defaultCardVersion.value,
@@ -241,17 +313,30 @@ onMounted(() => {
         </label>
         <label class="control">
           <span>默认卡片版本</span>
-          <select v-model="defaultCardVersion" :disabled="importing" @change="applyDefaultCardVersion">
+          <select
+            v-model="defaultCardVersion"
+            :disabled="importing"
+            @change="applyDefaultCardVersion"
+          >
             <option value="">请选择卡片版本</option>
             <option v-for="option in stationCardOptions" :key="option.value" :value="option.value">
-              {{ option.label }}（库存 {{ option.availableInventory }}）
+              {{ option.label }}（剩余 {{ option.remainingInventory }}）
             </option>
           </select>
         </label>
-        <VButton type="secondary" :disabled="!parsedRows.length || importing" @click="applyDefaultCardVersion">
+        <VButton
+          type="secondary"
+          :disabled="!parsedRows.length || importing"
+          @click="applyDefaultCardVersion"
+        >
           批量设置卡片
         </VButton>
-        <VButton type="primary" :loading="importing" :disabled="!canImport || parsing" @click="submitImport">
+        <VButton
+          type="primary"
+          :loading="importing"
+          :disabled="!canImport || parsing"
+          @click="submitImport"
+        >
           导入创建卡片
         </VButton>
       </div>
@@ -292,7 +377,11 @@ onMounted(() => {
               <td>
                 <select v-model="row.cardVersion" :disabled="importing">
                   <option value="">使用默认卡片</option>
-                  <option v-for="option in stationCardOptions" :key="option.value" :value="option.value">
+                  <option
+                    v-for="option in stationCardOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
                     {{ option.label }}
                   </option>
                 </select>
@@ -308,7 +397,11 @@ onMounted(() => {
           </tbody>
         </table>
       </div>
-      <VEmpty v-else title="尚未解析到可导入记录" message="请选择 BH6SYX 导出的 xls 或 xlsx 文件。" />
+      <VEmpty
+        v-else
+        title="尚未解析到可导入记录"
+        message="请选择 BH6SYX 导出的 xls 或 xlsx 文件。"
+      />
     </VCard>
 
     <VCard v-if="importResult" class="bh6syx-import-panel">
@@ -329,7 +422,10 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in importResult.results" :key="`${item.rowIndex}-${item.cardRecordName || item.callSign}`">
+            <tr
+              v-for="item in importResult.results"
+              :key="`${item.rowIndex}-${item.cardRecordName || item.callSign}`"
+            >
               <td>{{ item.rowIndex }}</td>
               <td>{{ item.callSign }}</td>
               <td>{{ item.cardRecordName || '-' }}</td>

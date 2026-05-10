@@ -122,7 +122,7 @@ Halo 官方资料核验日期：2026-05-10
 4. 线上换卡提交校验通过并成功写入 `ExchangeRequest` 后，提交接口返回本站通信地址，前台在成功提示中展示寄送信息。
 5. 后台审核通过后自动创建 `ONLINE_EYEBALL` 场景卡片，并把 `ExchangeRequest.spec.cardVersion` 写入新建 `CardRecord.spec.cardVersion`；同时根据申请中的个人地址或卡片局地址复用/创建地址资源，并写入 `CardRecord.spec.addressEntryName`。审核通过只代表申请通过与我方待发卡，不代表我方已收到对方卡片，新建卡片的 `cardReceived=false`。
 6. 换卡申请审核在同意或拒绝后显示“发送邮件通知”和“修改”操作；操作区提供“审核说明”按钮，审核前后均可编辑说明。手动同意时审核说明为空则保持为空，已有说明时以人工填写内容为准；手动拒绝时说明为空则默认“审批拒绝”。当 `SystemSetting.spec.onlineAutoNotifyOnExchangeReviewed=true` 时，审核同意或拒绝后自动发送审核结果邮件。邮件通知面向 `ExchangeRequest.spec.email`，发送结果写入 `ExchangeRequest.status.reviewMailStatus/reviewMailSentAt/reviewMailLastError/reviewMailTargetEmail`；状态为 `SENT` 时，服务端跳过重复发送，后台按钮禁用。无邮箱时按跳过处理；修改操作可调整申请信息与审核状态，并可删除本条换卡申请记录。
-7. 导入BH6SYX卡片广场数据支持上传 `.xls/.xlsx` 文件，自动识别表头行，按“状态”仅保留 `对方已寄出，待我签收` 与 `待双方寄出`，字段缺失时留空。页面可批量设置默认卡片版本，也可逐行选择卡片版本；导入提交到服务端后直接创建 `ONLINE_EYEBALL` 场景 `CardRecord`，并按收件人、电话、地址、邮编和邮箱复用或创建 `AddressBookEntry`。该导入不创建 `ExchangeRequest`；BH6SYX 表格中的“交换ID”与“对方备注”仅用于源表识别或导入清单预览，不写入数据，后续流程统一围绕本站卡片编号处理。
+7. 导入BH6SYX卡片广场数据支持上传 `.xls/.xlsx` 文件，自动识别表头行，按“状态”仅保留 `对方已寄出，待我签收` 与 `待双方寄出`，字段缺失时留空。页面可批量设置默认卡片版本，也可逐行选择卡片版本；默认卡片版本下拉按 `station-cards.availableInventory - card-records` 已用数量显示剩余量，不显示库存量。若源表“对方地址”开头重复包含“对方QTH”，导入预览与提交会去掉重复 QTH 前缀，仅保留通信地址。导入提交到服务端后直接创建 `ONLINE_EYEBALL` 场景 `CardRecord`，并按收件人、电话、地址、邮编和邮箱复用或创建 `AddressBookEntry`。该导入不创建 `ExchangeRequest`；BH6SYX 表格中的“交换ID”与“对方备注”仅用于源表识别或导入清单预览，不写入数据，后续流程统一围绕本站卡片编号处理。
 8. 后续流程复用创建卡片、制卡签发、发信确认、送达确认组件。
 
 ### 3.6 线下换卡业务
@@ -230,10 +230,11 @@ python -m cardprint.cli ui online
 1. 默认地址为 `http://localhost:8090`，但配置中可传入其他 `base_url`。
 2. 读取 `card-records` 生成卡片/信封队列，卡片打印会按 `CardRecord.spec.qsoRecordName` 额外读取 `qso-records` 并注入 `qsoInfo`。
 3. 信封打印会额外读取 `station-profiles`、`address-book-entries`、`bureau-entries` 做本台地址和收件地址补全。
-4. 卡片版本以 `station-cards` 为准；本地打印工具通过公开接口 `GET /apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` 拉取版本列表，并按 `sortOrder` 与版本号排序，不从 `card-records` 反推。
-5. 卡片二维码拼接支持 `qrcode.path_mappings` 短路径映射，在线打印配置页可在站点地址下方配置线下换卡、线上换卡、签收确认三类短路径；默认将公开页面长路径映射为 `/EYEBALL`、`/ONLINE_EYEBALL`、`/rp` 后再追加卡片 ID 与 `cs` 参数。
-6. 在线打印工具登录并拉取卡片版本时使用后台线程执行网络请求，只补齐空白本台通信地址字段，不覆盖已有本台姓名、电话、邮编、地址；受保护接口返回登录页或 HTML 时明确提示认证或权限问题，不静默解析为空数据。
-7. 打印状态通过人工确认回写 `CardRecord.spec.cardIssued/cardIssuedAt` 或 `envelopePrinted`，`cardIssuedAt` 使用 `yyyy-MM-dd HH:mm:ss` 文本格式；回写会同步刷新 `CardRecord.status.flowStatus`，并按后台状态联动规则补齐或清理相关状态字段。
+4. 补打信封页位于打包确认后，读取 `address-book-entries` 与 `bureau-entries` 生成独立队列，复用信封预设，支持按呼号、地址编号或卡片局编号筛选，支持当前行打印、勾选批量打印与全部打印，不回写业务状态。
+5. 卡片版本以 `station-cards` 为准；本地打印工具通过公开接口 `GET /apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` 拉取版本列表，并按 `sortOrder` 与版本号排序，不从 `card-records` 反推。
+6. 卡片二维码拼接支持 `qrcode.path_mappings` 短路径映射，在线打印配置页可在站点地址下方配置线下换卡、线上换卡、签收确认三类短路径；默认将公开页面长路径映射为 `/EYEBALL`、`/ONLINE_EYEBALL`、`/rp` 后再追加卡片 ID 与 `cs` 参数。
+7. 在线打印工具登录并拉取卡片版本时使用后台线程执行网络请求，只补齐空白本台通信地址字段，不覆盖已有本台姓名、电话、邮编、地址；受保护接口返回登录页或 HTML 时明确提示认证或权限问题，不静默解析为空数据。
+8. 打印状态通过人工确认回写 `CardRecord.spec.cardIssued/cardIssuedAt` 或 `envelopePrinted`，`cardIssuedAt` 使用 `yyyy-MM-dd HH:mm:ss` 文本格式；回写会同步刷新 `CardRecord.status.flowStatus`，并按后台状态联动规则补齐或清理相关状态字段。
 
 线下换卡业务不需要打包、制卡邮件流程和收件地址展示；后台线下换卡制卡签发页面只保留确认制卡，线下换卡创建卡片的批量编辑允许修改制卡状态。
 

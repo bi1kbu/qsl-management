@@ -1,0 +1,115 @@
+# CardPrint
+
+## 项目目标
+
+1. 用针式打印机稳定打印。  
+2. 支持纸张方向设置（常见右旋 `90°`）。  
+3. 先做定位标定（方向/偏移/死区），再做正式文字打印。  
+
+## 程序入口与使用场景
+
+### 1. 标定程序（Calibrator）
+
+- 入口命令：
+  - `python -m cardprint.cli ui calibrator`
+- 适用场景：
+  - 首次接入新打印机/新纸张。
+  - 更换驱动、换纸、换方向后需要重新校准。
+  - 调整原点中心、死区、字段模板布局。
+- 主要输出：
+  - 打印预设 `preset.json`（包含纸张、旋转、原点、死区、字段模板、推荐打印机）。
+
+### 2. 打印程序（Printer）
+
+- 入口命令：
+  - `python -m cardprint.cli ui printer`
+- 适用场景：
+  - 已有预设，进行单条/批量正式打印。
+  - 从手工录入、CSV、XLSX 导入数据并打印。
+- 主要输入：
+  - `preset.json` + 打印数据（UI 输入或文件导入）。
+
+### 3. 在线打印程序（Online Printer）
+
+- 入口命令：
+  - `python -m cardprint.cli ui online`
+- 适用场景：
+  - 需要从远程服务器实时拉取卡片/封面数据后直接打印。
+  - 打印与状态回写分离：打印后通过“人工确认页签”手动回写到业务系统（如 QSL 插件）。
+- 页面结构：
+  - 配置页：卡片/信封预设、鉴权与公共设置；远程接口地址与拉取过滤规则内置固定，站点地址、二维码短路径与请求超时可配置；点击“拉取远程数据源”一次性获取全量源数据。
+  - 启动行为：程序启动后会自动读取当前目录 `bridge_config.json` 并回填配置项（密码除外）；若读取失败则自动回退默认配置。
+  - 卡片打印页：字段映射使用程序内置规则（不可编辑），基于已拉取源拼接队列、预览、打印（不自动回写）；卡片数据从 `card-records` 读取，并按 `spec.qsoRecordName` 补读 `qso-records` 注入 `qsoInfo`；线下换卡业务制卡页支持按 `spec.offlineActivityName` 选择关联活动筛选队列，并按关联活动的 `spec.activityLocation` 填充 QTH。
+  - 卡片版本：登录并拉取卡片版本时，版本列表通过公开接口 `/apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` 获取；本台通信地址仍通过受保护接口读取。若受保护接口返回登录页或 HTML，工具会明确提示认证或权限问题，不再静默显示为空。
+  - 卡片二维码：配置页在“站点地址”下方提供二维码短路径输入项，保存到 `bridge_config.json` 的 `qrcode.path_mappings`；默认映射为 `/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL -> /EYEBALL`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL -> /ONLINE_EYEBALL`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public -> /rp`。通联业务与线上换卡业务制卡二维码统一使用签收确认地址；线下换卡业务制卡二维码仍使用线下换卡地址。
+  - 本台通信地址：登录并拉取卡片版本时仅补齐空白字段，已有本台姓名、电话、邮编、地址不会被远端资料覆盖。
+  - 封面打印页：字段映射使用程序内置规则（不可编辑），基于已拉取源拼接队列、预览、打印（不自动回写）。
+  - 制卡确认页：从已拉取源生成“未制卡”清单，勾选条目后手动回写 `cardIssued/cardIssuedAt`，时间格式为 `yyyy-MM-dd HH:mm:ss`。
+  - 打包确认页：从已拉取源生成“未打包”清单，勾选条目后手动回写 `envelopePrinted`。
+  - 补打信封页：位于打包确认后，复用信封预设，直接读取 `address-book-entries` 与 `bureau-entries` 生成独立信封队列；支持按呼号、地址编号或卡片局编号筛选，支持当前行打印、勾选批量打印、全部打印，不回写业务状态。
+  - 推荐作业顺序：`配置登录 -> 卡片打印（制卡） -> 制卡确认 -> 打印封面（打包） -> 打包确认`；需要按主数据补打时进入“补打信封”页。
+  - 队列过滤规则（内置）：卡片打印仅纳入“未制卡（`cardIssued=false`）”记录；封面打印仅纳入“未打包（`envelopePrinted=false`）”记录；补打信封不按卡片状态过滤。
+  - 字段自动换行：字段配置 `print_width_mm` 后会按宽度自动分行；配置 `print_height_mm` 后会按字段高度限制最大行数，计算时以最后一行字形仍落在字段高度内为准，不再把最后一行之后的行距计入截断条件。
+
+### 4. CLI 工具（自动化/排障）
+
+- 入口命令：
+  - `python -m cardprint.cli ...`
+- 适用场景：
+  - 枚举打印机/纸张、打印标定页、校验预设、批处理打印、问题定位。
+
+常用命令：
+
+- `python -m cardprint.cli printer list`
+- `python -m cardprint.cli printer papers --printer "OKi 5330SC"`
+- `python -m cardprint.cli calibrate print-cross --printer "OKi 5330SC" --paper "卡片横向（Nantian）"`
+- `python -m cardprint.cli preset validate --preset presets/preset.json`
+- `python -m cardprint.cli print run --job jobs/job.json`
+
+## 典型使用流程
+
+1. 进入标定程序，选择打印机和纸张，打印标定页。  
+2. 回填实测中心，反复“打印标定效果”直到十字对正。  
+3. 设置死区（预览红色半透明区域）并编辑字段模板。  
+4. 保存预设。  
+5. 进入打印程序，加载预设，导入数据并正式打印。  
+
+## 功能概览
+
+1. CLI 实现全部打印核心能力，基于 `pywin32` 或同类库，禁止先转 PDF/图片。  
+2. UI 大致布局：左侧参数区、右侧预览区；UI 全中文（英文数据源需要内置转换字典）。  
+3. 标定程序（UI）通过调用 CLI 实现：
+   - 打印机枚举、纸张选项枚举。
+   - 旋转方向（左旋/右旋）、旋转角度（90/180/270）设置。
+   - 打印原点标定（根据标定十字到上边距/左边距实测值计算）。
+   - 字段坐标语义：`x_mm/y_mm` 为目标位置；正式打印时会叠加 `origin_offset_mm` 做标定补偿。
+   - 死区标定（四周不可打印边距实测，预览红色透明遮罩并禁止放入内容）。
+   - 字段模板编辑（字段名、坐标、系统字体、字号、斜体、加粗等）。
+   - 保存打印预设文件。
+4. 打印程序（UI）通过调用 CLI + 预设文件实现：
+   - 预设读取后，标定参数只读不可编辑。
+   - 字段值录入（输入框/下拉/复选框）。
+   - 导入 `CSV/XLSX` 批量数据。
+   - 预留网络 JSON 数据源（后续插件化实现）。
+   - 代入、预览、打印。
+5. 标定程序与打印程序必须保证同一预览、同一打印效果。
+
+## 技术方案文档
+
+- [技术实现方案](docs/技术实现方案.md)
+- [实施任务清单](docs/实施任务清单.md)
+- [阶段测试报告](docs/阶段测试报告.md)
+
+## 快速开始
+
+1. 安装依赖（Windows）：
+   - `pip install -e .`
+   - 如需 XLSX：`pip install openpyxl`
+   - 如需真实打印：`pip install pywin32`
+2. 启动（在项目根目录）：
+   - `python -m cardprint.cli printer list`
+   - `python -m cardprint.cli ui calibrator`
+   - `python -m cardprint.cli ui printer`
+   - `python -m cardprint.cli ui online`
+3. 测试：
+   - `python -m pytest -q`

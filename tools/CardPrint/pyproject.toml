@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cardprint"
+version = "0.1.0"
+description = "Dot-matrix card printing toolkit with calibration and preview."
+readme = "readme.md"
+requires-python = ">=3.10"
+dependencies = [
+  "PySide6>=6.7",
+  "qrcode>=8.0",
+]
+
+[project.optional-dependencies]
+excel = ["openpyxl>=3.1"]
+dev = ["pytest>=8.0"]
+win32 = ["pywin32>=306"]
+
+[project.scripts]
+cardprint = "cardprint.cli:run"
+cardprint-calibrator = "cardprint.ui.calibrator_app:main"
+cardprint-printer = "cardprint.ui.printer_app:main"
+cardprint-online = "cardprint.ui.online_print_app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

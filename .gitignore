@@ -67,8 +67,13 @@ application-local.properties
 /workplace/
 /src/main/resources/console/
 
-# tools 目录纳入版本管理，仅排除数据文件
-tools/CardPrint/
+# tools 目录纳入版本管理，仅排除数据文件与本地运行产物
+tools/CardPrint/.pytest_cache/
+tools/CardPrint/.git/
+tools/CardPrint/tmp*/
+tools/CardPrint/**/__pycache__/
+tools/CardPrint/**/*.pyc
+tools/CardPrint/*.json
 tools/**/*.csv
 tools/**/*.tsv
 tools/**/*.xlsx
