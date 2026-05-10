@@ -92,6 +92,39 @@ export interface NotificationMailTestPayload {
   scene: NotificationMailTestScene
 }
 
+export interface Bh6syxImportRowPayload {
+  callSign: string
+  status: string
+  recipientName: string
+  telephone: string
+  address: string
+  postalCode: string
+  email: string
+  cardVersion: string
+}
+
+export interface Bh6syxImportPayload {
+  defaultCardVersion: string
+  rows: Bh6syxImportRowPayload[]
+}
+
+export interface Bh6syxImportRowResult {
+  rowIndex: number
+  callSign: string
+  cardRecordName: string
+  addressEntryName: string
+  result: 'CREATED' | 'SKIPPED' | 'FAILED'
+  message: string
+}
+
+export interface Bh6syxImportResult {
+  totalCount: number
+  successCount: number
+  skippedCount: number
+  failedCount: number
+  results: Bh6syxImportRowResult[]
+}
+
 export interface ImportJobCreatePayload {
   format: string
   strategy: 'skip' | 'overwrite'
@@ -259,6 +292,11 @@ export async function sendTestNotificationMail(
     `${consoleApiBase}/notification-mails/test`,
     payload,
   )
+  return response.data.data
+}
+
+export async function importBh6syxCards(payload: Bh6syxImportPayload): Promise<Bh6syxImportResult> {
+  const response = await axiosInstance.post<ApiResult<Bh6syxImportResult>>(`${consoleApiBase}/bh6syx-imports`, payload)
   return response.data.data
 }
 

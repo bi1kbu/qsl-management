@@ -4,6 +4,7 @@ import type { QslMenuModule } from '../constants/menu-modules'
 import QslModuleFrame from '../components/qsl/QslModuleFrame.vue'
 import AddressManagementModule from './modules/AddressManagementModule.vue'
 import AuditLogModule from './modules/AuditLogModule.vue'
+import Bh6syxImportModule from './modules/Bh6syxImportModule.vue'
 import BureauManagementModule from './modules/BureauManagementModule.vue'
 import CardIssueModule from './modules/CardIssueModule.vue'
 import CardMutationModule from './modules/CardMutationModule.vue'
@@ -183,6 +184,8 @@ const renderer = computed<ModuleRenderer>(() => {
     case 'exchange-request-review':
     case 'online-exchange-request-review':
       return { component: ExchangeRequestReviewModule }
+    case 'online-bh6syx-import':
+      return { component: Bh6syxImportModule }
     case 'offline-activity':
       return { component: OfflineActivityModule }
     case 'qso-query':

@@ -8,10 +8,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.bi1kbu.qslmanagement.extension.model.AddressBookEntry;
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import java.util.concurrent.atomic.AtomicReference;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.ReactiveExtensionClient;
@@ -520,6 +523,99 @@ class QslConsoleActionServiceValidationTest {
 
         assertEquals("已通过", result.reviewStatus());
         assertEquals("", result.reason());
+    }
+
+    @Test
+    void shouldImportBh6syxRowsAsOnlineEyeballCardRecords() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            mock(QslNotificationMailService.class)
+        );
+        var capturedCardRecord = new AtomicReference<CardRecord>();
+        var systemSetting = createSystemSetting();
+        systemSetting.getSpec().setCardRecordSequence(1000);
+
+        when(client.listAll(eq(CardRecord.class), any(), any()))
+            .thenReturn(Flux.empty(), Flux.empty());
+        when(client.listAll(eq(AddressBookEntry.class), any(), any()))
+            .thenReturn(Flux.empty(), Flux.empty());
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.create(any(AddressBookEntry.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.create(any(CardRecord.class))).thenAnswer(invocation -> {
+            capturedCardRecord.set(invocation.getArgument(0));
+            return Mono.just(invocation.getArgument(0));
+        });
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.importBh6syxCards(
+            new QslConsoleActionService.Bh6syxImportCommand(
+                "默认卡片A",
+                List.of(new QslConsoleActionService.Bh6syxImportRow(
+                    "bi4ncg",
+                    "对方已寄出，待我签收",
+                    "丁际博",
+                    "15066483560",
+                    "山东省聊城市临清市",
+                    "252600",
+                    "bi4ncg@example.com",
+                    ""
+                ))
+            ),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals(1, result.successCount());
+        var cardRecord = capturedCardRecord.get();
+        assertEquals("C1001", cardRecord.getMetadata().getName());
+        assertEquals(null, cardRecord.getMetadata().getAnnotations());
+        assertEquals("BI4NCG", cardRecord.getSpec().getCallSign());
+        assertEquals("EYEBALL", cardRecord.getSpec().getCardType());
+        assertEquals("ONLINE_EYEBALL", cardRecord.getSpec().getSceneType());
+        assertEquals("默认卡片A", cardRecord.getSpec().getCardVersion());
+        assertEquals("BI4NCG-1", cardRecord.getSpec().getAddressEntryName());
+        assertEquals("bi4ncg@example.com", cardRecord.getSpec().getMailTargetEmail());
+        assertEquals("BH6SYX卡片广场导入；状态：对方已寄出，待我签收", cardRecord.getSpec().getBusinessRemarks());
+        assertEquals(Boolean.FALSE, cardRecord.getSpec().getCardReceived());
+    }
+
+    @Test
+    void shouldSkipBh6syxRowsWhenStatusNotAllowed() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            mock(QslNotificationMailService.class)
+        );
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.importBh6syxCards(
+            new QslConsoleActionService.Bh6syxImportCommand(
+                "默认卡片A",
+                List.of(new QslConsoleActionService.Bh6syxImportRow(
+                    "BI4NCG",
+                    "已完成",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    ""
+                ))
+            ),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals(0, result.successCount());
+        assertEquals(1, result.skippedCount());
+        verify(client, org.mockito.Mockito.never()).create(any(CardRecord.class));
     }
 
     private static CardRecord createCardRecord(String name, String callSign, String cardType, String sceneType,

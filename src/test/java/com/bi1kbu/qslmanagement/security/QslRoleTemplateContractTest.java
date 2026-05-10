@@ -30,6 +30,7 @@ class QslRoleTemplateContractTest {
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "mail-send-confirms", "create");
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "mail-receive-confirms", "create");
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "exchange-requests", "create");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "bh6syx-imports", "create");
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "notification-mails", "create");
 
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "imports", "create");

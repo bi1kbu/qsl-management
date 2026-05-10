@@ -1,6 +1,6 @@
 # QSL 管理插件后端 API 合同
 
-更新时间：2026-05-05
+更新时间：2026-05-10
 适用插件：`qsl-management`
 目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.24 官方文档核验
 API 版本：`v1alpha1`
@@ -12,7 +12,7 @@ API 版本：`v1alpha1`
 
 ## 2. 官方依据
 
-核验日期：2026-05-05
+核验日期：2026-05-10
 
 1. Halo Extension、自定义模型与自动 CRUD
    https://docs.halo.run/developer-guide/plugin/api-reference/server/extension
@@ -95,6 +95,7 @@ API 版本：`v1alpha1`
 | POST | `/exchange-requests/{name}/approve` | 换卡申请通过并创建线上换卡卡片 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/reject` | 换卡申请拒绝 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/notify` | 发送线上换卡申请审核结果邮件 | `exchange-request-review:edit` |
+| POST | `/bh6syx-imports` | 导入 BH6SYX 卡片广场表格解析结果，直接创建 `ONLINE_EYEBALL` 卡片记录并按需创建/绑定地址簿 | `online-bh6syx-import:edit` |
 | POST | `/notification-mails/send` | 单条发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
 | POST | `/notification-mails/batch-send` | 批量发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
 | POST | `/notification-mails/test` | 向“本台电子邮件”发送测试通知邮件 | `system-settings:edit` |
@@ -178,6 +179,28 @@ API 版本：`v1alpha1`
 ```
 
 `scene` 允许：`created`、`sent`、`received`、`exchange-reviewed`。服务端使用 `StationProfile.spec.myEmail` 作为收件地址，测试数据中对方呼号等字段临时使用本台资料，卡片类型固定为 `EYEBALL`，卡片编号固定为 `C0001`。
+
+BH6SYX 卡片广场导入：
+
+```json
+{
+  "defaultCardVersion": "默认卡片A",
+  "rows": [
+    {
+      "callSign": "BI4NCG",
+      "status": "对方已寄出，待我签收",
+      "recipientName": "丁际博",
+      "telephone": "15066483560",
+      "address": "山东省聊城市临清市",
+      "postalCode": "252600",
+      "email": "",
+      "cardVersion": ""
+    }
+  ]
+}
+```
+
+服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
 
 导入预检/导入任务：
 
@@ -321,4 +344,5 @@ API 版本：`v1alpha1`
 4. 线下活动使用 `OfflineActivity` 持久化。
 5. 通知邮件接口已落地在 `/notification-mails/send` 与 `/notification-mails/batch-send`。
 6. RBAC 模板已覆盖控制台 CustomEndpoint、扩展资源 CRUD 与公开匿名接口。
+7. BH6SYX 卡片广场导入属于线上换卡业务菜单，服务端直接创建线上换卡卡片记录，不创建 `ExchangeRequest`。
 

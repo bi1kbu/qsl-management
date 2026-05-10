@@ -55,6 +55,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/exchange-requests/{name}/approve"), this::approveExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/reject"), this::rejectExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
+            .andRoute(POST("/bh6syx-imports"), this::importBh6syxCards)
             .andRoute(POST("/notification-mails/send"), this::sendNotificationMail)
             .andRoute(POST("/notification-mails/batch-send"), this::batchSendNotificationMail)
             .andRoute(POST("/notification-mails/test"), this::sendTestNotificationMail)
@@ -187,6 +188,35 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                 authenticatedOperator.clientIp(),
                 "换卡申请审核-手动发送"
             ))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> importBh6syxCards(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(Bh6syxImportRequest.class)
+                .defaultIfEmpty(new Bh6syxImportRequest("", List.of()))
+                .flatMap(payload -> actionService.importBh6syxCards(
+                    new QslConsoleActionService.Bh6syxImportCommand(
+                        payload.defaultCardVersion(),
+                        payload.rows() == null
+                            ? List.of()
+                            : payload.rows().stream()
+                                .map(row -> new QslConsoleActionService.Bh6syxImportRow(
+                                    row.callSign(),
+                                    row.status(),
+                                    row.recipientName(),
+                                    row.telephone(),
+                                    row.address(),
+                                    row.postalCode(),
+                                    row.email(),
+                                    row.cardVersion()
+                                ))
+                                .toList()
+                    ),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }
@@ -379,6 +409,24 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     }
 
     private record ExchangeRejectRequest(String reason) {
+    }
+
+    private record Bh6syxImportRequest(
+        String defaultCardVersion,
+        List<Bh6syxImportRowRequest> rows
+    ) {
+    }
+
+    private record Bh6syxImportRowRequest(
+        String callSign,
+        String status,
+        String recipientName,
+        String telephone,
+        String address,
+        String postalCode,
+        String email,
+        String cardVersion
+    ) {
     }
 
     private record ImportJobRequest(

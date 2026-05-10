@@ -25,13 +25,14 @@
     "axios": "^1.13.5",
     "canvas-confetti": "^1.9.3",
     "jszip": "^3.10.1",
-    "vue": "^3.5.28"
+    "vue": "^3.5.28",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@rsbuild/core": "^1.7.3",
-    "@rsbuild/plugin-sass": "^1.5.0",
     "@halo-dev/ui-plugin-bundler-kit": "^2.23.0",
     "@iconify-json/ri": "^1.2.6",
+    "@rsbuild/core": "^1.7.3",
+    "@rsbuild/plugin-sass": "^1.5.0",
     "@tsconfig/node20": "^20.1.6",
     "@types/canvas-confetti": "^1.9.0",
     "@types/jsdom": "^21.1.7",

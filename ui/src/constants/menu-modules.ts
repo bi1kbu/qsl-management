@@ -144,6 +144,21 @@ export const qslMenuModules: QslMenuModule[] = [
     editDependencies: [toViewPermission('exchange-request-review'), toEditPermission('card-record')],
   },
   {
+    key: 'online-bh6syx-import',
+    title: '导入BH6SYX卡片广场数据',
+    group: '线上换卡业务',
+    priority: 15,
+    viewPermission: toViewPermission('online-bh6syx-import'),
+    editPermission: toEditPermission('online-bh6syx-import'),
+    viewDependencies: [stationProfileViewPermission, toViewPermission('card-record'), addressBureauViewPermission],
+    editDependencies: [
+      toViewPermission('online-bh6syx-import'),
+      toEditPermission('card-record'),
+      addressBureauEditPermission,
+      toEditPermission('system-settings'),
+    ],
+  },
+  {
     key: 'online-card-record',
     title: '创建卡片',
     group: '线上换卡业务',
