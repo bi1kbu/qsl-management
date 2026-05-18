@@ -10,6 +10,7 @@ jobs:
     uses: halo-sigs/reusable-workflows/.github/workflows/plugin-cd.yaml@v4
     permissions:
       contents: write
+    secrets: inherit
     with:
       ui-path: "ui"
       pnpm-version: 10
