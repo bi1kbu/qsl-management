@@ -208,13 +208,17 @@ class QslPublicApiServiceValidationTest {
         settingSpec.setRequiresExchangeReview(Boolean.FALSE);
         systemSetting.setSpec(settingSpec);
 
+        var existingExchangeRequest = new ExchangeRequest();
+        existingExchangeRequest.setMetadata(QslApiSupport.createMetadata("EX0007"));
+
         var stationProfile = new StationProfile();
         var profileSpec = new StationProfile.StationProfileSpec();
         profileSpec.setMyCallSign("BI1KBU");
         profileSpec.setMyAddress("北京市测试路1号");
         stationProfile.setSpec(profileSpec);
 
-        when(client.listAll(eq(ExchangeRequest.class), any(), any())).thenReturn(Flux.empty());
+        when(client.listAll(eq(ExchangeRequest.class), any(), any()))
+            .thenReturn(Flux.empty(), Flux.just(existingExchangeRequest));
         when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty());
         when(client.listAll(eq(StationCard.class), any(), any())).thenReturn(Flux.just(stationCard));
         when(client.create(any(ExchangeRequest.class))).thenAnswer(invocation -> {
@@ -261,6 +265,8 @@ class QslPublicApiServiceValidationTest {
         var result = service.submitExchangeRequest(command, "127.0.0.1").block();
 
         assertEquals("已通过", result.reviewStatus());
+        assertEquals("EX0008", result.requestName());
+        assertEquals("EX0008", persistedRequest.get().getMetadata().getName());
         assertEquals("系统自动审批通过", persistedRequest.get().getStatus().getReviewReason());
         verify(consoleActionService).reviewExchangeRequest(
             anyString(),

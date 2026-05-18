@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { VButton, VCard } from '@halo-dev/components'
+import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
@@ -7,15 +7,17 @@ import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
 import { applySortDirection, compareCallSign, compareNumber, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
-interface CardRecordSpec {
+interface ReceiveRecordSpec {
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
-  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+  businessType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'OFFLINE_EYEBALL' | 'UNKNOWN'
   offlineActivityName?: string
+  receivedDate: string
   receivedAt: string
-  receivedRemarks: string
-  cardReceived: boolean
-  receivedRecordCodes: string
+  outboundCardNames: string
+  matchStatus: string
+  matchReason: string
+  remarks: string
 }
 
 interface ReceiveRecordRow {
@@ -23,9 +25,12 @@ interface ReceiveRecordRow {
   cardId: string
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  businessType: ReceiveRecordSpec['businessType']
   offlineActivityName: string
   receivedDate: string
   receivedTime: string
+  matchStatus: string
+  matchReason: string
   receivedRemarks: string
 }
 
@@ -34,12 +39,15 @@ type ReceiveRecordSortKey =
   | 'cardId'
   | 'callSign'
   | 'cardType'
+  | 'businessType'
   | 'offlineActivityName'
   | 'receivedDate'
   | 'receivedTime'
+  | 'matchStatus'
   | 'receivedRemarks'
+type BusinessTab = 'ALL' | ReceiveRecordSpec['businessType']
 
-const resourcePlural = 'card-records'
+const resourcePlural = 'receive-records'
 const rows = ref<ReceiveRecordRow[]>([])
 const loading = ref(false)
 const feedback = ref('')
@@ -48,6 +56,7 @@ const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const sortKey = ref<ReceiveRecordSortKey>('receiveRecordCode')
 const sortDirection = ref<QslSortDirection>('desc')
+const activeBusinessTab = ref<BusinessTab>('ALL')
 
 const filters = reactive({
   keyword: '',
@@ -102,32 +111,31 @@ const extractCodeSequence = (code: string): number => {
   return Number.parseInt(match[1], 10) || 0
 }
 
-const toReceiveRows = (extension: QslExtension<CardRecordSpec>): ReceiveRecordRow[] => {
+const toReceiveRows = (extension: QslExtension<ReceiveRecordSpec>): ReceiveRecordRow[] => {
   const spec = extension.spec
-  if (!spec?.cardReceived) {
-    return []
-  }
-  const codes = parseReceivedCodes(spec.receivedRecordCodes ?? '')
-  if (!codes.length) {
+  if (!spec) {
     return []
   }
   const fallbackTime = parseTimeFromReceivedAt(spec.receivedAt ?? '')
-  return codes.map((code) => ({
-    receiveRecordCode: code,
-    cardId: extension.metadata.name,
+  return [{
+    receiveRecordCode: extension.metadata.name,
+    cardId: spec.outboundCardNames ?? '',
     callSign: spec.callSign ?? '',
     cardType: spec.cardType ?? 'QSO',
+    businessType: spec.businessType ?? 'UNKNOWN',
     offlineActivityName: spec.offlineActivityName ?? '',
-    receivedDate: parseDateFromCode(code),
+    receivedDate: spec.receivedDate || parseDateFromCode(extension.metadata.name),
     receivedTime: fallbackTime,
-    receivedRemarks: spec.receivedRemarks ?? '',
-  }))
+    matchStatus: spec.matchStatus ?? '',
+    matchReason: spec.matchReason ?? '',
+    receivedRemarks: spec.remarks ?? '',
+  }]
 }
 
 const loadRows = async () => {
   loading.value = true
   try {
-    const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
+    const extensions = await listExtensions<ReceiveRecordSpec>(resourcePlural)
     rows.value = extensions
       .flatMap((item) => toReceiveRows(item))
       .sort((a, b) => extractCodeSequence(b.receiveRecordCode) - extractCodeSequence(a.receiveRecordCode))
@@ -143,20 +151,29 @@ const filteredRows = computed(() => {
   const keyword = filters.keyword.trim().toUpperCase()
   const callSign = filters.callSign.trim().toUpperCase()
   return rows.value.filter((item) => {
+    const businessOk =
+      activeBusinessTab.value === 'ALL'
+      || (activeBusinessTab.value === 'QSO' && (item.businessType === 'QSO' || item.businessType === 'SWL'))
+      || item.businessType === activeBusinessTab.value
     const keywordOk =
       !keyword ||
-      [item.receiveRecordCode, item.cardId, item.callSign, item.cardType, item.receivedDate, item.receivedRemarks]
+      [item.receiveRecordCode, item.cardId, item.callSign, item.cardType, item.businessType, item.offlineActivityName, item.matchStatus, item.matchReason, item.receivedDate, item.receivedRemarks]
         .join(' ')
         .toUpperCase()
         .includes(keyword)
     const callSignOk = !callSign || item.callSign.toUpperCase().includes(callSign)
     const typeOk = !filters.cardType || item.cardType === filters.cardType
-    const activityOk = !filters.activityName || item.offlineActivityName === filters.activityName
+    const activityOk = !showActivityFilter.value || !filters.activityName || item.offlineActivityName === filters.activityName
     const fromOk = !filters.dateFrom || (item.receivedDate && item.receivedDate >= filters.dateFrom)
     const toOk = !filters.dateTo || (item.receivedDate && item.receivedDate <= filters.dateTo)
-    return keywordOk && callSignOk && typeOk && activityOk && fromOk && toOk
+    return businessOk && keywordOk && callSignOk && typeOk && activityOk && fromOk && toOk
   })
 })
+
+const showActivityColumn = computed(() => activeBusinessTab.value === 'ALL' || activeBusinessTab.value === 'OFFLINE_EYEBALL')
+const showActivityFilter = computed(() => activeBusinessTab.value === 'ALL' || activeBusinessTab.value === 'OFFLINE_EYEBALL')
+const showMatchColumns = computed(() => activeBusinessTab.value !== 'QSO' && activeBusinessTab.value !== 'SWL')
+const tableColumnCount = computed(() => 7 + (showActivityColumn.value ? 1 : 0) + (showMatchColumns.value ? 2 : 0))
 
 const activityFilterOptions = computed(() => {
   const activitySet = new Set<string>()
@@ -219,6 +236,13 @@ const resetFilters = () => {
   currentPage.value = 1
 }
 
+watch(activeBusinessTab, () => {
+  currentPage.value = 1
+  if (!showActivityFilter.value) {
+    filters.activityName = ''
+  }
+})
+
 watch(filteredRows, () => {
   if (currentPage.value > totalPages.value) {
     currentPage.value = totalPages.value
@@ -238,6 +262,26 @@ onMounted(loadRows)
 <template>
   <div class="qsl-block">
     <VCard>
+      <template #header>
+        <VTabs v-model:activeId="activeBusinessTab">
+          <VTabItem id="ALL" label="全部">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+          <VTabItem id="QSO" label="通联收卡">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+          <VTabItem id="ONLINE_EYEBALL" label="线上换卡收卡">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+          <VTabItem id="OFFLINE_EYEBALL" label="线下换卡收卡">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+          <VTabItem id="UNKNOWN" label="未分类">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+        </VTabs>
+      </template>
+
       <QslQueryToolbar>
         <template #left>
           <div class="qsl-input-shell qsl-filter-toolbar__search">
@@ -263,7 +307,7 @@ onMounted(loadRows)
             <input v-model.trim="filters.callSign" type="text" placeholder="输入呼号" />
           </div>
         </label>
-        <label class="qsl-field">
+        <label v-if="showActivityFilter" class="qsl-field">
           <span class="qsl-field__label">卡片类型</span>
           <div class="qsl-input-shell">
             <select v-model="filters.cardType">
@@ -305,7 +349,9 @@ onMounted(loadRows)
               <th><QslSortableHeader column-key="cardId" label="卡片ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="cardType" label="类型" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="offlineActivityName" label="活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th v-if="showActivityColumn"><QslSortableHeader column-key="offlineActivityName" label="活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th v-if="showMatchColumns"><QslSortableHeader column-key="matchStatus" label="匹配状态" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th v-if="showMatchColumns">匹配说明</th>
               <th><QslSortableHeader column-key="receivedDate" label="收卡日期" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="receivedTime" label="收卡时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="receivedRemarks" label="收卡确认备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
@@ -317,13 +363,15 @@ onMounted(loadRows)
               <td>{{ item.cardId }}</td>
               <td>{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType }}</td>
-              <td>{{ item.offlineActivityName || '-' }}</td>
+              <td v-if="showActivityColumn">{{ item.offlineActivityName || '-' }}</td>
+              <td v-if="showMatchColumns">{{ item.matchStatus || '-' }}</td>
+              <td v-if="showMatchColumns">{{ item.matchReason || '-' }}</td>
               <td>{{ item.receivedDate || '-' }}</td>
               <td>{{ item.receivedTime || '-' }}</td>
               <td>{{ item.receivedRemarks || '-' }}</td>
             </tr>
             <tr v-if="!pagedRows.length">
-              <td colspan="8" class="qsl-table-empty">暂无收卡记录。</td>
+              <td :colspan="tableColumnCount" class="qsl-table-empty">暂无收卡记录。</td>
             </tr>
           </tbody>
         </table>

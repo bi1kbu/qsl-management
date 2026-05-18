@@ -9,7 +9,9 @@ import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.extension.model.ImportExportJob;
 import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
+import com.bi1kbu.qslmanagement.extension.model.OfflineExchangeCard;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
+import com.bi1kbu.qslmanagement.extension.model.ReceiveRecord;
 import com.bi1kbu.qslmanagement.extension.model.StationEquipment;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.nio.charset.StandardCharsets;
@@ -143,6 +145,78 @@ class QslImportExportJobServiceTest {
         var csv = new String(payload.content(), StandardCharsets.UTF_8);
         assertEquals(true, csv.contains("id#offline-activity,activityName,activityLocation,activityDate,activityTime,cardRemarks,workflowStatus"));
         assertEquals(true, csv.contains("20260502ACT01,五月线下换卡,北京,2026-05-02,0900,活动卡,进行中"));
+    }
+
+    @Test
+    void shouldExportReceiveRecordCsv() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+        var service = new QslImportExportJobService(client, auditService);
+
+        var job = buildExportJob("export-job-receive", "receive-record", "csv");
+        var receiveRecord = new ReceiveRecord();
+        receiveRecord.setMetadata(QslApiSupport.createMetadata("R0001-20260517"));
+        var spec = new ReceiveRecord.ReceiveRecordSpec();
+        spec.setCallSign("BH1AAA");
+        spec.setCardType("EYEBALL");
+        spec.setBusinessType("OFFLINE_EYEBALL");
+        spec.setOfflineActivityName("202605ACT02");
+        spec.setReceivedDate("2026-05-17");
+        spec.setReceivedAt("2026-05-17 12:00:00");
+        spec.setOutboundCardNames("C1001、C1002");
+        spec.setMatchStatus("自动匹配");
+        spec.setMatchReason("历史收卡编号聚合关联");
+        receiveRecord.setSpec(spec);
+        var status = new ReceiveRecord.ReceiveRecordStatus();
+        status.setSyncStatus("MIGRATED");
+        receiveRecord.setStatus(status);
+
+        when(client.fetch(eq(ImportExportJob.class), eq("export-job-receive"))).thenReturn(Mono.just(job));
+        when(client.listAll(eq(ReceiveRecord.class), any(), any())).thenReturn(Flux.just(receiveRecord));
+
+        var payload = service.buildExportDownload("export-job-receive").block();
+
+        assertNotNull(payload);
+        var csv = new String(payload.content(), StandardCharsets.UTF_8);
+        assertEquals(true, csv.contains("id#receive-record,callSign,cardType,businessType,offlineActivityName"));
+        assertEquals(true, csv.contains("R0001-20260517,BH1AAA,EYEBALL,OFFLINE_EYEBALL,202605ACT02"));
+    }
+
+    @Test
+    void shouldPrecheckImportOfflineExchangeCard() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+        var service = new QslImportExportJobService(client, auditService);
+
+        when(client.listAll(eq(OfflineExchangeCard.class), any(), any())).thenReturn(Flux.empty());
+
+        var result = service.precheckImport(
+            new QslImportExportJobService.ExecuteImportJobCommand(
+                "csv",
+                "overwrite",
+                "offline-exchange-card.csv",
+                List.of(new QslImportExportJobService.ImportDatasetPayload(
+                    "offline-exchange-card",
+                    List.of(Map.of(
+                        "id", "OEC-C1001",
+                        "cardRecordName", "C1001",
+                        "offlineActivityName", "202605ACT02",
+                        "callSign", "BH1AAA",
+                        "cardType", "EYEBALL",
+                        "claimStatus", "人工绑定",
+                        "sentStatus", "已发出"
+                    ))
+                ))
+            )
+        ).block();
+
+        assertNotNull(result);
+        assertEquals("offline-exchange-card", result.dataset());
+        assertEquals(1L, result.totalCount());
+        assertEquals(1L, result.successCount());
+        assertEquals(0L, result.failedCount());
+        Mockito.verify(client, Mockito.never()).create(any(OfflineExchangeCard.class));
+        Mockito.verify(client, Mockito.never()).update(any(OfflineExchangeCard.class));
     }
 
     @Test

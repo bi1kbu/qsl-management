@@ -181,6 +181,10 @@ const normalizedSceneTypes = computed<SceneType[]>(() => {
 const shouldLoadOfflineActivities = computed(() => {
   return normalizedSceneTypes.value.includes('EYEBALL')
 })
+const showOfflineActivity = computed(() => {
+  return normalizedSceneTypes.value.includes('EYEBALL')
+    && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+})
 const showAssociationColumns = computed(() => {
   return normalizedSceneTypes.value.some((item) => item === 'QSO' || item === 'SWL')
 })
@@ -286,7 +290,7 @@ const matchedCardRows = computed(() => {
   }
   return cardRows.value.filter((item) => {
     const matchesCallSign = item.callSign.toUpperCase().includes(normalizedKeyword.value)
-    const matchesActivity = activityFilter.value
+    const matchesActivity = showOfflineActivity.value && activityFilter.value
       ? (item.spec.offlineActivityName || '') === activityFilter.value
       : true
     return matchesCallSign && matchesActivity && !item.cardIssued
@@ -299,7 +303,7 @@ const queriedCardRows = computed(() => {
   }
   return cardRows.value.filter((item) => {
     const matchesCallSign = item.callSign.toUpperCase().includes(normalizedKeyword.value)
-    const matchesActivity = activityFilter.value
+    const matchesActivity = showOfflineActivity.value && activityFilter.value
       ? (item.spec.offlineActivityName || '') === activityFilter.value
       : true
     return matchesCallSign && matchesActivity
@@ -374,7 +378,7 @@ const remarkRows = computed(() => {
 
 const pendingIssueCardRows = computed(() => {
   return cardRows.value.filter((item) => {
-    const matchesActivity = activityFilter.value
+    const matchesActivity = showOfflineActivity.value && activityFilter.value
       ? (item.spec.offlineActivityName || '') === activityFilter.value
       : true
     if (isOfflineExchangeScene.value) {
@@ -1080,7 +1084,7 @@ onMounted(loadSourceData)
           </div>
         </label>
 
-        <label class="qsl-field">
+        <label v-if="showOfflineActivity" class="qsl-field">
           <span class="qsl-field__label">活动筛选</span>
           <div class="qsl-input-shell">
             <select v-model="activityFilter">
@@ -1285,7 +1289,7 @@ onMounted(loadSourceData)
               <th><QslSortableHeader column-key="cardDate" label="日期" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
               <th><QslSortableHeader column-key="cardTime" label="时间" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
               <th><QslSortableHeader column-key="cardVersion" label="卡片版本" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
-              <th><QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
+              <th v-if="showOfflineActivity"><QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
               <th>操作</th>
             </tr>
           </thead>
@@ -1297,7 +1301,7 @@ onMounted(loadSourceData)
               <td>{{ item.cardDate || '-' }}</td>
               <td>{{ item.cardTime || '-' }}</td>
               <td>{{ item.cardVersion || '-' }}</td>
-              <td>{{ resolveActivityText(item) }}</td>
+              <td v-if="showOfflineActivity">{{ resolveActivityText(item) }}</td>
               <td @click.stop>
                 <div class="qsl-actions qsl-actions--tight">
                   <VButton
@@ -1375,7 +1379,7 @@ onMounted(loadSourceData)
               </td>
             </tr>
             <tr v-if="!pendingIssueCardRows.length">
-              <td colspan="8" class="qsl-table-empty">暂无待制卡记录。</td>
+              <td :colspan="showOfflineActivity ? 8 : 7" class="qsl-table-empty">暂无待制卡记录。</td>
             </tr>
           </tbody>
         </table>
@@ -1386,7 +1390,7 @@ onMounted(loadSourceData)
 
 <style scoped lang="scss">
 :deep(.qsl-mail-action:not(:disabled)) {
-  color: #ea580c !important;
+  color: #ff0e0e !important;
   font-weight: 600;
 }
 

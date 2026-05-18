@@ -157,6 +157,18 @@ def test_normalize_bridge_config_includes_qrcode_path_mappings() -> None:
     assert mappings["/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public"] == "/receipt-short"
 
 
+def test_normalize_bridge_config_keeps_eyeball_reprint_preset() -> None:
+    cfg = bs.normalize_bridge_config(
+        {
+            "presets": {
+                "eyeball_reprint_card": "E:/preset/eyeball-reprint.json",
+            }
+        }
+    )
+
+    assert cfg["presets"]["eyeball_reprint_card"] == "E:/preset/eyeball-reprint.json"
+
+
 def test_fetch_dataset_maps_rows_and_record_id(monkeypatch) -> None:
     json_text = """
     {
@@ -285,7 +297,11 @@ def test_fetch_envelopes_enrich_address_info(monkeypatch) -> None:
       "items": [
         {
           "metadata": {"name": "card-record-c2001"},
-          "spec": {"callSign": "BA3NZH", "addressEntryName": "BA3NZH-1"}
+          "spec": {"callSign": "BA3NZH", "sceneType": "ONLINE_EYEBALL", "addressEntryName": "BA3NZH-1"}
+        },
+        {
+          "metadata": {"name": "card-record-c2002"},
+          "spec": {"callSign": "BA1OFF", "sceneType": "EYEBALL", "addressEntryName": "BA1OFF-1"}
         }
       ]
     }
@@ -320,6 +336,7 @@ def test_fetch_envelopes_enrich_address_info(monkeypatch) -> None:
 
     assert len(calls) == 4
     assert result["count"] == 1
+    assert result["records"][0]["record_id"] == "card-record-c2001"
     mapped = result["records"][0]["mapped_row"]
     assert mapped["name"] == "BA3NZH"
     assert mapped["address"] == "北京市朝阳区XX路"

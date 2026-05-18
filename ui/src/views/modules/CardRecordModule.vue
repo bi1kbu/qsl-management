@@ -3,7 +3,6 @@ import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   createExtension,
-  createResourceName,
   deleteExtension,
   getExtensionOrNull,
   listExtensions,
@@ -274,6 +273,9 @@ const systemSettingName = 'qsl-system-setting-default'
 const offlineActivityPlural = 'offline-activities'
 const DAILY_OFFLINE_ACTIVITY_NAME = '日常换卡'
 const NO_CARD_PLACEHOLDER_REMARK = '不创建卡片'
+const NO_CARD_SEQUENCE_START = 0
+const NO_CARD_NAME_PATTERN = /^NC(\d+)$/i
+const DEFAULT_ONLINE_EXCHANGE_CARD_REMARKS = '期待与您空中相遇。\nLooking forward to meeting you on the air.'
 
 const selectedQso = computed(() => {
   if (!form.qsoRecordName.trim()) {
@@ -304,6 +306,10 @@ const showOfflineActivitySelect = computed(() => {
     && normalizedSceneTypes.value.includes('EYEBALL')
     && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
   )
+})
+const showOfflineActivityFields = computed(() => {
+  return normalizedSceneTypes.value.includes('EYEBALL')
+    && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
 })
 const selectedOfflineActivity = computed(() => {
   if (!showOfflineActivitySelect.value) {
@@ -427,7 +433,7 @@ const filteredQsoRecords = computed(() => {
 })
 
 const filteredRecords = computed(() => {
-  const filteredByActivity = activityFilter.value
+  const filteredByActivity = showOfflineActivityFields.value && activityFilter.value
     ? records.value.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
     : records.value
   const keyword = historyKeyword.value.trim().toUpperCase()
@@ -559,7 +565,7 @@ const selectHistoryRowForQuery = (item: CardRecordItem) => {
     return
   }
   form.callSign = keyword
-  if (item.spec.offlineActivityName?.trim()) {
+  if (showOfflineActivityFields.value && item.spec.offlineActivityName?.trim()) {
     activityFilter.value = item.spec.offlineActivityName.trim()
   }
   historyKeyword.value = keyword
@@ -664,6 +670,12 @@ watch(dateTimeRequired, (required) => {
   stopRealtime()
 })
 
+watch(showOfflineActivityFields, (visible) => {
+  if (!visible) {
+    activityFilter.value = ''
+  }
+})
+
 const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', {
     hour12: false,
@@ -694,6 +706,28 @@ const getMaxCardSequence = (): number => {
   return records.value.reduce((max, item) => {
     return Math.max(max, extractCardSequence(item.resourceName))
   }, CARD_SEQUENCE_START)
+}
+
+const extractNoCardSequence = (resourceName: string): number => {
+  const matched = resourceName.trim().toUpperCase().match(NO_CARD_NAME_PATTERN)
+  if (!matched) {
+    return -1
+  }
+  const numericPart = Number.parseInt(matched[1] ?? '', 10)
+  return Number.isNaN(numericPart) ? -1 : numericPart
+}
+
+const allocateNoCardResourceName = (): string => {
+  const maxSequence = records.value.reduce((max, item) => {
+    return Math.max(max, extractNoCardSequence(item.resourceName))
+  }, NO_CARD_SEQUENCE_START)
+  return `NC${String(maxSequence + 1).padStart(4, '0')}`
+}
+
+const resolveDefaultCardRemarks = (cardType: CardType = form.cardType): string => {
+  return resolveSceneTypeByCardType(cardType) === 'ONLINE_EYEBALL'
+    ? DEFAULT_ONLINE_EXCHANGE_CARD_REMARKS
+    : ''
 }
 
 const allocateCardResourceName = async (): Promise<string> => {
@@ -1050,8 +1084,11 @@ const resetForm = () => {
   form.cardDate = ''
   form.cardTime = ''
   form.businessRemarks = ''
-  form.cardRemarks = ''
+  form.cardRemarks = resolveDefaultCardRemarks(defaultCardType)
   offlineBatchQuantity.value = 1
+  if (realtimeEnabled.value && dateTimeRequired.value) {
+    syncDateTimeToNow()
+  }
 }
 
 const fillFormFromRecord = (item: CardRecordItem) => {
@@ -1161,7 +1198,7 @@ const markQsoAsNoCard = async (item: QsoRecordItem) => {
 
   saving.value = true
   try {
-    const resourceName = createResourceName('no-card')
+    const resourceName = allocateNoCardResourceName()
     await createExtension<CardRecordSpec>(resourcePlural, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
@@ -1475,7 +1512,6 @@ const createOfflineBatchCards = async () => {
     const nextCardResourceNames = await allocateCardResourceNames(quantity)
     const trimmedBusinessRemarks = form.businessRemarks.trim()
     const trimmedCardRemarks = form.cardRemarks.trim()
-    const trimmedAddressEntryName = form.addressEntryName.trim()
 
     for (const cardResourceName of nextCardResourceNames) {
       await createExtension<CardRecordSpec>(resourcePlural, {
@@ -1491,7 +1527,7 @@ const createOfflineBatchCards = async () => {
           cardVersion,
           qsoRecordName: '',
           offlineActivityName: resolved.offlineActivityName,
-          addressEntryName: trimmedAddressEntryName,
+          addressEntryName: '',
           cardDate: resolved.cardDate,
           cardTime: resolved.cardTime,
           businessRemarks: trimmedBusinessRemarks,
@@ -1577,6 +1613,9 @@ const saveCardRecord = async () => {
 
   const rawOfflineActivityName = showOfflineActivitySelect.value ? form.offlineActivityName.trim() : ''
   let offlineActivityName = rawOfflineActivityName
+  const nextSceneType = resolveSceneTypeByCardType(form.cardType)
+  const nextAddressEntryName = nextSceneType === 'EYEBALL' ? '' : form.addressEntryName.trim()
+  const nextCardRemarks = form.cardRemarks.trim() || resolveDefaultCardRemarks(form.cardType)
   let cardDate = lockCardDateTime.value ? selectedQso.value?.date || '' : form.cardDate
   let cardTime = lockCardDateTime.value ? selectedQso.value?.time || '' : form.cardTime
 
@@ -1619,15 +1658,15 @@ const saveCardRecord = async () => {
         ...target.spec,
         callSign: normalizedCallSign,
         cardType: form.cardType,
-        sceneType: resolveSceneTypeByCardType(form.cardType),
+        sceneType: nextSceneType,
         cardVersion: persistedCardVersion,
         qsoRecordName,
         offlineActivityName,
-        addressEntryName: form.addressEntryName.trim(),
+        addressEntryName: nextAddressEntryName,
         cardDate,
         cardTime,
         businessRemarks: form.businessRemarks.trim(),
-        cardRemarks: form.cardRemarks.trim(),
+        cardRemarks: nextCardRemarks,
         envelopePrinted: target.spec.envelopePrinted,
       }
 
@@ -1694,11 +1733,11 @@ const saveCardRecord = async () => {
       spec: {
         callSign: normalizedCallSign,
         cardType: form.cardType,
-        sceneType: resolveSceneTypeByCardType(form.cardType),
+        sceneType: nextSceneType,
         cardVersion: persistedCardVersion,
         qsoRecordName,
         offlineActivityName,
-        addressEntryName: form.addressEntryName.trim(),
+        addressEntryName: nextAddressEntryName,
         cardDate,
         cardTime,
         businessRemarks: form.businessRemarks.trim(),
@@ -1706,7 +1745,7 @@ const saveCardRecord = async () => {
         sentRemarks: '',
         receivedRemarks: '',
         publicReceiptRemarks: '',
-        cardRemarks: form.cardRemarks.trim(),
+        cardRemarks: nextCardRemarks,
         cardSent: false,
         cardIssued: false,
         envelopePrinted: false,
@@ -1767,6 +1806,7 @@ const applySceneDefaults = () => {
   if (isOfflineExchangeScene.value) {
     form.offlineActivityName = DAILY_OFFLINE_ACTIVITY_NAME
   }
+  form.cardRemarks = resolveDefaultCardRemarks(defaultType)
 }
 
 onMounted(() => {
@@ -2010,7 +2050,7 @@ onBeforeUnmount(() => {
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
 
-      <div class="qsl-form-inline">
+      <div v-if="showOfflineActivityFields" class="qsl-form-inline">
         <label class="qsl-field qsl-field--inline">
           <span class="qsl-field__label">活动筛选</span>
           <div class="qsl-input-shell">
@@ -2077,7 +2117,7 @@ onBeforeUnmount(() => {
         <template #detail="{ row }">
           <table class="qsl-history-detail-table">
             <tbody>
-              <tr>
+              <tr v-if="showOfflineActivityFields">
                 <th>关联QSO</th>
                 <td>{{ toHistoryItem(row).qsoRecordName || '无' }}</td>
                 <th>关联活动</th>

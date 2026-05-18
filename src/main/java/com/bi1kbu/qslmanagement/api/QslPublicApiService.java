@@ -40,6 +40,7 @@ public class QslPublicApiService {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$");
     private static final Pattern TELEPHONE_PATTERN = Pattern.compile("^[0-9+\\-\\s]{0,30}$");
     private static final Pattern POSTAL_CODE_PATTERN = Pattern.compile("^[A-Za-z0-9\\-]{0,20}$");
+    private static final Pattern EXCHANGE_REQUEST_NAME_PATTERN = Pattern.compile("^EX(\\d{4,})$");
     private static final List<String> ALLOWED_SCENE_TYPES = List.of("QSO", "SWL", "ONLINE_EYEBALL", "EYEBALL");
 
     private final ReactiveExtensionClient client;
@@ -168,9 +169,9 @@ public class QslPublicApiService {
 
         return ensureNoPendingOnlineExchangeRequest(callSign)
             .then(Mono.defer(() -> validateSelectedStationCardVersions(cardVersions)))
-            .flatMap(persistedCardVersion -> {
+            .flatMap(persistedCardVersion -> nextExchangeRequestName().flatMap(resourceName -> {
                 var request = new ExchangeRequest();
-                request.setMetadata(QslApiSupport.createMetadata(QslApiSupport.createResourceName("exchange-request")));
+                request.setMetadata(QslApiSupport.createMetadata(resourceName));
 
                 var spec = new ExchangeRequest.ExchangeRequestSpec();
                 spec.setSceneType("ONLINE_EYEBALL");
@@ -225,7 +226,7 @@ public class QslPublicApiService {
                             nullToEmpty(contact.stationAddress()),
                             QslApiSupport.nowText()
                         )));
-            });
+            }));
     }
 
     private Mono<Boolean> requiresExchangeReview() {
@@ -694,6 +695,29 @@ public class QslPublicApiService {
                 }
                 return Mono.<Void>empty();
             });
+    }
+
+    private Mono<String> nextExchangeRequestName() {
+        return client.listAll(ExchangeRequest.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .map(request -> request.getMetadata() == null ? "" : request.getMetadata().getName())
+            .map(name -> extractSequence(name, EXCHANGE_REQUEST_NAME_PATTERN))
+            .reduce(0, Math::max)
+            .map(next -> String.format("EX%04d", next + 1));
+    }
+
+    private int extractSequence(String name, Pattern pattern) {
+        if (name == null || name.isBlank()) {
+            return 0;
+        }
+        var matcher = pattern.matcher(name.trim());
+        if (!matcher.matches()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(matcher.group(1));
+        } catch (NumberFormatException error) {
+            return 0;
+        }
     }
 
     private boolean isPendingReview(ExchangeRequest.ExchangeRequestStatus status) {

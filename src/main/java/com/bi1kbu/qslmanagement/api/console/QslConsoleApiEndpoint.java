@@ -6,6 +6,7 @@ import static org.springframework.web.reactive.function.server.RouterFunctions.r
 
 import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslApiResponses;
+import com.bi1kbu.qslmanagement.api.QslApiSupport;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
@@ -48,6 +49,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     public RouterFunction<ServerResponse> endpoint() {
         return route(GET("/reports/summary"), this::reportSummary)
             .andRoute(POST("/mail-send-confirms/{cardRecordName}/confirm"), this::confirmMailSend)
+            .andRoute(POST("/receipt-confirms/{cardRecordName}/confirm"), this::confirmReceipt)
             .andRoute(POST("/mail-receive-confirms/confirm"), this::confirmMailReceive)
             .andRoute(POST("/mail-receive-confirms/{cardRecordName}/received-date"), this::updateMailReceiveDate)
             .andRoute(POST("/mail-receive-confirms/{cardRecordName}/received-record-code/migrate"),
@@ -88,6 +90,28 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                 cardRecordName,
                 authenticatedOperator.name(),
                 authenticatedOperator.clientIp()
+            ))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> confirmReceipt(ServerRequest request) {
+        var cardRecordName = request.pathVariable("cardRecordName");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(ReceiptConfirmRequest.class)
+                .defaultIfEmpty(new ReceiptConfirmRequest(""))
+                .flatMap(payload -> actionService.confirmReceipt(
+                    cardRecordName,
+                    payload.receiptRemarks(),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .map(cardRecord -> new ReceiptConfirmResponse(
+                cardRecord.getMetadata().getName(),
+                QslApiSupport.normalizeCallSign(cardRecord.getSpec().getCallSign()),
+                QslApiSupport.normalizeCardType(cardRecord.getSpec().getCardType()),
+                "已确认签收",
+                QslApiSupport.nowText()
             ))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
@@ -399,6 +423,18 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         String receivedDate,
         String offlineActivityName,
         String targetCardRecordName
+    ) {
+    }
+
+    private record ReceiptConfirmRequest(String receiptRemarks) {
+    }
+
+    private record ReceiptConfirmResponse(
+        String cardRecordName,
+        String callSign,
+        String cardType,
+        String message,
+        String handledAt
     ) {
     }
 

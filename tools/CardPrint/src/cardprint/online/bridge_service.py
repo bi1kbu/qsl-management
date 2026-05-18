@@ -296,6 +296,7 @@ def default_bridge_config() -> dict[str, Any]:
             "cards": "",
             "envelopes": "",
             ADDRESS_ENVELOPE_DATASET: "",
+            "eyeball_reprint_card": "",
             "card_version_map_by_business": {key: {} for key in CARD_BUSINESS_KEYS},
         },
         "qrcode": {
@@ -428,6 +429,9 @@ def normalize_bridge_config(raw: dict[str, Any]) -> dict[str, Any]:
             or (cfg.get("presets", {}).get("envelopes", "") if dataset == ADDRESS_ENVELOPE_DATASET else "")
         ).strip()
         cfg["presets"][dataset] = preset_path
+    cfg["presets"]["eyeball_reprint_card"] = str(
+        cfg.get("presets", {}).get("eyeball_reprint_card", "")
+    ).strip()
     cfg["presets"]["card_version_map_by_business"] = normalized_map_by_business
 
     return cfg
@@ -867,6 +871,13 @@ def _enrich_rows_for_envelope_mapping(cfg: dict[str, Any], rows: list[dict[str, 
     return enriched
 
 
+def _is_online_envelope_row(row: dict[str, Any]) -> bool:
+    spec = row.get("spec")
+    if not isinstance(spec, dict):
+        return False
+    return _normalize_scene_type(spec) == "ONLINE_EYEBALL"
+
+
 def _build_address_envelope_items(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     sender_fields = _resolve_sender_fields(cfg)
     rows: list[dict[str, Any]] = []
@@ -1211,6 +1222,7 @@ class BridgeService:
         if dataset_name == "cards":
             source_rows = _enrich_rows_for_card_mapping(cfg, source_rows)
         elif dataset_name == "envelopes":
+            source_rows = [row for row in source_rows if _is_online_envelope_row(row)]
             source_rows = _enrich_rows_for_envelope_mapping(cfg, source_rows)
         mapping = cfg["mappings"].get(dataset_name, {})
         id_field = str(

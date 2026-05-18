@@ -7,7 +7,9 @@ import com.bi1kbu.qslmanagement.extension.model.EquipmentCatalogEntry;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.ImportExportJob;
 import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
+import com.bi1kbu.qslmanagement.extension.model.OfflineExchangeCard;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
+import com.bi1kbu.qslmanagement.extension.model.ReceiveRecord;
 import com.bi1kbu.qslmanagement.extension.model.StationCard;
 import com.bi1kbu.qslmanagement.extension.model.StationEquipment;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
@@ -51,8 +53,10 @@ public class QslImportExportJobService {
     private static final List<String> DATASET_EXPORT_ORDER = List.of(
         "qso-record",
         "card-record",
+        "receive-record",
         "exchange-request-review",
         "offline-activity",
+        "offline-exchange-card",
         "address-management",
         "bureau-management",
         "equipment-catalog",
@@ -472,6 +476,29 @@ public class QslImportExportJobService {
                     record.setStatus(status);
                 }
             );
+            case "receive-record" -> importRows(
+                dataset, rows, strategy, "receive-record", ReceiveRecord.class, ReceiveRecord::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null ? new ReceiveRecord.ReceiveRecordSpec() : record.getSpec();
+                    spec.setCallSign(value(row, "callSign"));
+                    spec.setCardType(defaultIfBlank(value(row, "cardType"), "QSO"));
+                    spec.setBusinessType(value(row, "businessType"));
+                    spec.setOfflineActivityName(value(row, "offlineActivityName"));
+                    spec.setReceivedDate(value(row, "receivedDate"));
+                    spec.setReceivedAt(value(row, "receivedAt"));
+                    spec.setOutboundCardNames(value(row, "outboundCardNames"));
+                    spec.setMatchStatus(value(row, "matchStatus"));
+                    spec.setMatchReason(value(row, "matchReason"));
+                    spec.setRemarks(value(row, "remarks"));
+                    record.setSpec(spec);
+
+                    var status = record.getStatus() == null
+                        ? new ReceiveRecord.ReceiveRecordStatus()
+                        : record.getStatus();
+                    status.setSyncStatus(value(row, "syncStatus"));
+                    record.setStatus(status);
+                }
+            );
             case "exchange-request-review" -> importRows(
                 dataset, rows, strategy, "exchange-request", ExchangeRequest.class, ExchangeRequest::new, dryRun,
                 (record, row) -> {
@@ -518,6 +545,31 @@ public class QslImportExportJobService {
                         ? new OfflineActivity.OfflineActivityStatus()
                         : record.getStatus();
                     status.setWorkflowStatus(value(row, "workflowStatus"));
+                    record.setStatus(status);
+                }
+            );
+            case "offline-exchange-card" -> importRows(
+                dataset, rows, strategy, "offline-exchange-card", OfflineExchangeCard.class,
+                OfflineExchangeCard::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null
+                        ? new OfflineExchangeCard.OfflineExchangeCardSpec()
+                        : record.getSpec();
+                    spec.setCardRecordName(value(row, "cardRecordName"));
+                    spec.setOfflineActivityName(value(row, "offlineActivityName"));
+                    spec.setCallSign(value(row, "callSign"));
+                    spec.setCardType(defaultIfBlank(value(row, "cardType"), "EYEBALL"));
+                    spec.setCardVersion(value(row, "cardVersion"));
+                    spec.setClaimStatus(value(row, "claimStatus"));
+                    spec.setSentStatus(value(row, "sentStatus"));
+                    spec.setSentAt(value(row, "sentAt"));
+                    spec.setRemarks(value(row, "remarks"));
+                    record.setSpec(spec);
+
+                    var status = record.getStatus() == null
+                        ? new OfflineExchangeCard.OfflineExchangeCardStatus()
+                        : record.getStatus();
+                    status.setFlowStatus(value(row, "flowStatus"));
                     record.setStatus(status);
                 }
             );
@@ -808,8 +860,10 @@ public class QslImportExportJobService {
         return switch (dataset) {
             case "qso-record" -> client.countBy(QsoRecord.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "card-record" -> client.countBy(CardRecord.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+            case "receive-record" -> client.countBy(ReceiveRecord.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "exchange-request-review" -> client.countBy(ExchangeRequest.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "offline-activity" -> client.countBy(OfflineActivity.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+            case "offline-exchange-card" -> client.countBy(OfflineExchangeCard.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "address-management" -> client.countBy(AddressBookEntry.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "bureau-management" -> client.countBy(BureauEntry.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "equipment-catalog" -> client.countBy(EquipmentCatalogEntry.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
@@ -959,6 +1013,40 @@ public class QslImportExportJobService {
                     "receivedRecordCodes",
                     "flowStatus"
                 ), rows));
+            case "receive-record" -> client.listAll(ReceiveRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .map(record -> {
+                    var spec = record.getSpec();
+                    var status = record.getStatus();
+                    return csvRow(
+                        record.getMetadata().getName(),
+                        spec == null ? "" : nullToEmpty(spec.getCallSign()),
+                        spec == null ? "" : nullToEmpty(spec.getCardType()),
+                        spec == null ? "" : nullToEmpty(spec.getBusinessType()),
+                        spec == null ? "" : nullToEmpty(spec.getOfflineActivityName()),
+                        spec == null ? "" : nullToEmpty(spec.getReceivedDate()),
+                        spec == null ? "" : nullToEmpty(spec.getReceivedAt()),
+                        spec == null ? "" : nullToEmpty(spec.getOutboundCardNames()),
+                        spec == null ? "" : nullToEmpty(spec.getMatchStatus()),
+                        spec == null ? "" : nullToEmpty(spec.getMatchReason()),
+                        spec == null ? "" : nullToEmpty(spec.getRemarks()),
+                        status == null ? "" : nullToEmpty(status.getSyncStatus())
+                    );
+                })
+                .collectList()
+                .map(rows -> renderCsv(dataset, List.of(
+                    "id",
+                    "callSign",
+                    "cardType",
+                    "businessType",
+                    "offlineActivityName",
+                    "receivedDate",
+                    "receivedAt",
+                    "outboundCardNames",
+                    "matchStatus",
+                    "matchReason",
+                    "remarks",
+                    "syncStatus"
+                ), rows));
             case "exchange-request-review" -> client.listAll(ExchangeRequest.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
                     var spec = record.getSpec();
@@ -1032,6 +1120,38 @@ public class QslImportExportJobService {
                     "activityTime",
                     "cardRemarks",
                     "workflowStatus"
+                ), rows));
+            case "offline-exchange-card" -> client.listAll(OfflineExchangeCard.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .map(record -> {
+                    var spec = record.getSpec();
+                    var status = record.getStatus();
+                    return csvRow(
+                        record.getMetadata().getName(),
+                        spec == null ? "" : nullToEmpty(spec.getCardRecordName()),
+                        spec == null ? "" : nullToEmpty(spec.getOfflineActivityName()),
+                        spec == null ? "" : nullToEmpty(spec.getCallSign()),
+                        spec == null ? "" : nullToEmpty(spec.getCardType()),
+                        spec == null ? "" : nullToEmpty(spec.getCardVersion()),
+                        spec == null ? "" : nullToEmpty(spec.getClaimStatus()),
+                        spec == null ? "" : nullToEmpty(spec.getSentStatus()),
+                        spec == null ? "" : nullToEmpty(spec.getSentAt()),
+                        spec == null ? "" : nullToEmpty(spec.getRemarks()),
+                        status == null ? "" : nullToEmpty(status.getFlowStatus())
+                    );
+                })
+                .collectList()
+                .map(rows -> renderCsv(dataset, List.of(
+                    "id",
+                    "cardRecordName",
+                    "offlineActivityName",
+                    "callSign",
+                    "cardType",
+                    "cardVersion",
+                    "claimStatus",
+                    "sentStatus",
+                    "sentAt",
+                    "remarks",
+                    "flowStatus"
                 ), rows));
             case "address-management" -> client.listAll(AddressBookEntry.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {

@@ -190,7 +190,7 @@ export const qslMenuModules: QslMenuModule[] = [
   },
   {
     key: 'online-delivery-confirm',
-    title: '送达确认',
+    title: '签收确认',
     group: '线上换卡业务',
     priority: 50,
     viewPermission: toViewPermission('mail-receive-confirm'),

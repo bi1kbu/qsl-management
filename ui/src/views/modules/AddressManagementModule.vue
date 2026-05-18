@@ -397,6 +397,9 @@ const buildPendingBindings = (
     if (isNoCardPlaceholder(item)) {
       return
     }
+    if (isOfflineExchangeCard(item)) {
+      return
+    }
     const callSign = normalizeCallSign(item.spec?.callSign ?? '')
     const addressEntryName = (item.spec?.addressEntryName ?? '').trim()
     if (!callSign || addressEntryName) {
@@ -439,6 +442,12 @@ const isNoCardPlaceholder = (item: QslExtension<CardRecordSpec>): boolean => {
     || businessRemarks === NO_CARD_PLACEHOLDER_REMARK
     || cardRemarks === NO_CARD_PLACEHOLDER_REMARK
   )
+}
+
+const isOfflineExchangeCard = (item: QslExtension<CardRecordSpec>): boolean => {
+  const sceneType = String(item.spec?.sceneType ?? '').trim().toUpperCase()
+  const cardType = String(item.spec?.cardType ?? '').trim().toUpperCase()
+  return sceneType === 'EYEBALL' || (!sceneType && cardType === 'EYEBALL')
 }
 
 const loadRows = async (options: { silent?: boolean } = {}) => {
@@ -519,6 +528,9 @@ const bindAddressForCallSign = async (callSign: string, addressEntryName: string
   const cardExtensions = await listExtensions<CardRecordSpec>(cardRecordPlural)
   let updatedCount = 0
   for (const record of cardExtensions) {
+    if (isOfflineExchangeCard(record)) {
+      continue
+    }
     const recordCallSign = normalizeCallSign(record.spec?.callSign ?? '')
     const currentBinding = (record.spec?.addressEntryName ?? '').trim()
     if (recordCallSign !== normalizedCallSign || currentBinding) {

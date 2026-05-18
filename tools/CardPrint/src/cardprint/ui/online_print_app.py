@@ -10,11 +10,13 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote, urlencode, urljoin
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtCore import QDate, QObject, Qt, QThread, QTime, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QComboBox,
+    QDateEdit,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -30,6 +32,7 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -178,6 +181,13 @@ def _resolve_offline_activity_name(source_row: dict[str, Any]) -> str:
     return ""
 
 
+def _is_online_envelope_source_row(source_row: dict[str, Any]) -> bool:
+    spec_raw = source_row.get("spec")
+    spec = spec_raw if isinstance(spec_raw, dict) else {}
+    scene_type = str(spec.get("sceneType", "")).strip().upper()
+    return scene_type == "ONLINE_EYEBALL"
+
+
 def _build_envelope_recipient_name(source_row: dict[str, Any], mapped_row: dict[str, Any]) -> str:
     spec_raw = source_row.get("spec")
     spec = spec_raw if isinstance(spec_raw, dict) else {}
@@ -234,6 +244,34 @@ class FetchCardVersionsWorker(QObject):
         except Exception as exc:
             details = exc.details if isinstance(exc, CardPrintError) else None
             self.failed.emit(str(exc), details)
+
+
+class BackgroundTaskWorker(QObject):
+    finished = Signal(object)
+    failed = Signal(str, object)
+
+    def __init__(self, task: Callable[[], Any]) -> None:
+        super().__init__()
+        self._task = task
+
+    def run(self) -> None:
+        try:
+            self.finished.emit(self._task())
+        except Exception as exc:
+            details = exc.details if isinstance(exc, CardPrintError) else None
+            self.failed.emit(str(exc), details)
+
+
+def _fetch_remote_sources_payload(config: dict[str, Any]) -> dict[str, Any]:
+    cfg = normalize_bridge_config(config)
+    bridge = BridgeService()
+    cards_result = bridge.fetch_dataset(cfg, "cards")
+    envelopes_result = bridge.fetch_dataset(cfg, "envelopes")
+    return {
+        "cards": [dict(item.get("source_row", {})) for item in cards_result.get("records", [])],
+        "envelopes": [dict(item.get("source_row", {})) for item in envelopes_result.get("records", [])],
+        "pulled_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
 
 
 class OnlineConfigPage(QWidget):
@@ -733,6 +771,8 @@ class OnlineDatasetPage(QWidget):
         self.records: list[dict[str, Any]] = []
         self._table_schema: list[tuple[str, list[str]]] = []
         self._qrcode_remark_text: str = QRCODE_REMARK_DEFAULT
+        self._queue_thread: QThread | None = None
+        self._queue_worker: BackgroundTaskWorker | None = None
 
         self.lbl_preset = QLabel("未配置", self)
         self.lbl_preset.setWordWrap(True)
@@ -1128,7 +1168,9 @@ class OnlineDatasetPage(QWidget):
                 return False
             return selected_version in row_versions
         if self.dataset == "envelopes":
-            # 封面打印队列：仅未打包。
+            # 封面打印队列：仅线上换卡且未打包。
+            if not _is_online_envelope_source_row(source_row):
+                return False
             if envelope_printed:
                 return False
             return True
@@ -1210,7 +1252,9 @@ class OnlineDatasetPage(QWidget):
             self.records = []
             self._refresh_record_table()
             self.preview.set_scene({})
-            self._status(f"{self.title}: 本次拉取无可用数据。")
+            result_text = f"{self.title}: 已完成拉取，远程 0 条，生成队列 0 条。"
+            self.lbl_result.setText(result_text)
+            self._status(result_text)
             return
         if self.dataset == "cards":
             selected_version = str(self.card_version_filter_combo.currentData() or "").strip().upper()
@@ -1218,7 +1262,9 @@ class OnlineDatasetPage(QWidget):
                 self.records = []
                 self._refresh_record_table()
                 self.preview.set_scene({})
-                self._status(f"{self.title}: 请先选择卡片版本后再查看列表。")
+                result_text = f"{self.title}: 已完成拉取，远程 {len(self._source_rows)} 条；请选择卡片版本后生成队列。"
+                self.lbl_result.setText(result_text)
+                self._status(result_text)
                 return
         try:
             cfg = normalize_bridge_config(self._get_config())
@@ -1330,25 +1376,67 @@ class OnlineDatasetPage(QWidget):
             self._refresh_record_table()
             if self.record_table.rowCount() > 0:
                 self.record_table.selectRow(0)
-            self._status(
-                f"{self.title}: 已生成 {len(self.records)} 条队列，按状态过滤跳过 {skipped_by_rule} 条。"
+            result_text = (
+                f"{self.title}: 已完成拉取，远程 {len(self._source_rows)} 条，"
+                f"生成队列 {len(self.records)} 条，过滤跳过 {skipped_by_rule} 条。"
             )
+            self.lbl_result.setText(result_text)
+            self._status(result_text)
         except Exception as exc:
             details = exc.details if isinstance(exc, CardPrintError) else None
+            self.lbl_result.setText(f"{self.title}: 生成队列失败：{exc}")
             self._show_error("生成队列失败", str(exc), details)
 
     def refresh_queue_from_remote(self) -> None:
+        if self._queue_thread is not None and self._queue_thread.isRunning():
+            return
         try:
             cfg = normalize_bridge_config(self._get_config())
             self._set_config(cfg)
-            result = self._bridge.fetch_dataset(cfg, self.dataset)
-            self._source_rows = [dict(item.get("source_row", {})) for item in result.get("records", [])]
-            self._source_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self._update_source_label()
-            self._rebuild_rows_from_source()
         except Exception as exc:
             details = exc.details if isinstance(exc, CardPrintError) else None
             self._show_error("拉取失败", str(exc), details)
+            return
+
+        self.btn_build_queue.setEnabled(False)
+        self.btn_build_queue.setText("正在拉取...")
+        self.lbl_source.setText("队列：正在拉取远程数据...")
+        result_text = f"{self.title}: 正在拉取远程数据，请稍候..."
+        self.lbl_result.setText(result_text)
+        self._status(result_text)
+        self._queue_thread = QThread(self)
+        self._queue_worker = BackgroundTaskWorker(
+            lambda cfg=copy.deepcopy(cfg), dataset=self.dataset: BridgeService().fetch_dataset(cfg, dataset)
+        )
+        self._queue_worker.moveToThread(self._queue_thread)
+        self._queue_thread.started.connect(self._queue_worker.run)
+        self._queue_worker.finished.connect(self._handle_queue_fetch_success)
+        self._queue_worker.failed.connect(self._handle_queue_fetch_failure)
+        self._queue_worker.finished.connect(self._queue_thread.quit)
+        self._queue_worker.failed.connect(self._queue_thread.quit)
+        self._queue_thread.finished.connect(self._finish_queue_fetch_thread)
+        self._queue_thread.start()
+
+    def _handle_queue_fetch_success(self, result: Any) -> None:
+        payload = result if isinstance(result, dict) else {}
+        self._source_rows = [dict(item.get("source_row", {})) for item in payload.get("records", [])]
+        self._source_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._update_source_label()
+        self._rebuild_rows_from_source()
+
+    def _handle_queue_fetch_failure(self, message: str, details: Any) -> None:
+        self.lbl_result.setText(f"{self.title}: 拉取失败：{message}")
+        self._show_error("拉取失败", message, details)
+
+    def _finish_queue_fetch_thread(self) -> None:
+        if self._queue_worker is not None:
+            self._queue_worker.deleteLater()
+        if self._queue_thread is not None:
+            self._queue_thread.deleteLater()
+        self._queue_worker = None
+        self._queue_thread = None
+        self.btn_build_queue.setEnabled(True)
+        self.btn_build_queue.setText("重新拉取并生成队列")
 
     def _on_card_version_filter_changed(self) -> None:
         if not self._enable_card_version_filter:
@@ -1708,6 +1796,347 @@ class OnlineDatasetPage(QWidget):
         self._print_records(self.records)
 
 
+class EyeballReprintPage(QWidget):
+    def __init__(
+        self,
+        *,
+        get_config: Callable[[], dict[str, Any]],
+        set_config: Callable[[dict[str, Any]], None],
+        get_config_path: Callable[[], str],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._get_config = get_config
+        self._set_config = set_config
+        self._get_config_path = get_config_path
+        self._preset_path = ""
+        self._preset_meta: dict[str, Any] = {"field_keys": [], "paper_name": "", "preferred_printer": ""}
+
+        self.preset_edit = QLineEdit(self)
+        self.btn_choose_preset = QPushButton("选择并保存...", self)
+        self.call_sign_edit = QLineEdit(self)
+        self.call_sign_edit.setPlaceholderText("例如：BI1KBU")
+        self.date_edit = QDateEdit(self)
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("yyyy-MM-dd")
+        self.time_edit = QTimeEdit(self)
+        self.time_edit.setDisplayFormat("HH:mm:ss")
+        self.realtime_check = QCheckBox("实时", self)
+        self.realtime_check.setChecked(True)
+        self.btn_build_preview = QPushButton("生成预览", self)
+
+        self.printer_combo = QComboBox(self)
+        self.paper_combo = QComboBox(self)
+        self.btn_refresh_printer = QPushButton("刷新打印机", self)
+        self.btn_refresh_paper = QPushButton("刷新纸张", self)
+        self.btn_print = QPushButton("打印当前补卡", self)
+        self.lbl_result = QLabel("未执行打印。", self)
+        self.lbl_result.setWordWrap(True)
+        self.preview = PreviewCanvas(self)
+        self.preview.set_editable(False)
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(1000)
+        self._timer.timeout.connect(self._sync_now_if_realtime)
+
+        self._build_ui()
+        self._bind_events()
+        self.refresh_printers()
+        self.refresh_papers()
+        self._sync_now_if_realtime()
+        self._timer.start()
+
+    def _build_ui(self) -> None:
+        splitter = QSplitter(Qt.Horizontal, self)
+        left = QWidget(splitter)
+        left_layout = QVBoxLayout(left)
+
+        preset_group = QGroupBox("补卡预设", left)
+        preset_layout = QFormLayout(preset_group)
+        preset_row = QWidget(preset_group)
+        preset_row_layout = QHBoxLayout(preset_row)
+        preset_row_layout.setContentsMargins(0, 0, 0, 0)
+        preset_row_layout.addWidget(self.preset_edit, 1)
+        preset_row_layout.addWidget(self.btn_choose_preset)
+        preset_layout.addRow("补打眼球卡片预设（专用预设）", preset_row)
+        left_layout.addWidget(preset_group)
+
+        input_group = QGroupBox("补打内容", left)
+        input_layout = QFormLayout(input_group)
+        input_layout.addRow("呼号（对方呼号）", self.call_sign_edit)
+        input_layout.addRow("日期（卡片日期）", self.date_edit)
+        time_row = QWidget(input_group)
+        time_row_layout = QHBoxLayout(time_row)
+        time_row_layout.setContentsMargins(0, 0, 0, 0)
+        time_row_layout.addWidget(self.time_edit)
+        time_row_layout.addWidget(self.realtime_check)
+        input_layout.addRow("时间（卡片时间）", time_row)
+        left_layout.addWidget(input_group)
+
+        printer_group = QGroupBox("打印设备", left)
+        printer_layout = QFormLayout(printer_group)
+        printer_layout.addRow("打印机（输出设备）", self.printer_combo)
+        printer_layout.addRow("纸张（打印纸张）", self.paper_combo)
+        printer_layout.addRow(self.btn_refresh_printer, self.btn_refresh_paper)
+        left_layout.addWidget(printer_group)
+
+        action_row = QHBoxLayout()
+        action_row.addWidget(self.btn_build_preview)
+        action_row.addWidget(self.btn_print)
+        left_layout.addLayout(action_row)
+        left_layout.addWidget(self.lbl_result)
+        left_layout.addStretch(1)
+
+        splitter.addWidget(left)
+        splitter.addWidget(self.preview)
+        splitter.setSizes([520, 860])
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.addWidget(splitter, 1)
+
+    def _bind_events(self) -> None:
+        self.btn_choose_preset.clicked.connect(self.choose_preset)
+        self.btn_refresh_printer.clicked.connect(self.refresh_printers)
+        self.btn_refresh_paper.clicked.connect(self.refresh_papers)
+        self.printer_combo.currentTextChanged.connect(lambda _: self.refresh_papers())
+        self.btn_build_preview.clicked.connect(self.preview_current)
+        self.btn_print.clicked.connect(self.print_current)
+        self.realtime_check.stateChanged.connect(lambda _: self._sync_now_if_realtime())
+
+    def _show_error(self, title: str, message: str, details: Any | None = None) -> None:
+        detail_text = "" if details is None else _json_text(details)
+        QMessageBox.critical(self, title, f"{message}\n{detail_text}")
+
+    def _status(self, text: str) -> None:
+        window = self.window()
+        if isinstance(window, QMainWindow):
+            window.statusBar().showMessage(text, 3000)
+
+    def set_config(self, config: dict[str, Any]) -> None:
+        cfg = normalize_bridge_config(config)
+        self._preset_path = str(cfg.get("presets", {}).get("eyeball_reprint_card", "")).strip()
+        self.preset_edit.setText(self._preset_path)
+        self._preset_meta = _load_preset_meta(self._preset_path)
+        self._apply_printer_and_paper_from_preset(self._preset_path)
+
+    def choose_preset(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "选择补打眼球卡片预设", str(Path.cwd()), "JSON Files (*.json)")
+        if not path:
+            return
+        self.preset_edit.setText(path)
+        self._preset_path = path
+        self._preset_meta = _load_preset_meta(path)
+        self._apply_printer_and_paper_from_preset(path)
+        self._persist_preset_path(path)
+        self.preview_current()
+
+    def _persist_preset_path(self, path: str) -> None:
+        cfg = normalize_bridge_config(self._get_config())
+        cfg.setdefault("presets", {})
+        cfg["presets"]["eyeball_reprint_card"] = path.strip()
+        persist_cfg = copy.deepcopy(cfg)
+        persist_cfg.setdefault("auth", {})
+        persist_cfg["auth"]["password"] = ""
+        config_path = self._get_config_path().strip() or str((Path.cwd() / "bridge_config.json").resolve())
+        save_bridge_config(config_path, persist_cfg)
+        self._set_config(cfg)
+        self._status(f"补打眼球卡片预设已保存：{config_path}")
+
+    def _apply_printer_and_paper_from_preset(self, preset_path: str) -> None:
+        meta = _load_preset_meta(preset_path)
+        preferred_printer = str(meta.get("preferred_printer", "")).strip()
+        if preferred_printer:
+            self._select_printer_by_name(preferred_printer, refresh_if_unchanged=True)
+        preferred_paper = str(meta.get("paper_name", "")).strip().casefold()
+        if preferred_paper:
+            for idx in range(self.paper_combo.count()):
+                if self.paper_combo.itemText(idx).strip().casefold() == preferred_paper:
+                    self.paper_combo.setCurrentIndex(idx)
+                    break
+
+    def _select_printer_by_name(self, printer_name: str, refresh_if_unchanged: bool = False) -> bool:
+        target = printer_name.strip().casefold()
+        if not target:
+            return False
+        current = self.printer_combo.currentIndex()
+        for idx in range(self.printer_combo.count()):
+            if self.printer_combo.itemText(idx).strip().casefold() != target:
+                continue
+            self.printer_combo.setCurrentIndex(idx)
+            if idx == current and refresh_if_unchanged:
+                self.refresh_papers()
+            return True
+        return False
+
+    def refresh_printers(self) -> None:
+        try:
+            payload = run_cli_json(["printer", "list"])
+            items = payload["data"].get("items", [])
+            previous = self.printer_combo.currentText().strip().casefold()
+            self.printer_combo.clear()
+            self.printer_combo.addItems(items)
+            if previous:
+                for idx, name in enumerate(items):
+                    if str(name).strip().casefold() == previous:
+                        self.printer_combo.setCurrentIndex(idx)
+                        break
+        except Exception as exc:
+            self._show_error("刷新打印机失败", str(exc))
+
+    def refresh_papers(self) -> None:
+        printer_name = self.printer_combo.currentText().strip()
+        if not printer_name:
+            return
+        try:
+            payload = run_cli_json(["printer", "papers", "--printer", printer_name])
+            items = payload["data"].get("items", [])
+            previous = self.paper_combo.currentText().strip().casefold()
+            self.paper_combo.clear()
+            self.paper_combo.addItems(items)
+            if previous:
+                for idx, name in enumerate(items):
+                    if str(name).strip().casefold() == previous:
+                        self.paper_combo.setCurrentIndex(idx)
+                        break
+        except Exception as exc:
+            self._show_error("刷新纸张失败", str(exc))
+
+    def _sync_now_if_realtime(self) -> None:
+        if not self.realtime_check.isChecked():
+            self.date_edit.setEnabled(True)
+            self.time_edit.setEnabled(True)
+            return
+        now = datetime.now()
+        self.date_edit.setDate(QDate(now.year, now.month, now.day))
+        self.time_edit.setTime(QTime(now.hour, now.minute, now.second))
+        self.date_edit.setEnabled(False)
+        self.time_edit.setEnabled(False)
+
+    def _build_source_row(self) -> dict[str, Any]:
+        call_sign = self.call_sign_edit.text().strip().upper()
+        if not call_sign:
+            raise CardPrintError(code="INVALID_REPRINT_INPUT", message="呼号不能为空。")
+        date_text = self.date_edit.date().toString("yyyy-MM-dd")
+        time_text = self.time_edit.time().toString("HHmm")
+        return {
+            "metadata": {"name": ""},
+            "spec": {
+                "callSign": call_sign,
+                "cardType": "EYEBALL",
+                "sceneType": "EYEBALL",
+                "cardDate": date_text,
+                "cardTime": time_text,
+                "cardSent": True,
+                "cardReceived": False,
+                "receiptConfirmed": False,
+            },
+            "cardType": "EYEBALL",
+            "cardDate": date_text,
+            "cardTime": time_text,
+            "cardSent": True,
+            "cardReceived": False,
+        }
+
+    def _build_mapped_row(self) -> dict[str, Any]:
+        cfg = normalize_bridge_config(self._get_config())
+        mapping = cfg.get("mappings", {}).get("cards", {}) or {}
+        source_row = self._build_source_row()
+        mapped_row = map_export_row(source_row, mapping)
+        mapped_row["peerCallsign"] = source_row["spec"]["callSign"]
+        mapped_row["Date"] = source_row["spec"]["cardDate"]
+        mapped_row["Time"] = source_row["spec"]["cardTime"]
+        mapped_row["card_tpye"] = "EYEBALL"
+        mapped_row["cardType"] = "EYEBALL"
+        mapped_row["EYEBALL"] = "⬛"
+        mapped_row["QSO"] = ""
+        mapped_row["SWL"] = ""
+        mapped_row["postCardStatus"] = "⬛"
+        mapped_row["发出卡片"] = "⬛"
+        mapped_row["returnCardStatus"] = ""
+        mapped_row["回复卡片"] = ""
+        mapped_row["欢迎回卡"] = ""
+        mapped_row["请回卡片"] = ""
+        mapped_row["感谢来卡"] = ""
+        mapped_row["感谢您的来卡"] = ""
+        return mapped_row
+
+    def _resolve_preset_path(self) -> str:
+        path = self.preset_edit.text().strip() or self._preset_path
+        if not path:
+            raise CardPrintError(code="MISSING_PRESET", message="请先选择补打眼球卡片预设。")
+        if not Path(path).exists():
+            raise CardPrintError(
+                code="MISSING_PRESET",
+                message="补打眼球卡片预设文件不存在。",
+                details={"path": path},
+            )
+        if path != self._preset_path:
+            self._persist_preset_path(path)
+        return path
+
+    def _build_paper_name(self) -> str:
+        selected = self.paper_combo.currentText().strip()
+        if selected:
+            return selected
+        return str(self._preset_meta.get("paper_name", "")).strip()
+
+    def preview_current(self) -> None:
+        try:
+            preset_path = self._resolve_preset_path()
+            mapped_row = self._build_mapped_row()
+            payload = run_cli_json(
+                [
+                    "render",
+                    "preview",
+                    "--preset",
+                    preset_path,
+                    "--row",
+                    json.dumps(mapped_row, ensure_ascii=False),
+                ]
+            )
+            self.preview.set_scene(payload.get("scene", {}))
+            self.lbl_result.setText("预览已生成。")
+        except Exception as exc:
+            details = exc.details if isinstance(exc, CardPrintError) else None
+            self._show_error("预览失败", str(exc), details)
+
+    def print_current(self) -> None:
+        printer_name = self.printer_combo.currentText().strip()
+        if not printer_name:
+            self._show_error("未选择打印机", "请先选择打印机。")
+            return
+        try:
+            preset_path = self._resolve_preset_path()
+            mapped_row = self._build_mapped_row()
+            run_cli_json(["preset", "validate", "--preset", preset_path])
+            job = {
+                "preset_path": preset_path,
+                "rows": [mapped_row],
+                "printer_name": printer_name,
+                "paper_name": self._build_paper_name(),
+            }
+            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
+                json.dump(job, f, ensure_ascii=False, indent=2)
+                job_path = f.name
+            try:
+                payload = run_cli_json(["print", "run", "--job", job_path], timeout_s=180.0)
+            finally:
+                try:
+                    Path(job_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            adapter = payload["data"]["adapter"]
+            rows = list(adapter.get("rows", []))
+            success_count = sum(1 for item in rows if str(item.get("status", "")).lower() == "success")
+            result_text = f"补打眼球卡片完成：成功 {success_count} / 总计 {len(rows)}。不回写业务状态。"
+            self.lbl_result.setText(result_text)
+            self._status(result_text)
+        except Exception as exc:
+            details = exc.details if isinstance(exc, CardPrintError) else None
+            self._show_error("打印失败", str(exc), details)
+
+
 class OnlinePrintWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -1747,6 +2176,12 @@ class OnlinePrintWindow(QMainWindow):
             set_config=self._set_config_from_dataset,
             parent=self,
         )
+        self.eyeball_reprint_page = EyeballReprintPage(
+            get_config=self._get_config_copy,
+            set_config=self._set_config_from_dataset,
+            get_config_path=self._get_config_path,
+            parent=self,
+        )
         self.envelopes_page = OnlineDatasetPage(
             dataset="envelopes",
             title="封面打印",
@@ -1781,6 +2216,7 @@ class OnlinePrintWindow(QMainWindow):
         self.tabs.addTab(self.qso_cards_page, "通联业务制卡")
         self.tabs.addTab(self.online_cards_page, "线上换卡业务制卡")
         self.tabs.addTab(self.offline_cards_page, "线下换卡业务制卡")
+        self.tabs.addTab(self.eyeball_reprint_page, "补打眼球卡片")
         self.tabs.addTab(self.card_confirm_page, "确认制卡")
         self.tabs.addTab(self.envelopes_page, "封面打印")
         self.tabs.addTab(self.envelope_confirm_page, "打包确认")
@@ -1813,9 +2249,21 @@ class OnlinePrintWindow(QMainWindow):
     def _get_config_copy(self) -> dict[str, Any]:
         return copy.deepcopy(self.config)
 
+    def _get_config_path(self) -> str:
+        return self.config_path
+
     def _set_config_from_dataset(self, config: dict[str, Any]) -> None:
         self.config = normalize_bridge_config(config)
         self.config_page.set_base_config(self.config)
+        self.config_page.set_config(self.config_path, self.config)
+        self.qso_cards_page.set_config(self.config)
+        self.online_cards_page.set_config(self.config)
+        self.offline_cards_page.set_config(self.config)
+        self.eyeball_reprint_page.set_config(self.config)
+        self.envelopes_page.set_config(self.config)
+        self.address_envelopes_page.set_config(self.config)
+        self.card_confirm_page.set_config(self.config)
+        self.envelope_confirm_page.set_config(self.config)
 
     def _on_config_applied(self, config_path: str, config: dict[str, Any]) -> None:
         current_versions = self.config_page.current_card_versions()
@@ -1850,6 +2298,7 @@ class OnlinePrintWindow(QMainWindow):
         self.qso_cards_page.set_config(self.config)
         self.online_cards_page.set_config(self.config)
         self.offline_cards_page.set_config(self.config)
+        self.eyeball_reprint_page.set_config(self.config)
         self.envelopes_page.set_config(self.config)
         self.address_envelopes_page.set_config(self.config)
         map_by_business = self.config.get("presets", {}).get("card_version_map_by_business", {}) or {}
@@ -1874,16 +2323,8 @@ class OnlinePrintWindow(QMainWindow):
         cfg = normalize_bridge_config(config)
         self._apply_config(config_path, cfg, refresh_config_page=False)
 
-        cards_result = self._bridge.fetch_dataset(cfg, "cards")
-        envelopes_result = self._bridge.fetch_dataset(cfg, "envelopes")
-        self._source_rows["cards"] = [dict(item.get("source_row", {})) for item in cards_result.get("records", [])]
-        self._source_rows["envelopes"] = [
-            dict(item.get("source_row", {})) for item in envelopes_result.get("records", [])
-        ]
-        self._source_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        self.card_confirm_page.set_source_rows(self._source_rows["cards"], self._source_timestamp)
-        self.envelope_confirm_page.set_source_rows(self._source_rows["envelopes"], self._source_timestamp)
+        payload = _fetch_remote_sources_payload(cfg)
+        self._apply_remote_sources_payload(payload)
         self.statusBar().showMessage(
             f"远程源拉取完成：cards={len(self._source_rows['cards'])}, envelopes={len(self._source_rows['envelopes'])}",
             5000,
@@ -1893,6 +2334,15 @@ class OnlinePrintWindow(QMainWindow):
             "envelopes": len(self._source_rows["envelopes"]),
             "pulled_at": self._source_timestamp,
         }
+
+    def _apply_remote_sources_payload(self, payload: dict[str, Any]) -> None:
+        self._source_rows["cards"] = list(payload.get("cards", []))
+        self._source_rows["envelopes"] = list(payload.get("envelopes", []))
+        self._source_timestamp = str(payload.get("pulled_at", "")).strip() or datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        self.card_confirm_page.set_source_rows(self._source_rows["cards"], self._source_timestamp)
+        self.envelope_confirm_page.set_source_rows(self._source_rows["envelopes"], self._source_timestamp)
 
     def refresh_sources_for_manual_confirm(self) -> None:
         self._pull_remote_sources(self.config_path, self.config)
@@ -1920,6 +2370,8 @@ class OnlineManualConfirmPage(QWidget):
         self._source_timestamp: str = ""
         self.records: list[dict[str, Any]] = []
         self._table_schema: list[tuple[str, list[str]]] = []
+        self._refresh_thread: QThread | None = None
+        self._refresh_worker: BackgroundTaskWorker | None = None
 
         self.lbl_source = QLabel("远程源：未拉取", self)
         self.lbl_source.setWordWrap(True)
@@ -2063,12 +2515,18 @@ class OnlineManualConfirmPage(QWidget):
         if self.dataset == "cards":
             card_issued = _to_bool(spec.get("cardIssued", source_row.get("cardIssued")))
             return not card_issued
+        if self.dataset == "envelopes" and not _is_online_envelope_source_row(source_row):
+            return False
         envelope_printed = _to_bool(spec.get("envelopePrinted", source_row.get("envelopePrinted")))
         return not envelope_printed
 
     def build_rows_from_source(self) -> None:
         if not self._source_rows:
-            self._show_error("未拉取远程源", "请先点击“一键拉取并生成待确认清单”。")
+            self.records = []
+            self._refresh_record_table()
+            result_text = f"{self.title}: 已完成拉取，远程 0 条，生成待确认 0 条。"
+            self.lbl_result.setText(result_text)
+            self._status(result_text)
             return
         try:
             cfg = normalize_bridge_config(self._get_config())
@@ -2092,11 +2550,15 @@ class OnlineManualConfirmPage(QWidget):
             self._refresh_record_table()
             if self.dataset == "cards":
                 self._update_version_summary_from_rows(self._source_rows)
-            self._status(
-                f"{self.title}: 已生成 {len(self.records)} 条待确认，按状态过滤跳过 {skipped_by_rule} 条。"
+            result_text = (
+                f"{self.title}: 已完成拉取，远程 {len(self._source_rows)} 条，"
+                f"生成待确认 {len(self.records)} 条，过滤跳过 {skipped_by_rule} 条。"
             )
+            self.lbl_result.setText(result_text)
+            self._status(result_text)
         except Exception as exc:
             details = exc.details if isinstance(exc, CardPrintError) else None
+            self.lbl_result.setText(f"{self.title}: 生成失败：{exc}")
             self._show_error("生成失败", str(exc), details)
 
     def _refresh_record_table(self) -> None:
@@ -2145,10 +2607,57 @@ class OnlineManualConfirmPage(QWidget):
         return False
 
     def _refresh_remote_and_build(self) -> None:
-        if not self._refresh_remote_source():
+        if self._refresh_thread is not None and self._refresh_thread.isRunning():
             return
+        window = self.window()
+        if not isinstance(window, OnlinePrintWindow):
+            return
+        try:
+            cfg = normalize_bridge_config(self._get_config())
+            self._set_config(cfg)
+        except Exception as exc:
+            details = exc.details if isinstance(exc, CardPrintError) else None
+            self._show_error("刷新失败", str(exc), details)
+            return
+
+        self.btn_refresh_and_build.setEnabled(False)
+        self.btn_refresh_and_build.setText("正在拉取...")
+        self.lbl_source.setText("远程源：正在拉取...")
+        result_text = f"{self.title}: 正在拉取远程源，请稍候..."
+        self.lbl_result.setText(result_text)
+        self._status(result_text)
+        self._refresh_thread = QThread(self)
+        self._refresh_worker = BackgroundTaskWorker(lambda cfg=copy.deepcopy(cfg): _fetch_remote_sources_payload(cfg))
+        self._refresh_worker.moveToThread(self._refresh_thread)
+        self._refresh_thread.started.connect(self._refresh_worker.run)
+        self._refresh_worker.finished.connect(self._handle_refresh_success)
+        self._refresh_worker.failed.connect(self._handle_refresh_failure)
+        self._refresh_worker.finished.connect(self._refresh_thread.quit)
+        self._refresh_worker.failed.connect(self._refresh_thread.quit)
+        self._refresh_thread.finished.connect(self._finish_refresh_thread)
+        self._refresh_thread.start()
+
+    def _handle_refresh_success(self, result: Any) -> None:
+        payload = result if isinstance(result, dict) else {}
+        window = self.window()
+        if isinstance(window, OnlinePrintWindow):
+            window._apply_remote_sources_payload(payload)
         self.build_rows_from_source()
-        self._show_info("完成", "已完成拉取并生成待确认清单。")
+
+    def _handle_refresh_failure(self, message: str, details: Any) -> None:
+        self._update_source_label()
+        self.lbl_result.setText(f"{self.title}: 拉取失败：{message}")
+        self._show_error("刷新失败", message, details)
+
+    def _finish_refresh_thread(self) -> None:
+        if self._refresh_worker is not None:
+            self._refresh_worker.deleteLater()
+        if self._refresh_thread is not None:
+            self._refresh_thread.deleteLater()
+        self._refresh_worker = None
+        self._refresh_thread = None
+        self.btn_refresh_and_build.setEnabled(True)
+        self.btn_refresh_and_build.setText("一键拉取并生成待确认清单")
 
     def confirm_selected(self) -> None:
         selected_records = self._selected_records()

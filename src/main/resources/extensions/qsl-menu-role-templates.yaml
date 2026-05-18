@@ -253,7 +253,7 @@ metadata:
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view","qsl-management-qso-record-view"]'
 rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
-    resources: [ "qso-records", "card-records" ]
+    resources: [ "qso-records", "card-records", "receive-records" ]
     verbs: [ "get", "list" ]
 ---
 apiVersion: v1alpha1
@@ -269,7 +269,7 @@ metadata:
     rbac.authorization.halo.run/dependencies: '["qsl-management-mail-receive-confirm-view","qsl-management-card-record-view","qsl-management-qso-record-view"]'
 rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
-    resources: [ "qso-records", "card-records" ]
+    resources: [ "qso-records", "card-records", "receive-records" ]
     verbs: [ "create", "update", "patch" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "mail-receive-confirms" ]
@@ -291,7 +291,7 @@ metadata:
     rbac.authorization.halo.run/dependencies: '["qsl-management-address-bureau-view","qsl-management-card-record-view"]'
 rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
-    resources: [ "exchange-requests", "offline-activities" ]
+    resources: [ "exchange-requests", "offline-activities", "offline-exchange-cards" ]
     verbs: [ "get", "list" ]
 ---
 apiVersion: v1alpha1
@@ -307,13 +307,13 @@ metadata:
     rbac.authorization.halo.run/dependencies: '["qsl-management-exchange-request-review-view","qsl-management-card-record-edit"]'
 rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
-    resources: [ "exchange-requests", "offline-activities" ]
+    resources: [ "exchange-requests", "offline-activities", "offline-exchange-cards" ]
     verbs: [ "update", "patch" ]
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "offline-activities" ]
     verbs: [ "create", "delete" ]
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
-    resources: [ "card-records" ]
+    resources: [ "card-records", "offline-exchange-cards" ]
     verbs: [ "create" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
     resources: [ "exchange-requests" ]
@@ -405,7 +405,7 @@ metadata:
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-record-view"]'
 rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
-    resources: [ "card-records" ]
+    resources: [ "card-records", "receive-records" ]
     verbs: [ "get", "list" ]
 ---
 apiVersion: v1alpha1

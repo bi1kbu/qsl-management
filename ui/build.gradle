@@ -5,6 +5,10 @@ plugins {
 
 group 'com.bi1kbu.qslmanagement.ui'
 
+tasks.named('pnpmInstall') {
+    doNotTrackState('pnpm optional dependency junctions may point to platform packages that are unreadable to Gradle on Windows.')
+}
+
 tasks.register('pnpmBuild', PnpmTask) {
     group = 'build'
     description = 'Build the UI project using pnpm'

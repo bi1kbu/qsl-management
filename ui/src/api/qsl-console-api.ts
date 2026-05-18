@@ -28,6 +28,18 @@ export interface MailReceiveConfirmResult {
   receivedRecordCode: string
 }
 
+export interface ReceiptConfirmPayload {
+  receiptRemarks: string
+}
+
+export interface ReceiptConfirmResult {
+  cardRecordName: string
+  callSign: string
+  cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  message: string
+  handledAt: string
+}
+
 export interface ReceivedRecordCodeMigratePayload {
   receivedRecordCode: string
   targetCardRecordName: string
@@ -217,6 +229,17 @@ export async function confirmMailSend(cardRecordName: string): Promise<void> {
 export async function confirmMailReceive(payload: MailReceiveConfirmPayload): Promise<MailReceiveConfirmResult> {
   const response = await axiosInstance.post<ApiResult<MailReceiveConfirmResult>>(
     `${consoleApiBase}/mail-receive-confirms/confirm`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function confirmReceipt(
+  cardRecordName: string,
+  payload: ReceiptConfirmPayload,
+): Promise<ReceiptConfirmResult> {
+  const response = await axiosInstance.post<ApiResult<ReceiptConfirmResult>>(
+    `${consoleApiBase}/receipt-confirms/${encodeURIComponent(cardRecordName)}/confirm`,
     payload,
   )
   return response.data.data

@@ -20,6 +20,7 @@ import OverviewDashboardModule from './modules/OverviewDashboardModule.vue'
 import OfflineActivityModule from './modules/OfflineActivityModule.vue'
 import QsoQueryModule from './modules/QsoQueryModule.vue'
 import ReceiveRecordQueryModule from './modules/ReceiveRecordQueryModule.vue'
+import ReceiptConfirmModule from './modules/ReceiptConfirmModule.vue'
 import QsoRecordModule from './modules/QsoRecordModule.vue'
 import ReportAuditlogModule from './modules/ReportAuditlogModule.vue'
 import StationCardModule from './modules/StationCardModule.vue'
@@ -138,11 +139,9 @@ const renderer = computed<ModuleRenderer>(() => {
       }
     case 'online-delivery-confirm':
       return {
-        component: MailReceiveConfirmModule,
+        component: ReceiptConfirmModule,
         props: {
           sceneTypes: ['ONLINE_EYEBALL'] as SceneType[],
-          defaultSceneType: 'ONLINE_EYEBALL' as SceneType,
-          defaultCardType: 'EYEBALL',
         },
       }
     case 'offline-delivery-confirm':

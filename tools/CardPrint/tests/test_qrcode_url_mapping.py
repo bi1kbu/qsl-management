@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from cardprint.online import bridge_service as bs
-from cardprint.ui.online_print_app import OnlineConfigPage, OnlineDatasetPage
+from cardprint.ui.online_print_app import OnlineConfigPage, OnlineDatasetPage, OnlineManualConfirmPage
 from cardprint.ui import online_print_app as app
 
 
@@ -158,6 +158,39 @@ def test_offline_card_page_activity_filter_all_keeps_all_activities() -> None:
     }
 
     assert page._matches_queue_rule(row) is True
+
+
+def test_envelope_page_only_keeps_online_exchange_rows() -> None:
+    page = OnlineDatasetPage.__new__(OnlineDatasetPage)
+    page.dataset = "envelopes"
+    page.card_business = ""
+    page._enable_card_version_filter = False
+    page._enable_activity_filter = False
+    page._enable_address_envelope_filter = False
+
+    online_row = {
+        "spec": {
+            "sceneType": "ONLINE_EYEBALL",
+            "envelopePrinted": False,
+        }
+    }
+    offline_row = {
+        "spec": {
+            "sceneType": "EYEBALL",
+            "envelopePrinted": False,
+        }
+    }
+
+    assert page._matches_queue_rule(online_row) is True
+    assert page._matches_queue_rule(offline_row) is False
+
+
+def test_envelope_confirm_only_keeps_online_exchange_rows() -> None:
+    page = OnlineManualConfirmPage.__new__(OnlineManualConfirmPage)
+    page.dataset = "envelopes"
+
+    assert page._matches_queue_rule({"spec": {"sceneType": "ONLINE_EYEBALL", "envelopePrinted": False}}) is True
+    assert page._matches_queue_rule({"spec": {"sceneType": "EYEBALL", "envelopePrinted": False}}) is False
 
 
 def test_address_envelope_page_filters_by_call_sign_or_resource_name() -> None:

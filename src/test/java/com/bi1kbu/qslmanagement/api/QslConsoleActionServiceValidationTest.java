@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.bi1kbu.qslmanagement.extension.model.AddressBookEntry;
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
+import com.bi1kbu.qslmanagement.extension.model.ReceiveRecord;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -87,6 +88,7 @@ class QslConsoleActionServiceValidationTest {
         var systemSetting = createSystemSetting();
 
         when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(newer, older));
+        stubReceiveRecordStorage(client);
         when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
             .thenReturn(Mono.just(systemSetting));
         when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
@@ -124,6 +126,7 @@ class QslConsoleActionServiceValidationTest {
         var systemSetting = createSystemSetting();
 
         when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(newer, older));
+        stubReceiveRecordStorage(client);
         when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
             .thenReturn(Mono.just(systemSetting));
         when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
@@ -185,6 +188,7 @@ class QslConsoleActionServiceValidationTest {
         var systemSetting = createSystemSetting();
 
         when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(otherActivity, matchedActivity));
+        stubReceiveRecordStorage(client);
         when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
             .thenReturn(Mono.just(systemSetting));
         when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
@@ -222,6 +226,7 @@ class QslConsoleActionServiceValidationTest {
         var systemSetting = createSystemSetting();
 
         when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(target));
+        stubReceiveRecordStorage(client);
         when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
             .thenReturn(Mono.just(systemSetting));
         when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
@@ -260,6 +265,7 @@ class QslConsoleActionServiceValidationTest {
         var systemSetting = createSystemSetting();
 
         when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(target));
+        stubReceiveRecordStorage(client);
         when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
             .thenReturn(Mono.just(systemSetting));
         when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(target));
@@ -485,6 +491,7 @@ class QslConsoleActionServiceValidationTest {
             auditService,
             notificationMailService
         );
+        var capturedCardRecord = new AtomicReference<CardRecord>();
 
         var exchangeRequest = new ExchangeRequest();
         exchangeRequest.setMetadata(QslApiSupport.createMetadata("exchange-request-1"));
@@ -509,7 +516,10 @@ class QslConsoleActionServiceValidationTest {
         when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty());
         when(client.update(any(ExchangeRequest.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-        when(client.create(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.create(any(CardRecord.class))).thenAnswer(invocation -> {
+            capturedCardRecord.set(invocation.getArgument(0));
+            return Mono.just(invocation.getArgument(0));
+        });
         when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
         when(notificationMailService.autoSendExchangeReviewIfEnabled(any(), any(), any())).thenReturn(Mono.empty());
 
@@ -523,6 +533,10 @@ class QslConsoleActionServiceValidationTest {
 
         assertEquals("已通过", result.reviewStatus());
         assertEquals("", result.reason());
+        assertEquals(
+            "期待与您空中相遇。\nLooking forward to meeting you on the air.",
+            capturedCardRecord.get().getSpec().getCardRemarks()
+        );
     }
 
     @Test
@@ -644,5 +658,10 @@ class QslConsoleActionServiceValidationTest {
         spec.setReceiveRecordSequence(0);
         systemSetting.setSpec(spec);
         return systemSetting;
+    }
+
+    private static void stubReceiveRecordStorage(ReactiveExtensionClient client) {
+        when(client.listAll(eq(ReceiveRecord.class), any(), any())).thenReturn(Flux.empty());
+        when(client.create(any(ReceiveRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
     }
 }

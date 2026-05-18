@@ -117,6 +117,10 @@ const normalizedSceneTypes = computed<SceneType[]>(() => {
 const shouldLoadOfflineActivities = computed(() => {
   return normalizedSceneTypes.value.includes('EYEBALL')
 })
+const showOfflineActivity = computed(() => {
+  return normalizedSceneTypes.value.includes('EYEBALL')
+    && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+})
 
 const resolveSceneTypeByCardType = (cardType: CardRecordSpec['cardType']): SceneType => {
   if (cardType === 'QSO' && normalizedSceneTypes.value.includes('QSO')) {
@@ -176,7 +180,7 @@ const offlineActivityPlural = 'offline-activities'
 
 const filteredRows = computed(() => {
   const pendingRows = rows.value.filter((row) => !row.sent || row.spec.sentMailStatus !== 'SENT')
-  const filteredByActivity = activityFilter.value
+  const filteredByActivity = showOfflineActivity.value && activityFilter.value
     ? pendingRows.filter((row) => (row.spec.offlineActivityName || '') === activityFilter.value)
     : pendingRows
   const keyword = historyKeyword.value.trim().toUpperCase()
@@ -303,6 +307,12 @@ watch(filteredRows, () => {
   }
   if (currentPage.value < 1) {
     currentPage.value = 1
+  }
+})
+
+watch(showOfflineActivity, (visible) => {
+  if (!visible) {
+    activityFilter.value = ''
   }
 })
 
@@ -940,7 +950,7 @@ onMounted(() => {
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
 
-      <div class="qsl-form-inline">
+      <div v-if="showOfflineActivity" class="qsl-form-inline">
         <label class="qsl-field qsl-field--inline">
           <span class="qsl-field__label">活动筛选</span>
           <div class="qsl-input-shell">
@@ -967,7 +977,7 @@ onMounted(() => {
               <th><QslSortableHeader column-key="cardType" label="卡片类型" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="cardPrintAt" label="卡片打印日期" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="envelopePrintAt" label="打包" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th v-if="showOfflineActivity"><QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="cardRemarks" label="卡片备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th>操作</th>
             </tr>
@@ -989,7 +999,7 @@ onMounted(() => {
               <td>{{ row.cardType }}</td>
               <td>{{ row.cardPrintAt }}</td>
               <td>{{ row.envelopePrintAt }}</td>
-              <td>{{ row.spec.offlineActivityName || '-' }}</td>
+              <td v-if="showOfflineActivity">{{ row.spec.offlineActivityName || '-' }}</td>
               <td>
                   <QslCardRemarkEntries
                     :remark-fields="{
@@ -1046,7 +1056,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!pagedRows.length">
-              <td colspan="9" class="qsl-table-empty">暂无待发出数据。</td>
+              <td :colspan="showOfflineActivity ? 9 : 8" class="qsl-table-empty">暂无待发出数据。</td>
             </tr>
           </tbody>
         </table>
@@ -1070,7 +1080,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 :deep(.qsl-mail-action:not(:disabled)) {
-  color: #ea580c !important;
+  color: #ff0e0e !important;
   font-weight: 600;
 }
 

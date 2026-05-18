@@ -3,8 +3,10 @@ import { listExtensions, type QslExtension } from './qsl-extension-api'
 export type DatasetValue =
   | 'qso-record'
   | 'card-record'
+  | 'receive-record'
   | 'exchange-request-review'
   | 'offline-activity'
+  | 'offline-exchange-card'
   | 'address-management'
   | 'bureau-management'
   | 'equipment-catalog'
@@ -264,6 +266,59 @@ const datasetConfigs: DatasetConfig[] = [
     }),
   },
   {
+    value: 'receive-record',
+    label: '收卡记录',
+    plural: 'receive-records',
+    kind: 'ReceiveRecord',
+    idPrefix: 'receive-record',
+    headers: [
+      'id',
+      'callSign',
+      'cardType',
+      'businessType',
+      'offlineActivityName',
+      'receivedDate',
+      'receivedAt',
+      'outboundCardNames',
+      'matchStatus',
+      'matchReason',
+      'remarks',
+      'syncStatus',
+    ],
+    keywords: ['receive-record', 'receive-records', '收卡记录'],
+    toRow: (item) => ({
+      id: item.metadata.name,
+      callSign: String(item.spec?.callSign ?? ''),
+      cardType: String(item.spec?.cardType ?? ''),
+      businessType: String(item.spec?.businessType ?? ''),
+      offlineActivityName: String(item.spec?.offlineActivityName ?? ''),
+      receivedDate: String(item.spec?.receivedDate ?? ''),
+      receivedAt: String(item.spec?.receivedAt ?? ''),
+      outboundCardNames: String(item.spec?.outboundCardNames ?? ''),
+      matchStatus: String(item.spec?.matchStatus ?? ''),
+      matchReason: String(item.spec?.matchReason ?? ''),
+      remarks: String(item.spec?.remarks ?? ''),
+      syncStatus: String(item.status?.syncStatus ?? ''),
+    }),
+    fromRow: (row) => ({
+      spec: {
+        callSign: row.callSign ?? '',
+        cardType: row.cardType ?? 'QSO',
+        businessType: row.businessType ?? '',
+        offlineActivityName: row.offlineActivityName ?? '',
+        receivedDate: row.receivedDate ?? '',
+        receivedAt: row.receivedAt ?? '',
+        outboundCardNames: row.outboundCardNames ?? '',
+        matchStatus: row.matchStatus ?? '',
+        matchReason: row.matchReason ?? '',
+        remarks: row.remarks ?? '',
+      },
+      status: {
+        syncStatus: row.syncStatus ?? '',
+      },
+    }),
+  },
+  {
     value: 'exchange-request-review',
     label: '换卡申请',
     plural: 'exchange-requests',
@@ -375,6 +430,56 @@ const datasetConfigs: DatasetConfig[] = [
       },
       status: {
         workflowStatus: row.workflowStatus ?? '',
+      },
+    }),
+  },
+  {
+    value: 'offline-exchange-card',
+    label: '线下换卡卡片',
+    plural: 'offline-exchange-cards',
+    kind: 'OfflineExchangeCard',
+    idPrefix: 'offline-exchange-card',
+    headers: [
+      'id',
+      'cardRecordName',
+      'offlineActivityName',
+      'callSign',
+      'cardType',
+      'cardVersion',
+      'claimStatus',
+      'sentStatus',
+      'sentAt',
+      'remarks',
+      'flowStatus',
+    ],
+    keywords: ['offline-exchange-card', 'offline-exchange-cards', '线下换卡卡片'],
+    toRow: (item) => ({
+      id: item.metadata.name,
+      cardRecordName: String(item.spec?.cardRecordName ?? ''),
+      offlineActivityName: String(item.spec?.offlineActivityName ?? ''),
+      callSign: String(item.spec?.callSign ?? ''),
+      cardType: String(item.spec?.cardType ?? ''),
+      cardVersion: String(item.spec?.cardVersion ?? ''),
+      claimStatus: String(item.spec?.claimStatus ?? ''),
+      sentStatus: String(item.spec?.sentStatus ?? ''),
+      sentAt: String(item.spec?.sentAt ?? ''),
+      remarks: String(item.spec?.remarks ?? ''),
+      flowStatus: String(item.status?.flowStatus ?? ''),
+    }),
+    fromRow: (row) => ({
+      spec: {
+        cardRecordName: row.cardRecordName ?? '',
+        offlineActivityName: row.offlineActivityName ?? '',
+        callSign: row.callSign ?? '',
+        cardType: row.cardType ?? 'EYEBALL',
+        cardVersion: row.cardVersion ?? '',
+        claimStatus: row.claimStatus ?? '',
+        sentStatus: row.sentStatus ?? '',
+        sentAt: row.sentAt ?? '',
+        remarks: row.remarks ?? '',
+      },
+      status: {
+        flowStatus: row.flowStatus ?? '',
       },
     }),
   },

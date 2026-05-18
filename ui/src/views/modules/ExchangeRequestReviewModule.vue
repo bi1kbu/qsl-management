@@ -723,7 +723,7 @@ onMounted(loadRows)
 
 <style scoped lang="scss">
 :deep(.qsl-mail-action:not(:disabled)) {
-  color: #ea580c !important;
+  color: #ff0e0e !important;
   font-weight: 600;
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { VButton, VCard, VTag } from '@halo-dev/components'
+import { VButton, VCard, VTabItem, VTabs, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
@@ -35,6 +35,7 @@ interface CardQueryItem {
   id: string
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
+  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   offlineActivityName: string
   cardVersion: string
   cardDate: string
@@ -69,6 +70,7 @@ const filters = reactive({
 
 const quickReceiptOptions = ['全部', '待签收', '已签收', '已收'] as const
 type QuickReceiptOption = (typeof quickReceiptOptions)[number]
+type SceneTab = 'ALL' | 'QSO' | 'ONLINE_EYEBALL' | 'EYEBALL'
 
 type CardQuerySortKey =
   | 'id'
@@ -86,6 +88,7 @@ type CardQuerySortKey =
   | 'remarksText'
 
 const quickReceipt = ref<QuickReceiptOption>('全部')
+const activeSceneTab = ref<SceneTab>('ALL')
 const sortKey = ref<CardQuerySortKey>('datetime')
 const sortDirection = ref<QslSortDirection>('desc')
 const showAdvancedFilters = ref(false)
@@ -96,12 +99,33 @@ const pageSizeOptions: number[] = [20, 30, 50, 100]
 const resourcePlural = 'card-records'
 
 const normalize = (value: string) => value.trim().toUpperCase()
+const isNoCardId = (value: string) => {
+  const normalized = value.trim()
+  return normalized.toLowerCase().startsWith('no-card-') || /^NC\d+$/i.test(normalized)
+}
+const displayCardId = (value: string) => isNoCardId(value) ? '' : value
+
+const normalizeSceneType = (sceneType?: string, cardType?: string): CardQueryItem['sceneType'] => {
+  const upperScene = (sceneType ?? '').trim().toUpperCase()
+  if (upperScene === 'QSO' || upperScene === 'SWL' || upperScene === 'ONLINE_EYEBALL' || upperScene === 'EYEBALL') {
+    return upperScene
+  }
+  const upperCardType = (cardType ?? '').trim().toUpperCase()
+  if (upperCardType === 'SWL') {
+    return 'SWL'
+  }
+  if (upperCardType === 'EYEBALL') {
+    return 'EYEBALL'
+  }
+  return 'QSO'
+}
 
 const toRow = (extension: QslExtension<CardRecordSpec>): CardQueryItem => {
   return {
     id: extension.metadata.name,
     callSign: extension.spec?.callSign ?? '',
     cardType: extension.spec?.cardType ?? 'QSO',
+    sceneType: normalizeSceneType(extension.spec?.sceneType, extension.spec?.cardType),
     offlineActivityName: extension.spec?.offlineActivityName ?? '',
     cardVersion: extension.spec?.cardVersion ?? '',
     cardDate: extension.spec?.cardDate ?? '',
@@ -145,6 +169,10 @@ const loadRows = async () => {
 
 const filteredRows = computed(() => {
   return rows.value.filter((item) => {
+    const sceneOk =
+      activeSceneTab.value === 'ALL'
+      || (activeSceneTab.value === 'QSO' && (item.sceneType === 'QSO' || item.sceneType === 'SWL'))
+      || item.sceneType === activeSceneTab.value
     const keyword = normalize(filters.keyword)
     const callSign = normalize(filters.callSign)
 
@@ -156,7 +184,7 @@ const filteredRows = computed(() => {
         .includes(keyword)
     const callSignOk = !callSign || item.callSign.toUpperCase().includes(callSign)
     const typeOk = !filters.cardType || item.cardType === filters.cardType
-    const activityOk = !filters.activityName || item.offlineActivityName === filters.activityName
+    const activityOk = !showActivityFilter.value || !filters.activityName || item.offlineActivityName === filters.activityName
     const fromOk = !filters.dateFrom || (item.cardDate && item.cardDate >= filters.dateFrom)
     const toOk = !filters.dateTo || (item.cardDate && item.cardDate <= filters.dateTo)
     const remarksOk = !filters.onlyWithRemarks || Boolean(item.remarksText.trim())
@@ -196,9 +224,15 @@ const filteredRows = computed(() => {
       quickOk = item.cardReceived
     }
 
-    return keywordOk && callSignOk && typeOk && activityOk && fromOk && toOk && remarksOk && sentOk && signOk && receiveOk && quickOk
+    return sceneOk && keywordOk && callSignOk && typeOk && activityOk && fromOk && toOk && remarksOk && sentOk && signOk && receiveOk && quickOk
   })
 })
+
+const showActivityColumn = computed(() => activeSceneTab.value === 'ALL' || activeSceneTab.value === 'EYEBALL')
+const showActivityFilter = computed(() => activeSceneTab.value === 'ALL' || activeSceneTab.value === 'EYEBALL')
+const showReceivedColumn = computed(() => activeSceneTab.value === 'ALL' || activeSceneTab.value === 'QSO' || activeSceneTab.value === 'ONLINE_EYEBALL')
+const showPackColumn = computed(() => activeSceneTab.value !== 'EYEBALL')
+const tableColumnCount = computed(() => 9 + (showActivityColumn.value ? 1 : 0) + (showPackColumn.value ? 1 : 0) + (showReceivedColumn.value ? 2 : 0))
 
 const activityFilterOptions = computed(() => {
   const activitySet = new Set<string>()
@@ -269,7 +303,7 @@ const activeFilterTags = computed(() => {
   if (filters.cardType) {
     tags.push({ key: 'cardType', label: `卡片类型：${filters.cardType}` })
   }
-  if (filters.activityName) {
+  if (showActivityFilter.value && filters.activityName) {
     tags.push({ key: 'activityName', label: `活动：${filters.activityName}` })
   }
   if (filters.sentStatus) {
@@ -306,6 +340,14 @@ const applyKeywordSearch = () => {
 
 watch(quickReceipt, () => {
   currentPage.value = 1
+})
+
+watch(activeSceneTab, () => {
+  currentPage.value = 1
+  expandedId.value = ''
+  if (!showActivityFilter.value) {
+    filters.activityName = ''
+  }
 })
 
 watch(sortedRows, () => {
@@ -386,6 +428,23 @@ onMounted(loadRows)
 <template>
   <div class="qsl-block">
     <VCard>
+      <template #header>
+        <VTabs v-model:activeId="activeSceneTab">
+          <VTabItem id="ALL" label="全部">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+          <VTabItem id="QSO" label="通联卡片">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+          <VTabItem id="ONLINE_EYEBALL" label="线上换卡">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+          <VTabItem id="EYEBALL" label="线下换卡">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+        </VTabs>
+      </template>
+
       <QslQueryToolbar>
         <template #left>
             <div class="qsl-input-shell qsl-filter-toolbar__search">
@@ -426,7 +485,7 @@ onMounted(loadRows)
           </div>
         </label>
 
-        <label class="qsl-field">
+        <label v-if="showActivityFilter" class="qsl-field">
           <span class="qsl-field__label">卡片类型</span>
           <div class="qsl-input-shell">
             <select v-model="filters.cardType">
@@ -517,15 +576,15 @@ onMounted(loadRows)
               <th><QslSortableHeader column-key="id" label="卡片ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="cardType" label="类型" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="offlineActivityName" label="活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th v-if="showActivityColumn"><QslSortableHeader column-key="offlineActivityName" label="活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="cardVersion" label="版本" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="datetime" label="日期时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="cardIssued" label="制卡" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="envelopePrinted" label="打包" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th v-if="showPackColumn"><QslSortableHeader column-key="envelopePrinted" label="打包" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="cardSent" label="已发" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="receiptConfirmed" label="签收" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardReceived" label="已收" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="receivedRecordCodes" label="收卡编号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th v-if="showReceivedColumn"><QslSortableHeader column-key="cardReceived" label="已收" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th v-if="showReceivedColumn"><QslSortableHeader column-key="receivedRecordCodes" label="收卡编号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="remarksText" label="备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
             </tr>
           </thead>
@@ -540,16 +599,16 @@ onMounted(loadRows)
                 @keydown.enter.prevent="toggleDetail(item.id)"
                 @keydown.space.prevent="toggleDetail(item.id)"
               >
-                <td>{{ item.id }}</td>
+                <td>{{ displayCardId(item.id) }}</td>
                 <td>{{ item.callSign || '-' }}</td>
                 <td>{{ item.cardType }}</td>
-                <td>{{ item.offlineActivityName || '-' }}</td>
+                <td v-if="showActivityColumn">{{ item.offlineActivityName || '-' }}</td>
                 <td>{{ item.cardVersion || '-' }}</td>
                 <td>{{ item.cardDate }} {{ item.cardTime }}</td>
                 <td>
                   <VTag :theme="item.cardIssued ? 'secondary' : 'default'">{{ item.cardIssued ? '是' : '否' }}</VTag>
                 </td>
-                <td>
+                <td v-if="showPackColumn">
                   <VTag :theme="item.envelopePrinted ? 'secondary' : 'default'">{{
                     item.envelopePrinted ? '是' : '否'
                   }}</VTag>
@@ -562,21 +621,21 @@ onMounted(loadRows)
                     item.receiptConfirmed ? '是' : '否'
                   }}</VTag>
                 </td>
-                <td>
+                <td v-if="showReceivedColumn">
                   <VTag :theme="item.cardReceived ? 'secondary' : 'default'">{{ item.cardReceived ? '是' : '否' }}</VTag>
                 </td>
-                <td>{{ item.receivedRecordCodes || '-' }}</td>
+                <td v-if="showReceivedColumn">{{ item.receivedRecordCodes || '-' }}</td>
                 <td>
                   {{ summarizeRemarks(item.remarkFields) }}
                 </td>
               </tr>
               <tr v-if="expandedId === item.id" class="qsl-table-detail-row">
-                <td colspan="13">
+                <td :colspan="tableColumnCount">
                   <div class="qsl-detail-grid">
-                    <p><strong>卡片ID：</strong>{{ item.id }}</p>
+                    <p><strong>卡片ID：</strong>{{ displayCardId(item.id) }}</p>
                     <p><strong>呼号：</strong>{{ item.callSign || '-' }}</p>
                     <p><strong>卡片类型：</strong>{{ item.cardType }}</p>
-                    <p><strong>关联活动：</strong>{{ item.offlineActivityName || '-' }}</p>
+                    <p v-if="showActivityColumn"><strong>关联活动：</strong>{{ item.offlineActivityName || '-' }}</p>
                     <p><strong>卡片版本：</strong>{{ item.cardVersion || '-' }}</p>
                     <p><strong>卡片日期：</strong>{{ item.cardDate || '-' }}</p>
                     <p><strong>卡片时间：</strong>{{ item.cardTime || '-' }}</p>
@@ -595,7 +654,7 @@ onMounted(loadRows)
               </tr>
             </template>
             <tr v-if="!pagedRows.length">
-              <td colspan="13" class="qsl-table-empty">暂无数据。</td>
+              <td :colspan="tableColumnCount" class="qsl-table-empty">暂无数据。</td>
             </tr>
           </tbody>
         </table>

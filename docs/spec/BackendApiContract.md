@@ -1,6 +1,6 @@
 # QSL 管理插件后端 API 合同
 
-更新时间：2026-05-10
+更新时间：2026-05-18
 适用插件：`qsl-management`
 目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.24 官方文档核验
 API 版本：`v1alpha1`
@@ -12,7 +12,7 @@ API 版本：`v1alpha1`
 
 ## 2. 官方依据
 
-核验日期：2026-05-10
+核验日期：2026-05-18
 
 1. Halo Extension、自定义模型与自动 CRUD
    https://docs.halo.run/developer-guide/plugin/api-reference/server/extension
@@ -65,6 +65,8 @@ API 版本：`v1alpha1`
 | 本台卡片 | `StationCard` | `station-cards` | `station-profile` |
 | 通联日志 | `QsoRecord` | `qso-records` | `qso-record` |
 | 卡片记录 | `CardRecord` | `card-records` | `card-record`、`card-issue`、`card-mutation`、`card-print-tool` 等按菜单或工具复用 |
+| 线下换卡卡片 | `OfflineExchangeCard` | `offline-exchange-cards` | `exchange-request-review`、后续独立 `offline-exchange-card` |
+| 收卡记录 | `ReceiveRecord` | `receive-records` | `mail-receive-confirm`、`card-query`、后续独立 `receive-record` |
 | 换卡申请 | `ExchangeRequest` | `exchange-requests` | `exchange-request-review` |
 | 线下活动 | `OfflineActivity` | `offline-activities` | `exchange-request-review` |
 | 地址管理 | `AddressBookEntry` | `address-book-entries` | `address-bureau` |
@@ -84,12 +86,15 @@ API 版本：`v1alpha1`
 | GET | `/overview/summary` | 总览看板聚合统计 | `overview-dashboard:view` |
 | GET | `/reports/summary` | 审计统计报表聚合 | `report-auditlog:view` |
 
+统计口径：卡片类统计只纳入正式 `C{序号}` 且呼号非空的 `CardRecord`。`sentTotal` 统计明确已发卡、已签收、有发卡时间的记录；线上换卡中 `cardIssued=true`、`envelopePrinted=true` 且 `createdMailStatus=SENT` 的历史记录也纳入已发，避免未回写 `cardSent` 时偏小。`receivedTotal` 优先按 `ReceiveRecord.spec.callSign` 去重，呼号为空时按 `ReceiveRecord.spec.outboundCardNames` 中的卡片 ID 去重。
+
 ### 6.2 业务动作
 
 | 方法 | 路径 | 说明 | 权限 |
 | --- | --- | --- | --- |
 | POST | `/mail-send-confirms/{cardRecordName}/confirm` | 确认发信，更新 `cardSent/sentAt` | `mail-send-confirm:edit` |
-| POST | `/mail-receive-confirms/confirm` | 送达确认/收卡确认，按 `callSign + cardType + sceneType` 匹配或自动补建记录 | `mail-receive-confirm:edit` |
+| POST | `/mail-receive-confirms/confirm` | 收卡确认创建 `ReceiveRecord` 并尝试关联发卡记录；无法匹配时不再新建发卡编号 | `mail-receive-confirm:edit` |
+| POST | `/receipt-confirms/{cardRecordName}/confirm` | 控制台确认对方已签收我方发出的卡片，写入 `CardRecord.spec.receiptConfirmed/publicReceiptRemarks`，不创建 `ReceiveRecord`，不分配收卡编号 | `mail-receive-confirm:edit` |
 | POST | `/mail-receive-confirms/{cardRecordName}/received-date` | 修改卡片收卡日期，并按日期重新赋予收卡编号 | `mail-receive-confirm:edit` |
 | POST | `/mail-receive-confirms/{cardRecordName}/received-record-code/migrate` | 将源卡片的指定收卡编号迁移到目标卡片收卡清单 | `mail-receive-confirm:edit` |
 | POST | `/exchange-requests/{name}/approve` | 换卡申请通过并创建线上换卡卡片 | `exchange-request-review:edit` |
@@ -115,7 +120,7 @@ API 版本：`v1alpha1`
 
 ### 6.4 控制台请求体
 
-送达确认：
+收卡确认：
 
 ```json
 {
@@ -129,7 +134,17 @@ API 版本：`v1alpha1`
 }
 ```
 
-`cardType` 允许：`QSO`、`SWL`、`EYEBALL`。`sceneType` 允许：`QSO`、`SWL`、`ONLINE_EYEBALL`、`EYEBALL`。`receivedDate` 必填，格式为 `yyyy-MM-dd`，用于生成收卡编号日期段并写入收卡时间；不填返回 `QSL-400-0001`，不再默认使用当前日期时间。同一呼号、卡片类型和场景存在多条卡片记录时，服务端只在未结束收卡的正式卡片记录中匹配，并按卡片编号序号从小到大绑定；已收卡但尚未点击“结束收卡”的记录仍可继续追加收卡编号，结束后后续确认才流转到下一条记录。清单行内“确认收卡”会提交 `targetCardRecordName`，服务端在指定卡片记录上追加新的收卡编号，允许同一卡片保存多个收卡编号。线下换卡收卡的 `offlineActivityName` 必填，服务端按同呼号、同卡片类型、同场景、同关联活动匹配待收卡记录；找不到旧卡片时自动创建的临时收卡卡片会记录该活动 ID，供后续前台线下换卡确认按同活动自动合并，合并时收卡编号原样迁移到旧卡片并删除临时卡片。
+`cardType` 允许：`QSO`、`SWL`、`EYEBALL`。`sceneType` 允许：`QSO`、`SWL`、`ONLINE_EYEBALL`、`EYEBALL`。`receivedDate` 必填，格式为 `yyyy-MM-dd`，用于生成收卡编号日期段并写入收卡时间；不填返回 `QSL-400-0001`，不再默认使用当前日期时间。2.0.0 起，服务端先创建 `ReceiveRecord`，再尝试关联已有发卡记录；收卡编号来源统一为 `ReceiveRecord.metadata.name`。线下换卡按活动、呼号、卡片类型匹配，允许同活动空呼号卡片在收卡时补写呼号。找不到发卡记录时，`ReceiveRecord.spec.matchStatus=未匹配`，不再自动创建 `CardRecord`。
+
+控制台签收确认：
+
+```json
+{
+  "receiptRemarks": "签收备注"
+}
+```
+
+`cardRecordName` 必须是正式 `C{序号}` 卡片编号。服务端将 `receiptConfirmed` 置为 `true`，追加 `publicReceiptRemarks`，并按场景联动补齐发卡状态。该接口用于线上换卡“签收确认”，不创建 `ReceiveRecord`，不分配 `receivedRecordCode`。
 
 修改收卡日期：
 
@@ -200,7 +215,7 @@ BH6SYX 卡片广场导入：
 }
 ```
 
-服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
+服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。线上换卡创建卡片默认写入卡片备注“期待与您空中相遇。\nLooking forward to meeting you on the air.”。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
 
 导入预检/导入任务：
 
@@ -234,7 +249,7 @@ BH6SYX 卡片广场导入：
 }
 ```
 
-当前导入导出数据集：`qso-record`、`card-record`、`exchange-request-review`、`offline-activity`、`address-management`、`bureau-management`、`equipment-catalog`、`system-setting`、`station-profile`、`station-equipment`、`station-card`。`all` 仅用于导出聚合，覆盖业务数据与配置菜单数据。
+当前导入导出数据集：`qso-record`、`card-record`、`receive-record`、`exchange-request-review`、`offline-activity`、`offline-exchange-card`、`address-management`、`bureau-management`、`equipment-catalog`、`system-setting`、`station-profile`、`station-equipment`、`station-card`。`all` 仅用于导出聚合，覆盖业务数据、收卡事实、线下换卡活动卡与配置菜单数据。2.0.0 前导出包需要先转换：从旧 `card-record.receivedRecordCodes` 聚合生成 `receive-record.csv`，从旧线下 `card-record.offlineActivityName` 聚合生成 `offline-exchange-card.csv`，并清理旧卡片记录中已迁出的收卡字段，过滤旧导出中误写入 `card-record.csv` 的 `qsl-station-card-*` 本台卡片版本占位记录，避免同一收卡事实或非业务卡片在新模型中重复统计。
 
 ## 7. 前台公开 API 与页面
 
@@ -253,6 +268,8 @@ BH6SYX 卡片广场导入：
 | POST | `/exchange-offline/-/confirm` | 匿名确认线下换卡；提交校验通过并写入卡片后才返回本站通信地址 | 是 |
 | POST | `/receipt-public/-/confirm` | 匿名签收确认 | 是 |
 
+公开 `POST /exchange-offline/-/confirm` 和 `POST /receipt-public/-/confirm` 均受 `QslPublicRateLimitService` 限制，限流键分别为 `exchange-offline-confirm` 与 `receipt-public-confirm`。线上换卡申请资源名由服务端扫描现有 `EX####` 并生成下一号，例如 `EX0001`、`EX0002`；历史 `exchange-request-*` 名称不参与新序列计算。前端“不创建卡片”占位记录使用 `NC####` 递增资源名，后台可持久化，前台作为空白卡片 ID 展示。
+
 ### 7.2 公开页面
 
 | 方法 | 路径 | 说明 |
@@ -265,7 +282,7 @@ BH6SYX 卡片广场导入：
 | GET | `/EYEBALL` | 线下换卡确认页面 |
 | GET | `/EYEBALL/{cardId}` | 线下换卡确认页面，按卡片编号预填 |
 
-线下换卡页面 HTML 不直接包含本站通信地址、收件人、电话或邮箱；本站联系信息只在 `POST /exchange-offline/-/confirm` 成功写入后随响应返回，用于页面展示提交成功后的寄送提示。
+线下换卡页面 HTML 不直接包含本站通信地址、收件人、电话或邮箱；本站联系信息只在 `POST /exchange-offline/-/confirm` 成功写入后随响应返回，用于页面展示提交成功后的寄送提示。线下换卡卡片不绑定通信地址或卡片局地址，服务端不得为线下换卡卡片写入 `CardRecord.spec.addressEntryName`。
 
 ### 7.3 短码
 
@@ -345,4 +362,6 @@ BH6SYX 卡片广场导入：
 5. 通知邮件接口已落地在 `/notification-mails/send` 与 `/notification-mails/batch-send`。
 6. RBAC 模板已覆盖控制台 CustomEndpoint、扩展资源 CRUD 与公开匿名接口。
 7. BH6SYX 卡片广场导入属于线上换卡业务菜单，服务端直接创建线上换卡卡片记录，不创建 `ExchangeRequest`。
+8. 2.0.0 起新增 `ReceiveRecord` 与 `OfflineExchangeCard`，收卡事实与线下换卡活动卡开始从 `CardRecord` 中解耦。
+9. 审计卡片记录查询和收卡记录查询按业务场景 tab 展示；卡片记录查询聚合 `CardRecord`，收卡记录查询聚合 `ReceiveRecord`，收卡编号以 `ReceiveRecord.metadata.name` 为准。
 
