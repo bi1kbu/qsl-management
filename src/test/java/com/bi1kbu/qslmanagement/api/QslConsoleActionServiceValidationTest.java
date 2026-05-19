@@ -248,8 +248,8 @@ class QslConsoleActionServiceValidationTest {
         ).block();
 
         assertEquals("C1001", result.cardRecordName());
-        assertEquals("R0002-20260507", result.receivedRecordCode());
-        assertEquals("R0001-20260506, R0002-20260507", target.getSpec().getReceivedRecordCodes());
+        assertEquals("R0001-20260507", result.receivedRecordCode());
+        assertEquals("R0001-20260506", target.getSpec().getReceivedRecordCodes());
         assertEquals(Boolean.TRUE, target.getSpec().getCardReceived());
         verify(client, org.mockito.Mockito.never()).create(any(CardRecord.class));
     }
@@ -289,8 +289,8 @@ class QslConsoleActionServiceValidationTest {
         ).block();
 
         assertEquals("C1001", result.cardRecordName());
-        assertEquals("R0002-20260507", result.receivedRecordCode());
-        assertEquals("R0001-20260506, R0002-20260507", target.getSpec().getReceivedRecordCodes());
+        assertEquals("R0001-20260507", result.receivedRecordCode());
+        assertEquals("R0001-20260506", target.getSpec().getReceivedRecordCodes());
         assertEquals(Boolean.TRUE, target.getSpec().getCardReceived());
         assertEquals("", target.getSpec().getReceivedMailStatus());
     }
@@ -309,9 +309,13 @@ class QslConsoleActionServiceValidationTest {
         source.getSpec().setReceivedAt("2026-05-06 10:00:00");
         source.getSpec().setReceivedMailStatus("SENT");
         var target = createCardRecord("C1002", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", false);
+        var receiveRecord = createReceiveRecord("R0001-20260506", "C1001");
 
         when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(source));
         when(client.fetch(eq(CardRecord.class), eq("C1002"))).thenReturn(Mono.just(target));
+        when(client.fetch(eq(ReceiveRecord.class), eq("R0001-20260506"))).thenReturn(Mono.just(receiveRecord));
+        when(client.listAll(eq(ReceiveRecord.class), any(), any())).thenReturn(Flux.just(receiveRecord));
+        when(client.update(any(ReceiveRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
 
@@ -325,10 +329,11 @@ class QslConsoleActionServiceValidationTest {
         assertEquals("C1001", result.sourceCardRecordName());
         assertEquals("C1002", result.targetCardRecordName());
         assertEquals("R0001-20260506", result.receivedRecordCode());
-        assertEquals("R0002-20260506", source.getSpec().getReceivedRecordCodes());
-        assertEquals(Boolean.TRUE, source.getSpec().getCardReceived());
+        assertEquals("C1002", receiveRecord.getSpec().getOutboundCardNames());
+        assertEquals("R0001-20260506, R0002-20260506", source.getSpec().getReceivedRecordCodes());
+        assertEquals(Boolean.FALSE, source.getSpec().getCardReceived());
         assertEquals("", source.getSpec().getReceivedMailStatus());
-        assertEquals("R0001-20260506", target.getSpec().getReceivedRecordCodes());
+        assertEquals(null, target.getSpec().getReceivedRecordCodes());
         assertEquals(Boolean.TRUE, target.getSpec().getCardReceived());
         assertEquals("", target.getSpec().getReceivedMailStatus());
     }
@@ -346,9 +351,13 @@ class QslConsoleActionServiceValidationTest {
         source.getSpec().setReceivedRecordCodes("R0001-20260506");
         source.getSpec().setReceivedAt("2026-05-06 10:00:00");
         var target = createCardRecord("C1002", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", false);
+        var receiveRecord = createReceiveRecord("R0001-20260506", "C1001");
 
         when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(source));
         when(client.fetch(eq(CardRecord.class), eq("C1002"))).thenReturn(Mono.just(target));
+        when(client.fetch(eq(ReceiveRecord.class), eq("R0001-20260506"))).thenReturn(Mono.just(receiveRecord));
+        when(client.listAll(eq(ReceiveRecord.class), any(), any())).thenReturn(Flux.just(receiveRecord));
+        when(client.update(any(ReceiveRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
 
@@ -359,10 +368,10 @@ class QslConsoleActionServiceValidationTest {
             "127.0.0.1"
         ).block();
 
-        assertEquals("", source.getSpec().getReceivedRecordCodes());
+        assertEquals("R0001-20260506", source.getSpec().getReceivedRecordCodes());
         assertEquals(Boolean.FALSE, source.getSpec().getCardReceived());
         assertEquals("", source.getSpec().getReceivedAt());
-        assertEquals("R0001-20260506", target.getSpec().getReceivedRecordCodes());
+        assertEquals(null, target.getSpec().getReceivedRecordCodes());
         assertEquals(Boolean.TRUE, target.getSpec().getCardReceived());
     }
 
@@ -658,6 +667,21 @@ class QslConsoleActionServiceValidationTest {
         spec.setReceiveRecordSequence(0);
         systemSetting.setSpec(spec);
         return systemSetting;
+    }
+
+    private static ReceiveRecord createReceiveRecord(String name, String outboundCardNames) {
+        var receiveRecord = new ReceiveRecord();
+        receiveRecord.setMetadata(QslApiSupport.createMetadata(name));
+        var spec = new ReceiveRecord.ReceiveRecordSpec();
+        spec.setCallSign("BI1KBU");
+        spec.setCardType("EYEBALL");
+        spec.setBusinessType("ONLINE_EYEBALL");
+        spec.setReceivedDate("2026-05-06");
+        spec.setReceivedAt("2026-05-06 10:00:00");
+        spec.setOutboundCardNames(outboundCardNames);
+        spec.setMatchStatus("已匹配");
+        receiveRecord.setSpec(spec);
+        return receiveRecord;
     }
 
     private static void stubReceiveRecordStorage(ReactiveExtensionClient client) {

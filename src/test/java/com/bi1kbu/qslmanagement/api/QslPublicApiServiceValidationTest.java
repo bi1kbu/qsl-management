@@ -360,7 +360,7 @@ class QslPublicApiServiceValidationTest {
     }
 
     @Test
-    void shouldMoveOfflineTemporaryReceivedCodeToActivatedCardWhenActivityMatches() {
+    void shouldNotUseLegacyOfflineTemporaryReceivedCodeWhenActivityMatches() {
         var client = Mockito.mock(ReactiveExtensionClient.class);
         var auditService = Mockito.mock(QslAuditService.class);
 
@@ -423,11 +423,12 @@ class QslPublicApiServiceValidationTest {
 
         assertEquals("C1001", result.cardRecordName());
         assertEquals("BI1KBU", activatedCard.getSpec().getCallSign());
-        assertEquals(Boolean.TRUE, activatedCard.getSpec().getCardReceived());
-        assertEquals("R0001-20260506", activatedCard.getSpec().getReceivedRecordCodes());
-        assertEquals("2026-05-06 10:00:00", activatedCard.getSpec().getReceivedAt());
+        assertEquals(Boolean.FALSE, activatedCard.getSpec().getCardReceived());
+        assertEquals("", activatedCard.getSpec().getReceivedRecordCodes());
+        assertEquals("", activatedCard.getSpec().getReceivedAt());
+        assertEquals("R0001-20260506", temporaryCard.getSpec().getReceivedRecordCodes());
         verify(client, times(1)).update(activatedCard);
-        verify(client, times(1)).delete(temporaryCard);
+        verify(client, times(0)).delete(temporaryCard);
     }
 
     @Test

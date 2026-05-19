@@ -181,7 +181,6 @@ const datasetConfigs: DatasetConfig[] = [
       'receivedMailSentAt',
       'receivedMailLastError',
       'mailTargetEmail',
-      'receivedRecordCodes',
       'flowStatus',
     ],
     keywords: ['card-record', 'card', '卡片记录'],
@@ -220,7 +219,6 @@ const datasetConfigs: DatasetConfig[] = [
       receivedMailSentAt: String(item.spec?.receivedMailSentAt ?? ''),
       receivedMailLastError: String(item.spec?.receivedMailLastError ?? ''),
       mailTargetEmail: String(item.spec?.mailTargetEmail ?? ''),
-      receivedRecordCodes: String(item.spec?.receivedRecordCodes ?? ''),
       flowStatus: String(item.status?.flowStatus ?? ''),
     }),
     fromRow: (row) => ({
@@ -258,7 +256,6 @@ const datasetConfigs: DatasetConfig[] = [
         receivedMailSentAt: row.receivedMailSentAt ?? '',
         receivedMailLastError: row.receivedMailLastError ?? '',
         mailTargetEmail: row.mailTargetEmail ?? '',
-        receivedRecordCodes: row.receivedRecordCodes ?? '',
       },
       status: {
         flowStatus: row.flowStatus ?? '',

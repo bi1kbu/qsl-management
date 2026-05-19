@@ -95,8 +95,8 @@ API 版本：`v1alpha1`
 | POST | `/mail-send-confirms/{cardRecordName}/confirm` | 确认发信，更新 `cardSent/sentAt` | `mail-send-confirm:edit` |
 | POST | `/mail-receive-confirms/confirm` | 收卡确认创建 `ReceiveRecord` 并尝试关联发卡记录；无法匹配时不再新建发卡编号 | `mail-receive-confirm:edit` |
 | POST | `/receipt-confirms/{cardRecordName}/confirm` | 控制台确认对方已签收我方发出的卡片，写入 `CardRecord.spec.receiptConfirmed/publicReceiptRemarks`，不创建 `ReceiveRecord`，不分配收卡编号 | `mail-receive-confirm:edit` |
-| POST | `/mail-receive-confirms/{cardRecordName}/received-date` | 修改卡片收卡日期，并按日期重新赋予收卡编号 | `mail-receive-confirm:edit` |
-| POST | `/mail-receive-confirms/{cardRecordName}/received-record-code/migrate` | 将源卡片的指定收卡编号迁移到目标卡片收卡清单 | `mail-receive-confirm:edit` |
+| POST | `/mail-receive-confirms/{cardRecordName}/received-date` | 修改卡片收卡日期，并同步更新关联收卡记录日期 | `mail-receive-confirm:edit` |
+| POST | `/mail-receive-confirms/{cardRecordName}/received-record-code/migrate` | 将指定收卡记录从源卡片关联迁移到目标卡片关联 | `mail-receive-confirm:edit` |
 | POST | `/exchange-requests/{name}/approve` | 换卡申请通过并创建线上换卡卡片 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/reject` | 换卡申请拒绝 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/notify` | 发送线上换卡申请审核结果邮件 | `exchange-request-review:edit` |
@@ -156,7 +156,7 @@ API 版本：`v1alpha1`
 }
 ```
 
-服务端会将 `cardReceived` 置为 `true`，按 `receivedDate` 更新 `receivedAt` 日期段，并把可识别的已有收卡编号改写为 `R0001-20260502` 形式。若原记录没有收卡编号，或已有编号不符合 `R{序号}-{yyyyMMdd}` 格式，则自动分配新的收卡编号。
+服务端会将 `cardReceived` 置为 `true`，按 `receivedDate` 更新 `receivedAt` 日期段，并同步更新通过 `ReceiveRecord.spec.outboundCardNames` 关联到该卡片的 `ReceiveRecord.spec.receivedDate/receivedAt`。2.0.7 起不再读取或改写 `CardRecord.spec.receivedRecordCodes`。
 
 迁移收卡编号：
 ```json
@@ -165,7 +165,7 @@ API 版本：`v1alpha1`
   "targetCardRecordName": "C1002"
 }
 ```
-`cardRecordName` 为源卡片 ID，源卡片与目标卡片都必须是正式 `C{序号}` 卡片记录。服务端会从源卡片 `receivedRecordCodes` 移除指定编号，并追加到目标卡片 `receivedRecordCodes`；目标卡片自动置为已收卡。源卡片若没有剩余收卡编号，则同步清空收卡状态、收卡时间和收卡邮件状态；若仍有剩余编号，则保持已收卡并清理收卡邮件状态，避免旧回执状态误用。
+`cardRecordName` 为源卡片 ID，源卡片与目标卡片都必须是正式 `C{序号}` 卡片记录。服务端会读取指定 `ReceiveRecord`，将 `ReceiveRecord.spec.outboundCardNames` 中的源卡片编号替换为目标卡片编号，并按新的关联结果刷新源卡片与目标卡片的收卡状态和收卡时间。2.0.7 起不再迁移 `CardRecord.spec.receivedRecordCodes` 字段内容。
 
 换卡申请拒绝：
 

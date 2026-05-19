@@ -28,7 +28,10 @@ interface CardRecordSpec {
   cardSent: boolean
   receiptConfirmed: boolean
   cardReceived: boolean
-  receivedRecordCodes: string
+}
+
+interface ReceiveRecordSpec {
+  outboundCardNames: string
 }
 
 interface CardQueryItem {
@@ -45,7 +48,7 @@ interface CardQueryItem {
   cardSent: boolean
   receiptConfirmed: boolean
   cardReceived: boolean
-  receivedRecordCodes: string
+  receiveRecordCodes: string
   remarkFields: CardRemarkFields
   remarksText: string
 }
@@ -84,7 +87,7 @@ type CardQuerySortKey =
   | 'cardSent'
   | 'receiptConfirmed'
   | 'cardReceived'
-  | 'receivedRecordCodes'
+  | 'receiveRecordCodes'
   | 'remarksText'
 
 const quickReceipt = ref<QuickReceiptOption>('全部')
@@ -97,6 +100,7 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const resourcePlural = 'card-records'
+const receiveRecordPlural = 'receive-records'
 
 const normalize = (value: string) => value.trim().toUpperCase()
 const isNoCardId = (value: string) => {
@@ -104,6 +108,26 @@ const isNoCardId = (value: string) => {
   return normalized.toLowerCase().startsWith('no-card-') || /^NC\d+$/i.test(normalized)
 }
 const displayCardId = (value: string) => isNoCardId(value) ? '' : value
+
+const parseResourceNames = (value?: string): string[] => {
+  return (value ?? '')
+    .split(',')
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean)
+}
+
+const buildReceiveRecordCodeMap = (extensions: QslExtension<ReceiveRecordSpec>[]): Map<string, string[]> => {
+  const grouped = new Map<string, string[]>()
+  extensions.forEach((extension) => {
+    const receiveRecordCode = extension.metadata.name.trim().toUpperCase()
+    parseResourceNames(extension.spec?.outboundCardNames).forEach((cardName) => {
+      const current = grouped.get(cardName) ?? []
+      current.push(receiveRecordCode)
+      grouped.set(cardName, current)
+    })
+  })
+  return grouped
+}
 
 const normalizeSceneType = (sceneType?: string, cardType?: string): CardQueryItem['sceneType'] => {
   const upperScene = (sceneType ?? '').trim().toUpperCase()
@@ -120,7 +144,8 @@ const normalizeSceneType = (sceneType?: string, cardType?: string): CardQueryIte
   return 'QSO'
 }
 
-const toRow = (extension: QslExtension<CardRecordSpec>): CardQueryItem => {
+const toRow = (extension: QslExtension<CardRecordSpec>, receiveRecordCodeMap: Map<string, string[]>): CardQueryItem => {
+  const receiveRecordCodes = receiveRecordCodeMap.get(extension.metadata.name.trim().toUpperCase()) ?? []
   return {
     id: extension.metadata.name,
     callSign: extension.spec?.callSign ?? '',
@@ -135,7 +160,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>): CardQueryItem => {
     cardSent: Boolean(extension.spec?.cardSent),
     receiptConfirmed: Boolean(extension.spec?.receiptConfirmed),
     cardReceived: Boolean(extension.spec?.cardReceived),
-    receivedRecordCodes: extension.spec?.receivedRecordCodes ?? '',
+    receiveRecordCodes: receiveRecordCodes.join(', '),
     remarkFields: {
       businessRemarks: extension.spec?.businessRemarks ?? '',
       receivedRemarks: extension.spec?.receivedRemarks ?? '',
@@ -158,7 +183,9 @@ const loadRows = async () => {
   loading.value = true
   try {
     const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
-    rows.value = extensions.map((extension) => toRow(extension))
+    const receiveRecordExtensions = await listExtensions<ReceiveRecordSpec>(receiveRecordPlural)
+    const receiveRecordCodeMap = buildReceiveRecordCodeMap(receiveRecordExtensions)
+    rows.value = extensions.map((extension) => toRow(extension, receiveRecordCodeMap))
     feedback.value = ''
   } catch (error) {
     feedback.value = `加载卡片记录失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -178,7 +205,7 @@ const filteredRows = computed(() => {
 
     const keywordOk =
       !keyword ||
-      [item.id, item.callSign, item.cardType, item.offlineActivityName, item.cardVersion, item.cardDate, item.cardTime, item.remarksText]
+      [item.id, item.callSign, item.cardType, item.offlineActivityName, item.cardVersion, item.cardDate, item.cardTime, item.receiveRecordCodes, item.remarksText]
         .join(' ')
         .toUpperCase()
         .includes(keyword)
@@ -584,7 +611,7 @@ onMounted(loadRows)
               <th><QslSortableHeader column-key="cardSent" label="已发" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="receiptConfirmed" label="签收" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th v-if="showReceivedColumn"><QslSortableHeader column-key="cardReceived" label="已收" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th v-if="showReceivedColumn"><QslSortableHeader column-key="receivedRecordCodes" label="收卡编号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th v-if="showReceivedColumn"><QslSortableHeader column-key="receiveRecordCodes" label="收卡编号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
               <th><QslSortableHeader column-key="remarksText" label="备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
             </tr>
           </thead>
@@ -624,7 +651,7 @@ onMounted(loadRows)
                 <td v-if="showReceivedColumn">
                   <VTag :theme="item.cardReceived ? 'secondary' : 'default'">{{ item.cardReceived ? '是' : '否' }}</VTag>
                 </td>
-                <td v-if="showReceivedColumn">{{ item.receivedRecordCodes || '-' }}</td>
+                <td v-if="showReceivedColumn">{{ item.receiveRecordCodes || '-' }}</td>
                 <td>
                   {{ summarizeRemarks(item.remarkFields) }}
                 </td>
@@ -644,7 +671,7 @@ onMounted(loadRows)
                     <p><strong>已发：</strong>{{ item.cardSent ? '是' : '否' }}</p>
                     <p><strong>签收：</strong>{{ item.receiptConfirmed ? '是' : '否' }}</p>
                     <p><strong>已收：</strong>{{ item.cardReceived ? '是' : '否' }}</p>
-                    <p><strong>收卡编号：</strong>{{ item.receivedRecordCodes || '-' }}</p>
+                    <p><strong>收卡编号：</strong>{{ item.receiveRecordCodes || '-' }}</p>
                     <div class="qsl-detail-full">
                       <strong>备注：</strong>
                       <QslCardRemarkEntries :remark-fields="item.remarkFields" empty-text="无" />

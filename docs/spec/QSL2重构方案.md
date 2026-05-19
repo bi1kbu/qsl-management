@@ -87,7 +87,7 @@ Halo 官方资料核验日期：2026-05-18
 | `matchReason` | `卡片ID`、`活动呼号`、`呼号场景`、`人工选择`、`未找到发卡记录` |
 | `remarks` | 收卡备注 |
 
-收卡业务的收卡编号来源统一为 `ReceiveRecord.metadata.name`。旧 `CardRecord.spec.receivedRecordCodes` 仅作为迁移期兼容字段，不作为新收卡编号、查询、统计或导入导出的主数据来源。
+收卡业务的收卡编号来源统一为 `ReceiveRecord.metadata.name`。旧 `CardRecord.spec.receivedRecordCodes` 字段保留到 2.1.x 版本移除，但 2.0.7 起普通业务、查询、统计、导入导出和前端展示均不再读写该字段；仅旧版本迁移与历史清理逻辑可读取它以生成 `ReceiveRecord`。
 
 ## 5. 发出与收回的关联关系
 
@@ -177,6 +177,6 @@ ReceiveRecord.spec.outboundCardNames = ["C1001"]
 
 ## 10. 偏离与回退
 
-1. 第一阶段不会立即移除旧 `CardRecord.cardReceived/receivedRecordCodes` 字段，原因是现有前端与打印工具仍读取这些字段。风险是迁移期存在双口径；回退方案是总览继续按旧字段统计。
+1. 2.0.7 不立即移除旧 `CardRecord.spec.receivedRecordCodes` 字段，原因是需要给历史数据与旧迁移工具留出清理窗口。风险是存量数据中仍可看到历史值；控制方案是普通业务、查询、统计、导入导出和前端展示不再读写该字段，并在 2.1.x 版本移除字段定义。
 2. 第一阶段不一次性拆分通联发卡与线上换卡发卡模型，原因是线下换卡与收卡偏差最严重。风险是 `CardRecord` 仍有部分历史耦合；回退方案是保持现有通联与线上换卡流程不变。
 3. 第一阶段新增模型后，历史数据迁移需单独执行导入或修复任务，避免自动迁移误合并实体卡片编号。

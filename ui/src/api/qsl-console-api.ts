@@ -40,18 +40,6 @@ export interface ReceiptConfirmResult {
   handledAt: string
 }
 
-export interface ReceivedRecordCodeMigratePayload {
-  receivedRecordCode: string
-  targetCardRecordName: string
-}
-
-export interface ReceivedRecordCodeMigrateResult {
-  sourceCardRecordName: string
-  targetCardRecordName: string
-  receivedRecordCode: string
-  message: string
-}
-
 export interface ExchangeReviewResult {
   requestName: string
   reviewStatus: '已通过' | '已拒绝'
@@ -278,17 +266,6 @@ export async function updateMailReceiveDate(
   const response = await axiosInstance.post<ApiResult<MailReceiveConfirmResult>>(
     `${consoleApiBase}/mail-receive-confirms/${encodeURIComponent(cardRecordName)}/received-date`,
     { receivedDate },
-  )
-  return response.data.data
-}
-
-export async function migrateReceivedRecordCode(
-  sourceCardRecordName: string,
-  payload: ReceivedRecordCodeMigratePayload,
-): Promise<ReceivedRecordCodeMigrateResult> {
-  const response = await axiosInstance.post<ApiResult<ReceivedRecordCodeMigrateResult>>(
-    `${consoleApiBase}/mail-receive-confirms/${encodeURIComponent(sourceCardRecordName)}/received-record-code/migrate`,
-    payload,
   )
   return response.data.data
 }

@@ -79,7 +79,7 @@ class QslCardStateTransitionSupportTest {
         assertEquals("", spec.getCardIssuedAt());
         assertEquals("", spec.getSentAt());
         assertEquals("", spec.getReceivedAt());
-        assertEquals("", spec.getReceivedRecordCodes());
+        assertEquals("R1-20260504", spec.getReceivedRecordCodes());
         assertEquals("", spec.getCreatedMailStatus());
         assertEquals("", spec.getCreatedMailSentAt());
         assertEquals("", spec.getCreatedMailLastError());

@@ -54,7 +54,6 @@ interface CardRecordSpec {
   receivedMailSentAt: string
   receivedMailLastError: string
   mailTargetEmail: string
-  receivedRecordCodes: string
 }
 
 interface CardRecordItem {
@@ -815,7 +814,6 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     receivedMailSentAt: spec?.receivedMailSentAt ?? '',
     receivedMailLastError: spec?.receivedMailLastError ?? '',
     mailTargetEmail: spec?.mailTargetEmail ?? '',
-    receivedRecordCodes: spec?.receivedRecordCodes ?? '',
   }
 }
 
@@ -1239,7 +1237,6 @@ const markQsoAsNoCard = async (item: QsoRecordItem) => {
         receivedMailSentAt: '',
         receivedMailLastError: '',
         mailTargetEmail: '',
-        receivedRecordCodes: '',
       },
     })
 
@@ -1554,7 +1551,6 @@ const createOfflineBatchCards = async () => {
           receivedMailSentAt: '',
           receivedMailLastError: '',
           mailTargetEmail: '',
-          receivedRecordCodes: '',
         },
       })
     }
@@ -1764,7 +1760,6 @@ const saveCardRecord = async () => {
         receivedMailSentAt: '',
         receivedMailLastError: '',
         mailTargetEmail: '',
-        receivedRecordCodes: '',
       },
     })
 

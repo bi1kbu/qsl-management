@@ -468,7 +468,6 @@ public class QslImportExportJobService {
                     spec.setReceivedMailSentAt(value(row, "receivedMailSentAt"));
                     spec.setReceivedMailLastError(value(row, "receivedMailLastError"));
                     spec.setMailTargetEmail(value(row, "mailTargetEmail"));
-                    spec.setReceivedRecordCodes(value(row, "receivedRecordCodes"));
                     record.setSpec(spec);
 
                     var status = record.getStatus() == null ? new CardRecord.CardRecordStatus() : record.getStatus();
@@ -970,7 +969,6 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getReceivedMailSentAt()),
                         spec == null ? "" : nullToEmpty(spec.getReceivedMailLastError()),
                         spec == null ? "" : nullToEmpty(spec.getMailTargetEmail()),
-                        spec == null ? "" : nullToEmpty(spec.getReceivedRecordCodes()),
                         status == null ? "" : nullToEmpty(status.getFlowStatus())
                     );
                 })
@@ -1010,7 +1008,6 @@ public class QslImportExportJobService {
                     "receivedMailSentAt",
                     "receivedMailLastError",
                     "mailTargetEmail",
-                    "receivedRecordCodes",
                     "flowStatus"
                 ), rows));
             case "receive-record" -> client.listAll(ReceiveRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)

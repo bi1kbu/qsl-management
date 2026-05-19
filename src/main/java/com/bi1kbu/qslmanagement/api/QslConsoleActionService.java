@@ -11,10 +11,10 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.data.domain.Sort;
@@ -291,32 +291,46 @@ public class QslConsoleActionService {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "收卡日期不能为空"));
         }
 
-        return fetchOr404(CardRecord.class, cardRecordName)
-            .flatMap(cardRecord -> {
-                var spec = ensureCardRecordSpec(cardRecord);
-                return rewriteReceivedRecordCodesForDate(spec.getReceivedRecordCodes(), normalizedReceivedDate)
-                    .flatMap(receivedRecordCodes -> {
-                        spec.setCardReceived(Boolean.TRUE);
-                        spec.setReceivedAt(resolveReceivedAt(normalizedReceivedDate, spec.getReceivedAt()));
-                        spec.setReceivedRecordCodes(receivedRecordCodes);
+        var normalizedCardRecordName = normalizeCardRecordName(cardRecordName);
+        return fetchOr404(CardRecord.class, normalizedCardRecordName)
+            .flatMap(cardRecord -> linkedReceiveRecordsForCard(normalizedCardRecordName)
+                .collectList()
+                .flatMap(receiveRecords -> {
+                    if (receiveRecords.isEmpty()) {
+                        return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                            "QSL-422-0001", "未找到关联收卡记录"));
+                    }
+                    var spec = ensureCardRecordSpec(cardRecord);
+                    var receivedAt = resolveReceivedAt(normalizedReceivedDate, spec.getReceivedAt());
+                    return reactor.core.publisher.Flux.fromIterable(receiveRecords)
+                        .concatMap(receiveRecord -> updateReceiveRecordDate(receiveRecord, normalizedReceivedDate,
+                            receivedAt))
+                        .collectList()
+                        .flatMap(updatedReceiveRecords -> {
+                            spec.setCardReceived(Boolean.TRUE);
+                            spec.setReceivedAt(receivedAt);
+                            clearReceivedMailState(spec);
 
-                        var status = cardRecord.getStatus() == null
-                            ? new CardRecord.CardRecordStatus()
-                            : cardRecord.getStatus();
-                        status.setFlowStatus("已收卡片");
-                        cardRecord.setStatus(status);
-                        return client.update(cardRecord)
-                            .map(updated -> new MailReceiveConfirmResult(
-                                updated.getMetadata().getName(),
-                                QslApiSupport.normalizeCallSign(spec.getCallSign()),
-                                QslApiSupport.normalizeCardType(spec.getCardType()),
-                                "修改收卡日期",
-                                "已按收卡日期重新赋予收卡编号。",
-                                spec.getReceivedAt(),
-                                receivedRecordCodes
-                            ));
-                    });
-            })
+                            var status = cardRecord.getStatus() == null
+                                ? new CardRecord.CardRecordStatus()
+                                : cardRecord.getStatus();
+                            status.setFlowStatus("已收卡片");
+                            cardRecord.setStatus(status);
+                            var receiveRecordNames = String.join(", ", updatedReceiveRecords.stream()
+                                .map(this::resourceName)
+                                .toList());
+                            return client.update(cardRecord)
+                                .map(updated -> new MailReceiveConfirmResult(
+                                    updated.getMetadata().getName(),
+                                    QslApiSupport.normalizeCallSign(spec.getCallSign()),
+                                    QslApiSupport.normalizeCardType(spec.getCardType()),
+                                    "修改收卡日期",
+                                    "已按收卡日期更新关联收卡记录。",
+                                    spec.getReceivedAt(),
+                                    receiveRecordNames
+                                ));
+                        });
+                }))
             .flatMap(result -> qslAuditService.appendAuditLog(
                 "修改收卡日期",
                 "card-record",
@@ -333,56 +347,54 @@ public class QslConsoleActionService {
             return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                 "QSL-422-0001", "源卡片必须是正式卡片编号"));
         }
-        var targetCardRecordName = command.targetCardRecordName() == null
-            ? ""
-            : command.targetCardRecordName().trim().toUpperCase();
+        var normalizedSourceCardRecordName = normalizeCardRecordName(sourceCardRecordName);
+        var targetCardRecordName = normalizeCardRecordName(command.targetCardRecordName());
         if (!isFormalCardRecordName(targetCardRecordName)) {
             return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                 "QSL-422-0001", "目标卡片必须是正式卡片编号"));
         }
-        if (sourceCardRecordName.trim().equalsIgnoreCase(targetCardRecordName)) {
+        if (normalizedSourceCardRecordName.equalsIgnoreCase(targetCardRecordName)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST,
                 "QSL-400-0001", "目标卡片不能与源卡片相同"));
         }
-        var receivedRecordCode = normalizeReceivedRecordCode(command.receivedRecordCode());
+        var receivedRecordCode = normalizeReceivedRecordName(command.receivedRecordCode());
         if (!isFormalReceivedRecordCode(receivedRecordCode)) {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST,
                 "QSL-400-0001", "收卡编号格式必须为 R0001-20260506"));
         }
 
         return Mono.zip(
-                fetchOr404(CardRecord.class, sourceCardRecordName.trim().toUpperCase()),
+                fetchOr404(CardRecord.class, normalizedSourceCardRecordName),
                 fetchOr404(CardRecord.class, targetCardRecordName)
             )
-            .flatMap(tuple -> {
-                var source = tuple.getT1();
-                var target = tuple.getT2();
-                var sourceSpec = ensureCardRecordSpec(source);
-                var targetSpec = ensureCardRecordSpec(target);
-                var sourceCodes = receivedRecordCodeSet(sourceSpec.getReceivedRecordCodes());
-                var targetCodes = receivedRecordCodeSet(targetSpec.getReceivedRecordCodes());
-                if (!sourceCodes.contains(receivedRecordCode)) {
+            .then(fetchOr404(ReceiveRecord.class, receivedRecordCode))
+            .flatMap(receiveRecord -> {
+                var receiveSpec = receiveRecord.getSpec() == null
+                    ? new ReceiveRecord.ReceiveRecordSpec()
+                    : receiveRecord.getSpec();
+                var outboundCardNames = outboundCardNameSet(receiveSpec.getOutboundCardNames());
+                if (!outboundCardNames.contains(normalizedSourceCardRecordName)) {
                     return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
-                        "QSL-422-0001", "源卡片未包含该收卡编号"));
+                        "QSL-422-0001", "收卡记录未关联源卡片"));
                 }
-                if (targetCodes.contains(receivedRecordCode)) {
+                if (outboundCardNames.contains(targetCardRecordName)) {
                     return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
-                        "QSL-422-0001", "目标卡片已包含该收卡编号"));
+                        "QSL-422-0001", "收卡记录已关联目标卡片"));
                 }
-
-                sourceCodes.remove(receivedRecordCode);
-                targetCodes.add(receivedRecordCode);
-                applyReceivedRecordCodes(source, sourceSpec, sourceCodes, false, "");
-                applyReceivedRecordCodes(target, targetSpec, targetCodes, true,
-                    resolveReceivedAtFromRecordCode(receivedRecordCode));
-
-                return client.update(target)
-                    .then(client.update(source))
+                outboundCardNames.remove(normalizedSourceCardRecordName);
+                outboundCardNames.add(targetCardRecordName);
+                receiveSpec.setOutboundCardNames(String.join(", ", outboundCardNames));
+                receiveSpec.setMatchStatus(defaultIfBlank(receiveSpec.getMatchStatus(), "人工匹配"));
+                receiveSpec.setMatchReason("人工迁移关联卡片");
+                receiveRecord.setSpec(receiveSpec);
+                return client.update(receiveRecord)
+                    .then(refreshCardReceiveState(normalizedSourceCardRecordName))
+                    .then(refreshCardReceiveState(targetCardRecordName))
                     .thenReturn(new ReceivedRecordCodeMigrateResult(
-                        source.getMetadata().getName(),
-                        target.getMetadata().getName(),
+                        normalizedSourceCardRecordName,
+                        targetCardRecordName,
                         receivedRecordCode,
-                        "已迁移收卡编号"
+                        "已迁移收卡记录关联"
                     ));
             })
             .flatMap(result -> qslAuditService.appendAuditLog(
@@ -692,7 +704,6 @@ public class QslConsoleActionService {
                 spec.setReceivedMailSentAt("");
                 spec.setReceivedMailLastError("");
                 spec.setMailTargetEmail(binding.mailTargetEmail());
-                spec.setReceivedRecordCodes("");
                 cardRecord.setSpec(spec);
 
                 var status = new CardRecord.CardRecordStatus();
@@ -1027,7 +1038,6 @@ public class QslConsoleActionService {
                 spec.setReceivedMailSentAt("");
                 spec.setReceivedMailLastError("");
                 spec.setMailTargetEmail(defaultIfBlank(mailTargetEmail, ""));
-                spec.setReceivedRecordCodes(defaultIfBlank(receivedRecordCode, ""));
                 cardRecord.setSpec(spec);
 
                 var status = new CardRecord.CardRecordStatus();
@@ -1047,7 +1057,6 @@ public class QslConsoleActionService {
         spec.setCardReceived(Boolean.TRUE);
         spec.setReceivedRemarks(QslApiSupport.appendRemark(spec.getReceivedRemarks(), mapReceiptRemark(receiptRemarks)));
         spec.setReceivedAt(defaultIfBlank(receivedAt, QslApiSupport.nowText()));
-        spec.setReceivedRecordCodes(appendReceivedRecordCode(spec.getReceivedRecordCodes(), receivedRecordCode));
         spec.setReceivedMailStatus("");
         spec.setReceivedMailSentAt("");
         spec.setReceivedMailLastError("");
@@ -1135,7 +1144,6 @@ public class QslConsoleActionService {
         spec.setReceivedMailSentAt("");
         spec.setReceivedMailLastError("");
         spec.setMailTargetEmail("");
-        spec.setReceivedRecordCodes("");
         cardRecord.setSpec(spec);
         return spec;
     }
@@ -1257,6 +1265,30 @@ public class QslConsoleActionService {
         return resourceName != null && CARD_NAME_PATTERN.matcher(resourceName.trim()).matches();
     }
 
+    private String normalizeCardRecordName(String resourceName) {
+        return resourceName == null ? "" : resourceName.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private LinkedHashSet<String> outboundCardNameSet(String outboundCardNames) {
+        var names = new LinkedHashSet<String>();
+        if (outboundCardNames == null || outboundCardNames.isBlank()) {
+            return names;
+        }
+        for (var name : outboundCardNames.split(",")) {
+            var normalized = normalizeCardRecordName(name);
+            if (!normalized.isBlank()) {
+                names.add(normalized);
+            }
+        }
+        return names;
+    }
+
+    private String resourceName(Extension extension) {
+        return extension == null || extension.getMetadata() == null || extension.getMetadata().getName() == null
+            ? ""
+            : extension.getMetadata().getName().trim();
+    }
+
     private <E extends Extension> Mono<E> fetchOr404(Class<E> extensionType, String name) {
         return client.fetch(extensionType, name)
             .switchIfEmpty(Mono.error(new QslApiException(HttpStatus.NOT_FOUND, "QSL-404-0001", "资源不存在")));
@@ -1312,17 +1344,10 @@ public class QslConsoleActionService {
     }
 
     private Mono<String> reserveNextReceivedRecordCode(String receivedDate) {
-        var legacyMaxMono = client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
-            .map(cardRecord -> extractMaxReceivedRecordSequence(cardRecord.getSpec() == null
-                ? ""
-                : cardRecord.getSpec().getReceivedRecordCodes()))
-            .reduce(RECEIVE_SEQUENCE_START, Math::max);
-        var receiveRecordMaxMono = client.listAll(ReceiveRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+        return client.listAll(ReceiveRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
             .map(receiveRecord -> receiveRecord.getMetadata() == null ? "" : receiveRecord.getMetadata().getName())
             .map(name -> extractSequence(name, RECEIVED_RECORD_PATTERN))
-            .reduce(RECEIVE_SEQUENCE_START, Math::max);
-        return Mono.zip(legacyMaxMono, receiveRecordMaxMono)
-            .map(tuple -> Math.max(tuple.getT1(), tuple.getT2()))
+            .reduce(RECEIVE_SEQUENCE_START, Math::max)
             .flatMap(existingMax -> fetchOrCreateSystemSetting()
                 .flatMap(systemSetting -> {
                     var spec = systemSetting.getSpec() == null
@@ -1387,22 +1412,52 @@ public class QslConsoleActionService {
         return receivedDate + " " + timePart;
     }
 
-    private Mono<String> rewriteReceivedRecordCodesForDate(String current, String receivedDate) {
-        var normalizedDatePart = LocalDate.parse(receivedDate, DateTimeFormatter.ISO_LOCAL_DATE)
-            .format(DateTimeFormatter.BASIC_ISO_DATE);
-        var codes = new LinkedHashSet<String>();
-        if (current != null && !current.isBlank()) {
-            Arrays.stream(current.split(","))
-                .map(this::normalizeReceivedRecordCode)
-                .filter(item -> !item.isBlank())
-                .map(item -> rewriteReceivedRecordCodeDate(item, normalizedDatePart))
-                .filter(item -> !item.isBlank())
-                .forEach(codes::add);
+    private reactor.core.publisher.Flux<ReceiveRecord> linkedReceiveRecordsForCard(String cardRecordName) {
+        var normalizedCardRecordName = normalizeCardRecordName(cardRecordName);
+        if (normalizedCardRecordName.isBlank()) {
+            return reactor.core.publisher.Flux.empty();
         }
-        if (!codes.isEmpty()) {
-            return Mono.just(String.join(", ", codes));
-        }
-        return reserveNextReceivedRecordCode(receivedDate);
+        return client.listAll(ReceiveRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .filter(receiveRecord -> {
+                var spec = receiveRecord.getSpec();
+                return spec != null
+                    && outboundCardNameSet(spec.getOutboundCardNames()).contains(normalizedCardRecordName);
+            });
+    }
+
+    private Mono<ReceiveRecord> updateReceiveRecordDate(ReceiveRecord receiveRecord, String receivedDate,
+        String receivedAt) {
+        var spec = receiveRecord.getSpec() == null
+            ? new ReceiveRecord.ReceiveRecordSpec()
+            : receiveRecord.getSpec();
+        spec.setReceivedDate(defaultIfBlank(receivedDate, ""));
+        spec.setReceivedAt(defaultIfBlank(receivedAt, QslApiSupport.nowText()));
+        receiveRecord.setSpec(spec);
+        return client.update(receiveRecord);
+    }
+
+    private Mono<CardRecord> refreshCardReceiveState(String cardRecordName) {
+        var normalizedCardRecordName = normalizeCardRecordName(cardRecordName);
+        return fetchOr404(CardRecord.class, normalizedCardRecordName)
+            .flatMap(cardRecord -> linkedReceiveRecordsForCard(normalizedCardRecordName)
+                .collectList()
+                .flatMap(receiveRecords -> {
+                    var spec = ensureCardRecordSpec(cardRecord);
+                    spec.setCardReceived(!receiveRecords.isEmpty());
+                    if (receiveRecords.isEmpty()) {
+                        spec.setReceivedAt("");
+                    } else if (defaultIfBlank(spec.getReceivedAt(), "").isBlank()) {
+                        spec.setReceivedAt(receiveRecords.stream()
+                            .map(ReceiveRecord::getSpec)
+                            .filter(item -> item != null && !defaultIfBlank(item.getReceivedAt(), "").isBlank())
+                            .map(item -> item.getReceivedAt().trim())
+                            .findFirst()
+                            .orElseGet(QslApiSupport::nowText));
+                    }
+                    clearReceivedMailState(spec);
+                    QslCardStateTransitionSupport.refreshFlowStatus(cardRecord);
+                    return client.update(cardRecord);
+                }));
     }
 
     private Mono<SystemSetting> fetchOrCreateSystemSetting() {
@@ -1436,103 +1491,21 @@ public class QslConsoleActionService {
         return spec;
     }
 
-    private int extractMaxReceivedRecordSequence(String receivedRecordCodes) {
-        if (receivedRecordCodes == null || receivedRecordCodes.isBlank()) {
-            return RECEIVE_SEQUENCE_START;
-        }
-        return Arrays.stream(receivedRecordCodes.split(","))
-            .map(this::normalizeReceivedRecordCode)
-            .filter(item -> !item.isBlank())
-            .mapToInt(code -> extractSequence(code, RECEIVED_RECORD_PATTERN))
-            .max()
-            .orElse(RECEIVE_SEQUENCE_START);
-    }
-
-    private String appendReceivedRecordCode(String current, String next) {
-        var normalizedNext = normalizeReceivedRecordCode(next);
-        if (normalizedNext.isBlank()) {
-            return defaultIfBlank(current, "");
-        }
-        var codes = new LinkedHashSet<String>();
-        if (current != null && !current.isBlank()) {
-            Arrays.stream(current.split(","))
-                .map(this::normalizeReceivedRecordCode)
-                .filter(item -> !item.isBlank())
-                .forEach(codes::add);
-        }
-        codes.add(normalizedNext);
-        return String.join(", ", codes);
-    }
-
-    private LinkedHashSet<String> receivedRecordCodeSet(String current) {
-        var codes = new LinkedHashSet<String>();
-        if (current != null && !current.isBlank()) {
-            Arrays.stream(current.split(","))
-                .map(this::normalizeReceivedRecordCode)
-                .filter(item -> !item.isBlank())
-                .forEach(codes::add);
-        }
-        return codes;
-    }
-
-    private void applyReceivedRecordCodes(CardRecord cardRecord, CardRecord.CardRecordSpec spec,
-        LinkedHashSet<String> codes, boolean forceReceived, String fallbackReceivedAt) {
-        var joinedCodes = String.join(", ", codes);
-        spec.setReceivedRecordCodes(joinedCodes);
-        spec.setCardReceived(forceReceived || !codes.isEmpty());
-        if (Boolean.TRUE.equals(spec.getCardReceived())) {
-            spec.setReceivedAt(defaultIfBlank(spec.getReceivedAt(), defaultIfBlank(fallbackReceivedAt, QslApiSupport.nowText())));
-        } else {
-            spec.setReceivedAt("");
-        }
-        clearReceivedMailState(spec);
-
-        var status = cardRecord.getStatus() == null
-            ? new CardRecord.CardRecordStatus()
-            : cardRecord.getStatus();
-        status.setFlowStatus(QslCardStateTransitionSupport.resolveFlowStatus(spec));
-        cardRecord.setStatus(status);
-    }
-
-    private String normalizeReceivedRecordCode(String code) {
+    private String normalizeReceivedRecordName(String code) {
         if (code == null || code.isBlank()) {
             return "";
         }
-        return code.trim().toUpperCase();
+        return code.trim().toUpperCase(Locale.ROOT);
     }
 
     private boolean isFormalReceivedRecordCode(String code) {
         return code != null && RECEIVED_RECORD_PATTERN.matcher(code.trim()).matches();
     }
 
-    private String resolveReceivedAtFromRecordCode(String receivedRecordCode) {
-        var matcher = RECEIVED_RECORD_PATTERN.matcher(normalizeReceivedRecordCode(receivedRecordCode));
-        if (!matcher.matches()) {
-            return QslApiSupport.nowText();
-        }
-        try {
-            var normalizedDate = LocalDate.parse(receivedRecordCode.substring(receivedRecordCode.length() - 8),
-                    DateTimeFormatter.BASIC_ISO_DATE)
-                .format(DateTimeFormatter.ISO_LOCAL_DATE);
-            return resolveReceivedAt(normalizedDate);
-        } catch (RuntimeException error) {
-            return QslApiSupport.nowText();
-        }
-    }
-
     private void clearReceivedMailState(CardRecord.CardRecordSpec spec) {
         spec.setReceivedMailStatus("");
         spec.setReceivedMailSentAt("");
         spec.setReceivedMailLastError("");
-    }
-
-    private String rewriteReceivedRecordCodeDate(String code, String datePart) {
-        var normalized = normalizeReceivedRecordCode(code);
-        var matcher = RECEIVED_RECORD_PATTERN.matcher(normalized);
-        if (!matcher.matches()) {
-            return "";
-        }
-        return "R" + matcher.group(1) + "-" + datePart;
     }
 
     private <E extends Extension> Mono<String> nextNumericResourceName(

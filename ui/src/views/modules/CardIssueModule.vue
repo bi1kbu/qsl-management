@@ -47,7 +47,6 @@ interface CardRecordSpec {
   receivedMailSentAt: string
   receivedMailLastError: string
   mailTargetEmail: string
-  receivedRecordCodes: string
 }
 
 interface CardRecordStatus {
@@ -110,7 +109,6 @@ interface CardIssueCardRow {
   receivedRemarks: string
   publicReceiptRemarks: string
   mailTargetEmail: string
-  receivedRecordCodes: string
 }
 
 type AddressSourceType = 'ADDRESS' | 'BURO'
@@ -557,7 +555,6 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     receivedMailSentAt: spec?.receivedMailSentAt ?? '',
     receivedMailLastError: spec?.receivedMailLastError ?? '',
     mailTargetEmail: spec?.mailTargetEmail ?? '',
-    receivedRecordCodes: spec?.receivedRecordCodes ?? '',
   }
 }
 
@@ -596,7 +593,6 @@ const toCardRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): C
     receivedRemarks: spec.receivedRemarks,
     publicReceiptRemarks: spec.publicReceiptRemarks,
     mailTargetEmail: spec.mailTargetEmail,
-    receivedRecordCodes: spec.receivedRecordCodes,
   }
 }
 

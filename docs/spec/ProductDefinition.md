@@ -139,8 +139,8 @@ Halo 官方资料核验日期：2026-05-19
 收卡业务包含通联收卡、线上换卡收卡、线下换卡收卡。
 
 1. 三类收卡菜单复用收卡确认组件，以 `sceneType` 限定业务范围。
-2. 2.0.0 起，收卡编号来源统一为 `ReceiveRecord.metadata.name`；收卡业务页面、查询、统计与导入导出均以 `ReceiveRecord` 作为收卡编号主数据来源。`CardRecord.spec.receivedRecordCodes` 仅作为迁移期旧字段保留，不作为新收卡编号分配、展示和统计的依据。
-3. 收卡业务提供基本确认、已收卡片、批量编辑与单条编辑能力；基本功能的“确认收信”和清单内“确认收卡”必须使用页面上方填写的收卡日期，未填写日期时前端弹窗提示且服务端拒绝提交，不再默认使用当前日期；该日期在本次浏览会话内按收卡子菜单记忆，提交后不清空。2.0.0 起，收卡确认先创建 `ReceiveRecord`，再把可匹配的发卡记录写入 `ReceiveRecord.spec.outboundCardNames`；无法匹配时 `matchStatus=未匹配`，不创建新的 `CardRecord`。旧 `CardRecord.spec.receivedRecordCodes` 仅用于迁移期读写兼容，不作为新收卡事实主数据。
+2. 2.0.0 起，收卡编号来源统一为 `ReceiveRecord.metadata.name`；收卡业务页面、查询、统计与导入导出均以 `ReceiveRecord` 作为收卡编号主数据来源。2.0.7 起 `CardRecord.spec.receivedRecordCodes` 仅作为待 2.1.x 移除的历史字段保留，普通业务、查询、统计、导入导出和前端展示均不再读写该字段。
+3. 收卡业务提供基本确认、已收卡片、批量编辑与单条编辑能力；基本功能的“确认收信”和清单内“确认收卡”必须使用页面上方填写的收卡日期，未填写日期时前端弹窗提示且服务端拒绝提交，不再默认使用当前日期；该日期在本次浏览会话内按收卡子菜单记忆，提交后不清空。2.0.0 起，收卡确认先创建 `ReceiveRecord`，再把可匹配的发卡记录写入 `ReceiveRecord.spec.outboundCardNames`；无法匹配时 `matchStatus=未匹配`，不创建新的 `CardRecord`。
 4. 线上换卡业务收到对方“已签收”动作时，如果未制卡、未打包或未发卡，会联动补齐 `cardIssued/cardIssuedAt/envelopePrinted/cardSent/sentAt`；通联业务和线上换卡业务只要 `cardSent=true`，也会联动补齐制卡和打包状态。状态机被批量编辑为否或空时，对应时间、邮件状态、邮件时间和邮件错误同步置空。
 
 ### 3.8 审计与数据

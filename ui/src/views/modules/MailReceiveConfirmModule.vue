@@ -5,7 +5,6 @@ import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
   batchSendNotificationMail,
   confirmMailReceive,
-  migrateReceivedRecordCode,
   sendNotificationMail,
   type MailReceiveConfirmResult,
   updateMailReceiveDate,
@@ -50,7 +49,6 @@ interface CardRecordSpec {
   receivedMailSentAt: string
   receivedMailLastError: string
   mailTargetEmail: string
-  receivedRecordCodes: string
 }
 
 interface CardRecordStatus {
@@ -116,7 +114,7 @@ type ReceiveSortKey =
   | 'receiveRecordCode'
   | 'outboundCardNames'
   | 'matchStatus'
-  | 'receivedRecordCodes'
+  | 'receiveRecordCodes'
   | 'receivedRemarks'
 
 const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
@@ -230,18 +228,12 @@ const batchEditValue = ref('')
 const editingResourceName = ref('')
 const savingSingleEdit = ref(false)
 const deletingSingleEdit = ref(false)
-const migratingResourceName = ref('')
-const savingReceivedCodeMigration = ref(false)
 const singleEditForm = reactive({
   cardType: props.defaultCardType,
   cardReceivedState: 'UNRECEIVED',
   receiptConfirmedState: 'UNCONFIRMED',
   receivedDate: '',
   receivedRemarks: '',
-})
-const receivedCodeMigrationForm = reactive({
-  receivedRecordCode: '',
-  targetCardRecordName: '',
 })
 const selectedOfflineActivity = ref('')
 const offlineActivities = ref<OfflineActivityOption[]>([])
@@ -355,7 +347,7 @@ const filteredBatchResults = computed(() => {
       item.callSign.toUpperCase().includes(keyword) ||
       item.resourceName.toUpperCase().includes(keyword) ||
       item.cardType.toUpperCase().includes(keyword) ||
-      formatReceivedRecordCodesForCard(item).toUpperCase().includes(keyword) ||
+      formatReceiveRecordCodesForCard(item).toUpperCase().includes(keyword) ||
       item.spec.receivedRemarks.toUpperCase().includes(keyword) ||
       item.spec.publicReceiptRemarks.toUpperCase().includes(keyword) ||
       (showOfflineActivity.value && (item.spec.offlineActivityName || '').toUpperCase().includes(keyword))
@@ -396,18 +388,6 @@ const isReceivedTab = computed(() => activeFunctionTab.value === 'received')
 const isBatchTab = computed(() => activeFunctionTab.value === 'batch')
 const singleEditTarget = computed(() => {
   return results.value.find((item) => item.resourceName === editingResourceName.value) ?? null
-})
-const receivedCodeMigrationSource = computed(() => {
-  return results.value.find((item) => item.resourceName === migratingResourceName.value) ?? null
-})
-const receivedCodeMigrationTargetOptions = computed(() => {
-  return results.value
-    .filter((item) => item.resourceName !== migratingResourceName.value)
-    .filter((item) => isFormalCardRecordName(item.resourceName))
-    .map((item) => ({
-      value: item.resourceName,
-      label: `${item.resourceName} / ${item.callSign || '-'} / ${item.cardType}`,
-    }))
 })
 const batchEditFields = [
   {
@@ -480,8 +460,8 @@ const compareReceiveRows = (left: ReceiveResult, right: ReceiveResult, key: Rece
       return compareBoolean(left.spec.cardSent, right.spec.cardSent)
     case 'offlineActivityName':
       return compareText(left.spec.offlineActivityName || '', right.spec.offlineActivityName || '')
-    case 'receivedRecordCodes':
-      return compareText(formatReceivedRecordCodesForCard(left), formatReceivedRecordCodesForCard(right))
+    case 'receiveRecordCodes':
+      return compareText(formatReceiveRecordCodesForCard(left), formatReceiveRecordCodesForCard(right))
     case 'receivedRemarks':
       return compareText(resolveReceiveRemarkText(left), resolveReceiveRemarkText(right))
     default:
@@ -499,7 +479,6 @@ const compareReceiveRecordRows = (
     case 'resourceName':
       return compareText(left.receiveRecordCode, right.receiveRecordCode)
     case 'outboundCardNames':
-    case 'receivedRecordCodes':
       return compareText(left.outboundCardNames, right.outboundCardNames)
     case 'callSign':
       return compareCallSign(left.callSign, right.callSign)
@@ -537,9 +516,6 @@ watch(results, () => {
   selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => nameSet.has(name))
   if (editingResourceName.value && !nameSet.has(editingResourceName.value)) {
     editingResourceName.value = ''
-  }
-  if (migratingResourceName.value && !nameSet.has(migratingResourceName.value)) {
-    migratingResourceName.value = ''
   }
 })
 
@@ -659,22 +635,6 @@ const resolveMailStatusText = (status: string): string => {
   return ''
 }
 
-const formatReceivedRecordCodes = (codes?: string): string => {
-  const normalized = (codes ?? '')
-    .split(',')
-    .map((item) => item.trim().toUpperCase())
-    .filter(Boolean)
-    .join(', ')
-  return normalized || '-'
-}
-
-const parseReceivedRecordCodes = (codes?: string): string[] => {
-  return (codes ?? '')
-    .split(',')
-    .map((item) => item.trim().toUpperCase())
-    .filter(Boolean)
-}
-
 const parseResourceNames = (value?: string): string[] => {
   return (value ?? '')
     .split(',')
@@ -702,11 +662,9 @@ const isCardReceivedForDisplay = (item: ReceiveResult): boolean => {
   return item.spec.cardReceived || linkedReceiveRecordsForCard(item).length > 0
 }
 
-const formatReceivedRecordCodesForCard = (item: ReceiveResult): string => {
-  const codes = new Set<string>()
-  parseReceivedRecordCodes(item.spec.receivedRecordCodes).forEach((code) => codes.add(code))
-  linkedReceiveRecordsForCard(item).forEach((record) => codes.add(record.receiveRecordCode.toUpperCase()))
-  return codes.size ? Array.from(codes).join(', ') : '-'
+const formatReceiveRecordCodesForCard = (item: ReceiveResult): string => {
+  const codes = linkedReceiveRecordsForCard(item).map((record) => record.receiveRecordCode.toUpperCase())
+  return codes.length ? codes.join(', ') : '-'
 }
 
 const resolveReceiveRemarkText = (item: ReceiveResult): string => {
@@ -752,7 +710,6 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     receivedMailSentAt: spec?.receivedMailSentAt ?? '',
     receivedMailLastError: spec?.receivedMailLastError ?? '',
     mailTargetEmail: spec?.mailTargetEmail ?? '',
-    receivedRecordCodes: formatReceivedRecordCodes(spec?.receivedRecordCodes).replace(/^-$/, ''),
   }
 }
 
@@ -830,7 +787,6 @@ const applyStateCleanup = (spec: CardRecordSpec) => {
   }
   if (!spec.cardReceived) {
     spec.receivedAt = ''
-    spec.receivedRecordCodes = ''
     clearReceivedMailState(spec)
   }
 }
@@ -1078,64 +1034,6 @@ const cancelSingleEdit = () => {
   feedback.value = '已取消单条编辑。'
 }
 
-const startReceivedCodeMigration = (item: ReceiveResult) => {
-  const codes = parseReceivedRecordCodes(item.spec.receivedRecordCodes)
-  if (!codes.length) {
-    feedback.value = '该卡片没有可迁移的收卡编号。'
-    return
-  }
-  migratingResourceName.value = item.resourceName
-  receivedCodeMigrationForm.receivedRecordCode = codes[0]
-  receivedCodeMigrationForm.targetCardRecordName = ''
-  feedback.value = `正在迁移收卡编号：${item.resourceName}`
-}
-
-const cancelReceivedCodeMigration = () => {
-  migratingResourceName.value = ''
-  receivedCodeMigrationForm.receivedRecordCode = ''
-  receivedCodeMigrationForm.targetCardRecordName = ''
-  feedback.value = '已取消收卡编号迁移。'
-}
-
-const saveReceivedCodeMigration = async () => {
-  const source = receivedCodeMigrationSource.value
-  if (!source) {
-    feedback.value = '未找到源卡片，请刷新清单后重试。'
-    return
-  }
-  const receivedRecordCode = receivedCodeMigrationForm.receivedRecordCode.trim().toUpperCase()
-  const targetCardRecordName = receivedCodeMigrationForm.targetCardRecordName.trim().toUpperCase()
-  if (!receivedRecordCode) {
-    feedback.value = '请选择要迁移的收卡编号。'
-    return
-  }
-  if (!isFormalCardRecordName(targetCardRecordName)) {
-    feedback.value = '请填写正式目标卡片ID，例如 C1001。'
-    return
-  }
-  if (targetCardRecordName === source.resourceName.toUpperCase()) {
-    feedback.value = '目标卡片不能与源卡片相同。'
-    return
-  }
-
-  savingReceivedCodeMigration.value = true
-  try {
-    const result = await migrateReceivedRecordCode(source.resourceName, {
-      receivedRecordCode,
-      targetCardRecordName,
-    })
-    await loadResults({ silent: true })
-    migratingResourceName.value = ''
-    receivedCodeMigrationForm.receivedRecordCode = ''
-    receivedCodeMigrationForm.targetCardRecordName = ''
-    feedback.value = `${result.message}：${result.receivedRecordCode}，${result.sourceCardRecordName} -> ${result.targetCardRecordName}`
-  } catch (error) {
-    feedback.value = `迁移收卡编号失败：${error instanceof Error ? error.message : '未知错误'}`
-  } finally {
-    savingReceivedCodeMigration.value = false
-  }
-}
-
 const saveSingleEdit = async () => {
   const target = singleEditTarget.value
   if (!target) {
@@ -1258,14 +1156,14 @@ const applyHistoryBatchEdit = async () => {
         action: '批量编辑收信确认记录',
         resourceType: 'card-record',
         resourceName: `count=${targets.length}`,
-        detail: `批量修改字段：收卡日期，值：${nextValue}，已同步重新赋予收卡编号。`,
+        detail: `批量修改字段：收卡日期，值：${nextValue}，已同步更新关联收卡记录日期。`,
       })
 
       await loadResults({ silent: true })
       clearHistorySelection()
       batchEditField.value = ''
       batchEditValue.value = ''
-      feedback.value = `已批量更新 ${targets.length} 条记录的收卡日期，并重新赋予收卡编号。`
+      feedback.value = `已批量更新 ${targets.length} 条记录的收卡日期，并同步更新关联收卡记录日期。`
       return
     }
 
@@ -1737,7 +1635,7 @@ onMounted(() => {
                 <QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
-                <QslSortableHeader column-key="receivedRecordCodes" label="收卡编号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader column-key="receiveRecordCodes" label="收卡编号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
               </th>
               <th>
                 <QslSortableHeader column-key="receivedRemarks" label="收卡确认备注" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
@@ -1767,7 +1665,7 @@ onMounted(() => {
                 <VTag :theme="item.spec.cardSent ? 'secondary' : 'default'">{{ item.spec.cardSent ? '是' : '否' }}</VTag>
               </td>
               <td v-if="showOfflineActivity">{{ item.spec.offlineActivityName || '-' }}</td>
-              <td>{{ formatReceivedRecordCodesForCard(item) }}</td>
+              <td>{{ formatReceiveRecordCodesForCard(item) }}</td>
               <td class="qsl-pre-line">{{ resolveReceiveRemarkText(item) }}</td>
               <td>
                 <div v-if="isBatchTab" class="qsl-actions qsl-actions--tight">

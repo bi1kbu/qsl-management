@@ -59,7 +59,6 @@ final class QslCardStateTransitionSupport {
         }
         if (!Boolean.TRUE.equals(spec.getCardReceived())) {
             spec.setReceivedAt("");
-            spec.setReceivedRecordCodes("");
             clearReceivedMail(spec);
         }
     }

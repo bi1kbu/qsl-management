@@ -63,7 +63,6 @@ interface CardRecordSpec {
   receivedMailSentAt: string
   receivedMailLastError: string
   mailTargetEmail: string
-  receivedRecordCodes: string
 }
 
 interface CardRecordStatus {
@@ -516,7 +515,6 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
     receivedMailSentAt: spec?.receivedMailSentAt ?? '',
     receivedMailLastError: spec?.receivedMailLastError ?? '',
     mailTargetEmail: spec?.mailTargetEmail ?? '',
-    receivedRecordCodes: spec?.receivedRecordCodes ?? '',
   }
 }
 
@@ -604,7 +602,6 @@ const applyStateConsistency = (spec: CardRecordSpec) => {
   }
   if (!spec.cardReceived) {
     spec.receivedAt = ''
-    spec.receivedRecordCodes = ''
     clearReceivedMailState(spec)
   }
 }
