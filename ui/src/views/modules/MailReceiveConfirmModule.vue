@@ -124,11 +124,13 @@ const props = withDefaults(
     sceneTypes?: SceneType[]
     defaultSceneType?: SceneType
     defaultCardType?: CardRecordSpec['cardType']
+    hideReceivedMailActions?: boolean
   }>(),
   {
     sceneTypes: () => ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL'],
     defaultSceneType: 'QSO',
     defaultCardType: 'QSO',
+    hideReceivedMailActions: false,
   },
 )
 
@@ -389,6 +391,7 @@ const isBatchTab = computed(() => activeFunctionTab.value === 'batch')
 const singleEditTarget = computed(() => {
   return results.value.find((item) => item.resourceName === editingResourceName.value) ?? null
 })
+const showReceivedMailActions = computed(() => !props.hideReceivedMailActions)
 const batchEditFields = [
   {
     value: 'cardType',
@@ -1286,8 +1289,8 @@ const closeReceiveForRow = async (item: ReceiveResult) => {
   try {
     const nextSpec: CardRecordSpec = {
       ...item.spec,
-      receivedMailStatus: 'PENDING',
-      receivedMailSentAt: '',
+      receivedMailStatus: showReceivedMailActions.value ? 'PENDING' : 'SENT',
+      receivedMailSentAt: showReceivedMailActions.value ? '' : nowText(),
       receivedMailLastError: '',
     }
 
@@ -1305,11 +1308,15 @@ const closeReceiveForRow = async (item: ReceiveResult) => {
       action: '结束收卡',
       resourceType: 'card-record',
       resourceName: item.resourceName,
-      detail: `呼号：${item.callSign || '-'}，卡片类型：${item.cardType || '-'}，已进入收卡回执待发送状态。`,
+      detail: showReceivedMailActions.value
+        ? `呼号：${item.callSign || '-'}，卡片类型：${item.cardType || '-'}，已进入收卡回执待发送状态。`
+        : `呼号：${item.callSign || '-'}，卡片类型：${item.cardType || '-'}，模式：默认不发邮件。`,
     })
 
     await loadResults({ silent: true })
-    feedback.value = `已结束收卡：${item.callSign || item.resourceName}`
+    feedback.value = showReceivedMailActions.value
+      ? `已结束收卡：${item.callSign || item.resourceName}`
+      : `已结束收卡并默认不发送邮件：${item.callSign || item.resourceName}`
   } catch (error) {
     feedback.value = `结束收卡失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -1318,6 +1325,10 @@ const closeReceiveForRow = async (item: ReceiveResult) => {
 }
 
 const batchSendReceivedMail = async () => {
+  if (!showReceivedMailActions.value) {
+    feedback.value = '当前页面默认不发送收卡邮件。'
+    return
+  }
   if (!selectedHistoryNames.value.length) {
     feedback.value = '请先选择要批量发送邮件的记录。'
     return
@@ -1422,6 +1433,7 @@ onMounted(() => {
         <div class="qsl-actions">
           <VButton type="secondary" :disabled="submitting" @click="submitReceive">确认收信</VButton>
           <VButton
+            v-if="showReceivedMailActions"
             class="qsl-mail-action"
             type="secondary"
             :disabled="batchSendingReceivedMail || !selectedHistoryCount"
@@ -1702,6 +1714,7 @@ onMounted(() => {
                     结束收卡
                   </VButton>
                   <VButton
+                    v-if="showReceivedMailActions"
                     class="qsl-mail-action"
                     size="xs"
                     type="secondary"
@@ -1716,6 +1729,7 @@ onMounted(() => {
                     发送收卡回执
                   </VButton>
                   <VButton
+                    v-if="showReceivedMailActions"
                     size="xs"
                     type="secondary"
                     :disabled="

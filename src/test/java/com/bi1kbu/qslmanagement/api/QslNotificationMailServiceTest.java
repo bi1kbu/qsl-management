@@ -9,8 +9,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
+import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.notification.Subscription;
@@ -96,6 +98,50 @@ class QslNotificationMailServiceTest {
         verify(notificationCenter, never()).subscribe(any(), any());
         verify(notificationReasonEmitter, never()).emit(anyString(), any());
         verify(client, never()).update(any(ExchangeRequest.class));
+    }
+
+    @Test
+    void shouldNotAutoSendOfflineReceiveMailEvenWhenSettingEnabled() {
+        var client = mock(ReactiveExtensionClient.class);
+        var notificationCenter = mock(NotificationCenter.class);
+        var notificationReasonEmitter = mock(NotificationReasonEmitter.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslNotificationMailService(
+            client,
+            notificationCenter,
+            notificationReasonEmitter,
+            auditService
+        );
+
+        var cardRecord = new CardRecord();
+        cardRecord.setMetadata(QslApiSupport.createMetadata("C1001"));
+        var cardSpec = new CardRecord.CardRecordSpec();
+        cardSpec.setCallSign("BI1KBU");
+        cardSpec.setCardType("EYEBALL");
+        cardSpec.setSceneType("EYEBALL");
+        cardSpec.setCardReceived(Boolean.TRUE);
+        cardSpec.setReceivedMailStatus("");
+        cardRecord.setSpec(cardSpec);
+
+        var systemSetting = new SystemSetting();
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setOfflineAutoNotifyOnCardReceived(Boolean.TRUE);
+        settingSpec.setAutoNotifyOnCardReceived(Boolean.TRUE);
+        systemSetting.setSpec(settingSpec);
+
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(cardRecord));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default"))).thenReturn(Mono.just(systemSetting));
+
+        service.autoSendIfEnabled(
+            "C1001",
+            QslNotificationMailService.MailScene.CARD_RECEIVED,
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        verify(notificationCenter, never()).subscribe(any(), any());
+        verify(notificationReasonEmitter, never()).emit(anyString(), any());
+        verify(client, never()).update(any(CardRecord.class));
     }
 
     private ExchangeRequest reviewedExchangeRequest() {

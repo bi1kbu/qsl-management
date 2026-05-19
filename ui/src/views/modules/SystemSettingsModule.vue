@@ -323,18 +323,7 @@ onMounted(loadSystemSettings)
 
           <div class="qsl-policy-group">
             <h4>线下换卡业务</h4>
-            <div class="qsl-switch-row">
-              <div>
-                <p class="qsl-switch-row__title">收卡后自动发送邮件</p>
-                <p class="qsl-switch-row__desc">适用于线下换卡收卡确认。</p>
-              </div>
-              <div class="qsl-switch-row__controls">
-                <VButton class="qsl-mail-action" size="sm" type="secondary" :disabled="sendingTestScene !== ''" @click="sendTestMail('received')">
-                  {{ sendingTestScene === 'received' ? '发送中' : '发送测试邮件' }}
-                </VButton>
-                <VSwitch v-model="systemSettingsForm.offlineAutoNotifyOnCardReceived" />
-              </div>
-            </div>
+            <p class="qsl-muted">线下换卡收卡与送达确认默认不发送邮件。</p>
           </div>
         </section>
 

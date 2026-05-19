@@ -880,8 +880,7 @@ public class QslNotificationMailService {
                             systemSetting.getAutoNotifyOnCardReceived());
                     }
                     if ("EYEBALL".equals(sceneType)) {
-                        yield isSettingEnabled(systemSetting.getOfflineAutoNotifyOnCardReceived(),
-                            systemSetting.getAutoNotifyOnCardReceived());
+                        yield false;
                     }
                     if ("QSO".equals(sceneType) || "SWL".equals(sceneType)) {
                         yield isSettingEnabled(systemSetting.getQsoAutoNotifyOnCardReceived(),

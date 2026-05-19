@@ -151,6 +151,7 @@ const renderer = computed<ModuleRenderer>(() => {
           sceneTypes: ['EYEBALL'] as SceneType[],
           defaultSceneType: 'EYEBALL' as SceneType,
           defaultCardType: 'EYEBALL',
+          hideReceivedMailActions: true,
         },
       }
     case 'receive-qso':
@@ -178,6 +179,7 @@ const renderer = computed<ModuleRenderer>(() => {
           sceneTypes: ['EYEBALL'] as SceneType[],
           defaultSceneType: 'EYEBALL' as SceneType,
           defaultCardType: 'EYEBALL',
+          hideReceivedMailActions: true,
         },
       }
     case 'exchange-request-review':
