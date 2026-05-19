@@ -186,6 +186,13 @@ FIXED_DATASET_MAPPINGS: dict[str, dict[str, Any]] = {
             "true_output": "⬛",
             "false_output": "",
         },
+        "感谢您的卡片": {
+            "type": "checkbox",
+            "sources": ["spec.cardReceived", "cardReceived", "收卡状态", "已收"],
+            "true_values": ["1", "true", "yes", "y", "on", "是", "√", "⬛"],
+            "true_output": "⬛",
+            "false_output": "",
+        },
         "remark": {"type": "coalesce", "sources": ["spec.cardRemarks", "cardRemarks", "remark", "备注"]},
         "card_tpye": {"type": "coalesce", "sources": ["spec.cardType", "cardType", "卡片类型"]},
         "cadr_id": {"type": "coalesce", "sources": ["metadata.name", "cardId", "卡片ID"]},

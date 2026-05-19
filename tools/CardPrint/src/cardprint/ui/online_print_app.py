@@ -96,6 +96,16 @@ def _load_preset_meta(path: str) -> dict[str, Any]:
     }
 
 
+def _apply_outbound_return_card_defaults(mapped_row: dict[str, Any]) -> None:
+    mapped_row["returnCardStatus"] = ""
+    mapped_row["回复卡片"] = "⬛"
+    mapped_row["欢迎回卡"] = "⬛"
+    mapped_row["请回卡片"] = "⬛"
+    mapped_row["感谢来卡"] = ""
+    mapped_row["感谢您的卡片"] = ""
+    mapped_row["感谢您的来卡"] = ""
+
+
 def _lookup_path_value(row: dict[str, Any], path: str) -> Any:
     cursor: Any = row
     for segment in path.split("."):
@@ -2053,12 +2063,7 @@ class EyeballReprintPage(QWidget):
         mapped_row["SWL"] = ""
         mapped_row["postCardStatus"] = "⬛"
         mapped_row["发出卡片"] = "⬛"
-        mapped_row["returnCardStatus"] = ""
-        mapped_row["回复卡片"] = ""
-        mapped_row["欢迎回卡"] = ""
-        mapped_row["请回卡片"] = ""
-        mapped_row["感谢来卡"] = ""
-        mapped_row["感谢您的来卡"] = ""
+        _apply_outbound_return_card_defaults(mapped_row)
         return mapped_row
 
     def _resolve_preset_path(self) -> str:

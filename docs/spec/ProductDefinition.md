@@ -228,10 +228,10 @@ python -m cardprint.cli ui online
 当前在线桥接代码事实：
 
 1. 默认地址为 `http://localhost:8090`，但配置中可传入其他 `base_url`。
-2. 读取 `card-records` 生成卡片/信封队列，卡片打印会按 `CardRecord.spec.qsoRecordName` 额外读取 `qso-records` 并注入 `qsoInfo`。
+2. 读取 `card-records` 生成卡片/信封队列，卡片打印会按 `CardRecord.spec.qsoRecordName` 额外读取 `qso-records` 并注入 `qsoInfo`；`CardRecord.spec.cardReceived` 为空或缺失时按未收卡处理，打印互斥项默认勾选“请回卡片”。
 3. 信封打印只纳入线上换卡 `sceneType=ONLINE_EYEBALL` 记录，并额外读取 `station-profiles`、`address-book-entries`、`bureau-entries` 做本台地址和收件地址补全；线下换卡 `sceneType=EYEBALL` 记录不进入封面打印和打包确认清单。
 4. 补打信封页位于打包确认后，读取 `address-book-entries` 与 `bureau-entries` 生成独立队列，复用信封预设，支持按呼号、地址编号或卡片局编号筛选，支持当前行打印、勾选批量打印与全部打印，不回写业务状态。
-5. 补打眼球卡片页位于在线打印工具内，使用 `bridge_config.json` 的 `presets.eyeball_reprint_card` 持久化保存专用补卡预设；手工输入呼号与日期时间，支持实时取当前日期时间，生成打印行时固定 `cardType=EYEBALL` 与“发出卡片”状态，不读取或回写后台业务记录。
+5. 补打眼球卡片页位于在线打印工具内，使用 `bridge_config.json` 的 `presets.eyeball_reprint_card` 持久化保存专用补卡预设；手工输入呼号与日期时间，支持实时取当前日期时间，生成打印行时固定 `cardType=EYEBALL`、“发出卡片”状态与“请回卡片”状态，不读取或回写后台业务记录。
 6. 卡片版本以 `station-cards` 为准；本地打印工具通过公开接口 `GET /apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` 拉取版本列表，并按 `sortOrder` 与版本号排序，不从 `card-records` 反推。
 7. 卡片二维码拼接支持 `qrcode.path_mappings` 短路径映射，在线打印配置页可在站点地址下方配置线下换卡、线上换卡、签收确认三类短路径；默认将公开页面长路径映射为 `/EYEBALL`、`/ONLINE_EYEBALL`、`/rp` 后再追加卡片 ID 与 `cs` 参数。
 8. 在线打印工具登录并拉取卡片版本时使用后台线程执行网络请求，只补齐空白本台通信地址字段，不覆盖已有本台姓名、电话、邮编、地址；受保护接口返回登录页或 HTML 时明确提示认证或权限问题，不静默解析为空数据。

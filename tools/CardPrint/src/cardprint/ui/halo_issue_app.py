@@ -495,7 +495,10 @@ class HaloIssueWindow(QMainWindow):
         power_preset_id = str(qso_spec.get("myRigPwr", ""))
         antenna_id = str(qso_spec.get("myRigAnt", ""))
         post_card_status = "⬛" if bool(card_spec.get("cardSent")) else ""
-        return_card_status = "⬛" if bool(card_spec.get("cardReceived")) else ""
+        card_received = self._to_bool(card_spec.get("cardReceived"))
+        request_return_card = not card_received
+        thanks_received_card = card_received
+        return_card_status = "⬛" if thanks_received_card else ""
         normalized_timezone = timezone.strip().upper().replace(" ", "")
         utc_box = "⬛" if normalized_timezone in {"", "UTC", "GMT", "Z"} else ""
         utc8_box = "⬛" if normalized_timezone in {"UTC+8", "UTC+08", "GMT+8", "GMT+08"} else ""
@@ -564,8 +567,12 @@ class HaloIssueWindow(QMainWindow):
             "qth": qth,
             "postCardStatus": post_card_status,
             "returnCardStatus": return_card_status,
-            "欢迎回卡": "" if bool(card_spec.get("cardReceived")) else "⬛",
+            "欢迎回卡": "⬛" if request_return_card else "",
+            "回复卡片": "⬛" if request_return_card else "",
+            "请回卡片": "⬛" if request_return_card else "",
             "感谢来卡": return_card_status,
+            "感谢您的卡片": "⬛" if thanks_received_card else "",
+            "感谢您的来卡": "⬛" if thanks_received_card else "",
             "remark": card_remarks,
             "card_tpye": card_type_upper,
             "cadr_id": card_id,
@@ -575,6 +582,12 @@ class HaloIssueWindow(QMainWindow):
                 for key, value in source.items():
                     result[str(key)] = "" if value is None else str(value)
         return result
+
+    @staticmethod
+    def _to_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value or "").strip().lower() in {"1", "true", "yes", "y", "on", "是", "已", "√", "⬛"}
 
     def _ensure_rows_renderable(self, *, rows: list[dict[str, Any]], preset_path: str, tab_kind: str) -> None:
         for index, row in enumerate(rows):

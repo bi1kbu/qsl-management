@@ -47,6 +47,7 @@ def test_card_mapping_defaults_to_request_return_card_and_utc() -> None:
     assert mapped["请回卡片"] == "⬛"
     assert mapped["感谢来卡"] == ""
     assert mapped["发出卡片"] == ""
+    assert mapped["感谢您的卡片"] == ""
     assert mapped["感谢您的来卡"] == ""
     assert mapped["UTC"] == "⬛"
     assert mapped["UTC+8"] == ""
@@ -69,6 +70,7 @@ def test_card_mapping_keeps_return_card_and_timezone_options_exclusive() -> None
     assert received_utc8["请回卡片"] == ""
     assert received_utc8["感谢来卡"] == "⬛"
     assert received_utc8["发出卡片"] == "⬛"
+    assert received_utc8["感谢您的卡片"] == "⬛"
     assert received_utc8["感谢您的来卡"] == "⬛"
     assert received_utc8["UTC"] == ""
     assert received_utc8["UTC+8"] == "⬛"
@@ -77,9 +79,19 @@ def test_card_mapping_keeps_return_card_and_timezone_options_exclusive() -> None
     assert unreceived_utc["请回卡片"] == "⬛"
     assert unreceived_utc["感谢来卡"] == ""
     assert unreceived_utc["发出卡片"] == ""
+    assert unreceived_utc["感谢您的卡片"] == ""
     assert unreceived_utc["感谢您的来卡"] == ""
     assert unreceived_utc["UTC"] == "⬛"
     assert unreceived_utc["UTC+8"] == ""
+
+
+def test_card_mapping_treats_empty_card_received_as_request_return_card() -> None:
+    mapping = bs.normalize_bridge_config({})["mappings"]["cards"]
+
+    request_return = bs.map_export_row({"spec": {"cardReceived": ""}}, mapping)
+
+    assert request_return["请回卡片"] == "⬛"
+    assert request_return["感谢您的卡片"] == ""
 
 
 def test_normalize_bridge_config_migrates_legacy_routes() -> None:

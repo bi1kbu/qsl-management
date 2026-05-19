@@ -39,7 +39,7 @@
 - 页面结构：
   - 配置页：卡片/信封预设、鉴权与公共设置；远程接口地址与拉取过滤规则内置固定，站点地址、二维码短路径与请求超时可配置；点击“拉取远程数据源”一次性获取全量源数据。
   - 启动行为：程序启动后会自动读取当前目录 `bridge_config.json` 并回填配置项（密码除外）；若读取失败则自动回退默认配置。
-  - 卡片打印页：字段映射使用程序内置规则（不可编辑），基于已拉取源拼接队列、预览、打印（不自动回写）；卡片数据从 `card-records` 读取，并按 `spec.qsoRecordName` 补读 `qso-records` 注入 `qsoInfo`；线下换卡业务制卡页支持按 `spec.offlineActivityName` 选择关联活动筛选队列，并按关联活动的 `spec.activityLocation` 填充 QTH。
+  - 卡片打印页：字段映射使用程序内置规则（不可编辑），基于已拉取源拼接队列、预览、打印（不自动回写）；卡片数据从 `card-records` 读取，并按 `spec.qsoRecordName` 补读 `qso-records` 注入 `qsoInfo`；线下换卡业务制卡页支持按 `spec.offlineActivityName` 选择关联活动筛选队列，并按关联活动的 `spec.activityLocation` 填充 QTH；`spec.cardReceived` 为空或缺失时按未收卡处理，打印互斥项默认勾选“请回卡片”。
   - 卡片版本：登录并拉取卡片版本时，版本列表通过公开接口 `/apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` 获取；本台通信地址仍通过受保护接口读取。若受保护接口返回登录页或 HTML，工具会明确提示认证或权限问题，不再静默显示为空。
   - 卡片二维码：配置页在“站点地址”下方提供二维码短路径输入项，保存到 `bridge_config.json` 的 `qrcode.path_mappings`；默认映射为 `/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL -> /EYEBALL`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL -> /ONLINE_EYEBALL`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public -> /rp`。通联业务与线上换卡业务制卡二维码统一使用签收确认地址；线下换卡业务制卡二维码仍使用线下换卡地址。
   - 本台通信地址：登录并拉取卡片版本时仅补齐空白字段，已有本台姓名、电话、邮编、地址不会被远端资料覆盖。
@@ -47,7 +47,7 @@
   - 制卡确认页：从已拉取源生成“未制卡”清单，勾选条目后手动回写 `cardIssued/cardIssuedAt`，时间格式为 `yyyy-MM-dd HH:mm:ss`。
   - 打包确认页：从已拉取源生成“未打包”清单，勾选条目后手动回写 `envelopePrinted`。
   - 补打信封页：位于打包确认后，复用信封预设，直接读取 `address-book-entries` 与 `bureau-entries` 生成独立信封队列；支持按呼号、地址编号或卡片局编号筛选，支持当前行打印、勾选批量打印、全部打印，不回写业务状态。
-  - 补打眼球卡片页：独立页签，使用 `bridge_config.json` 中 `presets.eyeball_reprint_card` 保存专用补卡预设；手工输入呼号与日期时间，支持实时取当前日期时间，生成打印行时固定 `cardType=EYEBALL` 且固定“发出卡片”状态，不读取或回写业务记录。
+  - 补打眼球卡片页：独立页签，使用 `bridge_config.json` 中 `presets.eyeball_reprint_card` 保存专用补卡预设；手工输入呼号与日期时间，支持实时取当前日期时间，生成打印行时固定 `cardType=EYEBALL`、固定“发出卡片”状态，并默认勾选“请回卡片”，不读取或回写业务记录。
   - 推荐作业顺序：`配置登录 -> 卡片打印（制卡） -> 制卡确认 -> 打印封面（打包） -> 打包确认`；需要按主数据补打时进入“补打信封”页，需要临时补打一张眼球发出卡片时进入“补打眼球卡片”页。
   - 队列过滤规则（内置）：卡片打印仅纳入“未制卡（`cardIssued=false`）”记录；封面打印仅纳入线上换卡且“未打包（`envelopePrinted=false`）”记录；补打信封不按卡片状态过滤。
   - 耗时拉取：卡片、封面、补打信封页面的“重新拉取并生成队列”，以及制卡/打包确认页的“一键拉取并生成待确认清单”使用后台线程执行；页面底部信息区域会显示正在拉取、已完成拉取、远程源数量、生成队列数量与过滤跳过数量。
