@@ -16,10 +16,13 @@ import {
   createImportJob,
   downloadImportJobErrors,
   downloadExportJob,
+  executeLegacyMigration,
   precheckImportJob,
+  precheckLegacyMigration,
   type ImportExportJobSpec,
   type ImportExportJobStatus,
   type ImportJobPrecheckResult,
+  type LegacyMigrationResult,
 } from '../../api/qsl-console-api'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
@@ -65,6 +68,11 @@ const zipImportItems = ref<ZipImportItem[]>([])
 const importBusy = ref(false)
 const importFeedback = ref('')
 const importPrecheckResult = ref('')
+const migrationBusy = ref(false)
+const migrationFeedback = ref('')
+const migrationResult = ref<LegacyMigrationResult | null>(null)
+const migrationConfirmText = ref('')
+const migrationConfirmRequiredText = '确认迁移旧版本数据'
 
 const exportForm = reactive({
   mode: 'single' as 'single' | 'all',
@@ -86,7 +94,7 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const jobPlural = 'import-export-jobs'
-const activeTab = ref<'import' | 'export' | 'jobs'>('import')
+const activeTab = ref<'import' | 'export' | 'migration' | 'jobs'>('import')
 const operationSortKey = ref<OperationSortKey>('time')
 const operationSortDirection = ref<QslSortDirection>('desc')
 
@@ -204,6 +212,21 @@ const buildPrecheckResultText = (result: ImportJobPrecheckResult): string => {
   const errorsPart = result.errorLines.length ? `；错误 ${result.errorLines.length} 条` : ''
   const datasetDetailPart = datasetParts ? `；明细：${datasetParts}` : ''
   return `预检完成：总 ${result.totalCount} 行，成功 ${result.successCount}，跳过 ${result.skippedCount}，失败 ${result.failedCount}${errorsPart}${datasetDetailPart}`
+}
+
+const buildMigrationResultText = (result: LegacyMigrationResult): string => {
+  const warningPart = result.warnings.length ? `；提示：${result.warnings.join('；')}` : ''
+  return `${result.status}：卡片记录 ${result.cardRecordTotal} 条，保留 ${result.retainedCardRecords} 条；创建收卡记录 ${
+    result.receiveRecordsToCreate
+  } 条（自动匹配 ${result.matchedReceiveRecords}，未匹配 ${result.unmatchedReceiveRecords}，已存在跳过 ${
+    result.receiveRecordsSkipped
+  }）；创建线下换卡卡片 ${result.offlineExchangeCardsToCreate} 条（已存在跳过 ${
+    result.offlineExchangeCardsSkipped
+  }）；更新卡片 ${result.updatedCardRecords} 条；删除本台卡片占位 ${result.deletedStationCardPlaceholders} 条；删除旧自动收卡卡片 ${
+    result.deletedLegacyAutoReceiveCards
+  } 条；更新系统设置 ${result.systemSettingsToUpdate} 条；卡片序列 ${result.adjustedCardRecordSequence}，收卡序列 ${
+    result.adjustedReceiveRecordSequence
+  }${warningPart}`
 }
 
 const toOperationRecord = (
@@ -507,6 +530,47 @@ const runImportExecute = async () => {
   }
 }
 
+const runMigrationPrecheck = async () => {
+  migrationBusy.value = true
+  migrationFeedback.value = ''
+  migrationResult.value = null
+  try {
+    const result = await precheckLegacyMigration()
+    migrationResult.value = result
+    migrationFeedback.value = buildMigrationResultText(result)
+    Toast.success('旧版本迁移预检完成。')
+  } catch (error) {
+    migrationFeedback.value = `旧版本迁移预检失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    migrationBusy.value = false
+  }
+}
+
+const runMigrationExecute = async () => {
+  if (migrationConfirmText.value.trim() !== migrationConfirmRequiredText) {
+    migrationFeedback.value = `请输入“${migrationConfirmRequiredText}”后再执行迁移。`
+    return
+  }
+
+  migrationBusy.value = true
+  migrationFeedback.value = ''
+  try {
+    const result = await executeLegacyMigration({
+      mode: 'current-storage',
+      confirmText: migrationConfirmText.value.trim(),
+    })
+    migrationResult.value = result
+    migrationFeedback.value = buildMigrationResultText(result)
+    migrationConfirmText.value = ''
+    Toast.success('旧版本迁移执行完成。')
+    await loadOperationRecords()
+  } catch (error) {
+    migrationFeedback.value = `旧版本迁移执行失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    migrationBusy.value = false
+  }
+}
+
 const downloadImportErrorReport = async (record: OperationRecord) => {
   if (!record.errorReportPath) {
     importFeedback.value = '当前任务没有可下载的错误回执。'
@@ -760,6 +824,73 @@ onBeforeUnmount(() => {
           </label>
         </VTabItem>
 
+        <VTabItem id="migration" label="旧版本迁移">
+          <div class="qsl-form-grid">
+            <label class="qsl-field qsl-field--full">
+              <span class="qsl-field__label">迁移范围</span>
+              <div class="qsl-input-shell">
+                <input value="当前 Halo 存储中的旧版 QSL 数据" readonly />
+              </div>
+            </label>
+
+            <label class="qsl-field qsl-field--full">
+              <span class="qsl-field__label">执行确认文字</span>
+              <div class="qsl-input-shell">
+                <input
+                  v-model="migrationConfirmText"
+                  :disabled="migrationBusy"
+                  :placeholder="migrationConfirmRequiredText"
+                />
+              </div>
+            </label>
+          </div>
+
+          <div class="qsl-import-file-box">
+            <div class="qsl-import-file-header">
+              <VTag theme="danger">破坏性迁移</VTag>
+              <span>执行前请先在“导出”页签导出全部数据并保存备份。</span>
+            </div>
+            <div class="qsl-import-file-body">
+              <p class="qsl-muted">
+                旧版本迁移会从旧卡片记录中拆分收卡事实和线下换卡卡片，清理旧自动收卡临时卡片、本台卡片版本占位记录，并更新序列号。
+              </p>
+              <p class="qsl-muted">
+                该操作按当前存储原地执行，不依赖卸载插件后清空数据；重复执行时会跳过已存在的收卡记录和线下换卡卡片。
+              </p>
+            </div>
+          </div>
+
+          <div class="qsl-actions">
+            <VButton type="secondary" :loading="migrationBusy" :disabled="migrationBusy" @click="runMigrationPrecheck">
+              预检旧版本迁移
+            </VButton>
+            <VButton
+              type="danger"
+              :loading="migrationBusy"
+              :disabled="migrationBusy || migrationConfirmText.trim() !== migrationConfirmRequiredText"
+              @click="runMigrationExecute"
+            >
+              执行旧版本迁移
+            </VButton>
+          </div>
+
+          <div class="qsl-import-export-result">
+            <p
+              v-if="migrationFeedback"
+              :class="['qsl-feedback', { 'qsl-feedback--error': isErrorFeedback(migrationFeedback) }]"
+            >
+              {{ migrationFeedback }}
+            </p>
+
+            <div v-if="migrationResult" class="qsl-migration-summary">
+              <VTag>{{ migrationResult.status }}</VTag>
+              <VTag theme="secondary">收卡 {{ migrationResult.receiveRecordsToCreate }}</VTag>
+              <VTag theme="secondary">线下换卡 {{ migrationResult.offlineExchangeCardsToCreate }}</VTag>
+              <VTag theme="secondary">清理 {{ migrationResult.deletedStationCardPlaceholders + migrationResult.deletedLegacyAutoReceiveCards }}</VTag>
+            </div>
+          </div>
+        </VTabItem>
+
         <VTabItem id="jobs" label="任务记录">
           <div class="qsl-table-wrap">
             <table class="qsl-table">
@@ -894,5 +1025,11 @@ onBeforeUnmount(() => {
   font-size: 14px;
   text-decoration: none;
   background: #fff;
+}
+
+.qsl-migration-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 </style>

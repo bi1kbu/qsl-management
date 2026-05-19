@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import com.bi1kbu.qslmanagement.api.OverviewSummary;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
+import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
 import java.security.Principal;
@@ -23,6 +24,7 @@ class QslConsoleApiEndpointForbiddenTest {
     private final QslOverviewService overviewService = mock(QslOverviewService.class);
     private final QslConsoleActionService actionService = mock(QslConsoleActionService.class);
     private final QslImportExportJobService importExportJobService = mock(QslImportExportJobService.class);
+    private final QslLegacyMigrationService legacyMigrationService = mock(QslLegacyMigrationService.class);
     private final QslNotificationMailService notificationMailService = mock(QslNotificationMailService.class);
 
     @Test
@@ -78,11 +80,34 @@ class QslConsoleApiEndpointForbiddenTest {
             .jsonPath("$.message").isEqualTo("无权限");
     }
 
+    @Test
+    void shouldRejectLegacyMigrationWhenAuthorizedButForbidden() {
+        when(legacyMigrationService.executeLegacyMigration(any(), anyString(), anyString()))
+            .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));
+        var client = buildAuthenticatedClient();
+
+        client.post()
+            .uri("/legacy-migrations/execute")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue("""
+                {
+                  "mode": "current-storage",
+                  "confirmText": "确认迁移旧版本数据"
+                }
+                """)
+            .exchange()
+            .expectStatus().isForbidden()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-403-0001")
+            .jsonPath("$.message").isEqualTo("无权限");
+    }
+
     private WebTestClient buildAuthenticatedClient() {
         var endpoint = new QslConsoleApiEndpoint(
             overviewService,
             actionService,
             importExportJobService,
+            legacyMigrationService,
             notificationMailService
         );
         var principal = (Principal) () -> "operator";

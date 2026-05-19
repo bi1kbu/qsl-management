@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import com.bi1kbu.qslmanagement.api.OverviewSummary;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
+import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
 import java.nio.charset.StandardCharsets;
@@ -19,6 +20,7 @@ class QslConsoleApiEndpointAuthTest {
     private final QslOverviewService overviewService = mock(QslOverviewService.class);
     private final QslConsoleActionService actionService = mock(QslConsoleActionService.class);
     private final QslImportExportJobService importExportJobService = mock(QslImportExportJobService.class);
+    private final QslLegacyMigrationService legacyMigrationService = mock(QslLegacyMigrationService.class);
     private final QslNotificationMailService notificationMailService = mock(QslNotificationMailService.class);
 
     @Test
@@ -125,6 +127,21 @@ class QslConsoleApiEndpointAuthTest {
     }
 
     @Test
+    void shouldRejectLegacyMigrationPrecheckWhenUnauthenticated() {
+        unauthorizedPost("/legacy-migrations/precheck", "{}");
+    }
+
+    @Test
+    void shouldRejectLegacyMigrationExecuteWhenUnauthenticated() {
+        unauthorizedPost("/legacy-migrations/execute", """
+            {
+              "mode": "current-storage",
+              "confirmText": "确认迁移旧版本数据"
+            }
+            """);
+    }
+
+    @Test
     void shouldRejectCreateExportJobWhenUnauthenticated() {
         unauthorizedPost("/exports/jobs", """
             {
@@ -187,6 +204,7 @@ class QslConsoleApiEndpointAuthTest {
             overviewService,
             actionService,
             importExportJobService,
+            legacyMigrationService,
             notificationMailService
         );
         return WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();

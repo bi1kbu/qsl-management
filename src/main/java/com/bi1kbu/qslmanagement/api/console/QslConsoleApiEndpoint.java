@@ -9,6 +9,7 @@ import com.bi1kbu.qslmanagement.api.QslApiResponses;
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
+import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
@@ -31,17 +32,20 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private final QslOverviewService overviewService;
     private final QslConsoleActionService actionService;
     private final QslImportExportJobService importExportJobService;
+    private final QslLegacyMigrationService legacyMigrationService;
     private final QslNotificationMailService notificationMailService;
 
     public QslConsoleApiEndpoint(
         QslOverviewService overviewService,
         QslConsoleActionService actionService,
         QslImportExportJobService importExportJobService,
+        QslLegacyMigrationService legacyMigrationService,
         QslNotificationMailService notificationMailService
     ) {
         this.overviewService = overviewService;
         this.actionService = actionService;
         this.importExportJobService = importExportJobService;
+        this.legacyMigrationService = legacyMigrationService;
         this.notificationMailService = notificationMailService;
     }
 
@@ -66,6 +70,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(GET("/imports/jobs/{jobName}"), this::getImportJob)
             .andRoute(GET("/imports/jobs/{jobName}/errors"), this::getImportJobErrors)
             .andRoute(GET("/imports/jobs/{jobName}/errors/download"), this::downloadImportJobErrors)
+            .andRoute(POST("/legacy-migrations/precheck"), this::precheckLegacyMigration)
+            .andRoute(POST("/legacy-migrations/execute"), this::executeLegacyMigration)
             .andRoute(POST("/exports/jobs"), this::createExportJob)
             .andRoute(GET("/exports/jobs/{jobName}"), this::getExportJob)
             .andRoute(GET("/exports/jobs/{jobName}/download"), this::downloadExportJob);
@@ -345,6 +351,29 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .onErrorResume(QslApiResponses::handleError);
     }
 
+    private Mono<ServerResponse> precheckLegacyMigration(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(ignored -> legacyMigrationService.precheckLegacyMigration())
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> executeLegacyMigration(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(LegacyMigrationRequest.class)
+                .defaultIfEmpty(new LegacyMigrationRequest("current-storage", ""))
+                .flatMap(payload -> legacyMigrationService.executeLegacyMigration(
+                    new QslLegacyMigrationService.LegacyMigrationCommand(
+                        payload.mode(),
+                        payload.confirmText()
+                    ),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
     private Mono<ServerResponse> createExportJob(ServerRequest request) {
         return ensureAuthenticated(request)
             .flatMap(authenticatedOperator -> request.bodyToMono(ExportJobRequest.class)
@@ -477,6 +506,9 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         String dataset,
         List<Map<String, String>> rows
     ) {
+    }
+
+    private record LegacyMigrationRequest(String mode, String confirmText) {
     }
 
     private record ExportJobRequest(String dataset, String format) {

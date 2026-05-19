@@ -172,6 +172,32 @@ export interface ImportJobPrecheckResult {
   datasets: ImportJobPrecheckDatasetResult[]
 }
 
+export interface LegacyMigrationResult {
+  status: string
+  message: string
+  mode: string
+  cardRecordTotal: number
+  retainedCardRecords: number
+  deletedStationCardPlaceholders: number
+  deletedLegacyAutoReceiveCards: number
+  updatedCardRecords: number
+  receiveRecordsToCreate: number
+  receiveRecordsSkipped: number
+  matchedReceiveRecords: number
+  unmatchedReceiveRecords: number
+  offlineExchangeCardsToCreate: number
+  offlineExchangeCardsSkipped: number
+  systemSettingsToUpdate: number
+  adjustedCardRecordSequence: number
+  adjustedReceiveRecordSequence: number
+  warnings: string[]
+}
+
+export interface LegacyMigrationExecutePayload {
+  mode: 'current-storage'
+  confirmText: string
+}
+
 export interface ExportJobCreatePayload {
   dataset: string
   format: string
@@ -331,6 +357,19 @@ export async function createImportJob(payload: ImportJobCreatePayload): Promise<
 export async function precheckImportJob(payload: ImportJobPrecheckPayload): Promise<ImportJobPrecheckResult> {
   const response = await axiosInstance.post<ApiResult<ImportJobPrecheckResult>>(
     `${consoleApiBase}/imports/precheck`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function precheckLegacyMigration(): Promise<LegacyMigrationResult> {
+  const response = await axiosInstance.post<ApiResult<LegacyMigrationResult>>(`${consoleApiBase}/legacy-migrations/precheck`)
+  return response.data.data
+}
+
+export async function executeLegacyMigration(payload: LegacyMigrationExecutePayload): Promise<LegacyMigrationResult> {
+  const response = await axiosInstance.post<ApiResult<LegacyMigrationResult>>(
+    `${consoleApiBase}/legacy-migrations/execute`,
     payload,
   )
   return response.data.data

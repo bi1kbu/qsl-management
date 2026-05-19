@@ -143,6 +143,8 @@ ReceiveRecord.spec.outboundCardNames = ["C1001"]
 4. 清理保留 `card-record.csv` 中已经迁出的收卡字段，收卡统计与闭环关系以 `ReceiveRecord` 为准。
 5. 同步修正 `system-setting.csv` 中的卡片编号与收卡编号序列，避免导入后继续从旧序号分配。
 
+若旧模型数据已经残留在当前 Halo 存储中，导入导出页面提供“旧版本迁移”原地处理入口：预检接口只统计影响范围，执行接口要求确认文字“确认迁移旧版本数据”，并按同一口径创建 `ReceiveRecord`、`OfflineExchangeCard`，清理旧自动收卡卡片、本台卡片版本占位记录和已迁出的收卡字段。该入口用于解决卸载插件不会自动清空 Extension 数据导致无法通过重装后导入完成迁移的问题。
+
 ## 8. API 合同基线
 
 ### 8.1 扩展资源

@@ -542,7 +542,7 @@ rules:
     resources: [ "import-export-jobs" ]
     verbs: [ "get", "list" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
-    resources: [ "imports", "exports" ]
+    resources: [ "imports", "exports", "legacy-migrations" ]
     verbs: [ "get", "list" ]
 ---
 apiVersion: v1alpha1
@@ -561,7 +561,7 @@ rules:
     resources: [ "import-export-jobs" ]
     verbs: [ "create", "update", "patch" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
-    resources: [ "imports", "exports" ]
+    resources: [ "imports", "exports", "legacy-migrations" ]
     verbs: [ "create", "get", "list" ]
 ---
 apiVersion: v1alpha1

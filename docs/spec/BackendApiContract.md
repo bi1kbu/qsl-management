@@ -1,6 +1,6 @@
 # QSL 管理插件后端 API 合同
 
-更新时间：2026-05-18
+更新时间：2026-05-19
 适用插件：`qsl-management`
 目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.24 官方文档核验
 API 版本：`v1alpha1`
@@ -12,7 +12,7 @@ API 版本：`v1alpha1`
 
 ## 2. 官方依据
 
-核验日期：2026-05-18
+核验日期：2026-05-19
 
 1. Halo Extension、自定义模型与自动 CRUD
    https://docs.halo.run/developer-guide/plugin/api-reference/server/extension
@@ -114,6 +114,8 @@ API 版本：`v1alpha1`
 | GET | `/imports/jobs/{jobName}` | 查询导入任务 | `import-export:view` |
 | GET | `/imports/jobs/{jobName}/errors` | 查询导入错误明细 | `import-export:view` |
 | GET | `/imports/jobs/{jobName}/errors/download` | 下载导入错误 CSV | `import-export:view` |
+| POST | `/legacy-migrations/precheck` | 旧版本数据模型原地迁移预检，不写入数据 | `import-export:edit` |
+| POST | `/legacy-migrations/execute` | 旧版本数据模型原地迁移，将旧卡片收卡字段拆分为 `ReceiveRecord`，并清理旧临时记录 | `import-export:edit` |
 | POST | `/exports/jobs` | 创建导出任务 | `import-export:edit` |
 | GET | `/exports/jobs/{jobName}` | 查询导出任务 | `import-export:view` |
 | GET | `/exports/jobs/{jobName}/download` | 下载导出文件 | `import-export:view` |
@@ -250,6 +252,8 @@ BH6SYX 卡片广场导入：
 ```
 
 当前导入导出数据集：`qso-record`、`card-record`、`receive-record`、`exchange-request-review`、`offline-activity`、`offline-exchange-card`、`address-management`、`bureau-management`、`equipment-catalog`、`system-setting`、`station-profile`、`station-equipment`、`station-card`。`all` 仅用于导出聚合，覆盖业务数据、收卡事实、线下换卡活动卡与配置菜单数据。2.0.0 前导出包需要先转换：从旧 `card-record.receivedRecordCodes` 聚合生成 `receive-record.csv`，从旧线下 `card-record.offlineActivityName` 聚合生成 `offline-exchange-card.csv`，并清理旧卡片记录中已迁出的收卡字段，过滤旧导出中误写入 `card-record.csv` 的 `qsl-station-card-*` 本台卡片版本占位记录，避免同一收卡事实或非业务卡片在新模型中重复统计。
+
+旧版本一键迁移用于处理“卸载插件后 Extension 数据仍保留”的场景。迁移范围为当前 Halo 存储中的旧版 QSL 数据，执行前必须先导出全部数据备份；执行接口要求请求体 `confirmText` 固定为“确认迁移旧版本数据”。迁移过程按旧版 `CardRecord.spec.receivedRecordCodes` 聚合创建 `ReceiveRecord`，按旧版线下 `CardRecord.spec.offlineActivityName` 创建 `OfflineExchangeCard`，删除 `qsl-station-card-*` 本台卡片版本占位记录和旧版自动收卡临时卡片，清空已迁出的收卡字段，并修正 `SystemSetting.spec.cardRecordSequence/receiveRecordSequence`。迁移接口具备幂等性：同名 `ReceiveRecord` 或 `OfflineExchangeCard` 已存在时跳过创建。
 
 ## 7. 前台公开 API 与页面
 
