@@ -84,7 +84,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
 
     private Mono<ServerResponse> reportSummary(ServerRequest request) {
         return ensureAuthenticated(request)
-            .then(overviewService.calculateSummary())
+            .then(overviewService.calculateReportSummary())
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

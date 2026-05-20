@@ -10,6 +10,8 @@ import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
+import com.bi1kbu.qslmanagement.api.ReportSummary;
+import java.util.List;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -186,6 +188,8 @@ class QslConsoleApiEndpointAuthTest {
 
     private WebTestClient buildClient() {
         when(overviewService.calculateSummary()).thenReturn(Mono.just(new OverviewSummary(0, 0, 0, 0, 0, 0, 0)));
+        when(overviewService.calculateReportSummary()).thenReturn(Mono.just(new ReportSummary(0, 0, 0, 0, 0, 0, 0,
+            new ReportSummary.ReportCharts(List.of()))));
         when(importExportJobService.getJob(anyString())).thenReturn(Mono.empty());
         when(importExportJobService.getJobErrors(anyString())).thenReturn(Mono.empty());
         when(importExportJobService.buildImportErrorDownload(anyString()))

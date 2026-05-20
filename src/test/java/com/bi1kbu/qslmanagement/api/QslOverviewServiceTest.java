@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import com.bi1kbu.qslmanagement.extension.model.ReceiveRecord;
+import java.time.YearMonth;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -119,6 +120,58 @@ class QslOverviewServiceTest {
         assertEquals(2L, summary.pendingSendTotal());
         assertEquals(1L, summary.deliverySignedTotal());
         assertEquals(1L, summary.receivedTotal());
+    }
+
+    @Test
+    void shouldBuildMonthlyCardFlowFromFirstCardDateToCurrentMonth() {
+        var client = mock(ReactiveExtensionClient.class);
+        var service = new QslOverviewService(client);
+        var januarySent = createCardRecord("C1001", "QSO", "QSO", "BI1KBU", true, false, false);
+        januarySent.getSpec().setCardDate("2026-01-15");
+        januarySent.getSpec().setSentAt("2026-01-16 09:00:00");
+        var marchSent = createCardRecord("C1002", "EYEBALL", "EYEBALL", "BI1ABC", true, false, false);
+        marchSent.getSpec().setCardDate("2026-03-02");
+        var excludedBlankCallSign = createCardRecord("C1003", "EYEBALL", "EYEBALL", "", true, false, false);
+        excludedBlankCallSign.getSpec().setCardDate("2026-01-20");
+
+        var januaryReceived = createReceiveRecord("R0001-20260117", "BI1KBU", "C1001");
+        januaryReceived.getSpec().setReceivedDate("2026-01-17");
+        var duplicateJanuaryReceived = createReceiveRecord("R0002-20260118", "BI1KBU", "C1001");
+        duplicateJanuaryReceived.getSpec().setReceivedDate("2026-01-18");
+        var februaryReceived = createReceiveRecord("R0003-20260201", "", "C1002");
+        februaryReceived.getSpec().setReceivedAt("2026-02-01 10:00:00");
+
+        when(client.countBy(eq(QsoRecord.class), any())).thenReturn(Mono.just(0L));
+        when(client.listAll(eq(CardRecord.class), any(), any()))
+            .thenReturn(Flux.just(januarySent, marchSent, excludedBlankCallSign));
+        when(client.listAll(eq(ReceiveRecord.class), any(), any()))
+            .thenReturn(Flux.just(januaryReceived, duplicateJanuaryReceived, februaryReceived));
+
+        var summary = service.calculateReportSummary().block();
+        var monthlyCardFlow = summary.charts().monthlyCardFlow();
+
+        assertEquals("2026-01", monthlyCardFlow.get(0).month());
+        assertEquals(YearMonth.now().toString(), monthlyCardFlow.get(monthlyCardFlow.size() - 1).month());
+        assertEquals(1L, monthlyCardFlow.stream()
+            .filter(item -> "2026-01".equals(item.month()))
+            .findFirst()
+            .orElseThrow()
+            .sentTotal());
+        assertEquals(1L, monthlyCardFlow.stream()
+            .filter(item -> "2026-01".equals(item.month()))
+            .findFirst()
+            .orElseThrow()
+            .receivedTotal());
+        assertEquals(1L, monthlyCardFlow.stream()
+            .filter(item -> "2026-02".equals(item.month()))
+            .findFirst()
+            .orElseThrow()
+            .receivedTotal());
+        assertEquals(1L, monthlyCardFlow.stream()
+            .filter(item -> "2026-03".equals(item.month()))
+            .findFirst()
+            .orElseThrow()
+            .sentTotal());
     }
 
     private static CardRecord createCardRecord(String name, String sceneType, String cardType, String callSign,

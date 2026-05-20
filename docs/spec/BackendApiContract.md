@@ -1,6 +1,6 @@
 # QSL 管理插件后端 API 合同
 
-更新时间：2026-05-19
+更新时间：2026-05-20
 适用插件：`qsl-management`
 目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.24 官方文档核验
 API 版本：`v1alpha1`
@@ -12,7 +12,7 @@ API 版本：`v1alpha1`
 
 ## 2. 官方依据
 
-核验日期：2026-05-19
+核验日期：2026-05-20
 
 1. Halo Extension、自定义模型与自动 CRUD
    https://docs.halo.run/developer-guide/plugin/api-reference/server/extension
@@ -84,9 +84,11 @@ API 版本：`v1alpha1`
 | 方法 | 路径 | 说明 | 权限 |
 | --- | --- | --- | --- |
 | GET | `/overview/summary` | 总览看板聚合统计 | `overview-dashboard:view` |
-| GET | `/reports/summary` | 审计统计报表聚合 | `report-auditlog:view` |
+| GET | `/reports/summary` | 审计统计报表聚合，包含月度收发卡片图表数据 | `report-auditlog:view` |
 
 统计口径：卡片类统计只纳入正式 `C{序号}` 且呼号非空的 `CardRecord`。`sentTotal` 统计明确已发卡、已签收、有发卡时间的记录；线上换卡中 `cardIssued=true`、`envelopePrinted=true` 且 `createdMailStatus=SENT` 的历史记录也纳入已发，避免未回写 `cardSent` 时偏小。`receivedTotal` 优先按 `ReceiveRecord.spec.callSign` 去重，呼号为空时按 `ReceiveRecord.spec.outboundCardNames` 中的卡片 ID 去重。
+
+`/reports/summary` 在上述汇总字段外返回 `charts.monthlyCardFlow`，每项包含 `month/sentTotal/receivedTotal`。月份范围从第一张正式卡片的 `CardRecord.spec.cardDate` 所在月份开始补齐至当前月份；月度发卡按同一已发统计口径取 `sentAt` 所在月份，缺失时回退 `cardDate`；月度收卡按 `ReceiveRecord.spec.receivedDate/receivedAt` 归月，并在月内按呼号或关联发卡 ID 去重。
 
 ### 6.2 业务动作
 

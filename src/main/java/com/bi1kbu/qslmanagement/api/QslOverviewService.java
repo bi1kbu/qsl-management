@@ -3,9 +3,17 @@ package com.bi1kbu.qslmanagement.api;
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import com.bi1kbu.qslmanagement.extension.model.ReceiveRecord;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Sort;
@@ -40,6 +48,20 @@ public class QslOverviewService {
             });
     }
 
+    public Mono<ReportSummary> calculateReportSummary() {
+        var qsoTotalMono = client.countBy(QsoRecord.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+        var cardListMono = client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT).collectList();
+        var receiveListMono = client.listAll(ReceiveRecord.class, EMPTY_OPTIONS, DEFAULT_SORT).collectList();
+
+        return Mono.zip(qsoTotalMono, cardListMono, receiveListMono)
+            .map(tuple -> {
+                var qsoTotal = tuple.getT1();
+                var cardRecords = tuple.getT2();
+                var receiveRecords = tuple.getT3();
+                return buildReportSummary(qsoTotal, cardRecords, receiveRecords);
+            });
+    }
+
     private OverviewSummary buildSummary(long qsoTotal, List<CardRecord> cardRecords, List<ReceiveRecord> receiveRecords) {
         var filteredCardRecords = cardRecords.stream()
             .filter(this::includeInCardStatistics)
@@ -69,6 +91,24 @@ public class QslOverviewService {
             sentTotal,
             deliverySignedTotal,
             receivedTotal
+        );
+    }
+
+    private ReportSummary buildReportSummary(long qsoTotal, List<CardRecord> cardRecords,
+        List<ReceiveRecord> receiveRecords) {
+        var summary = buildSummary(qsoTotal, cardRecords, receiveRecords);
+        var filteredCardRecords = cardRecords.stream()
+            .filter(this::includeInCardStatistics)
+            .toList();
+        return new ReportSummary(
+            summary.qsoTotal(),
+            summary.eyeballTotal(),
+            summary.cardTotal(),
+            summary.pendingSendTotal(),
+            summary.sentTotal(),
+            summary.deliverySignedTotal(),
+            summary.receivedTotal(),
+            new ReportSummary.ReportCharts(monthlyCardFlow(filteredCardRecords, receiveRecords))
         );
     }
 
@@ -139,6 +179,97 @@ public class QslOverviewService {
             .count();
     }
 
+    private List<ReportSummary.MonthlyCardFlowPoint> monthlyCardFlow(List<CardRecord> filteredCardRecords,
+        List<ReceiveRecord> receiveRecords) {
+        var firstMonth = filteredCardRecords.stream()
+            .map(this::cardStatisticMonth)
+            .flatMap(List::stream)
+            .min(YearMonth::compareTo)
+            .orElse(YearMonth.now());
+        var currentMonth = YearMonth.now();
+        if (firstMonth.isAfter(currentMonth)) {
+            firstMonth = currentMonth;
+        }
+        Map<YearMonth, MonthlyCounter> counters = new LinkedHashMap<>();
+        var cursor = firstMonth;
+        while (!cursor.isAfter(currentMonth)) {
+            counters.put(cursor, new MonthlyCounter());
+            cursor = cursor.plusMonths(1);
+        }
+
+        filteredCardRecords.stream()
+            .filter(this::includeInSentStatistics)
+            .forEach(cardRecord -> resolveSentMonth(cardRecord).ifPresent(month -> {
+                var counter = counters.get(month);
+                if (counter != null) {
+                    counter.sentTotal++;
+                }
+            }));
+        Map<YearMonth, Set<String>> receiveKeysByMonth = receiveRecords.stream()
+            .filter(receiveRecord -> receiveRecord != null && receiveRecord.getSpec() != null)
+            .flatMap(receiveRecord -> resolveReceiveMonth(receiveRecord)
+                .stream()
+                .flatMap(month -> receivedStatisticKeys(receiveRecord).stream()
+                    .map(key -> new MonthlyReceiveKey(month, key))))
+            .collect(Collectors.groupingBy(
+                MonthlyReceiveKey::month,
+                Collectors.mapping(MonthlyReceiveKey::key, Collectors.toSet())
+            ));
+        receiveKeysByMonth.forEach((month, receiveKeys) -> {
+            var counter = counters.get(month);
+            if (counter != null) {
+                counter.receivedTotal += receiveKeys.size();
+            }
+        });
+
+        return counters.entrySet().stream()
+            .map(entry -> new ReportSummary.MonthlyCardFlowPoint(
+                entry.getKey().toString(),
+                entry.getValue().sentTotal,
+                entry.getValue().receivedTotal
+            ))
+            .toList();
+    }
+
+    private List<YearMonth> cardStatisticMonth(CardRecord cardRecord) {
+        if (cardRecord == null || cardRecord.getSpec() == null) {
+            return List.of();
+        }
+        var values = new ArrayList<YearMonth>();
+        parseMonth(cardRecord.getSpec().getCardDate()).ifPresent(values::add);
+        parseMonth(cardRecord.getSpec().getSentAt()).ifPresent(values::add);
+        return values;
+    }
+
+    private Optional<YearMonth> resolveSentMonth(CardRecord cardRecord) {
+        if (cardRecord == null || cardRecord.getSpec() == null) {
+            return Optional.empty();
+        }
+        var spec = cardRecord.getSpec();
+        return parseMonth(spec.getSentAt()).or(() -> parseMonth(spec.getCardDate()));
+    }
+
+    private Optional<YearMonth> resolveReceiveMonth(ReceiveRecord receiveRecord) {
+        if (receiveRecord == null || receiveRecord.getSpec() == null) {
+            return Optional.empty();
+        }
+        var spec = receiveRecord.getSpec();
+        return parseMonth(spec.getReceivedDate()).or(() -> parseMonth(spec.getReceivedAt()));
+    }
+
+    private Optional<YearMonth> parseMonth(String value) {
+        var text = defaultString(value).trim();
+        if (text.length() < 7) {
+            return Optional.empty();
+        }
+        var dateText = text.length() >= 10 ? text.substring(0, 10) : text + "-01";
+        try {
+            return Optional.of(YearMonth.from(LocalDate.parse(dateText, DateTimeFormatter.ISO_LOCAL_DATE)));
+        } catch (DateTimeParseException ignored) {
+            return Optional.empty();
+        }
+    }
+
     private List<String> receivedStatisticKeys(ReceiveRecord receiveRecord) {
         var spec = receiveRecord.getSpec();
         var callSign = normalizeKey(spec.getCallSign());
@@ -159,5 +290,13 @@ public class QslOverviewService {
 
     private String normalizeKey(String value) {
         return defaultString(value).trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static class MonthlyCounter {
+        private long sentTotal;
+        private long receivedTotal;
+    }
+
+    private record MonthlyReceiveKey(YearMonth month, String key) {
     }
 }

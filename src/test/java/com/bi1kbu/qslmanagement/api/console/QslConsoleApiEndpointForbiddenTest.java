@@ -11,7 +11,9 @@ import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
+import com.bi1kbu.qslmanagement.api.ReportSummary;
 import java.security.Principal;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -29,7 +31,7 @@ class QslConsoleApiEndpointForbiddenTest {
 
     @Test
     void shouldRejectReportSummaryWhenAuthorizedButForbidden() {
-        when(overviewService.calculateSummary())
+        when(overviewService.calculateReportSummary())
             .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));
         var client = buildAuthenticatedClient();
 
@@ -45,6 +47,8 @@ class QslConsoleApiEndpointForbiddenTest {
     @Test
     void shouldRejectCreateImportJobWhenAuthorizedButForbidden() {
         when(overviewService.calculateSummary()).thenReturn(Mono.just(new OverviewSummary(0, 0, 0, 0, 0, 0, 0)));
+        when(overviewService.calculateReportSummary()).thenReturn(Mono.just(new ReportSummary(0, 0, 0, 0, 0, 0, 0,
+            new ReportSummary.ReportCharts(List.of()))));
         when(importExportJobService.executeImportJob(any(), anyString(), anyString()))
             .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));
         var client = buildAuthenticatedClient();
