@@ -34,6 +34,10 @@ interface ReceiveRecordSpec {
   outboundCardNames: string
 }
 
+interface CardRecordStatus {
+  flowStatus: string
+}
+
 interface CardQueryItem {
   id: string
   callSign: string
@@ -129,6 +133,10 @@ const buildReceiveRecordCodeMap = (extensions: QslExtension<ReceiveRecordSpec>[]
   return grouped
 }
 
+const isReceivedFlowStatus = (status?: Partial<CardRecordStatus>): boolean => {
+  return (status?.flowStatus ?? '').trim() === '已收卡片'
+}
+
 const normalizeSceneType = (sceneType?: string, cardType?: string): CardQueryItem['sceneType'] => {
   const upperScene = (sceneType ?? '').trim().toUpperCase()
   if (upperScene === 'QSO' || upperScene === 'SWL' || upperScene === 'ONLINE_EYEBALL' || upperScene === 'EYEBALL') {
@@ -144,7 +152,7 @@ const normalizeSceneType = (sceneType?: string, cardType?: string): CardQueryIte
   return 'QSO'
 }
 
-const toRow = (extension: QslExtension<CardRecordSpec>, receiveRecordCodeMap: Map<string, string[]>): CardQueryItem => {
+const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>, receiveRecordCodeMap: Map<string, string[]>): CardQueryItem => {
   const receiveRecordCodes = receiveRecordCodeMap.get(extension.metadata.name.trim().toUpperCase()) ?? []
   return {
     id: extension.metadata.name,
@@ -159,7 +167,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>, receiveRecordCodeMap: Ma
     envelopePrinted: Boolean(extension.spec?.envelopePrinted),
     cardSent: Boolean(extension.spec?.cardSent),
     receiptConfirmed: Boolean(extension.spec?.receiptConfirmed),
-    cardReceived: Boolean(extension.spec?.cardReceived),
+    cardReceived: isReceivedFlowStatus(extension.status),
     receiveRecordCodes: receiveRecordCodes.join(', '),
     remarkFields: {
       businessRemarks: extension.spec?.businessRemarks ?? '',
@@ -182,7 +190,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>, receiveRecordCodeMap: Ma
 const loadRows = async () => {
   loading.value = true
   try {
-    const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
+    const extensions = await listExtensions<CardRecordSpec, CardRecordStatus>(resourcePlural)
     const receiveRecordExtensions = await listExtensions<ReceiveRecordSpec>(receiveRecordPlural)
     const receiveRecordCodeMap = buildReceiveRecordCodeMap(receiveRecordExtensions)
     rows.value = extensions.map((extension) => toRow(extension, receiveRecordCodeMap))

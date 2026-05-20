@@ -564,6 +564,10 @@ const normalizeCardRecordStatus = (status?: Partial<CardRecordStatus>): CardReco
   }
 }
 
+const isReceivedFlowStatus = (status?: Partial<CardRecordStatus>): boolean => {
+  return (status?.flowStatus ?? '').trim() === '已收卡片'
+}
+
 const toCardRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): CardIssueCardRow => {
   const spec = normalizeCardRecordSpec(extension.spec)
   const status = normalizeCardRecordStatus(extension.status)
@@ -582,7 +586,7 @@ const toCardRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): C
     cardSent: spec.cardSent,
     cardIssued: spec.cardIssued,
     envelopePrinted: spec.envelopePrinted,
-    cardReceived: spec.cardReceived,
+    cardReceived: isReceivedFlowStatus(status),
     receiptConfirmed: spec.receiptConfirmed,
     cardIssuedAt: spec.cardIssuedAt,
     sentAt: spec.sentAt,

@@ -524,6 +524,10 @@ const normalizeCardRecordStatus = (status?: Partial<CardRecordStatus>): CardReco
   }
 }
 
+const isReceivedFlowStatus = (status?: Partial<CardRecordStatus>): boolean => {
+  return (status?.flowStatus ?? '').trim() === '已收卡片'
+}
+
 const nowText = (): string => {
   return new Date().toLocaleString('zh-CN', { hour12: false })
 }
@@ -606,6 +610,33 @@ const applyStateConsistency = (spec: CardRecordSpec) => {
   }
 }
 
+const resolveCardFlowStatus = (spec: CardRecordSpec): string => {
+  if (spec.cardReceived) {
+    return '已收卡片'
+  }
+  if (spec.receiptConfirmed) {
+    return '已签收'
+  }
+  if (spec.cardSent) {
+    return '已发信'
+  }
+  if (spec.envelopePrinted) {
+    return '已打包'
+  }
+  if (spec.cardIssued) {
+    return '已制卡'
+  }
+  return ''
+}
+
+const resolveNextFlowStatus = (spec: CardRecordSpec, requestedFlowStatus: string): string => {
+  const requested = requestedFlowStatus.trim()
+  if (spec.cardReceived || requested === '已收卡片') {
+    return resolveCardFlowStatus(spec)
+  }
+  return requested
+}
+
 const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): CardMutationItem => {
   const spec = normalizeCardRecordSpec(extension.spec)
   const status = normalizeCardRecordStatus(extension.status)
@@ -623,7 +654,7 @@ const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): CardM
     cardTime: spec.cardTime,
     cardIssued: spec.cardIssued,
     cardSent: spec.cardSent,
-    cardReceived: spec.cardReceived,
+    cardReceived: isReceivedFlowStatus(status),
     receiptConfirmed: spec.receiptConfirmed,
   }
 }
@@ -760,7 +791,7 @@ const startEditRow = (item: CardMutationItem) => {
   editForm.cardIssued = item.spec.cardIssued
   editForm.envelopePrinted = item.spec.envelopePrinted
   editForm.cardSent = item.spec.cardSent
-  editForm.cardReceived = item.spec.cardReceived
+  editForm.cardReceived = isReceivedFlowStatus(item.status)
   editForm.receiptConfirmed = item.spec.receiptConfirmed
   editForm.cardIssuedAt = item.spec.cardIssuedAt
   editForm.sentAt = item.spec.sentAt
@@ -886,7 +917,7 @@ const saveEdit = async () => {
     const nextSpec = buildSpecFromEditForm(baseSpec)
     const nextStatus: CardRecordStatus = {
       ...baseStatus,
-      flowStatus: editForm.flowStatus.trim(),
+      flowStatus: resolveNextFlowStatus(nextSpec, editForm.flowStatus),
     }
 
     await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, target.resourceName, {
@@ -1065,6 +1096,12 @@ const applyBatchField = (
       break
   }
   applyStateConsistency(nextSpec)
+  if (
+    ['cardIssuedState', 'cardSentState', 'envelopePrintedState', 'cardReceivedState', 'receiptConfirmedState'].includes(field)
+    || nextStatus.flowStatus.trim() === '已收卡片'
+  ) {
+    nextStatus.flowStatus = resolveNextFlowStatus(nextSpec, nextStatus.flowStatus)
+  }
 
   return { nextSpec, nextStatus }
 }
@@ -1537,7 +1574,7 @@ onMounted(() => {
                 <th>发卡状态</th>
                 <td>{{ toHistoryItem(row).spec.cardSent ? '是' : '否' }}</td>
                 <th>收卡状态</th>
-                <td>{{ toHistoryItem(row).spec.cardReceived ? '是' : '否' }}</td>
+                <td>{{ toHistoryItem(row).cardReceived ? '是' : '否' }}</td>
               </tr>
               <tr>
                 <th>签收状态</th>

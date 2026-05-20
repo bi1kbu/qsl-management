@@ -56,10 +56,15 @@ interface CardRecordSpec {
   mailTargetEmail: string
 }
 
+interface CardRecordStatus {
+  flowStatus: string
+}
+
 interface CardRecordItem {
   resourceName: string
   metadataVersion?: number | null
   spec: CardRecordSpec
+  status: CardRecordStatus
   callSign: string
   cardType: CardType
   cardVersion: string
@@ -817,12 +822,17 @@ const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec
   }
 }
 
-const toRecordItem = (extension: QslExtension<CardRecordSpec>): CardRecordItem => {
+const isReceivedFlowStatus = (status?: Partial<CardRecordStatus>): boolean => {
+  return (status?.flowStatus ?? '').trim() === '已收卡片'
+}
+
+const toRecordItem = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): CardRecordItem => {
   const spec = normalizeCardRecordSpec(extension.spec)
   return {
     resourceName: extension.metadata.name,
     metadataVersion: extension.metadata.version,
     spec,
+    status: extension.status ?? { flowStatus: '' },
     callSign: spec.callSign,
     cardType: spec.cardType,
     cardVersion: spec.cardVersion,
@@ -832,7 +842,7 @@ const toRecordItem = (extension: QslExtension<CardRecordSpec>): CardRecordItem =
     cardTime: spec.cardTime,
     cardRemarks: spec.cardRemarks,
     cardSent: spec.cardSent,
-    cardReceived: spec.cardReceived,
+    cardReceived: isReceivedFlowStatus(extension.status),
     receiptConfirmed: spec.receiptConfirmed,
   }
 }
@@ -854,7 +864,7 @@ const loadCardRecords = async (options: { silent?: boolean; skipLoading?: boolea
     loading.value = true
   }
   try {
-    const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
+    const extensions = await listExtensions<CardRecordSpec, CardRecordStatus>(resourcePlural)
     records.value = extensions
       .map((extension) => toRecordItem(extension))
       .filter((item) => {

@@ -91,6 +91,7 @@ public class QslLegacyMigrationService {
             .filter(card -> !isStationCardPlaceholder(card))
             .toList();
         var receiveRecords = buildReceiveRecords(businessCards, existingReceiveNames);
+        var linkedReceiveStates = buildLinkedReceiveStates(receiveRecords.toCreate(), snapshot.receiveRecords());
         var legacyAutoReceiveCards = businessCards.stream()
             .filter(this::isLegacyAutoReceiveCard)
             .toList();
@@ -98,8 +99,12 @@ public class QslLegacyMigrationService {
             .filter(card -> !isLegacyAutoReceiveCard(card))
             .toList();
         var cardsToUpdate = retainedCards.stream()
-            .filter(this::hasExtractedReceiveFields)
-            .peek(this::stripExtractedReceiveFields)
+            .filter(card -> hasExtractedReceiveFields(card)
+                || linkedReceiveStates.containsKey(normalizeResourceName(resourceName(card))))
+            .peek(card -> stripExtractedReceiveFields(
+                card,
+                linkedReceiveStates.get(normalizeResourceName(resourceName(card)))
+            ))
             .toList();
         var offlineCards = buildOfflineExchangeCards(retainedCards, existingOfflineNames);
         var maxCardSequence = maxCardSequence(retainedCards);
@@ -369,18 +374,74 @@ public class QslLegacyMigrationService {
                 || !isBlank(spec.getReceivedMailLastError()));
     }
 
-    private void stripExtractedReceiveFields(CardRecord cardRecord) {
+    private Map<String, LinkedReceiveState> buildLinkedReceiveStates(List<ReceiveRecord> toCreate,
+        List<ReceiveRecord> existingRecords) {
+        var states = new LinkedHashMap<String, LinkedReceiveState>();
+        var records = new ArrayList<ReceiveRecord>();
+        records.addAll(existingRecords);
+        records.addAll(toCreate);
+        for (var receiveRecord : records) {
+            var spec = receiveRecord.getSpec();
+            if (spec == null) {
+                continue;
+            }
+            var receivedDate = nullToEmpty(spec.getReceivedDate()).trim();
+            var receivedAt = defaultIfBlank(spec.getReceivedAt(),
+                receivedDate.isBlank() ? "" : receivedDate + " 00:00:00");
+            for (var cardName : splitValues(spec.getOutboundCardNames())) {
+                if (!isFormalCardName(cardName)) {
+                    continue;
+                }
+                var key = normalizeResourceName(cardName);
+                var current = states.get(key);
+                if (current == null || isEarlierReceivedAt(receivedAt, current.receivedAt())) {
+                    states.put(key, new LinkedReceiveState(receivedAt));
+                }
+            }
+        }
+        return states;
+    }
+
+    private void stripExtractedReceiveFields(CardRecord cardRecord, LinkedReceiveState linkedReceiveState) {
         var spec = cardRecord.getSpec();
-        spec.setCardReceived(Boolean.FALSE);
-        spec.setReceivedAt("");
+        if (linkedReceiveState == null) {
+            spec.setCardReceived(Boolean.FALSE);
+            spec.setReceivedAt("");
+        } else {
+            spec.setCardReceived(Boolean.TRUE);
+            spec.setReceivedAt(linkedReceiveState.receivedAt());
+        }
         spec.setReceivedRemarks("");
         spec.setReceivedMailStatus("");
         spec.setReceivedMailSentAt("");
         spec.setReceivedMailLastError("");
         spec.setReceivedRecordCodes("");
-        if (cardRecord.getStatus() != null && "已收卡片".equals(nullToEmpty(cardRecord.getStatus().getFlowStatus()).trim())) {
+        if (linkedReceiveState != null) {
+            var status = cardRecord.getStatus() == null
+                ? new CardRecord.CardRecordStatus()
+                : cardRecord.getStatus();
+            status.setFlowStatus("已收卡片");
+            cardRecord.setStatus(status);
+        } else if (cardRecord.getStatus() != null
+            && "已收卡片".equals(nullToEmpty(cardRecord.getStatus().getFlowStatus()).trim())) {
             cardRecord.getStatus().setFlowStatus(Boolean.TRUE.equals(spec.getCardSent()) ? "已发卡片" : "已制卡");
         }
+    }
+
+    private boolean isFormalCardName(String value) {
+        return CARD_SEQUENCE_PATTERN.matcher(nullToEmpty(value).trim()).matches();
+    }
+
+    private boolean isEarlierReceivedAt(String candidate, String current) {
+        var normalizedCandidate = nullToEmpty(candidate).trim();
+        var normalizedCurrent = nullToEmpty(current).trim();
+        if (normalizedCandidate.isBlank()) {
+            return normalizedCurrent.isBlank();
+        }
+        if (normalizedCurrent.isBlank()) {
+            return true;
+        }
+        return normalizedCandidate.compareTo(normalizedCurrent) < 0;
     }
 
     private int maxCardSequence(List<CardRecord> cardRecords) {
@@ -485,6 +546,10 @@ public class QslLegacyMigrationService {
         return nullToEmpty(value).trim().toUpperCase(Locale.ROOT);
     }
 
+    private String normalizeResourceName(String value) {
+        return nullToEmpty(value).trim().toUpperCase(Locale.ROOT);
+    }
+
     private String defaultIfBlank(String value, String defaultValue) {
         return isBlank(value) ? defaultValue : value.trim();
     }
@@ -577,6 +642,9 @@ public class QslLegacyMigrationService {
         long matchedCount,
         long unmatchedCount
     ) {
+    }
+
+    private record LinkedReceiveState(String receivedAt) {
     }
 
     private record OfflineBuildResult(

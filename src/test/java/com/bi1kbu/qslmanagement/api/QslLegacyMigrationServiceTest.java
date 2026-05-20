@@ -3,6 +3,7 @@ package com.bi1kbu.qslmanagement.api;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -87,7 +88,9 @@ class QslLegacyMigrationServiceTest {
         assertEquals(2, result.receiveRecordsToCreate());
         assertEquals(1, result.offlineExchangeCardsToCreate());
         assertEquals("", retained.getSpec().getReceivedRecordCodes());
-        assertEquals(Boolean.FALSE, retained.getSpec().getCardReceived());
+        assertTrue(retained.getSpec().getCardReceived());
+        assertEquals("2026-05-19 10:00:00", retained.getSpec().getReceivedAt());
+        assertEquals("已收卡片", retained.getStatus().getFlowStatus());
         assertEquals(1002, setting.getSpec().getCardRecordSequence());
         assertEquals(2, setting.getSpec().getReceiveRecordSequence());
         verify(client).delete(temporary);
@@ -109,6 +112,40 @@ class QslLegacyMigrationServiceTest {
         ).block());
 
         assertEquals("QSL-400-0001", error.getCode());
+    }
+
+    @Test
+    void shouldRefreshReceivedStateFromLinkedReceiveRecords() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+        var service = new QslLegacyMigrationService(client, auditService);
+        var linkedCard = sentCard("C2001", "BI1KBU");
+        var setting = systemSetting(2001, 4);
+
+        stubSnapshot(client,
+            List.of(linkedCard),
+            List.of(
+                receiveRecord("R0004-20260520", "C2001", "2026-05-20 09:00:00"),
+                receiveRecord("R0003-20260518", "C2001", "2026-05-18 08:00:00")
+            ),
+            List.of(),
+            List.of(setting)
+        );
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.executeLegacyMigration(
+            new QslLegacyMigrationService.LegacyMigrationCommand("current-storage", "确认迁移旧版本数据"),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("迁移完成", result.status());
+        assertEquals(1, result.updatedCardRecords());
+        assertTrue(linkedCard.getSpec().getCardReceived());
+        assertEquals("2026-05-18 08:00:00", linkedCard.getSpec().getReceivedAt());
+        assertEquals("已收卡片", linkedCard.getStatus().getFlowStatus());
     }
 
     private static void stubSnapshot(ReactiveExtensionClient client, List<CardRecord> cards,
@@ -175,10 +212,38 @@ class QslLegacyMigrationServiceTest {
         return card;
     }
 
+    private static CardRecord sentCard(String name, String callSign) {
+        var card = new CardRecord();
+        card.setMetadata(QslApiSupport.createMetadata(name));
+        var spec = new CardRecord.CardRecordSpec();
+        spec.setCallSign(callSign);
+        spec.setCardType("QSO");
+        spec.setSceneType("QSO");
+        spec.setCardSent(Boolean.TRUE);
+        spec.setSentAt("2026-05-17 09:00:00");
+        spec.setCardReceived(Boolean.FALSE);
+        spec.setReceivedAt("");
+        card.setSpec(spec);
+        var status = new CardRecord.CardRecordStatus();
+        status.setFlowStatus("已发信");
+        card.setStatus(status);
+        return card;
+    }
+
     private static ReceiveRecord receiveRecord(String name) {
         var receiveRecord = new ReceiveRecord();
         receiveRecord.setMetadata(QslApiSupport.createMetadata(name));
         receiveRecord.setSpec(new ReceiveRecord.ReceiveRecordSpec());
+        return receiveRecord;
+    }
+
+    private static ReceiveRecord receiveRecord(String name, String outboundCardNames, String receivedAt) {
+        var receiveRecord = new ReceiveRecord();
+        receiveRecord.setMetadata(QslApiSupport.createMetadata(name));
+        var spec = new ReceiveRecord.ReceiveRecordSpec();
+        spec.setOutboundCardNames(outboundCardNames);
+        spec.setReceivedAt(receivedAt);
+        receiveRecord.setSpec(spec);
         return receiveRecord;
     }
 

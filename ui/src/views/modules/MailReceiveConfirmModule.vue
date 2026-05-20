@@ -81,6 +81,7 @@ interface ReceiveResult {
   resourceName: string
   metadataVersion?: number | null
   spec: CardRecordSpec
+  status: CardRecordStatus
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
   action: string
@@ -449,6 +450,10 @@ const isFormalCardRecordName = (resourceName: string): boolean => {
   return /^C\d+$/i.test(resourceName.trim())
 }
 
+const isReceivedFlowStatus = (status?: Partial<CardRecordStatus>): boolean => {
+  return (status?.flowStatus ?? '').trim() === '已收卡片'
+}
+
 const compareReceiveRows = (left: ReceiveResult, right: ReceiveResult, key: ReceiveSortKey): number => {
   switch (key) {
     case 'resourceName':
@@ -458,7 +463,7 @@ const compareReceiveRows = (left: ReceiveResult, right: ReceiveResult, key: Rece
     case 'cardType':
       return compareText(left.cardType, right.cardType)
     case 'cardReceived':
-      return compareBoolean(left.spec.cardReceived, right.spec.cardReceived)
+      return compareBoolean(isCardReceivedForDisplay(left), isCardReceivedForDisplay(right))
     case 'cardSent':
       return compareBoolean(left.spec.cardSent, right.spec.cardSent)
     case 'offlineActivityName':
@@ -662,7 +667,7 @@ const linkedReceiveRecordsForCard = (item: ReceiveResult): ReceivedRecordResult[
 }
 
 const isCardReceivedForDisplay = (item: ReceiveResult): boolean => {
-  return item.spec.cardReceived || linkedReceiveRecordsForCard(item).length > 0
+  return isReceivedFlowStatus(item.status)
 }
 
 const formatReceiveRecordCodesForCard = (item: ReceiveResult): string => {
@@ -794,11 +799,30 @@ const applyStateCleanup = (spec: CardRecordSpec) => {
   }
 }
 
+const resolveCardFlowStatus = (spec: CardRecordSpec): string => {
+  if (spec.cardReceived) {
+    return '已收卡片'
+  }
+  if (spec.receiptConfirmed) {
+    return '已签收'
+  }
+  if (spec.cardSent) {
+    return '已发信'
+  }
+  if (spec.envelopePrinted) {
+    return '已打包'
+  }
+  if (spec.cardIssued) {
+    return '已制卡'
+  }
+  return ''
+}
+
 const toReceiveResult = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): ReceiveResult => {
   const spec = normalizeCardRecordSpec(extension.spec)
-  const status = extension.status
+  const status = extension.status ?? { flowStatus: '' }
   const cardType = spec.cardType
-  const cardReceived = Boolean(spec.cardReceived)
+  const cardReceived = isReceivedFlowStatus(status)
   const cardSent = Boolean(spec.cardSent)
 
   let action = status?.flowStatus?.trim() || '收信确认'
@@ -814,6 +838,7 @@ const toReceiveResult = (extension: QslExtension<CardRecordSpec, CardRecordStatu
     resourceName: extension.metadata.name,
     metadataVersion: extension.metadata.version,
     spec,
+    status,
     callSign: spec.callSign,
     cardType,
     action,
@@ -1066,7 +1091,7 @@ const saveSingleEdit = async () => {
     }
     applyStateCleanup(nextSpec)
 
-    await updateExtension<CardRecordSpec>(resourcePlural, target.resourceName, {
+    await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, target.resourceName, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
@@ -1074,6 +1099,10 @@ const saveSingleEdit = async () => {
         version: target.metadataVersion,
       },
       spec: nextSpec,
+      status: {
+        ...target.status,
+        flowStatus: resolveCardFlowStatus(nextSpec),
+      },
     })
 
     if (nextReceived && nextReceivedDate && nextReceivedDate !== currentReceivedDate) {
@@ -1176,7 +1205,7 @@ const applyHistoryBatchEdit = async () => {
           ? (nextValue as CardRecordSpec['cardType'])
           : item.spec.cardType
       const nextReceived =
-        batchEditField.value === 'cardReceivedState' ? nextValue === 'RECEIVED' : item.spec.cardReceived
+        batchEditField.value === 'cardReceivedState' ? nextValue === 'RECEIVED' : isCardReceivedForDisplay(item)
       const nextConfirmed =
         batchEditField.value === 'receiptConfirmedState' ? nextValue === 'CONFIRMED' : item.spec.receiptConfirmed
 
@@ -1191,7 +1220,7 @@ const applyHistoryBatchEdit = async () => {
       }
       applyStateCleanup(nextSpec)
 
-      await updateExtension<CardRecordSpec>(resourcePlural, item.resourceName, {
+      await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, item.resourceName, {
         apiVersion: qslApiVersion,
         kind: resourceKind,
         metadata: {
@@ -1199,6 +1228,10 @@ const applyHistoryBatchEdit = async () => {
           version: item.metadataVersion,
         },
         spec: nextSpec,
+        status: {
+          ...item.status,
+          flowStatus: resolveCardFlowStatus(nextSpec),
+        },
       })
     }
 
