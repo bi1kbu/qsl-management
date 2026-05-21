@@ -54,9 +54,10 @@
 ## 发布与 CI/CD 约定
 1. 每次提交并创建 GitHub Release 后，必须立即核实 GitHub Actions 中对应 CI 与 CD 的状态。
 2. 创建 Release 时不手动上传 JAR 附件；Release 附件由 CD 流程自动构建并上传，避免同名资产导致 CD 失败。
-3. CD 流程需核实至少包含构建、GitHub Release 附件上传、Halo 应用市场推送相关 job 的结论。
-4. 若 CI/CD 失败，必须查看失败 job 与关键日志，判断是否影响 GitHub Release 附件和 Halo 应用市场推送，并在最终回复中说明失败原因、影响范围与处理建议。
-5. 最终回复必须明确说明提交、推送、Release、CI、CD、Halo 应用市场推送状态。
+3. GitHub 推送若受到本机代理影响，优先尝试临时清空代理环境的单次命令方案，例如 `git -c http.proxy= -c https.proxy= push origin main`；该方案不得修改全局 Git 代理配置。
+4. CD 流程需核实至少包含构建、GitHub Release 附件上传、Halo 应用市场推送相关 job 的结论。
+5. 若 CI/CD 失败，必须查看失败 job 与关键日志，判断是否影响 GitHub Release 附件和 Halo 应用市场推送，并在最终回复中说明失败原因、影响范围与处理建议。
+6. 最终回复必须明确说明提交、推送、Release、CI、CD、Halo 应用市场推送状态。
 
 ## 业务批量编辑约定
 1. `通联业务` 菜单内四个子页面（通联日志、创建卡片、发信确认、送达确认）的批量编辑统一使用同一交互模板。
