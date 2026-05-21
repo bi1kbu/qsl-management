@@ -80,7 +80,12 @@ const hasFieldValue = computed(() => {
 })
 
 const confirmDisabled = computed(() => {
-  return props.disabled || props.selectedCount === 0 || !selectedFieldOption.value || !hasFieldValue.value
+  return (
+    props.disabled ||
+    props.selectedCount === 0 ||
+    !selectedFieldOption.value ||
+    !hasFieldValue.value
+  )
 })
 
 const updateFieldValue = (value: string) => {
@@ -131,7 +136,10 @@ const onConfirm = () => {
           </select>
         </div>
 
-        <div v-else-if="selectedFieldOption.inputType === 'textarea'" class="qsl-input-shell qsl-input-shell--textarea">
+        <div
+          v-else-if="selectedFieldOption.inputType === 'textarea'"
+          class="qsl-input-shell qsl-input-shell--textarea"
+        >
           <textarea
             :value="localFieldValue"
             rows="2"

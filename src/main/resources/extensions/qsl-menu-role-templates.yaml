@@ -198,6 +198,9 @@ rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "qso-records", "address-book-entries" ]
     verbs: [ "get", "list" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
+    resources: [ "card-mutations" ]
+    verbs: [ "create" ]
 ---
 apiVersion: v1alpha1
 kind: Role

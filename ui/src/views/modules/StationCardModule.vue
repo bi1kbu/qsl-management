@@ -156,7 +156,9 @@ const resolveAttachmentPreviewUrl = (attachment: Attachment): string => {
     thumbnails['s'] ||
     thumbnails['m'] ||
     thumbnails['l'] ||
-    Object.values(thumbnails).find((value): value is string => typeof value === 'string' && Boolean(value)) ||
+    Object.values(thumbnails).find(
+      (value): value is string => typeof value === 'string' && Boolean(value),
+    ) ||
     attachment.status?.permalink ||
     ''
   )
@@ -232,7 +234,10 @@ const uploadAttachment = async () => {
       await loadAttachmentOptions()
       return
     }
-    attachmentOptions.value = [option, ...attachmentOptions.value.filter((item) => item.name !== option.name)]
+    attachmentOptions.value = [
+      option,
+      ...attachmentOptions.value.filter((item) => item.name !== option.name),
+    ]
     attachmentUploadFile.value = null
     if (attachmentUploadInputRef.value) {
       attachmentUploadInputRef.value.value = ''
@@ -369,7 +374,9 @@ const addStationCard = () => {
     return
   }
 
-  const exists = stationCards.value.some((card) => card.versionName.toLowerCase() === versionName.toLowerCase())
+  const exists = stationCards.value.some(
+    (card) => card.versionName.toLowerCase() === versionName.toLowerCase(),
+  )
   if (exists) {
     feedback.value = `卡片版本“${versionName}”已存在。`
     return
@@ -433,12 +440,20 @@ const cancelInventoryEdit = () => {
 
 const confirmInventoryEdit = (card: StationCardVersion) => {
   const availableRawValue = Number(editingAvailableInventoryValue.value)
-  if (!Number.isFinite(availableRawValue) || availableRawValue < 0 || !Number.isInteger(availableRawValue)) {
+  if (
+    !Number.isFinite(availableRawValue) ||
+    availableRawValue < 0 ||
+    !Number.isInteger(availableRawValue)
+  ) {
     feedback.value = '可用库存必须为大于等于 0 的整数。'
     return
   }
   const versionTotalRawValue = Number(editingVersionTotalValue.value)
-  if (!Number.isFinite(versionTotalRawValue) || versionTotalRawValue < 0 || !Number.isInteger(versionTotalRawValue)) {
+  if (
+    !Number.isFinite(versionTotalRawValue) ||
+    versionTotalRawValue < 0 ||
+    !Number.isInteger(versionTotalRawValue)
+  ) {
     feedback.value = '版本总量必须为大于等于 0 的整数。'
     return
   }
@@ -535,7 +550,9 @@ const saveStationCard = async () => {
     }
 
     const removedItems = currentRemote.filter((item) => !keepNames.has(item.metadata.name))
-    const deleteTasks = removedItems.map((item) => deleteExtension(resourcePlural, item.metadata.name))
+    const deleteTasks = removedItems.map((item) =>
+      deleteExtension(resourcePlural, item.metadata.name),
+    )
     await Promise.all(deleteTasks)
     const deletedCount = removedItems.length
 
@@ -598,19 +615,33 @@ onMounted(() => {
         <label class="qsl-field">
           <span class="qsl-field__label">可用库存</span>
           <div class="qsl-input-shell">
-            <input v-model.number="newCardAvailableInventory" type="number" min="0" step="1" placeholder="例如：200" />
+            <input
+              v-model.number="newCardAvailableInventory"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="例如：200"
+            />
           </div>
         </label>
 
         <label class="qsl-field">
           <span class="qsl-field__label">版本总量</span>
           <div class="qsl-input-shell">
-            <input v-model.number="newCardVersionTotal" type="number" min="0" step="1" placeholder="例如：500" />
+            <input
+              v-model.number="newCardVersionTotal"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="例如：500"
+            />
           </div>
         </label>
 
         <div class="qsl-actions">
-          <VButton type="secondary" :disabled="loading || saving" @click="addStationCard">新增卡片版本</VButton>
+          <VButton type="secondary" :disabled="loading || saving" @click="addStationCard"
+            >新增卡片版本</VButton
+          >
           <VButton :disabled="loading || saving" @click="saveStationCard">保存卡片配置</VButton>
         </div>
       </div>
@@ -629,11 +660,19 @@ onMounted(() => {
           @drop.prevent="onCardDrop(card.id)"
           @dragend="onCardDragEnd"
         >
-          <img v-if="card.previewUrl" :src="card.previewUrl" :alt="`${card.versionName} 预览`" class="qsl-card-preview" />
+          <img
+            v-if="card.previewUrl"
+            :src="card.previewUrl"
+            :alt="`${card.versionName} 预览`"
+            class="qsl-card-preview"
+          />
           <div v-else class="qsl-card-preview qsl-card-preview--empty">缺少附件</div>
           <div class="qsl-card-meta">
             <p><strong>版本：</strong>{{ card.versionName }}</p>
-            <p><strong>附件：</strong>{{ card.attachmentDisplayName || card.attachmentName || '未选择' }}</p>
+            <p>
+              <strong>附件：</strong
+              >{{ card.attachmentDisplayName || card.attachmentName || '未选择' }}
+            </p>
             <p><strong>可用库存：</strong>{{ card.availableInventory }}</p>
             <p><strong>版本总量：</strong>{{ card.versionTotal }}</p>
             <p><strong>已使用：</strong>{{ getUsedCount(card.versionName) }}</p>
@@ -670,15 +709,38 @@ onMounted(() => {
                   </div>
                 </label>
                 <div class="qsl-actions qsl-inventory-edit__actions">
-                  <VButton size="xs" :disabled="loading || saving" @click="confirmInventoryEdit(card)">确认库存</VButton>
-                  <VButton size="xs" type="secondary" :disabled="loading || saving" @click="cancelInventoryEdit">取消</VButton>
-                  <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeStationCard(card.id)">删除</VButton>
+                  <VButton
+                    size="xs"
+                    :disabled="loading || saving"
+                    @click="confirmInventoryEdit(card)"
+                    >确认库存</VButton
+                  >
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="loading || saving"
+                    @click="cancelInventoryEdit"
+                    >取消</VButton
+                  >
+                  <VButton
+                    size="xs"
+                    type="danger"
+                    :disabled="loading || saving"
+                    @click="removeStationCard(card.id)"
+                    >删除</VButton
+                  >
                 </div>
               </div>
             </template>
             <template v-else>
               <div class="qsl-card-list__button-row">
-                <VButton size="xs" type="secondary" :disabled="loading || saving" @click="startInventoryEdit(card)">编辑库存</VButton>
+                <VButton
+                  size="xs"
+                  type="secondary"
+                  :disabled="loading || saving"
+                  @click="startInventoryEdit(card)"
+                  >编辑库存</VButton
+                >
                 <VButton
                   size="xs"
                   type="secondary"
@@ -687,7 +749,13 @@ onMounted(() => {
                 >
                   更换图片
                 </VButton>
-                <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeStationCard(card.id)">删除</VButton>
+                <VButton
+                  size="xs"
+                  type="danger"
+                  :disabled="loading || saving"
+                  @click="removeStationCard(card.id)"
+                  >删除</VButton
+                >
               </div>
             </template>
           </div>
@@ -708,9 +776,20 @@ onMounted(() => {
     <div class="qsl-attachment-picker">
       <div class="qsl-attachment-toolbar">
         <div class="qsl-input-shell">
-          <input v-model.trim="attachmentKeyword" type="search" placeholder="按附件名称搜索" @keyup.enter="loadAttachmentOptions" />
+          <input
+            v-model.trim="attachmentKeyword"
+            type="search"
+            placeholder="按附件名称搜索"
+            @keyup.enter="loadAttachmentOptions"
+          />
         </div>
-        <VButton size="sm" type="secondary" :disabled="loadingAttachments" @click="loadAttachmentOptions">刷新</VButton>
+        <VButton
+          size="sm"
+          type="secondary"
+          :disabled="loadingAttachments"
+          @click="loadAttachmentOptions"
+          >刷新</VButton
+        >
       </div>
 
       <div class="qsl-attachment-upload">
@@ -722,7 +801,11 @@ onMounted(() => {
             @change="onAttachmentUploadFileChange"
           />
         </div>
-        <VButton size="sm" :disabled="uploadingAttachment || !attachmentUploadFile" @click="uploadAttachment">
+        <VButton
+          size="sm"
+          :disabled="uploadingAttachment || !attachmentUploadFile"
+          @click="uploadAttachment"
+        >
           上传并使用
         </VButton>
       </div>
@@ -737,7 +820,10 @@ onMounted(() => {
           :disabled="loadingAttachments || uploadingAttachment"
           @click="selectAttachment(attachment)"
         >
-          <img :src="attachment.thumbnailUrl || attachment.permalink" :alt="`${attachment.displayName} 预览`" />
+          <img
+            :src="attachment.thumbnailUrl || attachment.permalink"
+            :alt="`${attachment.displayName} 预览`"
+          />
           <span>{{ attachment.displayName }}</span>
           <small>{{ formatFileSize(attachment.size) }}</small>
         </button>

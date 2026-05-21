@@ -61,14 +61,21 @@ const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
   const legacyReviewed = Boolean(extension.spec?.autoNotifyOnExchangeReviewed)
   systemSettingsForm.guestQueryPerMinute = extension.spec?.guestQueryPerMinute ?? 30
   systemSettingsForm.requiresExchangeReview = extension.spec?.requiresExchangeReview ?? true
-  systemSettingsForm.qsoAutoNotifyOnCardCreated = extension.spec?.qsoAutoNotifyOnCardCreated ?? legacyCreated
+  systemSettingsForm.qsoAutoNotifyOnCardCreated =
+    extension.spec?.qsoAutoNotifyOnCardCreated ?? legacyCreated
   systemSettingsForm.qsoAutoNotifyOnCardSent = extension.spec?.qsoAutoNotifyOnCardSent ?? legacySent
-  systemSettingsForm.qsoAutoNotifyOnCardReceived = extension.spec?.qsoAutoNotifyOnCardReceived ?? legacyReceived
-  systemSettingsForm.onlineAutoNotifyOnCardCreated = extension.spec?.onlineAutoNotifyOnCardCreated ?? legacyCreated
-  systemSettingsForm.onlineAutoNotifyOnCardSent = extension.spec?.onlineAutoNotifyOnCardSent ?? legacySent
-  systemSettingsForm.onlineAutoNotifyOnCardReceived = extension.spec?.onlineAutoNotifyOnCardReceived ?? legacyReceived
-  systemSettingsForm.onlineAutoNotifyOnExchangeReviewed = extension.spec?.onlineAutoNotifyOnExchangeReviewed ?? legacyReviewed
-  systemSettingsForm.offlineAutoNotifyOnCardReceived = extension.spec?.offlineAutoNotifyOnCardReceived ?? legacyReceived
+  systemSettingsForm.qsoAutoNotifyOnCardReceived =
+    extension.spec?.qsoAutoNotifyOnCardReceived ?? legacyReceived
+  systemSettingsForm.onlineAutoNotifyOnCardCreated =
+    extension.spec?.onlineAutoNotifyOnCardCreated ?? legacyCreated
+  systemSettingsForm.onlineAutoNotifyOnCardSent =
+    extension.spec?.onlineAutoNotifyOnCardSent ?? legacySent
+  systemSettingsForm.onlineAutoNotifyOnCardReceived =
+    extension.spec?.onlineAutoNotifyOnCardReceived ?? legacyReceived
+  systemSettingsForm.onlineAutoNotifyOnExchangeReviewed =
+    extension.spec?.onlineAutoNotifyOnExchangeReviewed ?? legacyReviewed
+  systemSettingsForm.offlineAutoNotifyOnCardReceived =
+    extension.spec?.offlineAutoNotifyOnCardReceived ?? legacyReceived
   systemSettingsForm.cardRecordSequence = extension.spec?.cardRecordSequence ?? 1000
   systemSettingsForm.receiveRecordSequence = extension.spec?.receiveRecordSequence ?? 0
 }
@@ -131,7 +138,10 @@ const loadSystemSettings = async () => {
 }
 
 const saveSystemSettings = async () => {
-  if (!Number.isInteger(systemSettingsForm.guestQueryPerMinute) || systemSettingsForm.guestQueryPerMinute < 1) {
+  if (
+    !Number.isInteger(systemSettingsForm.guestQueryPerMinute) ||
+    systemSettingsForm.guestQueryPerMinute < 1
+  ) {
     feedback.value = '游客每分钟查询次数必须为大于 0 的整数。'
     return
   }
@@ -211,7 +221,9 @@ onMounted(loadSystemSettings)
                 placeholder="请输入正整数"
               />
             </div>
-            <small class="qsl-field__tip">用于限制单 IP 每分钟通过前台卡片访问后端接口的频率。</small>
+            <small class="qsl-field__tip"
+              >用于限制单 IP 每分钟通过前台卡片访问后端接口的频率。</small
+            >
           </label>
 
           <div class="qsl-switch-row">
@@ -237,7 +249,13 @@ onMounted(loadSystemSettings)
                 <p class="qsl-switch-row__desc">适用于通联业务创建 QSO/SWL 卡片记录。</p>
               </div>
               <div class="qsl-switch-row__controls">
-                <VButton class="qsl-mail-action" size="sm" type="secondary" :disabled="sendingTestScene !== ''" @click="sendTestMail('created')">
+                <VButton
+                  class="qsl-mail-action"
+                  size="sm"
+                  type="secondary"
+                  :disabled="sendingTestScene !== ''"
+                  @click="sendTestMail('created')"
+                >
                   {{ sendingTestScene === 'created' ? '发送中' : '发送测试邮件' }}
                 </VButton>
                 <VSwitch v-model="systemSettingsForm.qsoAutoNotifyOnCardCreated" />
@@ -249,7 +267,13 @@ onMounted(loadSystemSettings)
                 <p class="qsl-switch-row__desc">适用于通联业务发信确认。</p>
               </div>
               <div class="qsl-switch-row__controls">
-                <VButton class="qsl-mail-action" size="sm" type="secondary" :disabled="sendingTestScene !== ''" @click="sendTestMail('sent')">
+                <VButton
+                  class="qsl-mail-action"
+                  size="sm"
+                  type="secondary"
+                  :disabled="sendingTestScene !== ''"
+                  @click="sendTestMail('sent')"
+                >
                   {{ sendingTestScene === 'sent' ? '发送中' : '发送测试邮件' }}
                 </VButton>
                 <VSwitch v-model="systemSettingsForm.qsoAutoNotifyOnCardSent" />
@@ -261,7 +285,13 @@ onMounted(loadSystemSettings)
                 <p class="qsl-switch-row__desc">适用于通联收卡确认。</p>
               </div>
               <div class="qsl-switch-row__controls">
-                <VButton class="qsl-mail-action" size="sm" type="secondary" :disabled="sendingTestScene !== ''" @click="sendTestMail('received')">
+                <VButton
+                  class="qsl-mail-action"
+                  size="sm"
+                  type="secondary"
+                  :disabled="sendingTestScene !== ''"
+                  @click="sendTestMail('received')"
+                >
                   {{ sendingTestScene === 'received' ? '发送中' : '发送测试邮件' }}
                 </VButton>
                 <VSwitch v-model="systemSettingsForm.qsoAutoNotifyOnCardReceived" />
@@ -277,7 +307,13 @@ onMounted(loadSystemSettings)
                 <p class="qsl-switch-row__desc">适用于线上换卡自动或手动创建卡片记录。</p>
               </div>
               <div class="qsl-switch-row__controls">
-                <VButton class="qsl-mail-action" size="sm" type="secondary" :disabled="sendingTestScene !== ''" @click="sendTestMail('created')">
+                <VButton
+                  class="qsl-mail-action"
+                  size="sm"
+                  type="secondary"
+                  :disabled="sendingTestScene !== ''"
+                  @click="sendTestMail('created')"
+                >
                   {{ sendingTestScene === 'created' ? '发送中' : '发送测试邮件' }}
                 </VButton>
                 <VSwitch v-model="systemSettingsForm.onlineAutoNotifyOnCardCreated" />
@@ -289,7 +325,13 @@ onMounted(loadSystemSettings)
                 <p class="qsl-switch-row__desc">适用于线上换卡发信确认。</p>
               </div>
               <div class="qsl-switch-row__controls">
-                <VButton class="qsl-mail-action" size="sm" type="secondary" :disabled="sendingTestScene !== ''" @click="sendTestMail('sent')">
+                <VButton
+                  class="qsl-mail-action"
+                  size="sm"
+                  type="secondary"
+                  :disabled="sendingTestScene !== ''"
+                  @click="sendTestMail('sent')"
+                >
                   {{ sendingTestScene === 'sent' ? '发送中' : '发送测试邮件' }}
                 </VButton>
                 <VSwitch v-model="systemSettingsForm.onlineAutoNotifyOnCardSent" />
@@ -301,7 +343,13 @@ onMounted(loadSystemSettings)
                 <p class="qsl-switch-row__desc">适用于线上换卡收卡确认。</p>
               </div>
               <div class="qsl-switch-row__controls">
-                <VButton class="qsl-mail-action" size="sm" type="secondary" :disabled="sendingTestScene !== ''" @click="sendTestMail('received')">
+                <VButton
+                  class="qsl-mail-action"
+                  size="sm"
+                  type="secondary"
+                  :disabled="sendingTestScene !== ''"
+                  @click="sendTestMail('received')"
+                >
                   {{ sendingTestScene === 'received' ? '发送中' : '发送测试邮件' }}
                 </VButton>
                 <VSwitch v-model="systemSettingsForm.onlineAutoNotifyOnCardReceived" />
@@ -313,7 +361,13 @@ onMounted(loadSystemSettings)
                 <p class="qsl-switch-row__desc">适用于线上换卡申请审核通过或拒绝。</p>
               </div>
               <div class="qsl-switch-row__controls">
-                <VButton class="qsl-mail-action" size="sm" type="secondary" :disabled="sendingTestScene !== ''" @click="sendTestMail('exchange-reviewed')">
+                <VButton
+                  class="qsl-mail-action"
+                  size="sm"
+                  type="secondary"
+                  :disabled="sendingTestScene !== ''"
+                  @click="sendTestMail('exchange-reviewed')"
+                >
                   {{ sendingTestScene === 'exchange-reviewed' ? '发送中' : '发送测试邮件' }}
                 </VButton>
                 <VSwitch v-model="systemSettingsForm.onlineAutoNotifyOnExchangeReviewed" />
@@ -328,7 +382,9 @@ onMounted(loadSystemSettings)
         </section>
 
         <div class="qsl-actions">
-          <VButton type="secondary" :disabled="loading || saving" @click="saveSystemSettings">保存参数</VButton>
+          <VButton type="secondary" :disabled="loading || saving" @click="saveSystemSettings"
+            >保存参数</VButton
+          >
           <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
         </div>
       </div>

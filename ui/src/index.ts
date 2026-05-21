@@ -48,7 +48,8 @@ const routes = [
     route: {
       path: `/qsl/${group.key}`,
       name: `QslGroup${group.key}`,
-      component: () => import(/* webpackChunkName: "MenuLayoutView" */ './views/MenuLayoutView.vue'),
+      component: () =>
+        import(/* webpackChunkName: "MenuLayoutView" */ './views/MenuLayoutView.vue'),
       redirect: `/qsl/${group.key}/${group.modules[0].key}`,
       meta: {
         title: group.title,
@@ -62,7 +63,8 @@ const routes = [
       children: group.modules.map((module) => ({
         path: module.key,
         name: `QslMenu${module.key}`,
-        component: () => import(/* webpackChunkName: "MenuModuleView" */ './views/MenuModuleView.vue'),
+        component: () =>
+          import(/* webpackChunkName: "MenuModuleView" */ './views/MenuModuleView.vue'),
         props: {
           qslModule: module,
         },

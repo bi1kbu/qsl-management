@@ -14,7 +14,8 @@ import RiArticleLine from '~icons/ri/article-line'
 import RiMailSendLine from '~icons/ri/mail-send-line'
 import RiExchangeLine from '~icons/ri/exchange-line'
 
-const SHORTCODE_PATTERN = /^\s*\[(qsl-card|qsl-receipt-card|qsl-online-exchange-card|qsl-offline-exchange-card)([^\]]*)\]\s*$/i
+const SHORTCODE_PATTERN =
+  /^\s*\[(qsl-card|qsl-receipt-card|qsl-online-exchange-card|qsl-offline-exchange-card)([^\]]*)\]\s*$/i
 const CALLSIGN_ATTR_PATTERN = /callSign\s*=\s*("([^"]*)"|'([^']*)'|([^\s\]]+))/i
 const CARD_ID_ATTR_PATTERN = /cardId\s*=\s*("([^"]*)"|'([^']*)'|([^\s\]]+))/i
 const shortcodePreviewPluginKey = new PluginKey('qsl-shortcode-preview-plugin')
@@ -242,13 +243,14 @@ const qslShortcodeEditorExtension = Extension.create({
             icon: markRaw(RiArticleLine),
             title: '插入 QSL 查询卡片',
             keywords: ['qsl', '查询', '卡片', 'card'],
-            command: ({ editor, range }: { editor: Editor; range: { from: number; to: number } }) => {
-              editor
-                .chain()
-                .focus()
-                .deleteRange(range)
-                .insertContent('[qsl-card]')
-                .run()
+            command: ({
+              editor,
+              range,
+            }: {
+              editor: Editor
+              range: { from: number; to: number }
+            }) => {
+              editor.chain().focus().deleteRange(range).insertContent('[qsl-card]').run()
             },
           },
           {
@@ -256,21 +258,28 @@ const qslShortcodeEditorExtension = Extension.create({
             icon: markRaw(RiMailSendLine),
             title: '插入 QSL 签收卡片',
             keywords: ['qsl', '签收', '回执', 'receipt'],
-            command: ({ editor, range }: { editor: Editor; range: { from: number; to: number } }) => {
-              editor
-                .chain()
-                .focus()
-                .deleteRange(range)
-                .insertContent('[qsl-receipt-card]')
-                .run()
-              },
+            command: ({
+              editor,
+              range,
+            }: {
+              editor: Editor
+              range: { from: number; to: number }
+            }) => {
+              editor.chain().focus().deleteRange(range).insertContent('[qsl-receipt-card]').run()
+            },
           },
           {
             priority: 152,
             icon: markRaw(RiExchangeLine),
             title: '插入线上换卡申请卡片',
             keywords: ['qsl', '线上换卡', '申请', 'exchange'],
-            command: ({ editor, range }: { editor: Editor; range: { from: number; to: number } }) => {
+            command: ({
+              editor,
+              range,
+            }: {
+              editor: Editor
+              range: { from: number; to: number }
+            }) => {
               editor
                 .chain()
                 .focus()
@@ -284,7 +293,13 @@ const qslShortcodeEditorExtension = Extension.create({
             icon: markRaw(RiExchangeLine),
             title: '插入线下换卡确认卡片',
             keywords: ['qsl', '线下换卡', '确认', 'exchange'],
-            command: ({ editor, range }: { editor: Editor; range: { from: number; to: number } }) => {
+            command: ({
+              editor,
+              range,
+            }: {
+              editor: Editor
+              range: { from: number; to: number }
+            }) => {
               editor
                 .chain()
                 .focus()

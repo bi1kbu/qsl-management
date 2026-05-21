@@ -339,6 +339,147 @@ class QslConsoleActionServiceValidationTest {
     }
 
     @Test
+    void shouldResetSendStatesAndKeepReceiveFactsWhenResendingCard() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            mock(QslNotificationMailService.class)
+        );
+        var cardRecord = createCardRecord("C1001", "BI1KBU", "QSO", "QSO", true);
+        var spec = cardRecord.getSpec();
+        spec.setCardIssued(Boolean.TRUE);
+        spec.setEnvelopePrinted(Boolean.TRUE);
+        spec.setCardSent(Boolean.TRUE);
+        spec.setCardIssuedAt("2026-05-01 10:00:00");
+        spec.setSentAt("2026-05-01 11:00:00");
+        spec.setReceivedAt("2026-05-02 12:00:00");
+        spec.setCreatedMailStatus("SENT");
+        spec.setCreatedMailSentAt("2026-05-01 10:05:00");
+        spec.setCreatedMailLastError("制卡邮件异常");
+        spec.setSentMailStatus("SENT");
+        spec.setSentMailSentAt("2026-05-01 11:05:00");
+        spec.setSentMailLastError("发卡邮件异常");
+        spec.setReceivedMailStatus("SENT");
+        spec.setReceivedMailSentAt("2026-05-02 12:05:00");
+        spec.setReceivedMailLastError("收卡邮件异常");
+        var receiveRecord = createReceiveRecord("R0001-20260502", "C1001");
+
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(cardRecord));
+        when(client.listAll(eq(ReceiveRecord.class), any(), any())).thenReturn(Flux.just(receiveRecord));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.resendCard("C1001", "admin", "127.0.0.1").block();
+
+        assertEquals("C1001", result.cardRecordName());
+        assertEquals(Boolean.FALSE, spec.getCardIssued());
+        assertEquals(Boolean.FALSE, spec.getEnvelopePrinted());
+        assertEquals(Boolean.FALSE, spec.getCardSent());
+        assertEquals("", spec.getCardIssuedAt());
+        assertEquals("", spec.getSentAt());
+        assertEquals(Boolean.TRUE, spec.getCardReceived());
+        assertEquals("2026-05-02 12:00:00", spec.getReceivedAt());
+        assertEquals("", spec.getCreatedMailStatus());
+        assertEquals("", spec.getCreatedMailSentAt());
+        assertEquals("", spec.getCreatedMailLastError());
+        assertEquals("", spec.getSentMailStatus());
+        assertEquals("", spec.getSentMailSentAt());
+        assertEquals("", spec.getSentMailLastError());
+        assertEquals("SENT", spec.getReceivedMailStatus());
+        assertEquals("2026-05-02 12:05:00", spec.getReceivedMailSentAt());
+        assertEquals("收卡邮件异常", spec.getReceivedMailLastError());
+        assertEquals("已收卡片", cardRecord.getStatus().getFlowStatus());
+        verify(auditService).appendAuditLog(
+            eq("卡片重发"),
+            eq("card-record"),
+            eq("C1001"),
+            any(),
+            eq("admin"),
+            eq("127.0.0.1")
+        );
+    }
+
+    @Test
+    void shouldMarkCardIssueErrorOnceAndAppendRemarks() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            mock(QslNotificationMailService.class)
+        );
+        var cardRecord = createCardRecord("C1001", "BI1KBU", "EYEBALL", "EYEBALL", false);
+        cardRecord.getSpec().setBusinessRemarks("原备注");
+
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(cardRecord));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        service.markCardIssueError("C1001", "打印错版", "admin", "127.0.0.1").block();
+
+        assertEquals("EYEBALL（ERROR）", cardRecord.getSpec().getCardType());
+        assertEquals("原备注；打印错版", cardRecord.getSpec().getBusinessRemarks());
+
+        var error = assertThrows(QslApiException.class, () -> service.markCardIssueError(
+            "C1001",
+            "",
+            "admin",
+            "127.0.0.1"
+        ).block());
+        assertEquals("QSL-422-0001", error.getCode());
+    }
+
+    @Test
+    void shouldMarkErrorCardAsResendAndRestoreCardTypeOnly() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            mock(QslNotificationMailService.class)
+        );
+        var cardRecord = createCardRecord("C1001", "BI1KBU", "EYEBALL（ERROR）", "EYEBALL", false);
+        var spec = cardRecord.getSpec();
+        spec.setCardIssued(Boolean.TRUE);
+        spec.setEnvelopePrinted(Boolean.TRUE);
+        spec.setCardSent(Boolean.TRUE);
+        spec.setCardIssuedAt("2026-05-01 10:00:00");
+        spec.setSentAt("2026-05-01 11:00:00");
+        spec.setCreatedMailStatus("SENT");
+        spec.setCreatedMailSentAt("2026-05-01 10:05:00");
+        spec.setSentMailStatus("SENT");
+        spec.setSentMailSentAt("2026-05-01 11:05:00");
+
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenReturn(Mono.just(cardRecord));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.markCardAsResend("C1001", "admin", "127.0.0.1").block();
+
+        assertEquals("C1001", result.cardRecordName());
+        assertEquals("EYEBALL", spec.getCardType());
+        assertEquals(Boolean.TRUE, spec.getCardIssued());
+        assertEquals(Boolean.TRUE, spec.getEnvelopePrinted());
+        assertEquals(Boolean.TRUE, spec.getCardSent());
+        assertEquals("2026-05-01 10:00:00", spec.getCardIssuedAt());
+        assertEquals("2026-05-01 11:00:00", spec.getSentAt());
+        assertEquals("SENT", spec.getCreatedMailStatus());
+        assertEquals("2026-05-01 10:05:00", spec.getCreatedMailSentAt());
+        assertEquals("SENT", spec.getSentMailStatus());
+        assertEquals("2026-05-01 11:05:00", spec.getSentMailSentAt());
+        verify(auditService).appendAuditLog(
+            eq("标记重发"),
+            eq("card-record"),
+            eq("C1001"),
+            any(),
+            eq("admin"),
+            eq("127.0.0.1")
+        );
+    }
+
+    @Test
     void shouldClearSourceReceivedStateWhenLastReceivedRecordCodeMigrated() {
         var client = mock(ReactiveExtensionClient.class);
         var auditService = mock(QslAuditService.class);

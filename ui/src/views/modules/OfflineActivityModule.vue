@@ -13,7 +13,13 @@ import {
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
 import { applySortDirection, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
-type ActivitySortKey = 'resourceName' | 'activityName' | 'activityLocation' | 'activityDate' | 'activityTime' | 'cardRemarks'
+type ActivitySortKey =
+  | 'resourceName'
+  | 'activityName'
+  | 'activityLocation'
+  | 'activityDate'
+  | 'activityTime'
+  | 'cardRemarks'
 
 interface OfflineActivitySpec {
   activityName: string
@@ -77,7 +83,11 @@ const filteredRows = computed(() => {
   })
 })
 
-const compareActivityRows = (left: OfflineActivityItem, right: OfflineActivityItem, key: ActivitySortKey): number => {
+const compareActivityRows = (
+  left: OfflineActivityItem,
+  right: OfflineActivityItem,
+  key: ActivitySortKey,
+): number => {
   if (key === 'resourceName') {
     return compareText(left.resourceName, right.resourceName)
   }
@@ -108,7 +118,9 @@ const normalizeSpec = (spec?: Partial<OfflineActivitySpec>): OfflineActivitySpec
   cardRemarks: spec?.cardRemarks ?? '',
 })
 
-const toItem = (extension: QslExtension<OfflineActivitySpec, OfflineActivityStatus>): OfflineActivityItem => ({
+const toItem = (
+  extension: QslExtension<OfflineActivitySpec, OfflineActivityStatus>,
+): OfflineActivityItem => ({
   resourceName: extension.metadata.name,
   metadataVersion: extension.metadata.version,
   spec: normalizeSpec(extension.spec),
@@ -165,7 +177,9 @@ const resetForm = () => {
 const loadRows = async () => {
   loading.value = true
   try {
-    const extensions = await listExtensions<OfflineActivitySpec, OfflineActivityStatus>(resourcePlural)
+    const extensions = await listExtensions<OfflineActivitySpec, OfflineActivityStatus>(
+      resourcePlural,
+    )
     rows.value = extensions.map((item) => toItem(item))
     if (!extensions.length) {
       feedback.value = '暂无线下活动记录。'
@@ -215,23 +229,28 @@ const saveActivity = async () => {
         feedback.value = '未找到要编辑的活动，请刷新后重试。'
         return
       }
-      await updateExtension<OfflineActivitySpec, OfflineActivityStatus>(resourcePlural, target.resourceName, {
-        apiVersion: qslApiVersion,
-        kind: resourceKind,
-        metadata: {
-          name: target.resourceName,
-          version: target.metadataVersion,
+      await updateExtension<OfflineActivitySpec, OfflineActivityStatus>(
+        resourcePlural,
+        target.resourceName,
+        {
+          apiVersion: qslApiVersion,
+          kind: resourceKind,
+          metadata: {
+            name: target.resourceName,
+            version: target.metadataVersion,
+          },
+          spec: nextSpec,
+          status: {
+            workflowStatus: '活动已更新',
+          },
         },
-        spec: nextSpec,
-        status: {
-          workflowStatus: '活动已更新',
-        },
-      })
+      )
       await appendQslAuditLog({
         action: '编辑线下活动',
         resourceType: 'offline-activity',
         resourceName: target.resourceName,
-        detail: `${nextSpec.activityName} ${nextSpec.activityDate} ${nextSpec.activityTime || ''}`.trim(),
+        detail:
+          `${nextSpec.activityName} ${nextSpec.activityDate} ${nextSpec.activityTime || ''}`.trim(),
       })
       await loadRows()
       resetForm()
@@ -255,7 +274,8 @@ const saveActivity = async () => {
       action: '新增线下活动',
       resourceType: 'offline-activity',
       resourceName,
-      detail: `${nextSpec.activityName} ${nextSpec.activityDate} ${nextSpec.activityTime || ''}`.trim(),
+      detail:
+        `${nextSpec.activityName} ${nextSpec.activityDate} ${nextSpec.activityTime || ''}`.trim(),
     })
     await loadRows()
     resetForm()
@@ -280,7 +300,8 @@ const removeActivity = async (row: OfflineActivityItem) => {
       action: '删除线下活动',
       resourceType: 'offline-activity',
       resourceName: row.resourceName,
-      detail: `${row.spec.activityName} ${row.spec.activityDate} ${row.spec.activityTime || ''}`.trim(),
+      detail:
+        `${row.spec.activityName} ${row.spec.activityDate} ${row.spec.activityTime || ''}`.trim(),
     })
     await loadRows()
     if (editingName.value === row.resourceName) {
@@ -306,14 +327,22 @@ onMounted(() => {
         <label class="qsl-field">
           <span class="qsl-field__label">活动名称</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="form.activityName" type="text" placeholder="例如：2026 春季线下换卡活动" />
+            <input
+              v-model.trim="form.activityName"
+              type="text"
+              placeholder="例如：2026 春季线下换卡活动"
+            />
           </div>
         </label>
 
         <label class="qsl-field">
           <span class="qsl-field__label">活动地点</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="form.activityLocation" type="text" placeholder="例如：北京信息科技大学沙河校区" />
+            <input
+              v-model.trim="form.activityLocation"
+              type="text"
+              placeholder="例如：北京信息科技大学沙河校区"
+            />
           </div>
         </label>
 
@@ -343,7 +372,9 @@ onMounted(() => {
         <VButton type="secondary" :disabled="saving || loading" @click="saveActivity">
           {{ isEditing ? '保存编辑' : '创建活动' }}
         </VButton>
-        <VButton v-if="isEditing" :disabled="saving || loading" @click="resetForm">取消编辑</VButton>
+        <VButton v-if="isEditing" :disabled="saving || loading" @click="resetForm"
+          >取消编辑</VButton
+        >
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
     </VCard>
@@ -360,12 +391,60 @@ onMounted(() => {
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="resourceName" label="活动ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="activityName" label="活动名称" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="activityLocation" label="活动地点" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="activityDate" label="活动日期" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="activityTime" label="活动时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardRemarks" label="卡片备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="resourceName"
+                  label="活动ID"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="activityName"
+                  label="活动名称"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="activityLocation"
+                  label="活动地点"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="activityDate"
+                  label="活动日期"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="activityTime"
+                  label="活动时间"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardRemarks"
+                  label="卡片备注"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
               <th>操作</th>
             </tr>
           </thead>
@@ -379,7 +458,13 @@ onMounted(() => {
               <td>{{ row.spec.cardRemarks || '-' }}</td>
               <td>
                 <div class="qsl-actions qsl-actions--tight">
-                  <VButton size="xs" type="secondary" :disabled="saving || loading" @click="startEdit(row)">编辑</VButton>
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="saving || loading"
+                    @click="startEdit(row)"
+                    >编辑</VButton
+                  >
                   <VButton
                     size="xs"
                     :disabled="deletingName === row.resourceName || saving || loading"

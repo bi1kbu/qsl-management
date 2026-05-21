@@ -2,14 +2,28 @@
 import { VButton, VCard, VTabItem, VTabs, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import { batchSendNotificationMail, confirmMailSend, sendNotificationMail } from '../../api/qsl-console-api'
-import { listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
+import {
+  batchSendNotificationMail,
+  confirmMailSend,
+  sendNotificationMail,
+} from '../../api/qsl-console-api'
+import {
+  listExtensions,
+  qslApiVersion,
+  updateExtension,
+  type QslExtension,
+} from '../../api/qsl-extension-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
-import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  applySortDirection,
+  compareCallSign,
+  compareText,
+  type QslSortDirection,
+} from '../../utils/qsl-table-sort'
 import { resolveMonotonicCardFlowStatus } from '../../utils/qsl-card-state'
 
 interface CardRecordSpec {
@@ -114,17 +128,17 @@ const normalizeSceneType = (sceneType?: string, cardType?: string): SceneType =>
 }
 
 const normalizedSceneTypes = computed<SceneType[]>(() => {
-  const deduplicated = Array.from(
-    new Set(props.sceneTypes.map((item) => normalizeSceneType(item))),
-  )
+  const deduplicated = Array.from(new Set(props.sceneTypes.map((item) => normalizeSceneType(item))))
   return deduplicated.length ? deduplicated : ['QSO']
 })
 const shouldLoadOfflineActivities = computed(() => {
   return normalizedSceneTypes.value.includes('EYEBALL')
 })
 const showOfflineActivity = computed(() => {
-  return normalizedSceneTypes.value.includes('EYEBALL')
-    && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  return (
+    normalizedSceneTypes.value.includes('EYEBALL') &&
+    !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  )
 })
 
 const resolveSceneTypeByCardType = (cardType: CardRecordSpec['cardType']): SceneType => {
@@ -185,9 +199,10 @@ const offlineActivityPlural = 'offline-activities'
 
 const filteredRows = computed(() => {
   const pendingRows = rows.value.filter((row) => !row.sent || row.spec.sentMailStatus !== 'SENT')
-  const filteredByActivity = showOfflineActivity.value && activityFilter.value
-    ? pendingRows.filter((row) => (row.spec.offlineActivityName || '') === activityFilter.value)
-    : pendingRows
+  const filteredByActivity =
+    showOfflineActivity.value && activityFilter.value
+      ? pendingRows.filter((row) => (row.spec.offlineActivityName || '') === activityFilter.value)
+      : pendingRows
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
     return filteredByActivity
@@ -202,14 +217,21 @@ const filteredRows = computed(() => {
   })
 })
 
-const compareSendRows = (left: SendConfirmItem, right: SendConfirmItem, key: SendSortKey): number => {
+const compareSendRows = (
+  left: SendConfirmItem,
+  right: SendConfirmItem,
+  key: SendSortKey,
+): number => {
   switch (key) {
     case 'callSign':
       return compareCallSign(left.callSign, right.callSign)
     case 'offlineActivityName':
       return compareText(left.spec.offlineActivityName || '', right.spec.offlineActivityName || '')
     case 'cardRemarks':
-      return compareText(left.spec.cardRemarks || left.spec.businessRemarks, right.spec.cardRemarks || right.spec.businessRemarks)
+      return compareText(
+        left.spec.cardRemarks || left.spec.businessRemarks,
+        right.spec.cardRemarks || right.spec.businessRemarks,
+      )
     default:
       return compareText(left[key], right[key])
   }
@@ -449,7 +471,8 @@ const applyCardSentSideEffects = (spec: CardRecordSpec) => {
 const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): SendConfirmItem => {
   const spec = normalizeCardRecordSpec(extension.spec)
   const status = { flowStatus: extension.status?.flowStatus ?? '' }
-  const cardPrintAt = spec.cardDate && spec.cardTime ? `${spec.cardDate} ${spec.cardTime}` : '未制卡'
+  const cardPrintAt =
+    spec.cardDate && spec.cardTime ? `${spec.cardDate} ${spec.cardTime}` : '未制卡'
   const envelopePrintAt = spec.envelopePrinted ? '已打包' : '未打包'
 
   return {
@@ -475,7 +498,11 @@ const loadRows = async (options: { silent?: boolean } = {}) => {
     const extensions = await listExtensions<CardRecordSpec, CardRecordStatus>(resourcePlural)
     rows.value = extensions
       .map((extension) => toRow(extension))
-      .filter((row) => normalizedSceneTypes.value.includes(normalizeSceneType(row.spec.sceneType, row.spec.cardType)))
+      .filter((row) =>
+        normalizedSceneTypes.value.includes(
+          normalizeSceneType(row.spec.sceneType, row.spec.cardType),
+        ),
+      )
       .filter((row) => isFormalCardRecordName(row.resourceName))
     if (!options.silent && extensions.length) {
       feedback.value = ''
@@ -650,7 +677,9 @@ const toggleHistorySelection = (resourceName: string) => {
 const toggleAllFilteredHistorySelection = () => {
   if (allFilteredSelected.value) {
     const filteredNameSet = new Set(filteredRows.value.map((item) => item.resourceName))
-    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !filteredNameSet.has(name))
+    selectedHistoryNames.value = selectedHistoryNames.value.filter(
+      (name) => !filteredNameSet.has(name),
+    )
     return
   }
 
@@ -682,7 +711,9 @@ const applyHistoryBatchEdit = async () => {
 
   batchUpdating.value = true
   try {
-    const targets = rows.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
+    const targets = rows.value.filter((item) =>
+      selectedHistoryNames.value.includes(item.resourceName),
+    )
 
     for (const item of targets) {
       const nextCardType =
@@ -690,9 +721,7 @@ const applyHistoryBatchEdit = async () => {
           ? (nextValue as CardRecordSpec['cardType'])
           : item.spec.cardType
       const nextSent =
-        batchEditField.value === 'sentState'
-          ? nextValue === 'SENT'
-          : item.spec.cardSent
+        batchEditField.value === 'sentState' ? nextValue === 'SENT' : item.spec.cardSent
       const nextSentAt =
         batchEditField.value === 'sentState'
           ? nextValue === 'SENT'
@@ -704,7 +733,8 @@ const applyHistoryBatchEdit = async () => {
         ...item.spec,
         cardType: nextCardType,
         sceneType: resolveSceneTypeByCardType(nextCardType),
-        businessRemarks: batchEditField.value === 'businessRemarks' ? nextValue : item.spec.businessRemarks,
+        businessRemarks:
+          batchEditField.value === 'businessRemarks' ? nextValue : item.spec.businessRemarks,
         cardSent: nextSent,
         sentAt: nextSentAt,
       }
@@ -730,7 +760,8 @@ const applyHistoryBatchEdit = async () => {
       resourceType: 'card-record',
       resourceName: `count=${targets.length}`,
       detail: `批量修改字段：${
-        batchEditFields.find((item) => item.value === batchEditField.value)?.label ?? batchEditField.value
+        batchEditFields.find((item) => item.value === batchEditField.value)?.label ??
+        batchEditField.value
       }，值：${nextValue}`,
     })
 
@@ -870,7 +901,9 @@ onMounted(() => {
       </div>
 
       <div v-if="isBatchTab" class="qsl-actions">
-        <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+        <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection"
+          >清空选择</VButton
+        >
       </div>
       <QslBatchFieldEditor
         v-if="isBatchTab"
@@ -932,14 +965,22 @@ onMounted(() => {
           <label class="qsl-field" v-if="editForm.sentState === 'SENT'">
             <span class="qsl-field__label">发信时间（可选）</span>
             <div class="qsl-input-shell">
-              <input v-model.trim="editForm.sentAt" type="text" placeholder="留空自动使用当前时间" />
+              <input
+                v-model.trim="editForm.sentAt"
+                type="text"
+                placeholder="留空自动使用当前时间"
+              />
             </div>
           </label>
 
           <label class="qsl-field qsl-field--full">
             <span class="qsl-field__label">业务备注</span>
             <div class="qsl-input-shell qsl-input-shell--textarea">
-              <textarea v-model.trim="editForm.businessRemarks" rows="2" placeholder="输入业务备注" />
+              <textarea
+                v-model.trim="editForm.businessRemarks"
+                rows="2"
+                placeholder="输入业务备注"
+              />
             </div>
           </label>
         </div>
@@ -971,14 +1012,18 @@ onMounted(() => {
           <div class="qsl-input-shell">
             <select v-model="activityFilter">
               <option value="">全部活动</option>
-              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">
+                {{ item }}
+              </option>
             </select>
           </div>
         </label>
       </div>
 
       <div class="qsl-actions">
-        <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+        <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection"
+          >清空选择</VButton
+        >
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
       </div>
 
@@ -987,13 +1032,69 @@ onMounted(() => {
           <thead>
             <tr>
               <th>选择</th>
-              <th><QslSortableHeader column-key="resourceName" label="卡片ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="callSign" label="对方呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardType" label="卡片类型" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardPrintAt" label="卡片打印日期" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="envelopePrintAt" label="打包" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th v-if="showOfflineActivity"><QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardRemarks" label="卡片备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="resourceName"
+                  label="卡片ID"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="对方呼号"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardType"
+                  label="卡片类型"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardPrintAt"
+                  label="卡片打印日期"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="envelopePrintAt"
+                  label="打包"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th v-if="showOfflineActivity">
+                <QslSortableHeader
+                  column-key="offlineActivityName"
+                  label="关联活动"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardRemarks"
+                  label="卡片备注"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
               <th>操作</th>
             </tr>
           </thead>
@@ -1016,13 +1117,13 @@ onMounted(() => {
               <td>{{ row.envelopePrintAt }}</td>
               <td v-if="showOfflineActivity">{{ row.spec.offlineActivityName || '-' }}</td>
               <td>
-                  <QslCardRemarkEntries
-                    :remark-fields="{
-                      businessRemarks: row.spec.businessRemarks,
-                      cardRemarks: row.spec.cardRemarks,
-                    }"
-                    :compact="true"
-                    empty-text="无"
+                <QslCardRemarkEntries
+                  :remark-fields="{
+                    businessRemarks: row.spec.businessRemarks,
+                    cardRemarks: row.spec.cardRemarks,
+                  }"
+                  :compact="true"
+                  empty-text="无"
                 />
               </td>
               <td>
@@ -1062,7 +1163,9 @@ onMounted(() => {
                     不发邮件
                   </VButton>
                   <VTag
-                    v-if="row.spec.sentMailStatus === 'SENT' || row.spec.sentMailStatus === 'FAILED'"
+                    v-if="
+                      row.spec.sentMailStatus === 'SENT' || row.spec.sentMailStatus === 'FAILED'
+                    "
                     :theme="row.spec.sentMailStatus === 'SENT' ? 'secondary' : 'danger'"
                   >
                     {{ resolveMailStatusText(row.spec.sentMailStatus) }}
@@ -1071,7 +1174,9 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!pagedRows.length">
-              <td :colspan="showOfflineActivity ? 9 : 8" class="qsl-table-empty">暂无待发出数据。</td>
+              <td :colspan="showOfflineActivity ? 9 : 8" class="qsl-table-empty">
+                暂无待发出数据。
+              </td>
             </tr>
           </tbody>
         </table>
@@ -1085,7 +1190,9 @@ onMounted(() => {
         @update:page-size="(value) => (pageSize = value)"
       />
       <div class="qsl-actions">
-        <VButton size="sm" :disabled="loading || pendingRowName !== ''" @click="loadRows">刷新清单</VButton>
+        <VButton size="sm" :disabled="loading || pendingRowName !== ''" @click="loadRows"
+          >刷新清单</VButton
+        >
       </div>
     </VCard>
 

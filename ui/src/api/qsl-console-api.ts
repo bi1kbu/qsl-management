@@ -40,6 +40,15 @@ export interface ReceiptConfirmResult {
   handledAt: string
 }
 
+export interface CardMutationActionResult {
+  cardRecordName: string
+  callSign: string
+  cardType: string
+  action: string
+  message: string
+  handledAt: string
+}
+
 export interface ExchangeReviewResult {
   requestName: string
   reviewStatus: '已通过' | '已拒绝'
@@ -237,10 +246,14 @@ export interface ImportErrorDownloadPayload {
 }
 
 export async function confirmMailSend(cardRecordName: string): Promise<void> {
-  await axiosInstance.post(`${consoleApiBase}/mail-send-confirms/${encodeURIComponent(cardRecordName)}/confirm`)
+  await axiosInstance.post(
+    `${consoleApiBase}/mail-send-confirms/${encodeURIComponent(cardRecordName)}/confirm`,
+  )
 }
 
-export async function confirmMailReceive(payload: MailReceiveConfirmPayload): Promise<MailReceiveConfirmResult> {
+export async function confirmMailReceive(
+  payload: MailReceiveConfirmPayload,
+): Promise<MailReceiveConfirmResult> {
   const response = await axiosInstance.post<ApiResult<MailReceiveConfirmResult>>(
     `${consoleApiBase}/mail-receive-confirms/confirm`,
     payload,
@@ -259,6 +272,31 @@ export async function confirmReceipt(
   return response.data.data
 }
 
+export async function resendCard(cardRecordName: string): Promise<CardMutationActionResult> {
+  const response = await axiosInstance.post<ApiResult<CardMutationActionResult>>(
+    `${consoleApiBase}/card-mutations/${encodeURIComponent(cardRecordName)}/resend`,
+  )
+  return response.data.data
+}
+
+export async function markCardError(
+  cardRecordName: string,
+  remarks = '',
+): Promise<CardMutationActionResult> {
+  const response = await axiosInstance.post<ApiResult<CardMutationActionResult>>(
+    `${consoleApiBase}/card-mutations/${encodeURIComponent(cardRecordName)}/mark-error`,
+    { remarks },
+  )
+  return response.data.data
+}
+
+export async function markCardResend(cardRecordName: string): Promise<CardMutationActionResult> {
+  const response = await axiosInstance.post<ApiResult<CardMutationActionResult>>(
+    `${consoleApiBase}/card-mutations/${encodeURIComponent(cardRecordName)}/mark-resend`,
+  )
+  return response.data.data
+}
+
 export async function updateMailReceiveDate(
   cardRecordName: string,
   receivedDate: string,
@@ -270,7 +308,10 @@ export async function updateMailReceiveDate(
   return response.data.data
 }
 
-export async function approveExchangeRequest(requestName: string, reason = ''): Promise<ExchangeReviewResult> {
+export async function approveExchangeRequest(
+  requestName: string,
+  reason = '',
+): Promise<ExchangeReviewResult> {
   const response = await axiosInstance.post<ApiResult<ExchangeReviewResult>>(
     `${consoleApiBase}/exchange-requests/${encodeURIComponent(requestName)}/approve`,
     { reason },
@@ -278,7 +319,10 @@ export async function approveExchangeRequest(requestName: string, reason = ''): 
   return response.data.data
 }
 
-export async function rejectExchangeRequest(requestName: string, reason: string): Promise<ExchangeReviewResult> {
+export async function rejectExchangeRequest(
+  requestName: string,
+  reason: string,
+): Promise<ExchangeReviewResult> {
   const response = await axiosInstance.post<ApiResult<ExchangeReviewResult>>(
     `${consoleApiBase}/exchange-requests/${encodeURIComponent(requestName)}/reject`,
     { reason },
@@ -286,14 +330,18 @@ export async function rejectExchangeRequest(requestName: string, reason: string)
   return response.data.data
 }
 
-export async function notifyExchangeRequest(requestName: string): Promise<ExchangeReviewMailSendResult> {
+export async function notifyExchangeRequest(
+  requestName: string,
+): Promise<ExchangeReviewMailSendResult> {
   const response = await axiosInstance.post<ApiResult<ExchangeReviewMailSendResult>>(
     `${consoleApiBase}/exchange-requests/${encodeURIComponent(requestName)}/notify`,
   )
   return response.data.data
 }
 
-export async function sendNotificationMail(payload: NotificationMailSendPayload): Promise<NotificationMailSendResult> {
+export async function sendNotificationMail(
+  payload: NotificationMailSendPayload,
+): Promise<NotificationMailSendResult> {
   const response = await axiosInstance.post<ApiResult<NotificationMailSendResult>>(
     `${consoleApiBase}/notification-mails/send`,
     payload,
@@ -322,16 +370,24 @@ export async function sendTestNotificationMail(
 }
 
 export async function importBh6syxCards(payload: Bh6syxImportPayload): Promise<Bh6syxImportResult> {
-  const response = await axiosInstance.post<ApiResult<Bh6syxImportResult>>(`${consoleApiBase}/bh6syx-imports`, payload)
+  const response = await axiosInstance.post<ApiResult<Bh6syxImportResult>>(
+    `${consoleApiBase}/bh6syx-imports`,
+    payload,
+  )
   return response.data.data
 }
 
 export async function createImportJob(payload: ImportJobCreatePayload): Promise<ImportExportJob> {
-  const response = await axiosInstance.post<ApiResult<ImportExportJob>>(`${consoleApiBase}/imports/jobs`, payload)
+  const response = await axiosInstance.post<ApiResult<ImportExportJob>>(
+    `${consoleApiBase}/imports/jobs`,
+    payload,
+  )
   return response.data.data
 }
 
-export async function precheckImportJob(payload: ImportJobPrecheckPayload): Promise<ImportJobPrecheckResult> {
+export async function precheckImportJob(
+  payload: ImportJobPrecheckPayload,
+): Promise<ImportJobPrecheckResult> {
   const response = await axiosInstance.post<ApiResult<ImportJobPrecheckResult>>(
     `${consoleApiBase}/imports/precheck`,
     payload,
@@ -340,11 +396,15 @@ export async function precheckImportJob(payload: ImportJobPrecheckPayload): Prom
 }
 
 export async function precheckLegacyMigration(): Promise<LegacyMigrationResult> {
-  const response = await axiosInstance.post<ApiResult<LegacyMigrationResult>>(`${consoleApiBase}/legacy-migrations/precheck`)
+  const response = await axiosInstance.post<ApiResult<LegacyMigrationResult>>(
+    `${consoleApiBase}/legacy-migrations/precheck`,
+  )
   return response.data.data
 }
 
-export async function executeLegacyMigration(payload: LegacyMigrationExecutePayload): Promise<LegacyMigrationResult> {
+export async function executeLegacyMigration(
+  payload: LegacyMigrationExecutePayload,
+): Promise<LegacyMigrationResult> {
   const response = await axiosInstance.post<ApiResult<LegacyMigrationResult>>(
     `${consoleApiBase}/legacy-migrations/execute`,
     payload,
@@ -353,11 +413,17 @@ export async function executeLegacyMigration(payload: LegacyMigrationExecutePayl
 }
 
 export async function createExportJob(payload: ExportJobCreatePayload): Promise<ImportExportJob> {
-  const response = await axiosInstance.post<ApiResult<ImportExportJob>>(`${consoleApiBase}/exports/jobs`, payload)
+  const response = await axiosInstance.post<ApiResult<ImportExportJob>>(
+    `${consoleApiBase}/exports/jobs`,
+    payload,
+  )
   return response.data.data
 }
 
-const parseDownloadFileName = (contentDisposition: string | undefined, fallback: string): string => {
+const parseDownloadFileName = (
+  contentDisposition: string | undefined,
+  fallback: string,
+): string => {
   if (!contentDisposition) {
     return fallback
   }
@@ -383,18 +449,27 @@ const parseDownloadFileName = (contentDisposition: string | undefined, fallback:
   return fallback
 }
 
-export async function downloadExportJob(jobName: string, fallbackName: string): Promise<ExportDownloadPayload> {
-  const response = await fetch(`${consoleApiBase}/exports/jobs/${encodeURIComponent(jobName)}/download`, {
-    method: 'GET',
-    credentials: 'same-origin',
-  })
+export async function downloadExportJob(
+  jobName: string,
+  fallbackName: string,
+): Promise<ExportDownloadPayload> {
+  const response = await fetch(
+    `${consoleApiBase}/exports/jobs/${encodeURIComponent(jobName)}/download`,
+    {
+      method: 'GET',
+      credentials: 'same-origin',
+    },
+  )
   if (!response.ok) {
     throw new Error(`下载导出文件失败（HTTP ${response.status}）。`)
   }
   const blob = await response.blob()
   return {
     blob,
-    fileName: parseDownloadFileName(response.headers.get('content-disposition') || undefined, fallbackName),
+    fileName: parseDownloadFileName(
+      response.headers.get('content-disposition') || undefined,
+      fallbackName,
+    ),
     contentType: response.headers.get('content-type') || '',
   }
 }
@@ -403,17 +478,23 @@ export async function downloadImportJobErrors(
   jobName: string,
   fallbackName: string,
 ): Promise<ImportErrorDownloadPayload> {
-  const response = await fetch(`${consoleApiBase}/imports/jobs/${encodeURIComponent(jobName)}/errors/download`, {
-    method: 'GET',
-    credentials: 'same-origin',
-  })
+  const response = await fetch(
+    `${consoleApiBase}/imports/jobs/${encodeURIComponent(jobName)}/errors/download`,
+    {
+      method: 'GET',
+      credentials: 'same-origin',
+    },
+  )
   if (!response.ok) {
     throw new Error(`下载导入错误回执失败（HTTP ${response.status}）。`)
   }
   const blob = await response.blob()
   return {
     blob,
-    fileName: parseDownloadFileName(response.headers.get('content-disposition') || undefined, fallbackName),
+    fileName: parseDownloadFileName(
+      response.headers.get('content-disposition') || undefined,
+      fallbackName,
+    ),
     contentType: response.headers.get('content-type') || '',
   }
 }

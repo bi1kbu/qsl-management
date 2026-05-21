@@ -1,12 +1,27 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { deleteExtension, listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
-import { approveExchangeRequest, notifyExchangeRequest, rejectExchangeRequest } from '../../api/qsl-console-api'
+import {
+  deleteExtension,
+  listExtensions,
+  qslApiVersion,
+  updateExtension,
+  type QslExtension,
+} from '../../api/qsl-extension-api'
+import {
+  approveExchangeRequest,
+  notifyExchangeRequest,
+  rejectExchangeRequest,
+} from '../../api/qsl-console-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
-import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  applySortDirection,
+  compareCallSign,
+  compareText,
+  type QslSortDirection,
+} from '../../utils/qsl-table-sort'
 
 type MailStatus = '' | 'SENT' | 'SKIPPED' | 'FAILED'
 type ExchangeSortKey = 'id' | 'callSign' | 'status' | 'reviewedAt'
@@ -126,7 +141,9 @@ const normalizeStatus = (status?: Partial<ExchangeRequestStatus>): ExchangeReque
   }
 }
 
-const toRow = (extension: QslExtension<ExchangeRequestSpec, ExchangeRequestStatus>): ExchangeRequestItem => {
+const toRow = (
+  extension: QslExtension<ExchangeRequestSpec, ExchangeRequestStatus>,
+): ExchangeRequestItem => {
   const spec = normalizeSpec(extension.spec)
   const status = normalizeStatus(extension.status)
   return {
@@ -170,7 +187,9 @@ const resolveMailStatusText = (status: MailStatus): string => {
 const loadRows = async () => {
   loading.value = true
   try {
-    const extensions = await listExtensions<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural)
+    const extensions = await listExtensions<ExchangeRequestSpec, ExchangeRequestStatus>(
+      resourcePlural,
+    )
     rows.value = extensions.map((extension) => toRow(extension))
     feedback.value = ''
   } catch (error) {
@@ -205,12 +224,18 @@ const updateReviewStatus = async (
 }
 
 const approve = async (row: ExchangeRequestItem) => {
-  const reason = reviewReasonEditingId.value === row.id ? reviewReasonDraft.value.trim() : row.reviewReason.trim()
+  const reason =
+    reviewReasonEditingId.value === row.id
+      ? reviewReasonDraft.value.trim()
+      : row.reviewReason.trim()
   await updateReviewStatus(row, '已通过', reason)
 }
 
 const reject = async (row: ExchangeRequestItem) => {
-  const reason = reviewReasonEditingId.value === row.id ? reviewReasonDraft.value.trim() : row.reviewReason.trim()
+  const reason =
+    reviewReasonEditingId.value === row.id
+      ? reviewReasonDraft.value.trim()
+      : row.reviewReason.trim()
   await updateReviewStatus(row, '已拒绝', reason)
 }
 
@@ -329,7 +354,9 @@ const deleteEditingRequest = async () => {
     feedback.value = `已取消删除：${target.id}`
     return
   }
-  const secondConfirmed = window.confirm('二次确认：删除后只移除本条换卡申请记录，不会删除已生成的卡片记录，是否继续？')
+  const secondConfirmed = window.confirm(
+    '二次确认：删除后只移除本条换卡申请记录，不会删除已生成的卡片记录，是否继续？',
+  )
   if (!secondConfirmed) {
     feedback.value = `已取消删除：${target.id}`
     return
@@ -419,9 +446,10 @@ const totalPages = computed(() => {
 
 const sortedRows = computed(() => {
   return [...rows.value].sort((left, right) => {
-    const result = sortKey.value === 'callSign'
-      ? compareCallSign(left.callSign, right.callSign)
-      : compareText(left[sortKey.value], right[sortKey.value])
+    const result =
+      sortKey.value === 'callSign'
+        ? compareCallSign(left.callSign, right.callSign)
+        : compareText(left[sortKey.value], right[sortKey.value])
     return applySortDirection(result, sortDirection.value)
   })
 })
@@ -465,10 +493,42 @@ onMounted(loadRows)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="id" label="申请ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="status" label="状态" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="reviewedAt" label="审核时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="id"
+                  label="申请ID"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="呼号"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="status"
+                  label="状态"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="reviewedAt"
+                  label="审核时间"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
               <th>操作</th>
             </tr>
           </thead>
@@ -486,7 +546,15 @@ onMounted(loadRows)
                 <td>{{ row.id }}</td>
                 <td>{{ row.callSign }}</td>
                 <td>
-                  <VTag :theme="row.status === '待审核' ? 'default' : row.status === '已通过' ? 'secondary' : 'danger'">
+                  <VTag
+                    :theme="
+                      row.status === '待审核'
+                        ? 'default'
+                        : row.status === '已通过'
+                          ? 'secondary'
+                          : 'danger'
+                    "
+                  >
                     {{ row.status }}
                   </VTag>
                 </td>
@@ -524,14 +592,25 @@ onMounted(loadRows)
                       class="qsl-mail-action"
                       size="xs"
                       type="secondary"
-                      :disabled="row.reviewMailStatus === 'SENT' || notifyingId === row.id || pendingId === row.id || loading"
+                      :disabled="
+                        row.reviewMailStatus === 'SENT' ||
+                        notifyingId === row.id ||
+                        pendingId === row.id ||
+                        loading
+                      "
                       @click="sendReviewMail(row)"
                     >
                       发送邮件通知
                     </VButton>
                     <VTag
                       v-if="row.reviewMailStatus"
-                      :theme="row.reviewMailStatus === 'SENT' ? 'secondary' : row.reviewMailStatus === 'FAILED' ? 'danger' : 'default'"
+                      :theme="
+                        row.reviewMailStatus === 'SENT'
+                          ? 'secondary'
+                          : row.reviewMailStatus === 'FAILED'
+                            ? 'danger'
+                            : 'default'
+                      "
                     >
                       {{ resolveMailStatusText(row.reviewMailStatus) }}
                     </VTag>
@@ -556,12 +635,20 @@ onMounted(loadRows)
                     <p><strong>电子邮件：</strong>{{ row.email || '-' }}</p>
                     <p><strong>电话：</strong>{{ row.telephone || '-' }}</p>
                     <p><strong>邮编：</strong>{{ row.postalCode || '-' }}</p>
-                    <p class="qsl-detail-full"><strong>收件地址：</strong>{{ row.address || '-' }}</p>
-                    <p class="qsl-detail-full"><strong>申请备注：</strong>{{ row.remarks || '-' }}</p>
+                    <p class="qsl-detail-full">
+                      <strong>收件地址：</strong>{{ row.address || '-' }}
+                    </p>
+                    <p class="qsl-detail-full">
+                      <strong>申请备注：</strong>{{ row.remarks || '-' }}
+                    </p>
                     <p><strong>审核人：</strong>{{ row.reviewedBy || '-' }}</p>
-                    <p><strong>审核通知：</strong>{{ resolveMailStatusText(row.reviewMailStatus) }}</p>
+                    <p>
+                      <strong>审核通知：</strong>{{ resolveMailStatusText(row.reviewMailStatus) }}
+                    </p>
                     <p><strong>通知时间：</strong>{{ row.reviewMailSentAt || '-' }}</p>
-                    <p class="qsl-detail-full"><strong>通知邮箱：</strong>{{ row.reviewMailTargetEmail || '-' }}</p>
+                    <p class="qsl-detail-full">
+                      <strong>通知邮箱：</strong>{{ row.reviewMailTargetEmail || '-' }}
+                    </p>
                     <p v-if="row.reviewMailLastError" class="qsl-detail-full">
                       <strong>通知错误：</strong>{{ row.reviewMailLastError }}
                     </p>
@@ -571,7 +658,11 @@ onMounted(loadRows)
                       </div>
                       <template v-if="reviewReasonEditingId === row.id">
                         <div class="qsl-input-shell qsl-input-shell--textarea">
-                          <textarea v-model.trim="reviewReasonDraft" rows="2" placeholder="输入审核说明" />
+                          <textarea
+                            v-model.trim="reviewReasonDraft"
+                            rows="2"
+                            placeholder="输入审核说明"
+                          />
                         </div>
                         <div class="qsl-actions qsl-actions--tight">
                           <VButton
@@ -582,12 +673,18 @@ onMounted(loadRows)
                           >
                             保存
                           </VButton>
-                          <VButton size="xs" :disabled="savingReviewReasonId === row.id" @click="cancelReviewReasonEdit">
+                          <VButton
+                            size="xs"
+                            :disabled="savingReviewReasonId === row.id"
+                            @click="cancelReviewReasonEdit"
+                          >
                             取消
                           </VButton>
                         </div>
                       </template>
-                      <p v-else class="qsl-review-reason-editor__text">{{ row.reviewReason || '-' }}</p>
+                      <p v-else class="qsl-review-reason-editor__text">
+                        {{ row.reviewReason || '-' }}
+                      </p>
                     </div>
                   </div>
                 </td>
@@ -715,7 +812,9 @@ onMounted(loadRows)
       <div class="qsl-actions">
         <VButton type="secondary" :disabled="savingEdit" @click="saveEdit">保存修改</VButton>
         <VButton :disabled="savingEdit" @click="cancelEdit">取消</VButton>
-        <VButton type="danger" :disabled="savingEdit" @click="deleteEditingRequest">删除本条数据</VButton>
+        <VButton type="danger" :disabled="savingEdit" @click="deleteEditingRequest"
+          >删除本条数据</VButton
+        >
       </div>
     </VCard>
   </div>

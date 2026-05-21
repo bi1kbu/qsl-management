@@ -107,7 +107,11 @@ export const qslMenuModules: QslMenuModule[] = [
     viewPermission: toViewPermission('card-issue'),
     editPermission: toEditPermission('card-issue'),
     viewDependencies: [toViewPermission('card-record'), addressBureauViewPermission],
-    editDependencies: [toViewPermission('card-issue'), toViewPermission('card-record'), addressBureauViewPermission],
+    editDependencies: [
+      toViewPermission('card-issue'),
+      toViewPermission('card-record'),
+      addressBureauViewPermission,
+    ],
   },
   {
     key: 'mail-send-confirm',
@@ -141,7 +145,10 @@ export const qslMenuModules: QslMenuModule[] = [
     viewPermission: toViewPermission('exchange-request-review'),
     editPermission: toEditPermission('exchange-request-review'),
     viewDependencies: [addressBureauViewPermission, toViewPermission('card-record')],
-    editDependencies: [toViewPermission('exchange-request-review'), toEditPermission('card-record')],
+    editDependencies: [
+      toViewPermission('exchange-request-review'),
+      toEditPermission('card-record'),
+    ],
   },
   {
     key: 'online-bh6syx-import',
@@ -150,7 +157,11 @@ export const qslMenuModules: QslMenuModule[] = [
     priority: 15,
     viewPermission: toViewPermission('online-bh6syx-import'),
     editPermission: toEditPermission('online-bh6syx-import'),
-    viewDependencies: [stationProfileViewPermission, toViewPermission('card-record'), addressBureauViewPermission],
+    viewDependencies: [
+      stationProfileViewPermission,
+      toViewPermission('card-record'),
+      addressBureauViewPermission,
+    ],
     editDependencies: [
       toViewPermission('online-bh6syx-import'),
       toEditPermission('card-record'),
@@ -176,7 +187,11 @@ export const qslMenuModules: QslMenuModule[] = [
     viewPermission: toViewPermission('card-issue'),
     editPermission: toEditPermission('card-issue'),
     viewDependencies: [toViewPermission('card-record'), addressBureauViewPermission],
-    editDependencies: [toViewPermission('card-issue'), toViewPermission('card-record'), addressBureauViewPermission],
+    editDependencies: [
+      toViewPermission('card-issue'),
+      toViewPermission('card-record'),
+      addressBureauViewPermission,
+    ],
   },
   {
     key: 'online-mail-send-confirm',
@@ -230,7 +245,11 @@ export const qslMenuModules: QslMenuModule[] = [
     viewPermission: toViewPermission('card-issue'),
     editPermission: toEditPermission('card-issue'),
     viewDependencies: [toViewPermission('card-record'), addressBureauViewPermission],
-    editDependencies: [toViewPermission('card-issue'), toViewPermission('card-record'), addressBureauViewPermission],
+    editDependencies: [
+      toViewPermission('card-issue'),
+      toViewPermission('card-record'),
+      addressBureauViewPermission,
+    ],
   },
   {
     key: 'offline-delivery-confirm',
@@ -295,7 +314,11 @@ export const qslMenuModules: QslMenuModule[] = [
     priority: 5,
     viewPermission: toViewPermission('card-mutation'),
     editPermission: toEditPermission('card-mutation'),
-    viewDependencies: [toViewPermission('card-record'), toViewPermission('qso-record'), addressBureauViewPermission],
+    viewDependencies: [
+      toViewPermission('card-record'),
+      toViewPermission('qso-record'),
+      addressBureauViewPermission,
+    ],
     editDependencies: [
       toViewPermission('card-mutation'),
       toEditPermission('card-record'),

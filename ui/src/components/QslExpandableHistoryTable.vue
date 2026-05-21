@@ -132,11 +132,20 @@ const formatCellValue = (value: unknown): string => {
 <template>
   <div v-if="showToolbar" class="qsl-history-toolbar">
     <label class="qsl-checkbox qsl-history-toolbar__title">
-      <input :checked="allRowsSelected" type="checkbox" :disabled="!rows.length" @change="toggleAllRowsSelection" />
+      <input
+        :checked="allRowsSelected"
+        type="checkbox"
+        :disabled="!rows.length"
+        @change="toggleAllRowsSelection"
+      />
       <span>{{ title }}</span>
     </label>
     <label v-if="showBatchToggle" class="qsl-checkbox">
-      <input :checked="batchEditEnabled" type="checkbox" @change="toggleBatchEditEnabled(($event.target as HTMLInputElement).checked)" />
+      <input
+        :checked="batchEditEnabled"
+        type="checkbox"
+        @change="toggleBatchEditEnabled(($event.target as HTMLInputElement).checked)"
+      />
       <span>批量编辑</span>
     </label>
     <div class="qsl-history-toolbar__right">
@@ -174,10 +183,19 @@ const formatCellValue = (value: unknown): string => {
       </thead>
       <tbody>
         <template v-for="row in rows" :key="getRowKey(row)">
-          <tr class="qsl-history-row" :class="{ 'is-expanded': isRowExpanded(row) }" @click="toggleRowExpand(row)">
+          <tr
+            class="qsl-history-row"
+            :class="{ 'is-expanded': isRowExpanded(row) }"
+            @click="toggleRowExpand(row)"
+          >
             <td @click.stop>
               <label class="qsl-checkbox qsl-select-only">
-                <input :checked="isRowSelected(row)" type="checkbox" aria-label="选择记录" @change="toggleRowSelection(row)" />
+                <input
+                  :checked="isRowSelected(row)"
+                  type="checkbox"
+                  aria-label="选择记录"
+                  @change="toggleRowSelection(row)"
+                />
               </label>
             </td>
             <td v-for="column in columns" :key="column.key">

@@ -109,15 +109,18 @@ const chartPoints = computed<ChartPoint[]>(() => {
   const rows = monthlyCardFlow.value
   const labelInterval = Math.max(1, Math.ceil(rows.length / 6))
   return rows.map((item, index) => {
-    const x = rows.length <= 1
-      ? chartPadding.left + chartInnerWidth.value / 2
-      : chartPadding.left + (chartInnerWidth.value * index) / (rows.length - 1)
-    const sentY = chartPadding.top
-      + chartInnerHeight.value
-      - (item.sentTotal / maxMonthlyValue.value) * chartInnerHeight.value
-    const receivedY = chartPadding.top
-      + chartInnerHeight.value
-      - (item.receivedTotal / maxMonthlyValue.value) * chartInnerHeight.value
+    const x =
+      rows.length <= 1
+        ? chartPadding.left + chartInnerWidth.value / 2
+        : chartPadding.left + (chartInnerWidth.value * index) / (rows.length - 1)
+    const sentY =
+      chartPadding.top +
+      chartInnerHeight.value -
+      (item.sentTotal / maxMonthlyValue.value) * chartInnerHeight.value
+    const receivedY =
+      chartPadding.top +
+      chartInnerHeight.value -
+      (item.receivedTotal / maxMonthlyValue.value) * chartInnerHeight.value
     return {
       ...item,
       x,
@@ -130,7 +133,9 @@ const chartPoints = computed<ChartPoint[]>(() => {
 
 const buildLinePath = (key: 'sentY' | 'receivedY'): string => {
   return chartPoints.value
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point[key].toFixed(2)}`)
+    .map(
+      (point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point[key].toFixed(2)}`,
+    )
     .join(' ')
 }
 
@@ -183,8 +188,14 @@ onMounted(regenerate)
             <h3>月度收发卡片数量</h3>
           </div>
           <div class="qsl-report-chart__legend">
-            <span><i class="qsl-report-chart__legend-dot qsl-report-chart__legend-dot--sent"></i>发出卡片</span>
-            <span><i class="qsl-report-chart__legend-dot qsl-report-chart__legend-dot--received"></i>收到卡片</span>
+            <span
+              ><i class="qsl-report-chart__legend-dot qsl-report-chart__legend-dot--sent"></i
+              >发出卡片</span
+            >
+            <span
+              ><i class="qsl-report-chart__legend-dot qsl-report-chart__legend-dot--received"></i
+              >收到卡片</span
+            >
           </div>
         </div>
 
@@ -196,12 +207,25 @@ onMounted(regenerate)
                 <line
                   :x1="chartPadding.left"
                   :x2="chartWidth - chartPadding.right"
-                  :y1="chartPadding.top + chartInnerHeight - (value / maxMonthlyValue) * chartInnerHeight"
-                  :y2="chartPadding.top + chartInnerHeight - (value / maxMonthlyValue) * chartInnerHeight"
+                  :y1="
+                    chartPadding.top +
+                    chartInnerHeight -
+                    (value / maxMonthlyValue) * chartInnerHeight
+                  "
+                  :y2="
+                    chartPadding.top +
+                    chartInnerHeight -
+                    (value / maxMonthlyValue) * chartInnerHeight
+                  "
                 />
                 <text
                   :x="chartPadding.left - 10"
-                  :y="chartPadding.top + chartInnerHeight - (value / maxMonthlyValue) * chartInnerHeight + 4"
+                  :y="
+                    chartPadding.top +
+                    chartInnerHeight -
+                    (value / maxMonthlyValue) * chartInnerHeight +
+                    4
+                  "
                   text-anchor="end"
                 >
                   {{ value }}
@@ -223,10 +247,23 @@ onMounted(regenerate)
               :y2="chartHeight - chartPadding.bottom"
             />
             <path class="qsl-report-chart__line qsl-report-chart__line--sent" :d="sentLinePath" />
-            <path class="qsl-report-chart__line qsl-report-chart__line--received" :d="receivedLinePath" />
+            <path
+              class="qsl-report-chart__line qsl-report-chart__line--received"
+              :d="receivedLinePath"
+            />
             <g v-for="point in chartPoints" :key="point.month">
-              <circle class="qsl-report-chart__point qsl-report-chart__point--sent" :cx="point.x" :cy="point.sentY" r="3.5" />
-              <circle class="qsl-report-chart__point qsl-report-chart__point--received" :cx="point.x" :cy="point.receivedY" r="3.5" />
+              <circle
+                class="qsl-report-chart__point qsl-report-chart__point--sent"
+                :cx="point.x"
+                :cy="point.sentY"
+                r="3.5"
+              />
+              <circle
+                class="qsl-report-chart__point qsl-report-chart__point--received"
+                :cx="point.x"
+                :cy="point.receivedY"
+                r="3.5"
+              />
               <text
                 v-if="point.showLabel"
                 class="qsl-report-chart__month-label"
@@ -240,7 +277,6 @@ onMounted(regenerate)
           </svg>
         </div>
         <p v-else class="qsl-muted">暂无可用于生成图表的卡片记录。</p>
-
       </section>
 
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
@@ -365,5 +401,4 @@ onMounted(regenerate)
 .qsl-report-chart__point--received {
   fill: #059669;
 }
-
 </style>

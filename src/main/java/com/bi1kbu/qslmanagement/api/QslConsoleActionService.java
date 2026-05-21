@@ -39,6 +39,7 @@ public class QslConsoleActionService {
     private static final String BH6SYX_IMPORT_SOURCE = "BH6SYX卡片广场";
     private static final int CARD_SEQUENCE_START = 1000;
     private static final int RECEIVE_SEQUENCE_START = 0;
+    private static final String ERROR_CARD_TYPE_SUFFIX = "（ERROR）";
     private static final Set<String> BH6SYX_ALLOWED_STATUSES = Set.of("对方已寄出，待我签收", "待双方寄出");
     private static final String DEFAULT_ONLINE_EXCHANGE_CARD_REMARKS =
         "期待与您空中相遇。\nLooking forward to meeting you on the air.";
@@ -127,6 +128,118 @@ public class QslConsoleActionService {
                 safeOperator(operator),
                 clientIp
             ).thenReturn(updated));
+    }
+
+    public Mono<CardMutationActionResult> resendCard(String cardRecordName, String operator, String clientIp) {
+        var normalizedCardRecordName = normalizeCardRecordName(cardRecordName);
+        if (!isFormalCardRecordName(normalizedCardRecordName)) {
+            return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "QSL-422-0001", "无正式卡片编号的记录不能执行卡片重发"));
+        }
+        return fetchOr404(CardRecord.class, normalizedCardRecordName)
+            .flatMap(cardRecord -> linkedReceiveRecordsForCard(normalizedCardRecordName)
+                .hasElements()
+                .flatMap(hasLinkedReceiveRecord -> {
+                    applyResendStateCleanup(cardRecord, hasLinkedReceiveRecord);
+                    return client.update(cardRecord);
+                }))
+            .flatMap(updated -> qslAuditService.appendAuditLog(
+                "卡片重发",
+                "card-record",
+                updated.getMetadata().getName(),
+                "已清理制卡、打包、发信及相关邮件状态，收卡事实保持不变",
+                safeOperator(operator),
+                clientIp
+            ).thenReturn(updated))
+            .map(updated -> new CardMutationActionResult(
+                updated.getMetadata().getName(),
+                QslApiSupport.normalizeCallSign(updated.getSpec().getCallSign()),
+                defaultIfBlank(updated.getSpec().getCardType(), ""),
+                "卡片重发",
+                "已清理制卡、打包、发信及相关邮件状态，收卡事实保持不变。",
+                QslApiSupport.nowText()
+            ));
+    }
+
+    public Mono<CardMutationActionResult> markCardAsResend(String cardRecordName, String operator, String clientIp) {
+        var normalizedCardRecordName = normalizeCardRecordName(cardRecordName);
+        if (!isFormalCardRecordName(normalizedCardRecordName)) {
+            return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "QSL-422-0001", "无正式卡片编号的记录不能标记重发"));
+        }
+        return fetchOr404(CardRecord.class, normalizedCardRecordName)
+            .flatMap(cardRecord -> {
+                var spec = ensureCardRecordSpec(cardRecord);
+                var currentCardType = defaultIfBlank(spec.getCardType(), "QSO").trim();
+                if (!isErrorCardType(currentCardType)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "只有发卡异常记录可以标记重发"));
+                }
+                spec.setCardType(stripErrorCardType(currentCardType));
+                QslCardStateTransitionSupport.refreshFlowStatus(cardRecord);
+                return client.update(cardRecord);
+            })
+            .flatMap(updated -> qslAuditService.appendAuditLog(
+                "标记重发",
+                "card-record",
+                updated.getMetadata().getName(),
+                "已解除发卡异常，等待执行卡片重发",
+                safeOperator(operator),
+                clientIp
+            ).thenReturn(updated))
+            .map(updated -> new CardMutationActionResult(
+                updated.getMetadata().getName(),
+                QslApiSupport.normalizeCallSign(updated.getSpec().getCallSign()),
+                defaultIfBlank(updated.getSpec().getCardType(), ""),
+                "标记重发",
+                "已解除发卡异常。",
+                QslApiSupport.nowText()
+            ));
+    }
+
+    public Mono<CardMutationActionResult> markCardIssueError(String cardRecordName, String remarks, String operator,
+        String clientIp) {
+        var normalizedCardRecordName = normalizeCardRecordName(cardRecordName);
+        if (!isFormalCardRecordName(normalizedCardRecordName)) {
+            return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "QSL-422-0001", "无正式卡片编号的记录不能标记发卡异常"));
+        }
+        if (remarks != null && remarks.trim().length() > 500) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST,
+                "QSL-400-0001", "异常备注长度不能超过500字符"));
+        }
+        return fetchOr404(CardRecord.class, normalizedCardRecordName)
+            .flatMap(cardRecord -> {
+                var spec = ensureCardRecordSpec(cardRecord);
+                var currentCardType = defaultIfBlank(spec.getCardType(), "QSO").trim();
+                if (isErrorCardType(currentCardType)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "该卡片已标记为发卡异常"));
+                }
+                spec.setCardType(toErrorCardType(currentCardType));
+                var normalizedRemarks = mapReceiptRemark(remarks);
+                if (!normalizedRemarks.isBlank()) {
+                    spec.setBusinessRemarks(QslApiSupport.appendRemark(spec.getBusinessRemarks(), normalizedRemarks));
+                }
+                QslCardStateTransitionSupport.refreshFlowStatus(cardRecord);
+                return client.update(cardRecord);
+            })
+            .flatMap((CardRecord updated) -> qslAuditService.appendAuditLog(
+                "发卡异常",
+                "card-record",
+                updated.getMetadata().getName(),
+                "卡片类型已标记为异常" + auditRemarkSuffix(remarks),
+                safeOperator(operator),
+                clientIp
+            ).thenReturn(updated))
+            .map(updated -> new CardMutationActionResult(
+                updated.getMetadata().getName(),
+                QslApiSupport.normalizeCallSign(updated.getSpec().getCallSign()),
+                defaultIfBlank(updated.getSpec().getCardType(), ""),
+                "发卡异常",
+                "已标记为发卡异常。",
+                QslApiSupport.nowText()
+            ));
     }
 
     public Mono<MailReceiveConfirmResult> confirmMailReceive(MailReceiveConfirmCommand command, String operator,
@@ -1265,6 +1378,52 @@ public class QslConsoleActionService {
         return resourceName != null && CARD_NAME_PATTERN.matcher(resourceName.trim()).matches();
     }
 
+    private boolean isErrorCardType(String cardType) {
+        var normalizedCardType = defaultIfBlank(cardType, "").trim();
+        return normalizedCardType.endsWith(ERROR_CARD_TYPE_SUFFIX) || normalizedCardType.endsWith("(ERROR)");
+    }
+
+    private String toErrorCardType(String cardType) {
+        var normalizedCardType = defaultIfBlank(cardType, "QSO").trim();
+        if (normalizedCardType.isBlank()) {
+            normalizedCardType = "QSO";
+        }
+        if (isErrorCardType(normalizedCardType)) {
+            return normalizedCardType;
+        }
+        return normalizedCardType + ERROR_CARD_TYPE_SUFFIX;
+    }
+
+    private String stripErrorCardType(String cardType) {
+        var normalizedCardType = defaultIfBlank(cardType, "QSO").trim();
+        if (normalizedCardType.endsWith(ERROR_CARD_TYPE_SUFFIX)) {
+            return normalizedCardType.substring(0, normalizedCardType.length() - ERROR_CARD_TYPE_SUFFIX.length());
+        }
+        if (normalizedCardType.endsWith("(ERROR)")) {
+            return normalizedCardType.substring(0, normalizedCardType.length() - "(ERROR)".length()).trim();
+        }
+        return normalizedCardType.isBlank() ? "QSO" : normalizedCardType;
+    }
+
+    private void applyResendStateCleanup(CardRecord cardRecord, boolean hasLinkedReceiveRecord) {
+        var spec = ensureCardRecordSpec(cardRecord);
+        if (hasLinkedReceiveRecord) {
+            spec.setCardReceived(Boolean.TRUE);
+        }
+        spec.setCardIssued(Boolean.FALSE);
+        spec.setCardIssuedAt("");
+        spec.setEnvelopePrinted(Boolean.FALSE);
+        spec.setCardSent(Boolean.FALSE);
+        spec.setSentAt("");
+        QslCardStateTransitionSupport.applyStateCleanup(spec);
+        QslCardStateTransitionSupport.refreshFlowStatus(cardRecord, hasLinkedReceiveRecord);
+    }
+
+    private String auditRemarkSuffix(String remarks) {
+        var normalizedRemarks = mapReceiptRemark(remarks);
+        return normalizedRemarks.isBlank() ? "" : "；备注：" + normalizedRemarks;
+    }
+
     private String normalizeCardRecordName(String resourceName) {
         return resourceName == null ? "" : resourceName.trim().toUpperCase(Locale.ROOT);
     }
@@ -1573,6 +1732,16 @@ public class QslConsoleActionService {
         String targetCardRecordName,
         String receivedRecordCode,
         String message
+    ) {
+    }
+
+    public record CardMutationActionResult(
+        String cardRecordName,
+        String callSign,
+        String cardType,
+        String action,
+        String message,
+        String handledAt
     ) {
     }
 

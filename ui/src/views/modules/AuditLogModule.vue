@@ -70,11 +70,11 @@ const filteredLogs = computed(() => {
 
   return logs.value.filter((item) => {
     return (
-      item.id.includes(keyword)
-      || item.operator.includes(keyword)
-      || item.action.includes(keyword)
-      || item.resource.includes(keyword)
-      || item.detail.includes(keyword)
+      item.id.includes(keyword) ||
+      item.operator.includes(keyword) ||
+      item.action.includes(keyword) ||
+      item.resource.includes(keyword) ||
+      item.detail.includes(keyword)
     )
   })
 })
@@ -120,7 +120,11 @@ onMounted(loadLogs)
       <QslQueryToolbar>
         <template #left>
           <div class="qsl-input-shell qsl-filter-toolbar__search">
-            <input v-model.trim="filters.keyword" type="text" placeholder="按日志ID/操作人/动作/资源/详情筛选" />
+            <input
+              v-model.trim="filters.keyword"
+              type="text"
+              placeholder="按日志ID/操作人/动作/资源/详情筛选"
+            />
           </div>
         </template>
         <template #right>

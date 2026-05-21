@@ -27,10 +27,23 @@ import {
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
-import { applySortDirection, compareNumber, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  applySortDirection,
+  compareNumber,
+  compareText,
+  type QslSortDirection,
+} from '../../utils/qsl-table-sort'
 
 type ImportFileKind = 'none' | 'csv' | 'zip' | 'unsupported'
-type OperationSortKey = 'id' | 'time' | 'action' | 'dataset' | 'format' | 'detail' | 'status' | 'errorCount'
+type OperationSortKey =
+  | 'id'
+  | 'time'
+  | 'action'
+  | 'dataset'
+  | 'format'
+  | 'detail'
+  | 'status'
+  | 'errorCount'
 
 interface OperationRecord {
   id: string
@@ -107,9 +120,10 @@ const totalPages = computed(() => {
 
 const sortedOperationRecords = computed(() => {
   return [...operationRecords.value].sort((left, right) => {
-    const result = operationSortKey.value === 'errorCount'
-      ? compareNumber(left.errorCount, right.errorCount)
-      : compareText(left[operationSortKey.value], right[operationSortKey.value])
+    const result =
+      operationSortKey.value === 'errorCount'
+        ? compareNumber(left.errorCount, right.errorCount)
+        : compareText(left[operationSortKey.value], right[operationSortKey.value])
     return applySortDirection(result, operationSortDirection.value)
   })
 })
@@ -338,7 +352,9 @@ const onImportFileChange = async (event: Event) => {
 
     try {
       const zip = await JSZip.loadAsync(importFile.value)
-      const entries = Object.values(zip.files).filter((item) => !item.dir && item.name.toLowerCase().endsWith('.csv'))
+      const entries = Object.values(zip.files).filter(
+        (item) => !item.dir && item.name.toLowerCase().endsWith('.csv'),
+      )
 
       if (!entries.length) {
         importFeedback.value = '压缩包中未发现CSV文件。'
@@ -704,14 +720,18 @@ onBeforeUnmount(() => {
 
             <div v-if="importFileKind === 'csv'" class="qsl-import-file-body">
               <p class="qsl-muted">{{ csvDetectDetail || '尚未读取CSV内容。' }}</p>
-              <p v-if="csvDetectedDataset" class="qsl-muted">已自动识别类型：{{ getDatasetLabel(csvDetectedDataset) }}</p>
+              <p v-if="csvDetectedDataset" class="qsl-muted">
+                已自动识别类型：{{ getDatasetLabel(csvDetectedDataset) }}
+              </p>
 
               <label v-else class="qsl-field">
                 <span class="qsl-field__label">手动指定CSV类型</span>
                 <div class="qsl-input-shell">
                   <select v-model="csvManualDataset">
                     <option value="">请选择类型</option>
-                    <option v-for="item in datasetOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                    <option v-for="item in datasetOptions" :key="item.value" :value="item.value">
+                      {{ item.label }}
+                    </option>
                   </select>
                 </div>
               </label>
@@ -730,7 +750,11 @@ onBeforeUnmount(() => {
                   <div class="qsl-input-shell">
                     <select v-model="item.dataset">
                       <option value="">请选择类型</option>
-                      <option v-for="dataset in datasetOptions" :key="dataset.value" :value="dataset.value">
+                      <option
+                        v-for="dataset in datasetOptions"
+                        :key="dataset.value"
+                        :value="dataset.value"
+                      >
                         {{ dataset.label }}
                       </option>
                     </select>
@@ -745,12 +769,19 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="qsl-actions">
-            <VButton type="secondary" :disabled="importBusy" @click="runImportPrecheck">预检导入</VButton>
-            <VButton type="secondary" :disabled="importBusy" @click="runImportExecute">执行导入</VButton>
+            <VButton type="secondary" :disabled="importBusy" @click="runImportPrecheck"
+              >预检导入</VButton
+            >
+            <VButton type="secondary" :disabled="importBusy" @click="runImportExecute"
+              >执行导入</VButton
+            >
           </div>
 
           <div class="qsl-import-export-result">
-            <p v-if="importFeedback" :class="['qsl-feedback', { 'qsl-feedback--error': isErrorFeedback(importFeedback) }]">
+            <p
+              v-if="importFeedback"
+              :class="['qsl-feedback', { 'qsl-feedback--error': isErrorFeedback(importFeedback) }]"
+            >
               {{ importFeedback }}
             </p>
             <p v-if="importPrecheckResult" class="qsl-muted">{{ importPrecheckResult }}</p>
@@ -773,7 +804,9 @@ onBeforeUnmount(() => {
               <span class="qsl-field__label">单独导出数据类型</span>
               <div class="qsl-input-shell">
                 <select v-model="exportForm.dataset">
-                  <option v-for="item in datasetOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                  <option v-for="item in datasetOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
                 </select>
               </div>
             </label>
@@ -803,14 +836,24 @@ onBeforeUnmount(() => {
 
           <div class="qsl-actions">
             <VButton :disabled="exportBusy" @click="runExportPreview">预览导出条数</VButton>
-            <VButton type="secondary" :disabled="exportBusy" @click="runExportExecute">执行导出</VButton>
-            <a v-if="exportBlobUrl" class="qsl-download-link" :href="exportBlobUrl" :download="exportFileName">
+            <VButton type="secondary" :disabled="exportBusy" @click="runExportExecute"
+              >执行导出</VButton
+            >
+            <a
+              v-if="exportBlobUrl"
+              class="qsl-download-link"
+              :href="exportBlobUrl"
+              :download="exportFileName"
+            >
               下载导出文件
             </a>
           </div>
 
           <div class="qsl-import-export-result">
-            <p v-if="exportFeedback" :class="['qsl-feedback', { 'qsl-feedback--error': isErrorFeedback(exportFeedback) }]">
+            <p
+              v-if="exportFeedback"
+              :class="['qsl-feedback', { 'qsl-feedback--error': isErrorFeedback(exportFeedback) }]"
+            >
               {{ exportFeedback }}
             </p>
             <p v-if="exportPreviewResult" class="qsl-muted">{{ exportPreviewResult }}</p>
@@ -861,13 +904,20 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="qsl-actions">
-            <VButton type="secondary" :loading="migrationBusy" :disabled="migrationBusy" @click="runMigrationPrecheck">
+            <VButton
+              type="secondary"
+              :loading="migrationBusy"
+              :disabled="migrationBusy"
+              @click="runMigrationPrecheck"
+            >
               预检旧版本迁移
             </VButton>
             <VButton
               type="danger"
               :loading="migrationBusy"
-              :disabled="migrationBusy || migrationConfirmText.trim() !== migrationConfirmRequiredText"
+              :disabled="
+                migrationBusy || migrationConfirmText.trim() !== migrationConfirmRequiredText
+              "
               @click="runMigrationExecute"
             >
               执行旧版本迁移
@@ -877,7 +927,10 @@ onBeforeUnmount(() => {
           <div class="qsl-import-export-result">
             <p
               v-if="migrationFeedback"
-              :class="['qsl-feedback', { 'qsl-feedback--error': isErrorFeedback(migrationFeedback) }]"
+              :class="[
+                'qsl-feedback',
+                { 'qsl-feedback--error': isErrorFeedback(migrationFeedback) },
+              ]"
             >
               {{ migrationFeedback }}
             </p>
@@ -885,8 +938,16 @@ onBeforeUnmount(() => {
             <div v-if="migrationResult" class="qsl-migration-summary">
               <VTag>{{ migrationResult.status }}</VTag>
               <VTag theme="secondary">收卡 {{ migrationResult.receiveRecordsToCreate }}</VTag>
-              <VTag theme="secondary">线下换卡 {{ migrationResult.offlineExchangeCardsToCreate }}</VTag>
-              <VTag theme="secondary">清理 {{ migrationResult.deletedStationCardPlaceholders + migrationResult.deletedLegacyAutoReceiveCards }}</VTag>
+              <VTag theme="secondary"
+                >线下换卡 {{ migrationResult.offlineExchangeCardsToCreate }}</VTag
+              >
+              <VTag theme="secondary"
+                >清理
+                {{
+                  migrationResult.deletedStationCardPlaceholders +
+                  migrationResult.deletedLegacyAutoReceiveCards
+                }}</VTag
+              >
             </div>
           </div>
         </VTabItem>
@@ -896,13 +957,69 @@ onBeforeUnmount(() => {
             <table class="qsl-table">
               <thead>
                 <tr>
-                  <th><QslSortableHeader column-key="id" label="任务ID" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
-                  <th><QslSortableHeader column-key="time" label="时间" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
-                  <th><QslSortableHeader column-key="action" label="类型" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
-                  <th><QslSortableHeader column-key="dataset" label="数据集" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
-                  <th><QslSortableHeader column-key="format" label="格式" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
-                  <th><QslSortableHeader column-key="detail" label="详情" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
-                  <th><QslSortableHeader column-key="status" label="状态" :sort-key="operationSortKey" :sort-direction="operationSortDirection" @sort="toggleOperationSort" /></th>
+                  <th>
+                    <QslSortableHeader
+                      column-key="id"
+                      label="任务ID"
+                      :sort-key="operationSortKey"
+                      :sort-direction="operationSortDirection"
+                      @sort="toggleOperationSort"
+                    />
+                  </th>
+                  <th>
+                    <QslSortableHeader
+                      column-key="time"
+                      label="时间"
+                      :sort-key="operationSortKey"
+                      :sort-direction="operationSortDirection"
+                      @sort="toggleOperationSort"
+                    />
+                  </th>
+                  <th>
+                    <QslSortableHeader
+                      column-key="action"
+                      label="类型"
+                      :sort-key="operationSortKey"
+                      :sort-direction="operationSortDirection"
+                      @sort="toggleOperationSort"
+                    />
+                  </th>
+                  <th>
+                    <QslSortableHeader
+                      column-key="dataset"
+                      label="数据集"
+                      :sort-key="operationSortKey"
+                      :sort-direction="operationSortDirection"
+                      @sort="toggleOperationSort"
+                    />
+                  </th>
+                  <th>
+                    <QslSortableHeader
+                      column-key="format"
+                      label="格式"
+                      :sort-key="operationSortKey"
+                      :sort-direction="operationSortDirection"
+                      @sort="toggleOperationSort"
+                    />
+                  </th>
+                  <th>
+                    <QslSortableHeader
+                      column-key="detail"
+                      label="详情"
+                      :sort-key="operationSortKey"
+                      :sort-direction="operationSortDirection"
+                      @sort="toggleOperationSort"
+                    />
+                  </th>
+                  <th>
+                    <QslSortableHeader
+                      column-key="status"
+                      label="状态"
+                      :sort-key="operationSortKey"
+                      :sort-direction="operationSortDirection"
+                      @sort="toggleOperationSort"
+                    />
+                  </th>
                   <th>操作</th>
                 </tr>
               </thead>

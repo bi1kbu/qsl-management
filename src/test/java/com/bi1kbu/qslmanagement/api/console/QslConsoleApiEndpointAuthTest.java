@@ -56,6 +56,25 @@ class QslConsoleApiEndpointAuthTest {
     }
 
     @Test
+    void shouldRejectCardResendWhenUnauthenticated() {
+        unauthorizedPost("/card-mutations/C1001/resend", "{}");
+    }
+
+    @Test
+    void shouldRejectCardIssueErrorWhenUnauthenticated() {
+        unauthorizedPost("/card-mutations/C1001/mark-error", """
+            {
+              "remarks": "打印错版"
+            }
+            """);
+    }
+
+    @Test
+    void shouldRejectCardMarkResendWhenUnauthenticated() {
+        unauthorizedPost("/card-mutations/C1001/mark-resend", "{}");
+    }
+
+    @Test
     void shouldRejectExchangeApproveWhenUnauthenticated() {
         unauthorizedPost("/exchange-requests/exchange-request-1/approve", "{}");
     }

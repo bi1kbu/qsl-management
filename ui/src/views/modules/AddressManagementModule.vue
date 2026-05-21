@@ -13,9 +13,23 @@ import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import { buildAddressResourceName } from '../../utils/resource-name'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
-import { applySortDirection, compareCallSign, compareNumber, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  applySortDirection,
+  compareCallSign,
+  compareNumber,
+  compareText,
+  type QslSortDirection,
+} from '../../utils/qsl-table-sort'
 
-type AddressSortKey = 'id' | 'callSign' | 'name' | 'telephone' | 'postalCode' | 'address' | 'email' | 'remarks'
+type AddressSortKey =
+  | 'id'
+  | 'callSign'
+  | 'name'
+  | 'telephone'
+  | 'postalCode'
+  | 'address'
+  | 'email'
+  | 'remarks'
 type PendingBindingSortKey = 'callSign' | 'unboundCount' | 'cardIdsText' | 'matchedAddressId'
 
 interface AddressBookSpec {
@@ -201,11 +215,11 @@ const filteredRows = computed(() => {
   }
   return rows.value.filter((item) => {
     return (
-      item.id.toUpperCase().includes(keyword)
-      || item.callSign.toUpperCase().includes(keyword)
-      || item.name.toUpperCase().includes(keyword)
-      || item.address.toUpperCase().includes(keyword)
-      || item.email.toUpperCase().includes(keyword)
+      item.id.toUpperCase().includes(keyword) ||
+      item.callSign.toUpperCase().includes(keyword) ||
+      item.name.toUpperCase().includes(keyword) ||
+      item.address.toUpperCase().includes(keyword) ||
+      item.email.toUpperCase().includes(keyword)
     )
   })
 })
@@ -217,29 +231,31 @@ const filteredPendingBindings = computed(() => {
   }
   return pendingBindings.value.filter((item) => {
     return (
-      item.callSign.includes(keyword)
-      || item.cardIdsText.toUpperCase().includes(keyword)
-      || item.matchedAddressId.toUpperCase().includes(keyword)
+      item.callSign.includes(keyword) ||
+      item.cardIdsText.toUpperCase().includes(keyword) ||
+      item.matchedAddressId.toUpperCase().includes(keyword)
     )
   })
 })
 
 const sortedRows = computed(() => {
   return [...filteredRows.value].sort((left, right) => {
-    const result = addressSortKey.value === 'callSign'
-      ? compareCallSign(left.callSign, right.callSign)
-      : compareText(left[addressSortKey.value], right[addressSortKey.value])
+    const result =
+      addressSortKey.value === 'callSign'
+        ? compareCallSign(left.callSign, right.callSign)
+        : compareText(left[addressSortKey.value], right[addressSortKey.value])
     return applySortDirection(result, addressSortDirection.value)
   })
 })
 
 const sortedPendingBindings = computed(() => {
   return [...filteredPendingBindings.value].sort((left, right) => {
-    const result = pendingSortKey.value === 'callSign'
-      ? compareCallSign(left.callSign, right.callSign)
-      : pendingSortKey.value === 'unboundCount'
-        ? compareNumber(left.unboundCount, right.unboundCount)
-        : compareText(left[pendingSortKey.value], right[pendingSortKey.value])
+    const result =
+      pendingSortKey.value === 'callSign'
+        ? compareCallSign(left.callSign, right.callSign)
+        : pendingSortKey.value === 'unboundCount'
+          ? compareNumber(left.unboundCount, right.unboundCount)
+          : compareText(left[pendingSortKey.value], right[pendingSortKey.value])
     return applySortDirection(result, pendingSortDirection.value)
   })
 })
@@ -335,10 +351,10 @@ const getBureauAddressCandidates = (item: PendingBindingItem): BindCandidateItem
   const matched = allCandidates.filter((row) => {
     if (!keyword) return true
     return (
-      row.id.toUpperCase().includes(keyword)
-      || normalizeCallSign(row.callSign).includes(keyword)
-      || row.name.toUpperCase().includes(keyword)
-      || row.address.toUpperCase().includes(keyword)
+      row.id.toUpperCase().includes(keyword) ||
+      normalizeCallSign(row.callSign).includes(keyword) ||
+      row.name.toUpperCase().includes(keyword) ||
+      row.address.toUpperCase().includes(keyword)
     )
   })
   return matched.sort((a, b) => a.id.localeCompare(b.id))
@@ -420,7 +436,8 @@ const buildPendingBindings = (
     .map(([callSign, value]) => {
       const sortedCardIds = value.cardIds.sort((a, b) => a.localeCompare(b))
       const displayCardIds = sortedCardIds.slice(0, 5)
-      const cardIdsText = displayCardIds.join('、') + (sortedCardIds.length > 5 ? ` 等${sortedCardIds.length}条` : '')
+      const cardIdsText =
+        displayCardIds.join('、') + (sortedCardIds.length > 5 ? ` 等${sortedCardIds.length}条` : '')
       return {
         callSign,
         unboundCount: value.count,
@@ -442,15 +459,19 @@ const isNoCardPlaceholder = (item: QslExtension<CardRecordSpec>): boolean => {
   const businessRemarks = String(item.spec?.businessRemarks ?? '').trim()
   const cardRemarks = String(item.spec?.cardRemarks ?? '').trim()
   return (
-    resourceName.startsWith('no-card-')
-    || businessRemarks === NO_CARD_PLACEHOLDER_REMARK
-    || cardRemarks === NO_CARD_PLACEHOLDER_REMARK
+    resourceName.startsWith('no-card-') ||
+    businessRemarks === NO_CARD_PLACEHOLDER_REMARK ||
+    cardRemarks === NO_CARD_PLACEHOLDER_REMARK
   )
 }
 
 const isOfflineExchangeCard = (item: QslExtension<CardRecordSpec, CardRecordStatus>): boolean => {
-  const sceneType = String(item.spec?.sceneType ?? '').trim().toUpperCase()
-  const cardType = String(item.spec?.cardType ?? '').trim().toUpperCase()
+  const sceneType = String(item.spec?.sceneType ?? '')
+    .trim()
+    .toUpperCase()
+  const cardType = String(item.spec?.cardType ?? '')
+    .trim()
+    .toUpperCase()
   return sceneType === 'EYEBALL' || (!sceneType && cardType === 'EYEBALL')
 }
 
@@ -522,7 +543,10 @@ const usePendingCallSign = (item: PendingBindingItem) => {
   feedback.value = `已填入呼号：${item.callSign}`
 }
 
-const bindAddressForCallSign = async (callSign: string, addressEntryName: string): Promise<number> => {
+const bindAddressForCallSign = async (
+  callSign: string,
+  addressEntryName: string,
+): Promise<number> => {
   const normalizedCallSign = normalizeCallSign(callSign)
   const normalizedAddressEntryName = addressEntryName.trim()
   if (!normalizedCallSign || !normalizedAddressEntryName) {
@@ -541,25 +565,33 @@ const bindAddressForCallSign = async (callSign: string, addressEntryName: string
       continue
     }
 
-    await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, record.metadata.name, {
-      apiVersion: qslApiVersion,
-      kind: cardRecordKind,
-      metadata: {
-        name: record.metadata.name,
-        version: record.metadata.version,
+    await updateExtension<CardRecordSpec, CardRecordStatus>(
+      cardRecordPlural,
+      record.metadata.name,
+      {
+        apiVersion: qslApiVersion,
+        kind: cardRecordKind,
+        metadata: {
+          name: record.metadata.name,
+          version: record.metadata.version,
+        },
+        spec: {
+          ...(record.spec ?? { callSign: '', addressEntryName: '' }),
+          addressEntryName: normalizedAddressEntryName,
+        },
+        status: record.status,
       },
-      spec: {
-        ...(record.spec ?? { callSign: '', addressEntryName: '' }),
-        addressEntryName: normalizedAddressEntryName,
-      },
-      status: record.status,
-    })
+    )
     updatedCount += 1
   }
   return updatedCount
 }
 
-const bindExistingAddress = async (item: PendingBindingItem, selectedAddressId: string, actionName: string) => {
+const bindExistingAddress = async (
+  item: PendingBindingItem,
+  selectedAddressId: string,
+  actionName: string,
+) => {
   if (!selectedAddressId) {
     feedback.value = `呼号 ${item.callSign} 暂无可用地址，请先新增地址或修改搜索关键字。`
     return
@@ -575,9 +607,10 @@ const bindExistingAddress = async (item: PendingBindingItem, selectedAddressId: 
       detail: `呼号：${item.callSign}，绑定卡片数：${updatedCount}`,
     })
     await loadRows({ silent: true })
-    feedback.value = updatedCount > 0
-      ? `已为 ${item.callSign} 绑定地址 ${selectedAddressId}（${updatedCount} 条）。`
-      : `呼号 ${item.callSign} 当前无待绑定卡片。`
+    feedback.value =
+      updatedCount > 0
+        ? `已为 ${item.callSign} 绑定地址 ${selectedAddressId}（${updatedCount} 条）。`
+        : `呼号 ${item.callSign} 当前无待绑定卡片。`
   } catch (error) {
     feedback.value = `绑定现有地址失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -615,7 +648,10 @@ const addAddress = async () => {
 
   submitting.value = true
   const callSign = normalizeCallSign(form.callSign)
-  const nextResourceName = buildAddressResourceName(rows.value.map((item) => item.id), callSign)
+  const nextResourceName = buildAddressResourceName(
+    rows.value.map((item) => item.id),
+    callSign,
+  )
   if (!nextResourceName) {
     feedback.value = '呼号不能为空。'
     submitting.value = false
@@ -658,9 +694,10 @@ const addAddress = async () => {
     }
 
     await loadRows({ silent: true })
-    feedback.value = autoBoundCount > 0
-      ? `已新增地址：${created.metadata.name}，并自动绑定 ${autoBoundCount} 条卡片。`
-      : `已新增地址：${created.metadata.name}`
+    feedback.value =
+      autoBoundCount > 0
+        ? `已新增地址：${created.metadata.name}，并自动绑定 ${autoBoundCount} 条卡片。`
+        : `已新增地址：${created.metadata.name}`
     resetForm()
   } catch (error) {
     feedback.value = `新增地址失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -795,9 +832,13 @@ const reindexAddressIds = async () => {
       return
     }
 
-    const unchangedNames = new Set(latestRows.map((item) => item.id).filter((id) => !renameMap.has(id)))
+    const unchangedNames = new Set(
+      latestRows.map((item) => item.id).filter((id) => !renameMap.has(id)),
+    )
     const targetNames = Array.from(renameMap.values())
-    const duplicateTargets = targetNames.filter((name, index) => targetNames.indexOf(name) !== index)
+    const duplicateTargets = targetNames.filter(
+      (name, index) => targetNames.indexOf(name) !== index,
+    )
     const conflictingTargets = targetNames.filter((name) => unchangedNames.has(name))
     if (duplicateTargets.length || conflictingTargets.length) {
       feedback.value = `地址编号重排失败：存在编号冲突（重复 ${duplicateTargets.length}，占用 ${conflictingTargets.length}）。`
@@ -824,19 +865,23 @@ const reindexAddressIds = async () => {
       if (!currentBinding || !renameMap.has(currentBinding)) {
         continue
       }
-      await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, record.metadata.name, {
-        apiVersion: qslApiVersion,
-        kind: cardRecordKind,
-        metadata: {
-          name: record.metadata.name,
-          version: record.metadata.version,
+      await updateExtension<CardRecordSpec, CardRecordStatus>(
+        cardRecordPlural,
+        record.metadata.name,
+        {
+          apiVersion: qslApiVersion,
+          kind: cardRecordKind,
+          metadata: {
+            name: record.metadata.name,
+            version: record.metadata.version,
+          },
+          spec: {
+            ...(record.spec ?? { callSign: '', addressEntryName: '' }),
+            addressEntryName: renameMap.get(currentBinding) ?? '',
+          },
+          status: record.status,
         },
-        spec: {
-          ...(record.spec ?? { callSign: '', addressEntryName: '' }),
-          addressEntryName: renameMap.get(currentBinding) ?? '',
-        },
-        status: record.status,
-      })
+      )
     }
 
     for (const [oldName] of renameEntries) {
@@ -943,8 +988,12 @@ onMounted(() => {
           <VButton type="secondary" :disabled="loading || submitting" @click="submitAddress">
             {{ editingId ? '保存修改' : '新增地址' }}
           </VButton>
-          <VButton v-if="editingId" :disabled="loading || submitting" @click="resetForm">取消编辑</VButton>
-          <VButton :disabled="loading || submitting || reindexing" @click="reindexAddressIds">按呼号重排编号</VButton>
+          <VButton v-if="editingId" :disabled="loading || submitting" @click="resetForm"
+            >取消编辑</VButton
+          >
+          <VButton :disabled="loading || submitting || reindexing" @click="reindexAddressIds"
+            >按呼号重排编号</VButton
+          >
           <VButton :disabled="loading || submitting" @click="loadRows">刷新</VButton>
           <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
         </div>
@@ -953,10 +1002,23 @@ onMounted(() => {
       <template v-else>
         <div class="qsl-form-inline qsl-list-toolbar">
           <div class="qsl-input-shell qsl-list-toolbar__search">
-            <input v-model.trim="historyKeywordInput" type="text" placeholder="按呼号或地址编号筛选" @keyup.enter="applyHistorySearch" />
+            <input
+              v-model.trim="historyKeywordInput"
+              type="text"
+              placeholder="按呼号或地址编号筛选"
+              @keyup.enter="applyHistorySearch"
+            />
           </div>
-          <VButton size="sm" type="secondary" :disabled="loading || submitting" @click="applyHistorySearch">搜索</VButton>
-          <VButton size="sm" :disabled="loading || submitting" @click="resetHistorySearch">重置</VButton>
+          <VButton
+            size="sm"
+            type="secondary"
+            :disabled="loading || submitting"
+            @click="applyHistorySearch"
+            >搜索</VButton
+          >
+          <VButton size="sm" :disabled="loading || submitting" @click="resetHistorySearch"
+            >重置</VButton
+          >
           <VButton size="sm" :disabled="loading || submitting" @click="loadRows">刷新</VButton>
         </div>
 
@@ -964,14 +1026,78 @@ onMounted(() => {
           <table class="qsl-table">
             <thead>
               <tr>
-                <th><QslSortableHeader column-key="id" label="地址编号" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-                <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-                <th><QslSortableHeader column-key="name" label="姓名" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-                <th><QslSortableHeader column-key="telephone" label="电话" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-                <th><QslSortableHeader column-key="postalCode" label="邮编" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-                <th><QslSortableHeader column-key="address" label="地址" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-                <th><QslSortableHeader column-key="email" label="邮箱" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-                <th><QslSortableHeader column-key="remarks" label="地址备注" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
+                <th>
+                  <QslSortableHeader
+                    column-key="id"
+                    label="地址编号"
+                    :sort-key="addressSortKey"
+                    :sort-direction="addressSortDirection"
+                    @sort="toggleAddressSort"
+                  />
+                </th>
+                <th>
+                  <QslSortableHeader
+                    column-key="callSign"
+                    label="呼号"
+                    :sort-key="addressSortKey"
+                    :sort-direction="addressSortDirection"
+                    @sort="toggleAddressSort"
+                  />
+                </th>
+                <th>
+                  <QslSortableHeader
+                    column-key="name"
+                    label="姓名"
+                    :sort-key="addressSortKey"
+                    :sort-direction="addressSortDirection"
+                    @sort="toggleAddressSort"
+                  />
+                </th>
+                <th>
+                  <QslSortableHeader
+                    column-key="telephone"
+                    label="电话"
+                    :sort-key="addressSortKey"
+                    :sort-direction="addressSortDirection"
+                    @sort="toggleAddressSort"
+                  />
+                </th>
+                <th>
+                  <QslSortableHeader
+                    column-key="postalCode"
+                    label="邮编"
+                    :sort-key="addressSortKey"
+                    :sort-direction="addressSortDirection"
+                    @sort="toggleAddressSort"
+                  />
+                </th>
+                <th>
+                  <QslSortableHeader
+                    column-key="address"
+                    label="地址"
+                    :sort-key="addressSortKey"
+                    :sort-direction="addressSortDirection"
+                    @sort="toggleAddressSort"
+                  />
+                </th>
+                <th>
+                  <QslSortableHeader
+                    column-key="email"
+                    label="邮箱"
+                    :sort-key="addressSortKey"
+                    :sort-direction="addressSortDirection"
+                    @sort="toggleAddressSort"
+                  />
+                </th>
+                <th>
+                  <QslSortableHeader
+                    column-key="remarks"
+                    label="地址备注"
+                    :sort-key="addressSortKey"
+                    :sort-direction="addressSortDirection"
+                    @sort="toggleAddressSort"
+                  />
+                </th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -987,8 +1113,16 @@ onMounted(() => {
                 <td>{{ item.remarks || '-' }}</td>
                 <td>
                   <div class="qsl-actions qsl-actions--tight">
-                    <VButton size="xs" :disabled="loading || submitting" @click="startEdit(item)">编辑</VButton>
-                    <VButton size="xs" type="danger" :disabled="loading || submitting" @click="removeAddress(item.id)">删除</VButton>
+                    <VButton size="xs" :disabled="loading || submitting" @click="startEdit(item)"
+                      >编辑</VButton
+                    >
+                    <VButton
+                      size="xs"
+                      type="danger"
+                      :disabled="loading || submitting"
+                      @click="removeAddress(item.id)"
+                      >删除</VButton
+                    >
                   </div>
                 </td>
               </tr>
@@ -1013,7 +1147,11 @@ onMounted(() => {
     <VCard title="待绑定地址呼号清单">
       <div class="qsl-form-inline qsl-list-toolbar">
         <div class="qsl-input-shell qsl-list-toolbar__search">
-          <input v-model.trim="pendingKeywordInput" type="text" placeholder="按呼号、卡片编号或建议地址筛选" />
+          <input
+            v-model.trim="pendingKeywordInput"
+            type="text"
+            placeholder="按呼号、卡片编号或建议地址筛选"
+          />
         </div>
       </div>
 
@@ -1022,10 +1160,42 @@ onMounted(() => {
           <thead>
             <tr>
               <th>序号</th>
-              <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
-              <th><QslSortableHeader column-key="unboundCount" label="待绑定卡片数" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
-              <th><QslSortableHeader column-key="cardIdsText" label="涉及卡片" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
-              <th><QslSortableHeader column-key="matchedAddressId" label="建议地址编号" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="呼号"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="unboundCount"
+                  label="待绑定卡片数"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardIdsText"
+                  label="涉及卡片"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="matchedAddressId"
+                  label="建议地址编号"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
               <th>操作</th>
             </tr>
           </thead>
@@ -1038,17 +1208,34 @@ onMounted(() => {
               <td>{{ item.matchedAddressId || '未配置' }}</td>
               <td>
                 <div class="qsl-actions qsl-actions--tight qsl-pending-actions">
-                  <VButton size="xs" type="secondary" :disabled="loading || submitting" @click="usePendingCallSign(item)">
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="loading || submitting"
+                    @click="usePendingCallSign(item)"
+                  >
                     新增地址
                   </VButton>
-                  <VButton size="xs" :disabled="loading || submitting" @click="bindSelfAddress(item)">
+                  <VButton
+                    size="xs"
+                    :disabled="loading || submitting"
+                    @click="bindSelfAddress(item)"
+                  >
                     绑定本人地址
                   </VButton>
-                  <VButton size="xs" type="secondary" :disabled="loading || submitting" @click="toggleBureauBinding(item)">
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="loading || submitting"
+                    @click="toggleBureauBinding(item)"
+                  >
                     绑定卡局地址
                   </VButton>
                 </div>
-                <div v-if="pendingBureauExpandMap[item.callSign]" class="qsl-pending-actions qsl-pending-actions--expand">
+                <div
+                  v-if="pendingBureauExpandMap[item.callSign]"
+                  class="qsl-pending-actions qsl-pending-actions--expand"
+                >
                   <div class="qsl-input-shell qsl-pending-actions__keyword">
                     <input
                       v-model.trim="pendingBureauKeywordMap[item.callSign]"
@@ -1059,12 +1246,24 @@ onMounted(() => {
                   <div class="qsl-input-shell qsl-pending-actions__select-shell">
                     <select v-model="pendingBureauSelectedMap[item.callSign]">
                       <option value="">请选择地址</option>
-                      <option v-for="candidate in getBureauAddressCandidates(item)" :key="candidate.id" :value="candidate.id">
-                        {{ candidate.id }} ｜ {{ candidate.sourceType === 'BURO' ? '卡片局' : '地址簿' }} ｜ {{ candidate.callSign || candidate.name || '-' }}
+                      <option
+                        v-for="candidate in getBureauAddressCandidates(item)"
+                        :key="candidate.id"
+                        :value="candidate.id"
+                      >
+                        {{ candidate.id }} ｜
+                        {{ candidate.sourceType === 'BURO' ? '卡片局' : '地址簿' }} ｜
+                        {{ candidate.callSign || candidate.name || '-' }}
                       </option>
                     </select>
                   </div>
-                  <VButton size="xs" :disabled="loading || submitting || !getSelectedBureauAddressForPendingItem(item)" @click="saveBureauBinding(item)">
+                  <VButton
+                    size="xs"
+                    :disabled="
+                      loading || submitting || !getSelectedBureauAddressForPendingItem(item)
+                    "
+                    @click="saveBureauBinding(item)"
+                  >
                     保存绑定
                   </VButton>
                 </div>

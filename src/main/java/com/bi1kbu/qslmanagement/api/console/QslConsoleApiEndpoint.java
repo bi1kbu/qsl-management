@@ -58,6 +58,9 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/mail-receive-confirms/{cardRecordName}/received-date"), this::updateMailReceiveDate)
             .andRoute(POST("/mail-receive-confirms/{cardRecordName}/received-record-code/migrate"),
                 this::migrateReceivedRecordCode)
+            .andRoute(POST("/card-mutations/{cardRecordName}/resend"), this::resendCard)
+            .andRoute(POST("/card-mutations/{cardRecordName}/mark-error"), this::markCardIssueError)
+            .andRoute(POST("/card-mutations/{cardRecordName}/mark-resend"), this::markCardAsResend)
             .andRoute(POST("/exchange-requests/{name}/approve"), this::approveExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/reject"), this::rejectExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
@@ -173,6 +176,45 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp()
                 )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> resendCard(ServerRequest request) {
+        var cardRecordName = request.pathVariable("cardRecordName");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> actionService.resendCard(
+                cardRecordName,
+                authenticatedOperator.name(),
+                authenticatedOperator.clientIp()
+            ))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> markCardIssueError(ServerRequest request) {
+        var cardRecordName = request.pathVariable("cardRecordName");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(CardIssueErrorRequest.class)
+                .defaultIfEmpty(new CardIssueErrorRequest(""))
+                .flatMap(payload -> actionService.markCardIssueError(
+                    cardRecordName,
+                    payload.remarks(),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> markCardAsResend(ServerRequest request) {
+        var cardRecordName = request.pathVariable("cardRecordName");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> actionService.markCardAsResend(
+                cardRecordName,
+                authenticatedOperator.name(),
+                authenticatedOperator.clientIp()
+            ))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }
@@ -471,6 +513,9 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     }
 
     private record ReceivedRecordCodeMigrateRequest(String receivedRecordCode, String targetCardRecordName) {
+    }
+
+    private record CardIssueErrorRequest(String remarks) {
     }
 
     private record ExchangeRejectRequest(String reason) {

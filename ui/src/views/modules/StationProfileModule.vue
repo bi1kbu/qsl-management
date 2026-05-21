@@ -142,7 +142,11 @@ onMounted(loadStationProfile)
         <label class="qsl-field">
           <span class="qsl-field__label">本台呼号（My_Call_Sign）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="stationProfileForm.myCallSign" type="text" placeholder="如：BI1KBU" />
+            <input
+              v-model.trim="stationProfileForm.myCallSign"
+              type="text"
+              placeholder="如：BI1KBU"
+            />
           </div>
         </label>
 
@@ -156,28 +160,44 @@ onMounted(loadStationProfile)
         <label class="qsl-field">
           <span class="qsl-field__label">电话（My_Telephone）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="stationProfileForm.myTelephone" type="text" placeholder="请输入联系电话" />
+            <input
+              v-model.trim="stationProfileForm.myTelephone"
+              type="text"
+              placeholder="请输入联系电话"
+            />
           </div>
         </label>
 
         <label class="qsl-field">
           <span class="qsl-field__label">邮编（My_Postal_Code）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="stationProfileForm.myPostalCode" type="text" placeholder="请输入邮政编码" />
+            <input
+              v-model.trim="stationProfileForm.myPostalCode"
+              type="text"
+              placeholder="请输入邮政编码"
+            />
           </div>
         </label>
 
         <label class="qsl-field qsl-field--full">
           <span class="qsl-field__label">收件地址（My_Address）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="stationProfileForm.myAddress" type="text" placeholder="请输入详细收件地址" />
+            <input
+              v-model.trim="stationProfileForm.myAddress"
+              type="text"
+              placeholder="请输入详细收件地址"
+            />
           </div>
         </label>
 
         <label class="qsl-field">
           <span class="qsl-field__label">电子邮件（My_E-mail）</span>
           <div class="qsl-input-shell">
-            <input v-model.trim="stationProfileForm.myEmail" type="email" placeholder="请输入电子邮箱" />
+            <input
+              v-model.trim="stationProfileForm.myEmail"
+              type="email"
+              placeholder="请输入电子邮箱"
+            />
           </div>
         </label>
 
@@ -194,7 +214,9 @@ onMounted(loadStationProfile)
       </div>
 
       <div class="qsl-actions">
-        <VButton type="secondary" :disabled="loading || saving" @click="saveStationProfile">保存通信地址</VButton>
+        <VButton type="secondary" :disabled="loading || saving" @click="saveStationProfile"
+          >保存通信地址</VButton
+        >
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
     </VCard>

@@ -2,6 +2,7 @@
 import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import { markCardError, markCardResend, resendCard } from '../../api/qsl-console-api'
 import {
   deleteExtension,
   getExtensionOrNull,
@@ -15,10 +16,16 @@ import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vu
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
-import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  applySortDirection,
+  compareCallSign,
+  compareText,
+  type QslSortDirection,
+} from '../../utils/qsl-table-sort'
 import { resolveCardFlowStatus as resolveDerivedCardFlowStatus } from '../../utils/qsl-card-state'
 
 type CardType = 'QSO' | 'SWL' | 'EYEBALL'
+type CardMutationRecordType = string
 type MailStatus = '' | 'PENDING' | 'SENT' | 'FAILED'
 type MutationSortKey =
   | 'resourceName'
@@ -32,7 +39,7 @@ type MutationSortKey =
 
 interface CardRecordSpec {
   callSign: string
-  cardType: CardType
+  cardType: CardMutationRecordType
   sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
   cardVersion: string
   qsoRecordName: string
@@ -90,7 +97,7 @@ interface CardMutationItem {
   spec: CardRecordSpec
   status: CardRecordStatus
   callSign: string
-  cardType: CardType
+  cardType: CardMutationRecordType
   cardVersion: string
   qsoRecordName: string
   addressEntryName: string
@@ -126,9 +133,10 @@ const loading = ref(false)
 const savingEdit = ref(false)
 const deletingRowName = ref('')
 const batchUpdating = ref(false)
+const mutationActionRunning = ref(false)
 const feedback = ref('')
 
-const activeTab = ref<'basic' | 'batch'>('basic')
+const activeTab = ref<'basic' | 'batch' | 'resend' | 'error'>('basic')
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
 const syncHistoryQuery = ref(false)
@@ -138,6 +146,12 @@ const editingResourceName = ref('')
 const batchEditField = ref('')
 const batchEditValue = ref('')
 const addressLookupKeyword = ref('')
+const resendTargetKeyword = ref('')
+const resendTargetName = ref('')
+const errorTargetKeyword = ref('')
+const errorTargetName = ref('')
+const errorRemarks = ref('')
+const errorCustomRemark = ref('')
 
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -191,6 +205,8 @@ const batchMailStatusOptions: OptionItem[] = [
   { label: '发送失败', value: 'FAILED' },
 ]
 
+const errorRemarkPresets = ['原址查无此人', '迁移新址不明', '原写地址不详', '欠资清补贴邮票']
+
 const historyColumns = [
   { key: 'resourceName', label: '卡片ID', sortable: true },
   { key: 'callSign', label: '对方呼号', sortable: true },
@@ -203,13 +219,37 @@ const historyColumns = [
 ]
 
 const isBatchTab = computed(() => activeTab.value === 'batch')
+const isResendTab = computed(() => activeTab.value === 'resend')
+const isErrorTab = computed(() => activeTab.value === 'error')
 const isEditing = computed(() => Boolean(editingResourceName.value))
-const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
+const selectedNormalRows = computed(() =>
+  normalRows.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName)),
+)
+const selectedHistoryCount = computed(() => selectedNormalRows.value.length)
 
-const filteredRows = computed(() => {
-  const filteredByActivity = activityFilter.value
-    ? rows.value.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
-    : rows.value
+const isErrorCardRecord = (item: CardMutationItem): boolean => {
+  const cardType = (item.cardType || item.spec.cardType || '').trim().toUpperCase()
+  return cardType === 'ERROR' || cardType.endsWith('（ERROR）') || cardType.endsWith('(ERROR)')
+}
+
+const normalRows = computed(() => rows.value.filter((item) => !isErrorCardRecord(item)))
+const errorRows = computed(() => rows.value.filter((item) => isErrorCardRecord(item)))
+const resendRows = computed(() =>
+  normalRows.value.filter((item) => {
+    return (
+      /^C\d+$/i.test(item.resourceName) &&
+      !item.spec.cardIssued &&
+      !item.spec.envelopePrinted &&
+      !item.spec.cardSent
+    )
+  }),
+)
+
+const filterRowsByQuery = (sourceRows: CardMutationItem[], includeActivityFilter = true) => {
+  const filteredByActivity =
+    includeActivityFilter && activityFilter.value
+      ? sourceRows.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
+      : sourceRows
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
     return filteredByActivity
@@ -225,9 +265,75 @@ const filteredRows = computed(() => {
       (item.spec.offlineActivityName || '').toUpperCase().includes(keyword)
     )
   })
+}
+
+const filteredRows = computed(() => {
+  return filterRowsByQuery(normalRows.value)
 })
 
-const compareMutationRows = (left: CardMutationItem, right: CardMutationItem, key: MutationSortKey): number => {
+const filteredResendRows = computed(() => {
+  return filterRowsByQuery(resendRows.value, false)
+})
+
+const filteredErrorRows = computed(() => {
+  return filterRowsByQuery(errorRows.value, false)
+})
+
+const resendCandidateRows = computed(() => {
+  const keyword = resendTargetKeyword.value.trim().toUpperCase()
+  const candidates = [...normalRows.value].sort((left, right) =>
+    compareText(left.resourceName, right.resourceName),
+  )
+  if (!keyword) {
+    return candidates.slice(0, 50)
+  }
+  return candidates
+    .filter((item) => {
+      return (
+        item.resourceName.toUpperCase().includes(keyword) ||
+        item.callSign.toUpperCase().includes(keyword)
+      )
+    })
+    .slice(0, 50)
+})
+
+const selectedResendTarget = computed(() => {
+  if (!resendTargetName.value) {
+    return null
+  }
+  return normalRows.value.find((item) => item.resourceName === resendTargetName.value) ?? null
+})
+
+const errorCandidateRows = computed(() => {
+  const keyword = errorTargetKeyword.value.trim().toUpperCase()
+  const candidates = [...normalRows.value].sort((left, right) =>
+    compareText(left.resourceName, right.resourceName),
+  )
+  if (!keyword) {
+    return candidates.slice(0, 50)
+  }
+  return candidates
+    .filter((item) => {
+      return (
+        item.resourceName.toUpperCase().includes(keyword) ||
+        item.callSign.toUpperCase().includes(keyword)
+      )
+    })
+    .slice(0, 50)
+})
+
+const selectedErrorTarget = computed(() => {
+  if (!errorTargetName.value) {
+    return null
+  }
+  return normalRows.value.find((item) => item.resourceName === errorTargetName.value) ?? null
+})
+
+const compareMutationRows = (
+  left: CardMutationItem,
+  right: CardMutationItem,
+  key: MutationSortKey,
+): number => {
   if (key === 'callSign') {
     return compareCallSign(left.callSign, right.callSign)
   }
@@ -243,6 +349,37 @@ const sortedRows = computed(() => {
   })
 })
 
+const sortedResendRows = computed(() => {
+  return [...filteredResendRows.value].sort((left, right) => {
+    return applySortDirection(compareMutationRows(left, right, sortKey.value), sortDirection.value)
+  })
+})
+
+const sortedErrorRows = computed(() => {
+  return [...filteredErrorRows.value].sort((left, right) => {
+    return applySortDirection(compareMutationRows(left, right, sortKey.value), sortDirection.value)
+  })
+})
+
+const currentTableRows = computed(() => {
+  if (isErrorTab.value) {
+    return filteredErrorRows.value
+  }
+  if (isResendTab.value) {
+    return filteredResendRows.value
+  }
+  return filteredRows.value
+})
+const currentSortedRows = computed(() => {
+  if (isErrorTab.value) {
+    return sortedErrorRows.value
+  }
+  if (isResendTab.value) {
+    return sortedResendRows.value
+  }
+  return sortedRows.value
+})
+
 const toggleSort = (key: string) => {
   const nextKey = key as MutationSortKey
   if (sortKey.value === nextKey) {
@@ -256,7 +393,7 @@ const toggleSort = (key: string) => {
 
 const activityFilterOptions = computed(() => {
   const activitySet = new Set<string>()
-  rows.value.forEach((item) => {
+  currentTableRows.value.forEach((item) => {
     const activityName = (item.spec.offlineActivityName || '').trim()
     if (activityName) {
       activitySet.add(activityName)
@@ -266,22 +403,27 @@ const activityFilterOptions = computed(() => {
 })
 
 const allFilteredSelected = computed(() => {
-  if (!filteredRows.value.length) {
+  if (!currentTableRows.value.length) {
     return false
   }
-  return filteredRows.value.every((item) => selectedHistoryNames.value.includes(item.resourceName))
+  return currentTableRows.value.every((item) =>
+    selectedHistoryNames.value.includes(item.resourceName),
+  )
 })
 
 const totalPages = computed(() => {
-  if (!filteredRows.value.length) {
+  if (!currentTableRows.value.length) {
     return 1
   }
-  return Math.ceil(filteredRows.value.length / pageSize.value)
+  return Math.ceil(currentTableRows.value.length / pageSize.value)
 })
 
-const pagedRows = computed(() => {
+const pagedRows = computed<Record<string, unknown>[]>(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return sortedRows.value.slice(start, start + pageSize.value)
+  return currentSortedRows.value.slice(start, start + pageSize.value) as unknown as Record<
+    string,
+    unknown
+  >[]
 })
 
 const filteredAddressOptions = computed(() => {
@@ -303,7 +445,9 @@ const selectableAddressOptions = computed(() => {
   if (!selectedAddressOption.value) {
     return filteredAddressOptions.value
   }
-  const exists = filteredAddressOptions.value.some((item) => item.value === selectedAddressOption.value?.value)
+  const exists = filteredAddressOptions.value.some(
+    (item) => item.value === selectedAddressOption.value?.value,
+  )
   if (exists) {
     return filteredAddressOptions.value
   }
@@ -341,8 +485,18 @@ const batchEditFields = computed(() => {
     { value: 'cardDate', label: '卡片日期', inputType: 'date' },
     { value: 'cardTime', label: '卡片时间', inputType: 'text', placeholder: 'HHmm' },
     { value: 'businessRemarks', label: '业务备注', inputType: 'textarea', placeholder: '输入备注' },
-    { value: 'receivedRemarks', label: '收卡确认备注', inputType: 'textarea', placeholder: '输入备注' },
-    { value: 'publicReceiptRemarks', label: '线下换卡确认备注', inputType: 'textarea', placeholder: '输入线下换卡确认备注' },
+    {
+      value: 'receivedRemarks',
+      label: '收卡确认备注',
+      inputType: 'textarea',
+      placeholder: '输入备注',
+    },
+    {
+      value: 'publicReceiptRemarks',
+      label: '线下换卡确认备注',
+      inputType: 'textarea',
+      placeholder: '输入线下换卡确认备注',
+    },
     { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
     { value: 'flowStatus', label: '流程状态', inputType: 'text', placeholder: '例如：已发信' },
     {
@@ -390,33 +544,73 @@ const batchEditFields = computed(() => {
         { label: '否', value: 'FALSE' },
       ],
     },
-    { value: 'cardIssuedAt', label: '制卡时间', inputType: 'text', placeholder: 'yyyy-MM-dd HH:mm:ss' },
+    {
+      value: 'cardIssuedAt',
+      label: '制卡时间',
+      inputType: 'text',
+      placeholder: 'yyyy-MM-dd HH:mm:ss',
+    },
     { value: 'sentAt', label: '发卡时间', inputType: 'text', placeholder: 'yyyy-MM-dd HH:mm:ss' },
-    { value: 'receivedAt', label: '收卡时间', inputType: 'text', placeholder: 'yyyy-MM-dd HH:mm:ss' },
+    {
+      value: 'receivedAt',
+      label: '收卡时间',
+      inputType: 'text',
+      placeholder: 'yyyy-MM-dd HH:mm:ss',
+    },
     {
       value: 'createdMailStatus',
       label: '制卡邮件状态',
       inputType: 'select',
       options: batchMailStatusOptions,
     },
-    { value: 'createdMailSentAt', label: '制卡邮件时间', inputType: 'text', placeholder: 'yyyy-MM-dd HH:mm:ss' },
-    { value: 'createdMailLastError', label: '制卡邮件错误', inputType: 'textarea', placeholder: '输入错误信息' },
+    {
+      value: 'createdMailSentAt',
+      label: '制卡邮件时间',
+      inputType: 'text',
+      placeholder: 'yyyy-MM-dd HH:mm:ss',
+    },
+    {
+      value: 'createdMailLastError',
+      label: '制卡邮件错误',
+      inputType: 'textarea',
+      placeholder: '输入错误信息',
+    },
     {
       value: 'sentMailStatus',
       label: '发卡邮件状态',
       inputType: 'select',
       options: batchMailStatusOptions,
     },
-    { value: 'sentMailSentAt', label: '发卡邮件时间', inputType: 'text', placeholder: 'yyyy-MM-dd HH:mm:ss' },
-    { value: 'sentMailLastError', label: '发卡邮件错误', inputType: 'textarea', placeholder: '输入错误信息' },
+    {
+      value: 'sentMailSentAt',
+      label: '发卡邮件时间',
+      inputType: 'text',
+      placeholder: 'yyyy-MM-dd HH:mm:ss',
+    },
+    {
+      value: 'sentMailLastError',
+      label: '发卡邮件错误',
+      inputType: 'textarea',
+      placeholder: '输入错误信息',
+    },
     {
       value: 'receivedMailStatus',
       label: '收卡邮件状态',
       inputType: 'select',
       options: batchMailStatusOptions,
     },
-    { value: 'receivedMailSentAt', label: '收卡邮件时间', inputType: 'text', placeholder: 'yyyy-MM-dd HH:mm:ss' },
-    { value: 'receivedMailLastError', label: '收卡邮件错误', inputType: 'textarea', placeholder: '输入错误信息' },
+    {
+      value: 'receivedMailSentAt',
+      label: '收卡邮件时间',
+      inputType: 'text',
+      placeholder: 'yyyy-MM-dd HH:mm:ss',
+    },
+    {
+      value: 'receivedMailLastError',
+      label: '收卡邮件错误',
+      inputType: 'textarea',
+      placeholder: '输入错误信息',
+    },
   ] as const
 })
 
@@ -428,7 +622,7 @@ watch(rows, () => {
   }
 })
 
-watch(filteredRows, () => {
+watch(currentTableRows, () => {
   if (currentPage.value > totalPages.value) {
     currentPage.value = totalPages.value
   }
@@ -439,6 +633,42 @@ watch(filteredRows, () => {
 
 watch(pageSize, () => {
   currentPage.value = 1
+})
+
+watch(activeTab, () => {
+  currentPage.value = 1
+})
+
+watch(resendCandidateRows, (candidates) => {
+  if (!isResendTab.value) {
+    return
+  }
+  if (candidates.length === 1) {
+    resendTargetName.value = candidates[0].resourceName
+    return
+  }
+  if (
+    resendTargetName.value &&
+    !candidates.some((item) => item.resourceName === resendTargetName.value)
+  ) {
+    resendTargetName.value = ''
+  }
+})
+
+watch(errorCandidateRows, (candidates) => {
+  if (!isErrorTab.value) {
+    return
+  }
+  if (candidates.length === 1) {
+    errorTargetName.value = candidates[0].resourceName
+    return
+  }
+  if (
+    errorTargetName.value &&
+    !candidates.some((item) => item.resourceName === errorTargetName.value)
+  ) {
+    errorTargetName.value = ''
+  }
 })
 
 watch(historyKeyword, (value) => {
@@ -568,7 +798,10 @@ const clearReceivedMailState = (spec: CardRecordSpec) => {
 
 const applyStateConsistency = (spec: CardRecordSpec) => {
   const sceneType = normalizeSceneType(spec.sceneType, spec.cardType)
-  if (spec.cardSent && (sceneType === 'QSO' || sceneType === 'SWL' || sceneType === 'ONLINE_EYEBALL')) {
+  if (
+    spec.cardSent &&
+    (sceneType === 'QSO' || sceneType === 'SWL' || sceneType === 'ONLINE_EYEBALL')
+  ) {
     if (!spec.cardIssued) {
       spec.cardIssued = true
       spec.cardIssuedAt = nowText()
@@ -662,9 +895,11 @@ const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): CardM
 
 const isNoCardPlaceholder = (item: CardMutationItem): boolean => {
   const resourceName = item.resourceName.trim().toLowerCase()
-  return resourceName.startsWith('no-card-')
-    && item.spec.businessRemarks.trim() === NO_CARD_PLACEHOLDER_REMARK
-    && item.spec.cardRemarks.trim() === NO_CARD_PLACEHOLDER_REMARK
+  return (
+    resourceName.startsWith('no-card-') &&
+    item.spec.businessRemarks.trim() === NO_CARD_PLACEHOLDER_REMARK &&
+    item.spec.cardRemarks.trim() === NO_CARD_PLACEHOLDER_REMARK
+  )
 }
 
 const loadRows = async (options: { silent?: boolean } = {}) => {
@@ -778,7 +1013,9 @@ const startEditRow = (item: CardMutationItem) => {
   editingResourceName.value = item.resourceName
   addressLookupKeyword.value = item.callSign.trim().toUpperCase()
   editForm.callSign = item.spec.callSign
-  editForm.cardType = item.spec.cardType
+  editForm.cardType = ['QSO', 'SWL', 'EYEBALL'].includes(item.spec.cardType)
+    ? (item.spec.cardType as CardType)
+    : 'QSO'
   editForm.cardVersion = item.spec.cardVersion
   editForm.qsoRecordName = item.spec.qsoRecordName
   editForm.addressEntryName = item.spec.addressEntryName
@@ -836,17 +1073,32 @@ const selectHistoryRowForQuery = (item: CardMutationItem) => {
 
 const toggleAllFilteredHistorySelection = () => {
   if (allFilteredSelected.value) {
-    const filteredNameSet = new Set(filteredRows.value.map((item) => item.resourceName))
-    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !filteredNameSet.has(name))
+    const filteredNameSet = new Set(currentTableRows.value.map((item) => item.resourceName))
+    selectedHistoryNames.value = selectedHistoryNames.value.filter(
+      (name) => !filteredNameSet.has(name),
+    )
     return
   }
   const merged = new Set(selectedHistoryNames.value)
-  filteredRows.value.forEach((item) => merged.add(item.resourceName))
+  currentTableRows.value.forEach((item) => merged.add(item.resourceName))
   selectedHistoryNames.value = Array.from(merged)
 }
 
 const clearHistorySelection = () => {
   selectedHistoryNames.value = []
+}
+
+const selectErrorRemarkPreset = (value: string) => {
+  errorRemarks.value = value
+}
+
+const applyCustomErrorRemark = () => {
+  const remark = errorCustomRemark.value.trim()
+  if (!remark) {
+    feedback.value = '请先填写其他异常备注。'
+    return
+  }
+  errorRemarks.value = remark
 }
 
 const clearAddressLookup = () => {
@@ -911,7 +1163,10 @@ const saveEdit = async () => {
 
   savingEdit.value = true
   try {
-    const latest = await getExtensionOrNull<CardRecordSpec, CardRecordStatus>(resourcePlural, target.resourceName)
+    const latest = await getExtensionOrNull<CardRecordSpec, CardRecordStatus>(
+      resourcePlural,
+      target.resourceName,
+    )
     const baseSpec = normalizeCardRecordSpec(latest?.spec ?? target.spec)
     const baseStatus = normalizeCardRecordStatus(latest?.status ?? target.status)
 
@@ -948,7 +1203,7 @@ const saveEdit = async () => {
   }
 }
 
-const withTimeout = async <T>(task: Promise<T>, timeoutMs = 15000): Promise<T> => {
+const withTimeout = async <T,>(task: Promise<T>, timeoutMs = 15000): Promise<T> => {
   return await Promise.race([
     task,
     new Promise<T>((_, reject) => {
@@ -964,7 +1219,9 @@ const removeRow = async (item: CardMutationItem) => {
     return
   }
 
-  const secondConfirmed = window.confirm(`二次确认：删除后卡片ID ${item.resourceName} 将作废且不可复用，是否继续？`)
+  const secondConfirmed = window.confirm(
+    `二次确认：删除后卡片ID ${item.resourceName} 将作废且不可复用，是否继续？`,
+  )
   if (!secondConfirmed) {
     feedback.value = `已取消删除：${item.resourceName}`
     return
@@ -993,6 +1250,141 @@ const removeRow = async (item: CardMutationItem) => {
     window.alert(message)
   } finally {
     deletingRowName.value = ''
+  }
+}
+
+const applyResendAction = async () => {
+  const targetName = resendTargetName.value.trim()
+  if (!targetName) {
+    feedback.value = '请先选择需要重发的卡片。'
+    return
+  }
+  const target = normalRows.value.find((item) => item.resourceName === targetName)
+  if (!target) {
+    feedback.value = '未找到可重发的正常卡片记录。'
+    return
+  }
+
+  const confirmed = window.confirm(`确认将卡片 ${target.resourceName} 重置为待重发吗？`)
+  if (!confirmed) {
+    feedback.value = `已取消卡片重发操作：${target.resourceName}`
+    return
+  }
+
+  mutationActionRunning.value = true
+  try {
+    await withTimeout(resendCard(target.resourceName))
+    await appendQslAuditLog({
+      action: '卡片异动-卡片重发',
+      resourceType: 'card-record',
+      resourceName: target.resourceName,
+      detail: `重发卡片：呼号=${target.callSign}，类型=${target.cardType}`,
+    })
+    await loadRows({ silent: true })
+    resendTargetName.value = ''
+    resendTargetKeyword.value = ''
+    feedback.value = `已提交卡片重发动作：${target.resourceName}`
+  } catch (error) {
+    feedback.value = `卡片重发失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    mutationActionRunning.value = false
+  }
+}
+
+const applySingleResendAction = async (item: CardMutationItem) => {
+  const confirmed = window.confirm(`确认将卡片 ${item.resourceName} 重置为待重发吗？`)
+  if (!confirmed) {
+    feedback.value = `已取消卡片重发操作：${item.resourceName}`
+    return
+  }
+
+  mutationActionRunning.value = true
+  try {
+    await withTimeout(resendCard(item.resourceName))
+    await appendQslAuditLog({
+      action: '卡片异动-卡片重发',
+      resourceType: 'card-record',
+      resourceName: item.resourceName,
+      detail: `重发卡片：呼号=${item.callSign}，类型=${item.cardType}`,
+    })
+    await loadRows({ silent: true })
+    selectedHistoryNames.value = selectedHistoryNames.value.filter(
+      (name) => name !== item.resourceName,
+    )
+    feedback.value = `已提交卡片重发动作：${item.resourceName}`
+  } catch (error) {
+    feedback.value = `卡片重发失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    mutationActionRunning.value = false
+  }
+}
+
+const applyMarkErrorAction = async () => {
+  const targetName = errorTargetName.value.trim()
+  if (!targetName) {
+    feedback.value = '请先选择需要标记异常的卡片。'
+    return
+  }
+  const target = normalRows.value.find((item) => item.resourceName === targetName)
+  if (!target) {
+    feedback.value = '未找到可标记异常的正常卡片记录。'
+    return
+  }
+
+  const confirmed = window.confirm(`确认将卡片 ${target.resourceName} 标记为发卡异常吗？`)
+  if (!confirmed) {
+    feedback.value = `已取消标记异常：${target.resourceName}`
+    return
+  }
+
+  mutationActionRunning.value = true
+  try {
+    await withTimeout(markCardError(target.resourceName, errorRemarks.value.trim()))
+    await appendQslAuditLog({
+      action: '卡片异动-发卡异常',
+      resourceType: 'card-record',
+      resourceName: target.resourceName,
+      detail: `标记为 ERROR 类型：呼号=${target.callSign}，原类型=${target.cardType}`,
+    })
+    await loadRows({ silent: true })
+    errorTargetName.value = ''
+    errorTargetKeyword.value = ''
+    errorRemarks.value = ''
+    errorCustomRemark.value = ''
+    feedback.value = `已提交发卡异常动作：${target.resourceName}`
+  } catch (error) {
+    feedback.value = `标记发卡异常失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    mutationActionRunning.value = false
+  }
+}
+
+const applyMarkResendAction = async (item: CardMutationItem) => {
+  const confirmed = window.confirm(`确认将异常卡片 ${item.resourceName} 标记为重发吗？`)
+  if (!confirmed) {
+    feedback.value = `已取消标记重发：${item.resourceName}`
+    return
+  }
+
+  mutationActionRunning.value = true
+  try {
+    await withTimeout(markCardResend(item.resourceName))
+    await withTimeout(resendCard(item.resourceName))
+    await appendQslAuditLog({
+      action: '卡片异动-标记重发',
+      resourceType: 'card-record',
+      resourceName: item.resourceName,
+      detail: `解除异常并重发：呼号=${item.callSign}，原类型=${item.cardType}`,
+    })
+    await loadRows({ silent: true })
+    selectedHistoryNames.value = selectedHistoryNames.value.filter(
+      (name) => name !== item.resourceName,
+    )
+    feedback.value = `已将异常卡片标记为重发：${item.resourceName}`
+  } catch (error) {
+    feedback.value = `标记重发失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    mutationActionRunning.value = false
   }
 }
 
@@ -1097,7 +1489,15 @@ const applyBatchField = (
       break
   }
   applyStateConsistency(nextSpec)
-  if (['cardIssuedState', 'cardSentState', 'envelopePrintedState', 'cardReceivedState', 'receiptConfirmedState'].includes(field)) {
+  if (
+    [
+      'cardIssuedState',
+      'cardSentState',
+      'envelopePrintedState',
+      'cardReceivedState',
+      'receiptConfirmedState',
+    ].includes(field)
+  ) {
     nextStatus.flowStatus = resolveNextFlowStatus(nextSpec, nextStatus.flowStatus)
   }
 
@@ -1119,7 +1519,8 @@ const applyHistoryBatchEdit = async () => {
   }
 
   const fieldOption = batchEditFields.value.find((item) => item.value === batchEditField.value)
-  const normalizedValue = fieldOption?.inputType === 'textarea' ? batchEditValue.value : batchEditValue.value.trim()
+  const normalizedValue =
+    fieldOption?.inputType === 'textarea' ? batchEditValue.value : batchEditValue.value.trim()
 
   if (
     fieldOption?.inputType !== 'select' &&
@@ -1132,16 +1533,26 @@ const applyHistoryBatchEdit = async () => {
 
   batchUpdating.value = true
   try {
-    const targets = rows.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
+    const targets = normalRows.value.filter((item) =>
+      selectedHistoryNames.value.includes(item.resourceName),
+    )
 
     for (const item of targets) {
-      const latest = await getExtensionOrNull<CardRecordSpec, CardRecordStatus>(resourcePlural, item.resourceName)
+      const latest = await getExtensionOrNull<CardRecordSpec, CardRecordStatus>(
+        resourcePlural,
+        item.resourceName,
+      )
       if (!latest) {
         continue
       }
       const baseSpec = normalizeCardRecordSpec(latest.spec ?? item.spec)
       const baseStatus = normalizeCardRecordStatus(latest.status ?? item.status)
-      const { nextSpec, nextStatus } = applyBatchField(baseSpec, baseStatus, batchEditField.value, normalizedValue)
+      const { nextSpec, nextStatus } = applyBatchField(
+        baseSpec,
+        baseStatus,
+        batchEditField.value,
+        normalizedValue,
+      )
       await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, item.resourceName, {
         apiVersion: qslApiVersion,
         kind: resourceKind,
@@ -1193,11 +1604,156 @@ onMounted(() => {
           <VTabItem id="batch" label="批量编辑">
             <div class="qsl-tab-panel-placeholder" />
           </VTabItem>
+          <VTabItem id="resend" label="卡片重发">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+          <VTabItem id="error" label="发卡异常">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
         </VTabs>
       </template>
 
-      <template v-if="!isBatchTab">
-        <p v-if="!isEditing" class="qsl-muted">请在下方清单点击“编辑”，加载对应卡片后进行异动修改。</p>
+      <template v-if="isResendTab">
+        <p class="qsl-muted">输入卡片ID或呼号筛选卡片，提交后清空制卡、打包、发卡状态。</p>
+        <div class="qsl-error-action-panel">
+          <div class="qsl-form-grid qsl-form-grid--two">
+            <label class="qsl-field">
+              <span class="qsl-field__label">筛选卡片</span>
+              <div class="qsl-input-shell">
+                <input
+                  v-model.trim="resendTargetKeyword"
+                  type="text"
+                  placeholder="输入卡片ID或呼号"
+                />
+              </div>
+            </label>
+            <label class="qsl-field">
+              <span class="qsl-field__label">重发卡片</span>
+              <div class="qsl-input-shell">
+                <select v-model="resendTargetName">
+                  <option value="">请选择卡片</option>
+                  <option
+                    v-for="item in resendCandidateRows"
+                    :key="`resend-target-${item.resourceName}`"
+                    :value="item.resourceName"
+                  >
+                    {{ item.resourceName }} {{ item.callSign || '-' }} {{ item.cardType }}
+                  </option>
+                </select>
+              </div>
+            </label>
+          </div>
+
+          <div v-if="selectedResendTarget" class="qsl-selected-card">
+            <strong>{{ selectedResendTarget.resourceName }}</strong>
+            <span>呼号：{{ selectedResendTarget.callSign || '-' }}</span>
+            <span>类型：{{ selectedResendTarget.cardType || '-' }}</span>
+            <span>制卡日期：{{ selectedResendTarget.spec.cardIssuedAt || '-' }}</span>
+            <span>发卡日期：{{ selectedResendTarget.spec.sentAt || '-' }}</span>
+            <span>地址：{{ selectedResendTarget.addressEntryName || '-' }}</span>
+          </div>
+
+          <div class="qsl-actions qsl-actions--tight">
+            <VButton
+              type="secondary"
+              :disabled="!resendTargetName || mutationActionRunning"
+              @click="applyResendAction"
+            >
+              确认重发
+            </VButton>
+            <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
+          </div>
+        </div>
+      </template>
+
+      <template v-else-if="isErrorTab">
+        <p class="qsl-muted">
+          选择正常卡片并提交后，后端会把该卡片标记为 ERROR 类型；异常卡片只在下方发卡异常清单显示。
+        </p>
+        <div class="qsl-error-action-panel">
+          <div class="qsl-form-grid qsl-form-grid--two">
+            <label class="qsl-field">
+              <span class="qsl-field__label">筛选卡片</span>
+              <div class="qsl-input-shell">
+                <input
+                  v-model.trim="errorTargetKeyword"
+                  type="text"
+                  placeholder="输入卡片ID或呼号"
+                />
+              </div>
+            </label>
+            <label class="qsl-field">
+              <span class="qsl-field__label">异常卡片</span>
+              <div class="qsl-input-shell">
+                <select v-model="errorTargetName">
+                  <option value="">请选择卡片</option>
+                  <option
+                    v-for="item in errorCandidateRows"
+                    :key="`error-target-${item.resourceName}`"
+                    :value="item.resourceName"
+                  >
+                    {{ item.resourceName }} {{ item.callSign || '-' }} {{ item.cardType }}
+                  </option>
+                </select>
+              </div>
+            </label>
+          </div>
+
+          <div v-if="selectedErrorTarget" class="qsl-selected-card">
+            <strong>{{ selectedErrorTarget.resourceName }}</strong>
+            <span>呼号：{{ selectedErrorTarget.callSign || '-' }}</span>
+            <span>类型：{{ selectedErrorTarget.cardType || '-' }}</span>
+            <span>制卡日期：{{ selectedErrorTarget.spec.cardIssuedAt || '-' }}</span>
+            <span>发卡日期：{{ selectedErrorTarget.spec.sentAt || '-' }}</span>
+            <span>地址：{{ selectedErrorTarget.addressEntryName || '-' }}</span>
+          </div>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">异常备注</span>
+            <div class="qsl-input-shell">
+              <textarea
+                v-model.trim="errorRemarks"
+                rows="3"
+                maxlength="500"
+                placeholder="请选择预设或输入异常备注"
+              />
+            </div>
+          </label>
+
+          <div class="qsl-error-presets">
+            <VButton
+              v-for="item in errorRemarkPresets"
+              :key="item"
+              size="sm"
+              @click="selectErrorRemarkPreset(item)"
+            >
+              {{ item }}
+            </VButton>
+            <label class="qsl-field qsl-error-custom-remark">
+              <span class="qsl-field__label">其他</span>
+              <div class="qsl-input-shell">
+                <input v-model.trim="errorCustomRemark" type="text" placeholder="自定义异常原因" />
+              </div>
+            </label>
+            <VButton size="sm" @click="applyCustomErrorRemark">填入其他</VButton>
+          </div>
+
+          <div class="qsl-actions qsl-actions--tight">
+            <VButton
+              type="secondary"
+              :disabled="!errorTargetName || mutationActionRunning"
+              @click="applyMarkErrorAction"
+              >标记发卡异常</VButton
+            >
+            <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
+          </div>
+        </div>
+      </template>
+
+      <template v-else-if="!isBatchTab">
+        <p v-if="!isEditing" class="qsl-muted">
+          请在下方清单点击“编辑”，加载对应卡片后进行异动修改。
+        </p>
 
         <template v-else>
           <VCard title="基础信息">
@@ -1232,7 +1788,9 @@ onMounted(() => {
                 <div class="qsl-input-shell">
                   <select v-model="editForm.qsoRecordName">
                     <option value="">空</option>
-                    <option v-for="item in qsoOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                    <option v-for="item in qsoOptions" :key="item.value" :value="item.value">
+                      {{ item.label }}
+                    </option>
                   </select>
                 </div>
               </label>
@@ -1247,21 +1805,34 @@ onMounted(() => {
               <label class="qsl-field">
                 <span class="qsl-field__label">卡片时间</span>
                 <div class="qsl-input-shell">
-                  <input v-model.trim="editForm.cardTime" type="text" maxlength="4" placeholder="HHmm" />
+                  <input
+                    v-model.trim="editForm.cardTime"
+                    type="text"
+                    maxlength="4"
+                    placeholder="HHmm"
+                  />
                 </div>
               </label>
 
               <label class="qsl-field qsl-field--full">
                 <span class="qsl-field__label">业务备注</span>
                 <div class="qsl-input-shell qsl-input-shell--textarea">
-                  <textarea v-model.trim="editForm.businessRemarks" rows="2" placeholder="输入业务备注" />
+                  <textarea
+                    v-model.trim="editForm.businessRemarks"
+                    rows="2"
+                    placeholder="输入业务备注"
+                  />
                 </div>
               </label>
 
               <label class="qsl-field qsl-field--full">
                 <span class="qsl-field__label">卡片备注（打印）</span>
                 <div class="qsl-input-shell qsl-input-shell--textarea">
-                  <textarea v-model.trim="editForm.cardRemarks" rows="2" placeholder="输入卡片备注" />
+                  <textarea
+                    v-model.trim="editForm.cardRemarks"
+                    rows="2"
+                    placeholder="输入卡片备注"
+                  />
                 </div>
               </label>
             </div>
@@ -1273,9 +1844,18 @@ onMounted(() => {
                 <span class="qsl-field__label">地址查找（呼号/卡片局）</span>
                 <div class="qsl-form-inline">
                   <div class="qsl-input-shell">
-                    <input v-model.trim="addressLookupKeyword" type="text" placeholder="输入呼号或卡片局筛选地址编号" />
+                    <input
+                      v-model.trim="addressLookupKeyword"
+                      type="text"
+                      placeholder="输入呼号或卡片局筛选地址编号"
+                    />
                   </div>
-                  <VButton size="sm" :disabled="!addressLookupKeyword.trim()" @click="clearAddressLookup">清空筛选</VButton>
+                  <VButton
+                    size="sm"
+                    :disabled="!addressLookupKeyword.trim()"
+                    @click="clearAddressLookup"
+                    >清空筛选</VButton
+                  >
                 </div>
               </label>
 
@@ -1284,7 +1864,13 @@ onMounted(() => {
                 <div class="qsl-input-shell qsl-input-shell--stack">
                   <select v-model="editForm.addressEntryName">
                     <option value="">空</option>
-                    <option v-for="item in selectableAddressOptions" :key="item.value" :value="item.value">{{ item.label }}</option>
+                    <option
+                      v-for="item in selectableAddressOptions"
+                      :key="item.value"
+                      :value="item.value"
+                    >
+                      {{ item.label }}
+                    </option>
                   </select>
                   <div class="qsl-inline-option-list">
                     <VButton
@@ -1299,7 +1885,6 @@ onMounted(() => {
                   </div>
                 </div>
               </label>
-
             </div>
           </VCard>
 
@@ -1318,14 +1903,22 @@ onMounted(() => {
               <label class="qsl-field">
                 <span class="qsl-field__label">流程状态</span>
                 <div class="qsl-input-shell">
-                  <input v-model.trim="editForm.flowStatus" type="text" placeholder="例如：已发信" />
+                  <input
+                    v-model.trim="editForm.flowStatus"
+                    type="text"
+                    placeholder="例如：已发信"
+                  />
                 </div>
               </label>
 
               <label class="qsl-field">
                 <span class="qsl-field__label">制卡时间</span>
                 <div class="qsl-input-shell">
-                  <input v-model.trim="editForm.cardIssuedAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                  <input
+                    v-model.trim="editForm.cardIssuedAt"
+                    type="text"
+                    placeholder="yyyy-MM-dd HH:mm:ss"
+                  />
                 </div>
               </label>
 
@@ -1333,7 +1926,13 @@ onMounted(() => {
                 <span class="qsl-field__label">制卡邮件状态</span>
                 <div class="qsl-input-shell">
                   <select v-model="editForm.createdMailStatus">
-                    <option v-for="item in mailStatusOptions" :key="`created-${item.value}`" :value="item.value">{{ item.label }}</option>
+                    <option
+                      v-for="item in mailStatusOptions"
+                      :key="`created-${item.value}`"
+                      :value="item.value"
+                    >
+                      {{ item.label }}
+                    </option>
                   </select>
                 </div>
               </label>
@@ -1341,14 +1940,22 @@ onMounted(() => {
               <label class="qsl-field">
                 <span class="qsl-field__label">制卡邮件时间</span>
                 <div class="qsl-input-shell">
-                  <input v-model.trim="editForm.createdMailSentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                  <input
+                    v-model.trim="editForm.createdMailSentAt"
+                    type="text"
+                    placeholder="yyyy-MM-dd HH:mm:ss"
+                  />
                 </div>
               </label>
 
               <label class="qsl-field qsl-field--full">
                 <span class="qsl-field__label">制卡邮件错误</span>
                 <div class="qsl-input-shell qsl-input-shell--textarea">
-                  <textarea v-model.trim="editForm.createdMailLastError" rows="2" placeholder="输入错误信息" />
+                  <textarea
+                    v-model.trim="editForm.createdMailLastError"
+                    rows="2"
+                    placeholder="输入错误信息"
+                  />
                 </div>
               </label>
             </div>
@@ -1364,7 +1971,11 @@ onMounted(() => {
               <label class="qsl-field">
                 <span class="qsl-field__label">发卡时间</span>
                 <div class="qsl-input-shell">
-                  <input v-model.trim="editForm.sentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                  <input
+                    v-model.trim="editForm.sentAt"
+                    type="text"
+                    placeholder="yyyy-MM-dd HH:mm:ss"
+                  />
                 </div>
               </label>
 
@@ -1372,7 +1983,13 @@ onMounted(() => {
                 <span class="qsl-field__label">发卡邮件状态</span>
                 <div class="qsl-input-shell">
                   <select v-model="editForm.sentMailStatus">
-                    <option v-for="item in mailStatusOptions" :key="`sent-${item.value}`" :value="item.value">{{ item.label }}</option>
+                    <option
+                      v-for="item in mailStatusOptions"
+                      :key="`sent-${item.value}`"
+                      :value="item.value"
+                    >
+                      {{ item.label }}
+                    </option>
                   </select>
                 </div>
               </label>
@@ -1380,14 +1997,22 @@ onMounted(() => {
               <label class="qsl-field">
                 <span class="qsl-field__label">发卡邮件时间</span>
                 <div class="qsl-input-shell">
-                  <input v-model.trim="editForm.sentMailSentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                  <input
+                    v-model.trim="editForm.sentMailSentAt"
+                    type="text"
+                    placeholder="yyyy-MM-dd HH:mm:ss"
+                  />
                 </div>
               </label>
 
               <label class="qsl-field qsl-field--full">
                 <span class="qsl-field__label">发卡邮件错误</span>
                 <div class="qsl-input-shell qsl-input-shell--textarea">
-                  <textarea v-model.trim="editForm.sentMailLastError" rows="2" placeholder="输入错误信息" />
+                  <textarea
+                    v-model.trim="editForm.sentMailLastError"
+                    rows="2"
+                    placeholder="输入错误信息"
+                  />
                 </div>
               </label>
             </div>
@@ -1403,7 +2028,11 @@ onMounted(() => {
               <label class="qsl-field">
                 <span class="qsl-field__label">收卡时间</span>
                 <div class="qsl-input-shell">
-                  <input v-model.trim="editForm.receivedAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                  <input
+                    v-model.trim="editForm.receivedAt"
+                    type="text"
+                    placeholder="yyyy-MM-dd HH:mm:ss"
+                  />
                 </div>
               </label>
 
@@ -1411,7 +2040,13 @@ onMounted(() => {
                 <span class="qsl-field__label">收卡邮件状态</span>
                 <div class="qsl-input-shell">
                   <select v-model="editForm.receivedMailStatus">
-                    <option v-for="item in mailStatusOptions" :key="`received-${item.value}`" :value="item.value">{{ item.label }}</option>
+                    <option
+                      v-for="item in mailStatusOptions"
+                      :key="`received-${item.value}`"
+                      :value="item.value"
+                    >
+                      {{ item.label }}
+                    </option>
                   </select>
                 </div>
               </label>
@@ -1419,21 +2054,33 @@ onMounted(() => {
               <label class="qsl-field">
                 <span class="qsl-field__label">收卡邮件时间</span>
                 <div class="qsl-input-shell">
-                  <input v-model.trim="editForm.receivedMailSentAt" type="text" placeholder="yyyy-MM-dd HH:mm:ss" />
+                  <input
+                    v-model.trim="editForm.receivedMailSentAt"
+                    type="text"
+                    placeholder="yyyy-MM-dd HH:mm:ss"
+                  />
                 </div>
               </label>
 
               <label class="qsl-field qsl-field--full">
                 <span class="qsl-field__label">收卡确认备注</span>
                 <div class="qsl-input-shell qsl-input-shell--textarea">
-                  <textarea v-model.trim="editForm.receivedRemarks" rows="2" placeholder="输入收卡确认备注" />
+                  <textarea
+                    v-model.trim="editForm.receivedRemarks"
+                    rows="2"
+                    placeholder="输入收卡确认备注"
+                  />
                 </div>
               </label>
 
               <label class="qsl-field qsl-field--full">
                 <span class="qsl-field__label">收卡邮件错误</span>
                 <div class="qsl-input-shell qsl-input-shell--textarea">
-                  <textarea v-model.trim="editForm.receivedMailLastError" rows="2" placeholder="输入错误信息" />
+                  <textarea
+                    v-model.trim="editForm.receivedMailLastError"
+                    rows="2"
+                    placeholder="输入错误信息"
+                  />
                 </div>
               </label>
             </div>
@@ -1449,7 +2096,11 @@ onMounted(() => {
               <label class="qsl-field qsl-field--full">
                 <span class="qsl-field__label">线下换卡确认备注</span>
                 <div class="qsl-input-shell qsl-input-shell--textarea">
-                  <textarea v-model.trim="editForm.publicReceiptRemarks" rows="2" placeholder="输入线下换卡确认备注" />
+                  <textarea
+                    v-model.trim="editForm.publicReceiptRemarks"
+                    rows="2"
+                    placeholder="输入线下换卡确认备注"
+                  />
                 </div>
               </label>
             </div>
@@ -1457,7 +2108,9 @@ onMounted(() => {
         </template>
 
         <div class="qsl-actions">
-          <VButton type="secondary" :disabled="!isEditing || savingEdit" @click="saveEdit">保存异动</VButton>
+          <VButton type="secondary" :disabled="!isEditing || savingEdit" @click="saveEdit"
+            >保存异动</VButton
+          >
           <VButton :disabled="!isEditing || savingEdit" @click="cancelEdit">取消编辑</VButton>
           <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
         </div>
@@ -1465,7 +2118,9 @@ onMounted(() => {
 
       <template v-else>
         <div class="qsl-actions">
-          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection"
+            >清空选择</VButton
+          >
         </div>
         <QslBatchFieldEditor
           :fields="batchEditFields"
@@ -1484,10 +2139,10 @@ onMounted(() => {
 
     <VCard>
       <QslBusinessRecordHeader
-        title="卡片异动清单"
+        :title="isErrorTab ? '发卡异常清单' : isResendTab ? '卡片重发清单' : '卡片异动清单'"
         :keyword="historyKeywordInput"
         :all-selected="allFilteredSelected"
-        :has-rows="filteredRows.length > 0"
+        :has-rows="currentTableRows.length > 0"
         :sync-enabled="syncHistoryQuery"
         placeholder="按呼号、卡片ID、地址编号筛选"
         @update:keyword="(value) => (historyKeywordInput = value)"
@@ -1496,20 +2151,22 @@ onMounted(() => {
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
 
-      <div class="qsl-form-inline">
+      <div v-if="!isErrorTab && !isResendTab" class="qsl-form-inline">
         <label class="qsl-field qsl-field--inline">
           <span class="qsl-field__label">活动筛选</span>
           <div class="qsl-input-shell">
             <select v-model="activityFilter">
               <option value="">全部活动</option>
-              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">
+                {{ item }}
+              </option>
             </select>
           </div>
         </label>
       </div>
 
       <QslExpandableHistoryTable
-        title="卡片异动清单"
+        :title="isErrorTab ? '发卡异常清单' : isResendTab ? '卡片重发清单' : '卡片异动清单'"
         :rows="pagedRows"
         :columns="historyColumns"
         row-key-field="resourceName"
@@ -1519,7 +2176,9 @@ onMounted(() => {
         :show-toolbar="false"
         :sort-key="sortKey"
         :sort-direction="sortDirection"
-        empty-text="暂无卡片记录。"
+        :empty-text="
+          isErrorTab ? '暂无发卡异常记录。' : isResendTab ? '暂无卡片重发记录。' : '暂无卡片记录。'
+        "
         @update:selected-keys="(value) => (selectedHistoryNames = value)"
         @sort="toggleSort"
       >
@@ -1538,15 +2197,35 @@ onMounted(() => {
         </template>
 
         <template #row-actions="{ row }">
-          <VButton size="xs" type="secondary" @click="startEditRow(toHistoryItem(row))">编辑</VButton>
-          <button
-            type="button"
-            class="qsl-row-delete-button"
-            :disabled="deletingRowName === toHistoryItem(row).resourceName || savingEdit || batchUpdating || loading"
-            @click.stop.prevent="removeRow(toHistoryItem(row))"
-          >
-            删除
-          </button>
+          <span v-if="isResendTab" class="qsl-muted">重发记录</span>
+          <template v-else-if="!isErrorTab">
+            <VButton size="xs" type="secondary" @click="startEditRow(toHistoryItem(row))"
+              >编辑</VButton
+            >
+            <button
+              type="button"
+              class="qsl-row-delete-button"
+              :disabled="
+                deletingRowName === toHistoryItem(row).resourceName ||
+                savingEdit ||
+                batchUpdating ||
+                loading ||
+                mutationActionRunning
+              "
+              @click.stop.prevent="removeRow(toHistoryItem(row))"
+            >
+              删除
+            </button>
+          </template>
+          <template v-else>
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="loading || mutationActionRunning"
+              @click="applyMarkResendAction(toHistoryItem(row))"
+              >标记重发</VButton
+            >
+          </template>
         </template>
 
         <template #detail="{ row }">
@@ -1630,7 +2309,7 @@ onMounted(() => {
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
 
       <QslPaginationBar
-        :total="filteredRows.length"
+        :total="currentTableRows.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
@@ -1654,6 +2333,40 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.qsl-error-action-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.qsl-selected-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.qsl-selected-card strong {
+  color: #111827;
+}
+
+.qsl-error-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+
+.qsl-error-custom-remark {
+  min-width: 260px;
+  flex: 1 1 260px;
 }
 
 .qsl-inline-option-list {
@@ -1706,5 +2419,16 @@ onMounted(() => {
 
 .qsl-row-clickable {
   cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .qsl-error-presets {
+    align-items: stretch;
+  }
+
+  .qsl-error-custom-remark {
+    min-width: 0;
+    flex-basis: 100%;
+  }
 }
 </style>

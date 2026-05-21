@@ -1,6 +1,6 @@
 # QSL 管理插件后端 API 合同
 
-更新时间：2026-05-20
+更新时间：2026-05-21
 适用插件：`qsl-management`
 目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.24 官方文档核验
 API 版本：`v1alpha1`
@@ -12,7 +12,7 @@ API 版本：`v1alpha1`
 
 ## 2. 官方依据
 
-核验日期：2026-05-20
+核验日期：2026-05-21
 
 1. Halo Extension、自定义模型与自动 CRUD
    https://docs.halo.run/developer-guide/plugin/api-reference/server/extension
@@ -40,7 +40,7 @@ API 版本：`v1alpha1`
 2. 自动 CRUD 由 Halo Extension API 与 RBAC 模板控制。
 3. 前台公开 API 聚合到 `anonymous`，允许匿名访问，但叠加限流与输入校验。
 4. 服务端鉴权是安全边界；前端菜单权限仅用于导航与展示。
-5. RBAC `rules.resources` 使用实际资源段，例如 `card-records`、`mail-send-confirms`、`exchange-online/requests`。
+5. RBAC `rules.resources` 使用实际资源段，例如 `card-records`、`card-mutations`、`mail-send-confirms`、`exchange-online/requests`。
 6. 本地卡片打印工具使用汇总权限模板 `qsl-management-card-print-tool`（显示名“卡片打印工具”），通过 `rbac.authorization.halo.run/dependencies` 引用通信地址/本台卡片只读、卡片记录编辑、通联记录只读、地址/卡片局只读权限，便于为个人令牌一次性授权。
 
 ## 5. 扩展资源自动 CRUD
@@ -99,6 +99,9 @@ API 版本：`v1alpha1`
 | POST | `/receipt-confirms/{cardRecordName}/confirm` | 控制台确认对方已签收我方发出的卡片，写入 `CardRecord.spec.receiptConfirmed/publicReceiptRemarks`，不创建 `ReceiveRecord`，不分配收卡编号 | `mail-receive-confirm:edit` |
 | POST | `/mail-receive-confirms/{cardRecordName}/received-date` | 修改卡片收卡日期，并同步更新关联收卡记录日期 | `mail-receive-confirm:edit` |
 | POST | `/mail-receive-confirms/{cardRecordName}/received-record-code/migrate` | 将指定收卡记录从源卡片关联迁移到目标卡片关联 | `mail-receive-confirm:edit` |
+| POST | `/card-mutations/{cardRecordName}/resend` | 卡片重发：清理制卡、打包、发信及相关邮件状态，刷新流程状态，保留收卡事实 | `card-mutation:edit` |
+| POST | `/card-mutations/{cardRecordName}/mark-error` | 发卡异常：将卡片类型标记为 `原类型（ERROR）`，可追加异常备注 | `card-mutation:edit` |
+| POST | `/card-mutations/{cardRecordName}/mark-resend` | 标记重发：解除发卡异常，将卡片类型还原为原类型；前端随后调用卡片重发接口清理状态 | `card-mutation:edit` |
 | POST | `/exchange-requests/{name}/approve` | 换卡申请通过并创建线上换卡卡片 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/reject` | 换卡申请拒绝 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/notify` | 发送线上换卡申请审核结果邮件 | `exchange-request-review:edit` |
@@ -168,6 +171,24 @@ API 版本：`v1alpha1`
 }
 ```
 `cardRecordName` 为源卡片 ID，源卡片与目标卡片都必须是正式 `C{序号}` 卡片记录。服务端会读取指定 `ReceiveRecord`，将 `ReceiveRecord.spec.outboundCardNames` 中的源卡片编号替换为目标卡片编号，并按新的关联结果刷新源卡片与目标卡片的收卡状态和收卡时间。2.0.7 起不再迁移 `CardRecord.spec.receivedRecordCodes` 字段内容。
+
+卡片重发：
+
+无需请求体。`cardRecordName` 必须是正式 `C{序号}` 卡片编号。服务端会将 `cardIssued/cardIssuedAt/envelopePrinted/cardSent/sentAt` 以及制卡、发卡相关邮件状态清空，并按状态机刷新 `status.flowStatus`。`cardReceived/receivedAt` 与 `ReceiveRecord.spec.outboundCardNames` 收卡关联事实保持不变。
+
+发卡异常：
+
+```json
+{
+  "remarks": "打印错版"
+}
+```
+
+`cardRecordName` 必须是正式 `C{序号}` 卡片编号。服务端将当前 `CardRecord.spec.cardType` 追加中文后缀 `（ERROR）`；若已存在 `（ERROR）` 或 `(ERROR)` 后缀，返回 `QSL-422-0001`，避免重复标记。`remarks` 可选，最长 500 字符，填写后追加到 `businessRemarks`。
+
+标记重发：
+
+无需请求体。`cardRecordName` 必须是正式 `C{序号}` 卡片编号，且当前 `CardRecord.spec.cardType` 必须为 `原类型（ERROR）` 或 `原类型(ERROR)`。服务端会移除 ERROR 后缀，还原原始卡片类型。控制台“标记重发”按钮在该接口成功后继续调用 `/card-mutations/{cardRecordName}/resend`，完成制卡、打包、发信及相关邮件状态清理，使记录进入卡片重发清单。
 
 换卡申请拒绝：
 

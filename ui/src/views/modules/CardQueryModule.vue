@@ -7,7 +7,13 @@ import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 import { summarizeCardRemark, type CardRemarkFields } from '../../utils/card-remark'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
-import { applySortDirection, compareBoolean, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  applySortDirection,
+  compareBoolean,
+  compareCallSign,
+  compareText,
+  type QslSortDirection,
+} from '../../utils/qsl-table-sort'
 
 interface CardRecordSpec {
   callSign: string
@@ -111,7 +117,7 @@ const isNoCardId = (value: string) => {
   const normalized = value.trim()
   return normalized.toLowerCase().startsWith('no-card-') || /^NC\d+$/i.test(normalized)
 }
-const displayCardId = (value: string) => isNoCardId(value) ? '' : value
+const displayCardId = (value: string) => (isNoCardId(value) ? '' : value)
 
 const parseResourceNames = (value?: string): string[] => {
   return (value ?? '')
@@ -120,7 +126,9 @@ const parseResourceNames = (value?: string): string[] => {
     .filter(Boolean)
 }
 
-const buildReceiveRecordCodeMap = (extensions: QslExtension<ReceiveRecordSpec>[]): Map<string, string[]> => {
+const buildReceiveRecordCodeMap = (
+  extensions: QslExtension<ReceiveRecordSpec>[],
+): Map<string, string[]> => {
   const grouped = new Map<string, string[]>()
   extensions.forEach((extension) => {
     const receiveRecordCode = extension.metadata.name.trim().toUpperCase()
@@ -139,7 +147,12 @@ const isReceivedFlowStatus = (status?: Partial<CardRecordStatus>): boolean => {
 
 const normalizeSceneType = (sceneType?: string, cardType?: string): CardQueryItem['sceneType'] => {
   const upperScene = (sceneType ?? '').trim().toUpperCase()
-  if (upperScene === 'QSO' || upperScene === 'SWL' || upperScene === 'ONLINE_EYEBALL' || upperScene === 'EYEBALL') {
+  if (
+    upperScene === 'QSO' ||
+    upperScene === 'SWL' ||
+    upperScene === 'ONLINE_EYEBALL' ||
+    upperScene === 'EYEBALL'
+  ) {
     return upperScene
   }
   const upperCardType = (cardType ?? '').trim().toUpperCase()
@@ -152,8 +165,12 @@ const normalizeSceneType = (sceneType?: string, cardType?: string): CardQueryIte
   return 'QSO'
 }
 
-const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>, receiveRecordCodeMap: Map<string, string[]>): CardQueryItem => {
-  const receiveRecordCodes = receiveRecordCodeMap.get(extension.metadata.name.trim().toUpperCase()) ?? []
+const toRow = (
+  extension: QslExtension<CardRecordSpec, CardRecordStatus>,
+  receiveRecordCodeMap: Map<string, string[]>,
+): CardQueryItem => {
+  const receiveRecordCodes =
+    receiveRecordCodeMap.get(extension.metadata.name.trim().toUpperCase()) ?? []
   return {
     id: extension.metadata.name,
     callSign: extension.spec?.callSign ?? '',
@@ -205,21 +222,34 @@ const loadRows = async () => {
 const filteredRows = computed(() => {
   return rows.value.filter((item) => {
     const sceneOk =
-      activeSceneTab.value === 'ALL'
-      || (activeSceneTab.value === 'QSO' && (item.sceneType === 'QSO' || item.sceneType === 'SWL'))
-      || item.sceneType === activeSceneTab.value
+      activeSceneTab.value === 'ALL' ||
+      (activeSceneTab.value === 'QSO' && (item.sceneType === 'QSO' || item.sceneType === 'SWL')) ||
+      item.sceneType === activeSceneTab.value
     const keyword = normalize(filters.keyword)
     const callSign = normalize(filters.callSign)
 
     const keywordOk =
       !keyword ||
-      [item.id, item.callSign, item.cardType, item.offlineActivityName, item.cardVersion, item.cardDate, item.cardTime, item.receiveRecordCodes, item.remarksText]
+      [
+        item.id,
+        item.callSign,
+        item.cardType,
+        item.offlineActivityName,
+        item.cardVersion,
+        item.cardDate,
+        item.cardTime,
+        item.receiveRecordCodes,
+        item.remarksText,
+      ]
         .join(' ')
         .toUpperCase()
         .includes(keyword)
     const callSignOk = !callSign || item.callSign.toUpperCase().includes(callSign)
     const typeOk = !filters.cardType || item.cardType === filters.cardType
-    const activityOk = !showActivityFilter.value || !filters.activityName || item.offlineActivityName === filters.activityName
+    const activityOk =
+      !showActivityFilter.value ||
+      !filters.activityName ||
+      item.offlineActivityName === filters.activityName
     const fromOk = !filters.dateFrom || (item.cardDate && item.cardDate >= filters.dateFrom)
     const toOk = !filters.dateTo || (item.cardDate && item.cardDate <= filters.dateTo)
     const remarksOk = !filters.onlyWithRemarks || Boolean(item.remarksText.trim())
@@ -259,15 +289,43 @@ const filteredRows = computed(() => {
       quickOk = item.cardReceived
     }
 
-    return sceneOk && keywordOk && callSignOk && typeOk && activityOk && fromOk && toOk && remarksOk && sentOk && signOk && receiveOk && quickOk
+    return (
+      sceneOk &&
+      keywordOk &&
+      callSignOk &&
+      typeOk &&
+      activityOk &&
+      fromOk &&
+      toOk &&
+      remarksOk &&
+      sentOk &&
+      signOk &&
+      receiveOk &&
+      quickOk
+    )
   })
 })
 
-const showActivityColumn = computed(() => activeSceneTab.value === 'ALL' || activeSceneTab.value === 'EYEBALL')
-const showActivityFilter = computed(() => activeSceneTab.value === 'ALL' || activeSceneTab.value === 'EYEBALL')
-const showReceivedColumn = computed(() => activeSceneTab.value === 'ALL' || activeSceneTab.value === 'QSO' || activeSceneTab.value === 'ONLINE_EYEBALL')
+const showActivityColumn = computed(
+  () => activeSceneTab.value === 'ALL' || activeSceneTab.value === 'EYEBALL',
+)
+const showActivityFilter = computed(
+  () => activeSceneTab.value === 'ALL' || activeSceneTab.value === 'EYEBALL',
+)
+const showReceivedColumn = computed(
+  () =>
+    activeSceneTab.value === 'ALL' ||
+    activeSceneTab.value === 'QSO' ||
+    activeSceneTab.value === 'ONLINE_EYEBALL',
+)
 const showPackColumn = computed(() => activeSceneTab.value !== 'EYEBALL')
-const tableColumnCount = computed(() => 9 + (showActivityColumn.value ? 1 : 0) + (showPackColumn.value ? 1 : 0) + (showReceivedColumn.value ? 2 : 0))
+const tableColumnCount = computed(
+  () =>
+    9 +
+    (showActivityColumn.value ? 1 : 0) +
+    (showPackColumn.value ? 1 : 0) +
+    (showReceivedColumn.value ? 2 : 0),
+)
 
 const activityFilterOptions = computed(() => {
   const activitySet = new Set<string>()
@@ -288,7 +346,10 @@ const sortedRows = computed(() => {
         result = compareCallSign(left.callSign, right.callSign)
         break
       case 'datetime':
-        result = compareText(`${left.cardDate} ${left.cardTime}`, `${right.cardDate} ${right.cardTime}`)
+        result = compareText(
+          `${left.cardDate} ${left.cardTime}`,
+          `${right.cardDate} ${right.cardTime}`,
+        )
         break
       case 'cardIssued':
       case 'envelopePrinted':
@@ -482,33 +543,37 @@ onMounted(loadRows)
 
       <QslQueryToolbar>
         <template #left>
-            <div class="qsl-input-shell qsl-filter-toolbar__search">
-              <input
-                v-model.trim="keywordInput"
-                type="text"
-                placeholder="输入关键词搜索"
-                @keyup.enter="applyKeywordSearch"
-              />
-            </div>
-            <VButton type="secondary" :disabled="loading" @click="applyKeywordSearch">搜索</VButton>
+          <div class="qsl-input-shell qsl-filter-toolbar__search">
+            <input
+              v-model.trim="keywordInput"
+              type="text"
+              placeholder="输入关键词搜索"
+              @keyup.enter="applyKeywordSearch"
+            />
+          </div>
+          <VButton type="secondary" :disabled="loading" @click="applyKeywordSearch">搜索</VButton>
         </template>
 
         <template #right>
-            <label class="qsl-filter-inline">
-              <span>签收视图：</span>
-              <select v-model="quickReceipt">
-                <option v-for="option in quickReceiptOptions" :key="option" :value="option">
-                  {{ option }}
-                </option>
-              </select>
-            </label>
+          <label class="qsl-filter-inline">
+            <span>签收视图：</span>
+            <select v-model="quickReceipt">
+              <option v-for="option in quickReceiptOptions" :key="option" :value="option">
+                {{ option }}
+              </option>
+            </select>
+          </label>
 
-            <button type="button" class="qsl-filter-link" @click="showAdvancedFilters = !showAdvancedFilters">
-              {{ showAdvancedFilters ? '收起筛选' : '高级筛选' }}
-            </button>
+          <button
+            type="button"
+            class="qsl-filter-link"
+            @click="showAdvancedFilters = !showAdvancedFilters"
+          >
+            {{ showAdvancedFilters ? '收起筛选' : '高级筛选' }}
+          </button>
 
-            <VButton :disabled="loading" @click="resetFilters">重置</VButton>
-            <VButton :disabled="loading" @click="loadRows">刷新</VButton>
+          <VButton :disabled="loading" @click="resetFilters">重置</VButton>
+          <VButton :disabled="loading" @click="loadRows">刷新</VButton>
         </template>
       </QslQueryToolbar>
 
@@ -608,19 +673,123 @@ onMounted(loadRows)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="id" label="卡片ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardType" label="类型" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th v-if="showActivityColumn"><QslSortableHeader column-key="offlineActivityName" label="活动" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardVersion" label="版本" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="datetime" label="日期时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardIssued" label="制卡" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th v-if="showPackColumn"><QslSortableHeader column-key="envelopePrinted" label="打包" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardSent" label="已发" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="receiptConfirmed" label="签收" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th v-if="showReceivedColumn"><QslSortableHeader column-key="cardReceived" label="已收" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th v-if="showReceivedColumn"><QslSortableHeader column-key="receiveRecordCodes" label="收卡编号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="remarksText" label="备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="id"
+                  label="卡片ID"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="呼号"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardType"
+                  label="类型"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th v-if="showActivityColumn">
+                <QslSortableHeader
+                  column-key="offlineActivityName"
+                  label="活动"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardVersion"
+                  label="版本"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="datetime"
+                  label="日期时间"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardIssued"
+                  label="制卡"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th v-if="showPackColumn">
+                <QslSortableHeader
+                  column-key="envelopePrinted"
+                  label="打包"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardSent"
+                  label="已发"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="receiptConfirmed"
+                  label="签收"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th v-if="showReceivedColumn">
+                <QslSortableHeader
+                  column-key="cardReceived"
+                  label="已收"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th v-if="showReceivedColumn">
+                <QslSortableHeader
+                  column-key="receiveRecordCodes"
+                  label="收卡编号"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="remarksText"
+                  label="备注"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -641,7 +810,9 @@ onMounted(loadRows)
                 <td>{{ item.cardVersion || '-' }}</td>
                 <td>{{ item.cardDate }} {{ item.cardTime }}</td>
                 <td>
-                  <VTag :theme="item.cardIssued ? 'secondary' : 'default'">{{ item.cardIssued ? '是' : '否' }}</VTag>
+                  <VTag :theme="item.cardIssued ? 'secondary' : 'default'">{{
+                    item.cardIssued ? '是' : '否'
+                  }}</VTag>
                 </td>
                 <td v-if="showPackColumn">
                   <VTag :theme="item.envelopePrinted ? 'secondary' : 'default'">{{
@@ -649,7 +820,9 @@ onMounted(loadRows)
                   }}</VTag>
                 </td>
                 <td>
-                  <VTag :theme="item.cardSent ? 'secondary' : 'default'">{{ item.cardSent ? '是' : '否' }}</VTag>
+                  <VTag :theme="item.cardSent ? 'secondary' : 'default'">{{
+                    item.cardSent ? '是' : '否'
+                  }}</VTag>
                 </td>
                 <td>
                   <VTag :theme="item.receiptConfirmed ? 'secondary' : 'default'">{{
@@ -657,7 +830,9 @@ onMounted(loadRows)
                   }}</VTag>
                 </td>
                 <td v-if="showReceivedColumn">
-                  <VTag :theme="item.cardReceived ? 'secondary' : 'default'">{{ item.cardReceived ? '是' : '否' }}</VTag>
+                  <VTag :theme="item.cardReceived ? 'secondary' : 'default'">{{
+                    item.cardReceived ? '是' : '否'
+                  }}</VTag>
                 </td>
                 <td v-if="showReceivedColumn">{{ item.receiveRecordCodes || '-' }}</td>
                 <td>
@@ -670,7 +845,9 @@ onMounted(loadRows)
                     <p><strong>卡片ID：</strong>{{ displayCardId(item.id) }}</p>
                     <p><strong>呼号：</strong>{{ item.callSign || '-' }}</p>
                     <p><strong>卡片类型：</strong>{{ item.cardType }}</p>
-                    <p v-if="showActivityColumn"><strong>关联活动：</strong>{{ item.offlineActivityName || '-' }}</p>
+                    <p v-if="showActivityColumn">
+                      <strong>关联活动：</strong>{{ item.offlineActivityName || '-' }}
+                    </p>
                     <p><strong>卡片版本：</strong>{{ item.cardVersion || '-' }}</p>
                     <p><strong>卡片日期：</strong>{{ item.cardDate || '-' }}</p>
                     <p><strong>卡片时间：</strong>{{ item.cardTime || '-' }}</p>

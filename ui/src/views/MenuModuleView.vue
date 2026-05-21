@@ -216,7 +216,6 @@ const renderer = computed<ModuleRenderer>(() => {
       }
   }
 })
-
 </script>
 
 <template>

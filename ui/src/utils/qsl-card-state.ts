@@ -19,7 +19,10 @@ const flowStatusOrder: Record<string, number> = {
   已收卡片: 5,
 }
 
-export const resolveCardFlowStatus = (spec?: QslCardStateSpec, hasLinkedReceiveRecord = false): string => {
+export const resolveCardFlowStatus = (
+  spec?: QslCardStateSpec,
+  hasLinkedReceiveRecord = false,
+): string => {
   if (hasLinkedReceiveRecord || spec?.cardReceived) {
     return '已收卡片'
   }

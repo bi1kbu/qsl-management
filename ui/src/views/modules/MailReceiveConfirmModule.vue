@@ -9,12 +9,23 @@ import {
   type MailReceiveConfirmResult,
   updateMailReceiveDate,
 } from '../../api/qsl-console-api'
-import { deleteExtension, listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
+import {
+  deleteExtension,
+  listExtensions,
+  qslApiVersion,
+  updateExtension,
+  type QslExtension,
+} from '../../api/qsl-extension-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
-import { compareBoolean, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  compareBoolean,
+  compareCallSign,
+  compareText,
+  type QslSortDirection,
+} from '../../utils/qsl-table-sort'
 
 interface CardRecordSpec {
   callSign: string
@@ -154,17 +165,17 @@ const normalizeSceneType = (sceneType?: string, cardType?: string): SceneType =>
 }
 
 const normalizedSceneTypes = computed<SceneType[]>(() => {
-  const deduplicated = Array.from(
-    new Set(props.sceneTypes.map((item) => normalizeSceneType(item))),
-  )
+  const deduplicated = Array.from(new Set(props.sceneTypes.map((item) => normalizeSceneType(item))))
   return deduplicated.length ? deduplicated : ['QSO']
 })
 const shouldLoadOfflineActivities = computed(() => {
   return normalizedSceneTypes.value.includes('EYEBALL')
 })
 const showOfflineActivity = computed(() => {
-  return normalizedSceneTypes.value.includes('EYEBALL')
-    && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  return (
+    normalizedSceneTypes.value.includes('EYEBALL') &&
+    !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  )
 })
 const rememberedReceiveDateKey = computed(() => {
   return `qsl:mail-receive:received-date:${normalizedSceneTypes.value.join('-')}:${props.defaultCardType}`
@@ -288,8 +299,8 @@ const availableCardTypes = computed<CardRecordSpec['cardType'][]>(() => {
     options.push('SWL')
   }
   if (
-    normalizedSceneTypes.value.includes('EYEBALL')
-    || normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+    normalizedSceneTypes.value.includes('EYEBALL') ||
+    normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
   ) {
     options.push('EYEBALL')
   }
@@ -297,10 +308,15 @@ const availableCardTypes = computed<CardRecordSpec['cardType'][]>(() => {
 })
 
 const filteredResults = computed(() => {
-  const actionableResults = results.value.filter((item) => !isCardReceivedForDisplay(item) || item.spec.receivedMailStatus !== 'SENT')
-  const filteredByActivity = showOfflineActivity.value && selectedOfflineActivity.value
-    ? actionableResults.filter((item) => (item.spec.offlineActivityName || '') === selectedOfflineActivity.value)
-    : actionableResults
+  const actionableResults = results.value.filter(
+    (item) => !isCardReceivedForDisplay(item) || item.spec.receivedMailStatus !== 'SENT',
+  )
+  const filteredByActivity =
+    showOfflineActivity.value && selectedOfflineActivity.value
+      ? actionableResults.filter(
+          (item) => (item.spec.offlineActivityName || '') === selectedOfflineActivity.value,
+        )
+      : actionableResults
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
     return filteredByActivity
@@ -309,17 +325,21 @@ const filteredResults = computed(() => {
     return (
       item.callSign.toUpperCase().includes(keyword) ||
       item.resourceName.toUpperCase().includes(keyword) ||
-      item.cardType.toUpperCase().includes(keyword)
-      || (showOfflineActivity.value && (item.spec.offlineActivityName || '').toUpperCase().includes(keyword))
+      item.cardType.toUpperCase().includes(keyword) ||
+      (showOfflineActivity.value &&
+        (item.spec.offlineActivityName || '').toUpperCase().includes(keyword))
     )
   })
 })
 
 const filteredReceivedResults = computed(() => {
   const receivedResults = receiveRecords.value.filter((item) => isReceiveRecordInCurrentScene(item))
-  const filteredByActivity = showOfflineActivity.value && selectedOfflineActivity.value
-    ? receivedResults.filter((item) => (item.offlineActivityName || '') === selectedOfflineActivity.value)
-    : receivedResults
+  const filteredByActivity =
+    showOfflineActivity.value && selectedOfflineActivity.value
+      ? receivedResults.filter(
+          (item) => (item.offlineActivityName || '') === selectedOfflineActivity.value,
+        )
+      : receivedResults
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
     return filteredByActivity
@@ -332,15 +352,19 @@ const filteredReceivedResults = computed(() => {
       item.cardType.toUpperCase().includes(keyword) ||
       item.matchStatus.toUpperCase().includes(keyword) ||
       item.remarks.toUpperCase().includes(keyword) ||
-      (showOfflineActivity.value && (item.offlineActivityName || '').toUpperCase().includes(keyword))
+      (showOfflineActivity.value &&
+        (item.offlineActivityName || '').toUpperCase().includes(keyword))
     )
   })
 })
 
 const filteredBatchResults = computed(() => {
-  const filteredByActivity = showOfflineActivity.value && selectedOfflineActivity.value
-    ? results.value.filter((item) => (item.spec.offlineActivityName || '') === selectedOfflineActivity.value)
-    : results.value
+  const filteredByActivity =
+    showOfflineActivity.value && selectedOfflineActivity.value
+      ? results.value.filter(
+          (item) => (item.spec.offlineActivityName || '') === selectedOfflineActivity.value,
+        )
+      : results.value
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
     return filteredByActivity
@@ -353,7 +377,8 @@ const filteredBatchResults = computed(() => {
       formatReceiveRecordCodesForCard(item).toUpperCase().includes(keyword) ||
       item.spec.receivedRemarks.toUpperCase().includes(keyword) ||
       item.spec.publicReceiptRemarks.toUpperCase().includes(keyword) ||
-      (showOfflineActivity.value && (item.spec.offlineActivityName || '').toUpperCase().includes(keyword))
+      (showOfflineActivity.value &&
+        (item.spec.offlineActivityName || '').toUpperCase().includes(keyword))
     )
   })
 })
@@ -364,7 +389,9 @@ const activeHistoryResults = computed(() => {
 const sortedActiveHistoryResults = computed(() => {
   const items = [...activeHistoryResults.value]
   const direction = receiveSortDirection.value === 'asc' ? 1 : -1
-  return items.sort((left, right) => compareReceiveRows(left, right, receiveSortKey.value) * direction)
+  return items.sort(
+    (left, right) => compareReceiveRows(left, right, receiveSortKey.value) * direction,
+  )
 })
 
 const offlineActivityOptions = computed(() => {
@@ -382,7 +409,9 @@ const allFilteredSelected = computed(() => {
   if (!activeHistoryResults.value.length) {
     return false
   }
-  return activeHistoryResults.value.every((item) => selectedHistoryNames.value.includes(item.resourceName))
+  return activeHistoryResults.value.every((item) =>
+    selectedHistoryNames.value.includes(item.resourceName),
+  )
 })
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
@@ -454,7 +483,11 @@ const isReceivedFlowStatus = (status?: Partial<CardRecordStatus>): boolean => {
   return (status?.flowStatus ?? '').trim() === '已收卡片'
 }
 
-const compareReceiveRows = (left: ReceiveResult, right: ReceiveResult, key: ReceiveSortKey): number => {
+const compareReceiveRows = (
+  left: ReceiveResult,
+  right: ReceiveResult,
+  key: ReceiveSortKey,
+): number => {
   switch (key) {
     case 'resourceName':
       return compareText(left.resourceName, right.resourceName)
@@ -469,7 +502,10 @@ const compareReceiveRows = (left: ReceiveResult, right: ReceiveResult, key: Rece
     case 'offlineActivityName':
       return compareText(left.spec.offlineActivityName || '', right.spec.offlineActivityName || '')
     case 'receiveRecordCodes':
-      return compareText(formatReceiveRecordCodesForCard(left), formatReceiveRecordCodesForCard(right))
+      return compareText(
+        formatReceiveRecordCodesForCard(left),
+        formatReceiveRecordCodesForCard(right),
+      )
     case 'receivedRemarks':
       return compareText(resolveReceiveRemarkText(left), resolveReceiveRemarkText(right))
     default:
@@ -506,7 +542,9 @@ const compareReceiveRecordRows = (
 const sortedReceivedResults = computed(() => {
   const items = [...filteredReceivedResults.value]
   const direction = receiveSortDirection.value === 'asc' ? 1 : -1
-  return items.sort((left, right) => compareReceiveRecordRows(left, right, receiveSortKey.value) * direction)
+  return items.sort(
+    (left, right) => compareReceiveRecordRows(left, right, receiveSortKey.value) * direction,
+  )
 })
 
 const toggleReceiveSort = (key: ReceiveSortKey) => {
@@ -570,14 +608,14 @@ watch(
   { immediate: true },
 )
 
-watch(
-  offlineActivityOptions,
-  (options) => {
-    if (selectedOfflineActivity.value && !options.some((item) => item.resourceName === selectedOfflineActivity.value)) {
-      selectedOfflineActivity.value = ''
-    }
-  },
-)
+watch(offlineActivityOptions, (options) => {
+  if (
+    selectedOfflineActivity.value &&
+    !options.some((item) => item.resourceName === selectedOfflineActivity.value)
+  ) {
+    selectedOfflineActivity.value = ''
+  }
+})
 
 const applyHistorySearch = () => {
   historyKeyword.value = historyKeywordInput.value.trim().toUpperCase()
@@ -671,7 +709,9 @@ const isCardReceivedForDisplay = (item: ReceiveResult): boolean => {
 }
 
 const formatReceiveRecordCodesForCard = (item: ReceiveResult): string => {
-  const codes = linkedReceiveRecordsForCard(item).map((record) => record.receiveRecordCode.toUpperCase())
+  const codes = linkedReceiveRecordsForCard(item).map((record) =>
+    record.receiveRecordCode.toUpperCase(),
+  )
   return codes.length ? codes.join(', ') : '-'
 }
 
@@ -679,7 +719,9 @@ const resolveReceiveRemarkText = (item: ReceiveResult): string => {
   const remarks = [
     item.spec.receivedRemarks?.trim() ?? '',
     item.spec.publicReceiptRemarks?.trim() ?? '',
-    ...linkedReceiveRecordsForCard(item).map((record) => record.remarks.trim()).filter(Boolean),
+    ...linkedReceiveRecordsForCard(item)
+      .map((record) => record.remarks.trim())
+      .filter(Boolean),
   ].filter(Boolean)
   return remarks.length ? remarks.join('\n') : '-'
 }
@@ -818,7 +860,9 @@ const resolveCardFlowStatus = (spec: CardRecordSpec): string => {
   return ''
 }
 
-const toReceiveResult = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): ReceiveResult => {
+const toReceiveResult = (
+  extension: QslExtension<CardRecordSpec, CardRecordStatus>,
+): ReceiveResult => {
   const spec = normalizeCardRecordSpec(extension.spec)
   const status = extension.status ?? { flowStatus: '' }
   const cardType = spec.cardType
@@ -847,7 +891,9 @@ const toReceiveResult = (extension: QslExtension<CardRecordSpec, CardRecordStatu
   }
 }
 
-const toReceivedRecordResult = (extension: QslExtension<ReceiveRecordSpec>): ReceivedRecordResult => {
+const toReceivedRecordResult = (
+  extension: QslExtension<ReceiveRecordSpec>,
+): ReceivedRecordResult => {
   const spec = extension.spec
   return {
     receiveRecordCode: extension.metadata.name,
@@ -874,9 +920,17 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
     ])
     results.value = extensions
       .map((extension) => toReceiveResult(extension))
-      .filter((item) => normalizedSceneTypes.value.includes(normalizeSceneType(item.spec.sceneType, item.spec.cardType)))
+      .filter((item) =>
+        normalizedSceneTypes.value.includes(
+          normalizeSceneType(item.spec.sceneType, item.spec.cardType),
+        ),
+      )
       .filter((item) => isFormalCardRecordName(item.resourceName))
-      .filter((item) => item.callSign.trim() || normalizeSceneType(item.spec.sceneType, item.spec.cardType) !== 'EYEBALL')
+      .filter(
+        (item) =>
+          item.callSign.trim() ||
+          normalizeSceneType(item.spec.sceneType, item.spec.cardType) !== 'EYEBALL',
+      )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     receiveRecords.value = receiveExtensions
       .map((extension) => toReceivedRecordResult(extension))
@@ -902,10 +956,12 @@ const loadOfflineActivities = async () => {
   }
   try {
     const extensions = await listExtensions<OfflineActivitySpec>(offlineActivityPlural)
-    offlineActivities.value = extensions.map((item) => ({
-      resourceName: item.metadata.name,
-      activityName: item.spec?.activityName ?? '',
-    })).filter((item) => item.resourceName.trim())
+    offlineActivities.value = extensions
+      .map((item) => ({
+        resourceName: item.metadata.name,
+        activityName: item.spec?.activityName ?? '',
+      }))
+      .filter((item) => item.resourceName.trim())
   } catch {
     offlineActivities.value = []
   }
@@ -962,14 +1018,20 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
   if (!receivedDate) {
     return
   }
-  const offlineActivityName = showOfflineActivity.value ? selectedOfflineActivity.value.trim() : item.spec.offlineActivityName
+  const offlineActivityName = showOfflineActivity.value
+    ? selectedOfflineActivity.value.trim()
+    : item.spec.offlineActivityName
   if (showOfflineActivity.value && !offlineActivityName) {
     window.alert('请选择收卡归属活动。')
     feedback.value = '请选择收卡归属活动。'
     return
   }
   const itemOfflineActivityName = item.spec.offlineActivityName.trim()
-  if (showOfflineActivity.value && itemOfflineActivityName && itemOfflineActivityName !== offlineActivityName) {
+  if (
+    showOfflineActivity.value &&
+    itemOfflineActivityName &&
+    itemOfflineActivityName !== offlineActivityName
+  ) {
     feedback.value = '所选收卡归属活动与当前记录关联活动不一致。'
     return
   }
@@ -1029,7 +1091,9 @@ const toggleHistorySelection = (resourceName: string) => {
 const toggleAllFilteredHistorySelection = () => {
   if (allFilteredSelected.value) {
     const filteredNameSet = new Set(activeHistoryResults.value.map((item) => item.resourceName))
-    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !filteredNameSet.has(name))
+    selectedHistoryNames.value = selectedHistoryNames.value.filter(
+      (name) => !filteredNameSet.has(name),
+    )
     return
   }
 
@@ -1174,7 +1238,9 @@ const applyHistoryBatchEdit = async () => {
 
   batchUpdating.value = true
   try {
-    const targets = results.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
+    const targets = results.value.filter((item) =>
+      selectedHistoryNames.value.includes(item.resourceName),
+    )
 
     if (batchEditField.value === 'receivedDate') {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(nextValue)) {
@@ -1205,9 +1271,13 @@ const applyHistoryBatchEdit = async () => {
           ? (nextValue as CardRecordSpec['cardType'])
           : item.spec.cardType
       const nextReceived =
-        batchEditField.value === 'cardReceivedState' ? nextValue === 'RECEIVED' : isCardReceivedForDisplay(item)
+        batchEditField.value === 'cardReceivedState'
+          ? nextValue === 'RECEIVED'
+          : isCardReceivedForDisplay(item)
       const nextConfirmed =
-        batchEditField.value === 'receiptConfirmedState' ? nextValue === 'CONFIRMED' : item.spec.receiptConfirmed
+        batchEditField.value === 'receiptConfirmedState'
+          ? nextValue === 'CONFIRMED'
+          : item.spec.receiptConfirmed
 
       const nextSpec: CardRecordSpec = {
         ...item.spec,
@@ -1215,7 +1285,8 @@ const applyHistoryBatchEdit = async () => {
         sceneType: resolveSceneTypeByCardType(nextCardType),
         cardReceived: nextReceived,
         receiptConfirmed: nextConfirmed,
-        receivedRemarks: batchEditField.value === 'receiptRemarks' ? nextValue : item.spec.receivedRemarks,
+        receivedRemarks:
+          batchEditField.value === 'receiptRemarks' ? nextValue : item.spec.receivedRemarks,
         receivedAt: nextReceived ? item.spec.receivedAt || nowText() : '',
       }
       applyStateCleanup(nextSpec)
@@ -1240,7 +1311,8 @@ const applyHistoryBatchEdit = async () => {
       resourceType: 'card-record',
       resourceName: `count=${targets.length}`,
       detail: `批量修改字段：${
-        batchEditFields.find((item) => item.value === batchEditField.value)?.label ?? batchEditField.value
+        batchEditFields.find((item) => item.value === batchEditField.value)?.label ??
+        batchEditField.value
       }，值：${nextValue}`,
     })
 
@@ -1371,9 +1443,15 @@ const batchSendReceivedMail = async () => {
 
   batchSendingReceivedMail.value = true
   try {
-    const selectedRows = results.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
+    const selectedRows = results.value.filter((item) =>
+      selectedHistoryNames.value.includes(item.resourceName),
+    )
     const eligibleNames = selectedRows
-      .filter((item) => isCardReceivedForDisplay(item) && ['PENDING', 'FAILED'].includes(item.spec.receivedMailStatus || ''))
+      .filter(
+        (item) =>
+          isCardReceivedForDisplay(item) &&
+          ['PENDING', 'FAILED'].includes(item.spec.receivedMailStatus || ''),
+      )
       .map((item) => item.resourceName)
 
     if (!eligibleNames.length) {
@@ -1433,7 +1511,9 @@ onMounted(() => {
               <select v-model="form.cardType">
                 <option v-if="availableCardTypes.includes('QSO')" value="QSO">QSO</option>
                 <option v-if="availableCardTypes.includes('SWL')" value="SWL">SWL</option>
-                <option v-if="availableCardTypes.includes('EYEBALL')" value="EYEBALL">EYEBALL</option>
+                <option v-if="availableCardTypes.includes('EYEBALL')" value="EYEBALL">
+                  EYEBALL
+                </option>
               </select>
             </div>
           </label>
@@ -1450,7 +1530,11 @@ onMounted(() => {
             <div class="qsl-input-shell">
               <select v-model="selectedOfflineActivity">
                 <option value="">请选择活动</option>
-                <option v-for="item in offlineActivityOptions" :key="item.resourceName" :value="item.resourceName">
+                <option
+                  v-for="item in offlineActivityOptions"
+                  :key="item.resourceName"
+                  :value="item.resourceName"
+                >
                   {{ item.activityName || item.resourceName }}
                 </option>
               </select>
@@ -1484,7 +1568,9 @@ onMounted(() => {
 
       <template v-else-if="isBatchTab">
         <div class="qsl-actions">
-          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection"
+            >清空选择</VButton
+          >
         </div>
         <QslBatchFieldEditor
           :fields="batchEditFields"
@@ -1540,7 +1626,11 @@ onMounted(() => {
             <label class="qsl-field qsl-field--full">
               <span class="qsl-field__label">签收备注</span>
               <div class="qsl-input-shell qsl-input-shell--textarea">
-                <textarea v-model="singleEditForm.receivedRemarks" rows="2" placeholder="输入备注" />
+                <textarea
+                  v-model="singleEditForm.receivedRemarks"
+                  rows="2"
+                  placeholder="输入备注"
+                />
               </div>
             </label>
           </div>
@@ -1559,7 +1649,9 @@ onMounted(() => {
             >
               删除本条记录
             </VButton>
-            <VButton :disabled="savingSingleEdit || deletingSingleEdit" @click="cancelSingleEdit">取消编辑</VButton>
+            <VButton :disabled="savingSingleEdit || deletingSingleEdit" @click="cancelSingleEdit"
+              >取消编辑</VButton
+            >
           </div>
         </div>
       </template>
@@ -1586,22 +1678,58 @@ onMounted(() => {
           <thead>
             <tr>
               <th>
-                <QslSortableHeader column-key="receiveRecordCode" label="收卡编号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="receiveRecordCode"
+                  label="收卡编号"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>
-                <QslSortableHeader column-key="outboundCardNames" label="关联发卡编号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="outboundCardNames"
+                  label="关联发卡编号"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>
-                <QslSortableHeader column-key="callSign" label="对方呼号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="对方呼号"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>
-                <QslSortableHeader column-key="cardType" label="卡片类型" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="cardType"
+                  label="卡片类型"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th v-if="showOfflineActivity">
-                <QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="offlineActivityName"
+                  label="关联活动"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>
-                <QslSortableHeader column-key="matchStatus" label="匹配状态" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="matchStatus"
+                  label="匹配状态"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>收卡日期</th>
               <th>收卡确认备注</th>
@@ -1654,7 +1782,9 @@ onMounted(() => {
       />
 
       <div class="qsl-actions">
-        <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+        <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection"
+          >清空选择</VButton
+        >
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
       </div>
 
@@ -1664,28 +1794,76 @@ onMounted(() => {
             <tr>
               <th>选择</th>
               <th>
-                <QslSortableHeader column-key="resourceName" label="卡片ID" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="resourceName"
+                  label="卡片ID"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>
-                <QslSortableHeader column-key="callSign" label="对方呼号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="对方呼号"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>
-                <QslSortableHeader column-key="cardType" label="卡片类型" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="cardType"
+                  label="卡片类型"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>
-                <QslSortableHeader column-key="cardReceived" label="收卡状态" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="cardReceived"
+                  label="收卡状态"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>
-                <QslSortableHeader column-key="cardSent" label="发卡状态" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="cardSent"
+                  label="发卡状态"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th v-if="showOfflineActivity">
-                <QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="offlineActivityName"
+                  label="关联活动"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>
-                <QslSortableHeader column-key="receiveRecordCodes" label="收卡编号" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="receiveRecordCodes"
+                  label="收卡编号"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>
-                <QslSortableHeader column-key="receivedRemarks" label="收卡确认备注" :sort-key="receiveSortKey" :sort-direction="receiveSortDirection" @sort="toggleReceiveSort($event as ReceiveSortKey)" />
+                <QslSortableHeader
+                  column-key="receivedRemarks"
+                  label="收卡确认备注"
+                  :sort-key="receiveSortKey"
+                  :sort-direction="receiveSortDirection"
+                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
+                />
               </th>
               <th>操作</th>
             </tr>
@@ -1703,13 +1881,19 @@ onMounted(() => {
                 </label>
               </td>
               <td>{{ item.resourceName }}</td>
-              <td class="qsl-row-clickable" @click="selectRowForQuery(item)">{{ item.callSign || '-' }}</td>
+              <td class="qsl-row-clickable" @click="selectRowForQuery(item)">
+                {{ item.callSign || '-' }}
+              </td>
               <td>{{ item.cardType }}</td>
               <td>
-                <VTag :theme="isCardReceivedForDisplay(item) ? 'secondary' : 'default'">{{ isCardReceivedForDisplay(item) ? '是' : '否' }}</VTag>
+                <VTag :theme="isCardReceivedForDisplay(item) ? 'secondary' : 'default'">{{
+                  isCardReceivedForDisplay(item) ? '是' : '否'
+                }}</VTag>
               </td>
               <td>
-                <VTag :theme="item.spec.cardSent ? 'secondary' : 'default'">{{ item.spec.cardSent ? '是' : '否' }}</VTag>
+                <VTag :theme="item.spec.cardSent ? 'secondary' : 'default'">{{
+                  item.spec.cardSent ? '是' : '否'
+                }}</VTag>
               </td>
               <td v-if="showOfflineActivity">{{ item.spec.offlineActivityName || '-' }}</td>
               <td>{{ formatReceiveRecordCodesForCard(item) }}</td>
@@ -1757,7 +1941,8 @@ onMounted(() => {
                       pendingMailRowName === item.resourceName ||
                       item.spec.receivedMailStatus === 'SENT' ||
                       !isCardReceivedForDisplay(item) ||
-                      (item.spec.receivedMailStatus !== 'PENDING' && item.spec.receivedMailStatus !== 'FAILED')
+                      (item.spec.receivedMailStatus !== 'PENDING' &&
+                        item.spec.receivedMailStatus !== 'FAILED')
                     "
                     @click="sendReceivedMailForRow(item)"
                   >
@@ -1771,14 +1956,17 @@ onMounted(() => {
                       pendingMailRowName === item.resourceName ||
                       item.spec.receivedMailStatus === 'SENT' ||
                       !isCardReceivedForDisplay(item) ||
-                      (item.spec.receivedMailStatus !== 'PENDING' && item.spec.receivedMailStatus !== 'FAILED')
+                      (item.spec.receivedMailStatus !== 'PENDING' &&
+                        item.spec.receivedMailStatus !== 'FAILED')
                     "
                     @click="markReceivedMailAsSentForRow(item)"
                   >
                     不发邮件
                   </VButton>
                   <VTag
-                    v-if="['PENDING', 'SENT', 'FAILED'].includes(item.spec.receivedMailStatus || '')"
+                    v-if="
+                      ['PENDING', 'SENT', 'FAILED'].includes(item.spec.receivedMailStatus || '')
+                    "
                     :theme="
                       item.spec.receivedMailStatus === 'SENT'
                         ? 'secondary'
@@ -1793,7 +1981,9 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!pagedFilteredResults.length">
-              <td :colspan="showOfflineActivity ? 10 : 9" class="qsl-table-empty">暂无收信确认记录。</td>
+              <td :colspan="showOfflineActivity ? 10 : 9" class="qsl-table-empty">
+                暂无收信确认记录。
+              </td>
             </tr>
           </tbody>
         </table>

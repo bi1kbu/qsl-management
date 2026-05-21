@@ -53,7 +53,12 @@ const parseList = (value: string): string[] => {
 }
 
 const stringifyList = (value: unknown): string => {
-  return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean).join('、') : ''
+  return Array.isArray(value)
+    ? value
+        .map((item) => String(item))
+        .filter(Boolean)
+        .join('、')
+    : ''
 }
 
 const datasetConfigs: DatasetConfig[] = [
@@ -486,7 +491,17 @@ const datasetConfigs: DatasetConfig[] = [
     plural: 'address-book-entries',
     kind: 'AddressBookEntry',
     idPrefix: 'address',
-    headers: ['id', 'callSign', 'name', 'telephone', 'postalCode', 'address', 'email', 'addressRemarks', 'syncStatus'],
+    headers: [
+      'id',
+      'callSign',
+      'name',
+      'telephone',
+      'postalCode',
+      'address',
+      'email',
+      'addressRemarks',
+      'syncStatus',
+    ],
     keywords: ['address-management', 'address', '地址管理'],
     toRow: (item) => ({
       id: item.metadata.name,
@@ -520,7 +535,15 @@ const datasetConfigs: DatasetConfig[] = [
     plural: 'bureau-entries',
     kind: 'BureauEntry',
     idPrefix: 'buro',
-    headers: ['id', 'bureauName', 'telephone', 'postalCode', 'address', 'addressRemarks', 'syncStatus'],
+    headers: [
+      'id',
+      'bureauName',
+      'telephone',
+      'postalCode',
+      'address',
+      'addressRemarks',
+      'syncStatus',
+    ],
     keywords: ['bureau-management', 'bureau', '卡片局管理'],
     toRow: (item) => ({
       id: item.metadata.name,
@@ -612,7 +635,9 @@ const datasetConfigs: DatasetConfig[] = [
       onlineAutoNotifyOnCardCreated: String(Boolean(item.spec?.onlineAutoNotifyOnCardCreated)),
       onlineAutoNotifyOnCardSent: String(Boolean(item.spec?.onlineAutoNotifyOnCardSent)),
       onlineAutoNotifyOnCardReceived: String(Boolean(item.spec?.onlineAutoNotifyOnCardReceived)),
-      onlineAutoNotifyOnExchangeReviewed: String(Boolean(item.spec?.onlineAutoNotifyOnExchangeReviewed)),
+      onlineAutoNotifyOnExchangeReviewed: String(
+        Boolean(item.spec?.onlineAutoNotifyOnExchangeReviewed),
+      ),
       offlineAutoNotifyOnCardReceived: String(Boolean(item.spec?.offlineAutoNotifyOnCardReceived)),
       cardRecordSequence: String(item.spec?.cardRecordSequence ?? ''),
       receiveRecordSequence: String(item.spec?.receiveRecordSequence ?? ''),
@@ -633,7 +658,9 @@ const datasetConfigs: DatasetConfig[] = [
         onlineAutoNotifyOnCardCreated: parseBoolean(row.onlineAutoNotifyOnCardCreated ?? ''),
         onlineAutoNotifyOnCardSent: parseBoolean(row.onlineAutoNotifyOnCardSent ?? ''),
         onlineAutoNotifyOnCardReceived: parseBoolean(row.onlineAutoNotifyOnCardReceived ?? ''),
-        onlineAutoNotifyOnExchangeReviewed: parseBoolean(row.onlineAutoNotifyOnExchangeReviewed ?? ''),
+        onlineAutoNotifyOnExchangeReviewed: parseBoolean(
+          row.onlineAutoNotifyOnExchangeReviewed ?? '',
+        ),
         offlineAutoNotifyOnCardReceived: parseBoolean(row.offlineAutoNotifyOnCardReceived ?? ''),
         cardRecordSequence: parseInteger(row.cardRecordSequence ?? ''),
         receiveRecordSequence: parseInteger(row.receiveRecordSequence ?? ''),
@@ -779,10 +806,9 @@ const datasetConfigs: DatasetConfig[] = [
   },
 ]
 
-const datasetConfigMap = Object.fromEntries(datasetConfigs.map((config) => [config.value, config])) as Record<
-  DatasetValue,
-  DatasetConfig
->
+const datasetConfigMap = Object.fromEntries(
+  datasetConfigs.map((config) => [config.value, config]),
+) as Record<DatasetValue, DatasetConfig>
 
 export const datasetOptions = datasetConfigs.map((config) => ({
   value: config.value,
@@ -797,7 +823,10 @@ export const getDatasetLabel = (dataset: DatasetValue | ''): string => {
 }
 
 const normalizeMarker = (value: string): string => {
-  return value.toLowerCase().replace(/[\uFEFF"']/g, '').replace(/\s+/g, '')
+  return value
+    .toLowerCase()
+    .replace(/[\uFEFF"']/g, '')
+    .replace(/\s+/g, '')
 }
 
 export const detectDatasetByMarker = (marker: string): DatasetValue | '' => {
@@ -875,7 +904,9 @@ export const parseCsvRows = (content: string): string[][] => {
   return rows.filter((line) => line.some((cellValue) => cellValue.trim().length > 0))
 }
 
-export const parseCsvToRowObjects = (content: string): { rowObjects: Record<string, string>[]; dataRows: number } => {
+export const parseCsvToRowObjects = (
+  content: string,
+): { rowObjects: Record<string, string>[]; dataRows: number } => {
   const rows = parseCsvRows(content)
   if (rows.length <= 1) {
     return { rowObjects: [], dataRows: 0 }
@@ -887,7 +918,9 @@ export const parseCsvToRowObjects = (content: string): { rowObjects: Record<stri
     }
     return header.trim()
   })
-  const headers = rawHeaders.map((header, index) => (header || (index === 0 ? 'id' : `field${index}`)))
+  const headers = rawHeaders.map(
+    (header, index) => header || (index === 0 ? 'id' : `field${index}`),
+  )
   const rowObjects: Record<string, string>[] = []
 
   for (let index = 1; index < rows.length; index += 1) {

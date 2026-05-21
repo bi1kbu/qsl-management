@@ -28,7 +28,11 @@ const entries = computed(() => {
 <template>
   <div class="qsl-remark-entries" :class="{ 'qsl-remark-entries--compact': compact }">
     <ul v-if="entries.length" class="qsl-remark-list">
-      <li v-for="(entry, index) in entries" :key="`${entry.scene}-${index}`" class="qsl-remark-item">
+      <li
+        v-for="(entry, index) in entries"
+        :key="`${entry.scene}-${index}`"
+        class="qsl-remark-item"
+      >
         <span class="qsl-remark-scene">{{ entry.scene }}</span>
         <span class="qsl-remark-content">{{ entry.content }}</span>
       </li>

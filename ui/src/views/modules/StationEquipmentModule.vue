@@ -223,7 +223,9 @@ const saveStationEquipment = async () => {
     }
 
     const removedItems = currentRemote.filter((item) => !keepNames.has(item.metadata.name))
-    const deleteTasks = removedItems.map((item) => deleteExtension(resourcePlural, item.metadata.name))
+    const deleteTasks = removedItems.map((item) =>
+      deleteExtension(resourcePlural, item.metadata.name),
+    )
     await Promise.all(deleteTasks)
     const deletedCount = removedItems.length
 
@@ -250,7 +252,12 @@ onMounted(loadStationEquipment)
     <VCard title="本台设备清单">
       <div class="qsl-form-inline">
         <div class="qsl-input-shell">
-          <input v-model.trim="newRigName" type="text" placeholder="输入设备名称（My_RIG）" @keyup.enter="addRig" />
+          <input
+            v-model.trim="newRigName"
+            type="text"
+            placeholder="输入设备名称（My_RIG）"
+            @keyup.enter="addRig"
+          />
         </div>
         <VButton type="secondary" :disabled="loading || saving" @click="addRig">新增设备</VButton>
       </div>
@@ -265,7 +272,9 @@ onMounted(loadStationEquipment)
           >
             {{ rig.name }}
           </button>
-          <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeRig(rig.id)">删除</VButton>
+          <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeRig(rig.id)"
+            >删除</VButton
+          >
         </li>
       </ul>
 
@@ -289,10 +298,16 @@ onMounted(loadStationEquipment)
                 @keyup.enter="addRigProperty('antennas')"
               />
             </div>
-            <VButton size="sm" :disabled="loading || saving" @click="addRigProperty('antennas')">添加</VButton>
+            <VButton size="sm" :disabled="loading || saving" @click="addRigProperty('antennas')"
+              >添加</VButton
+            >
           </div>
           <div v-if="selectedRig.antennas.length" class="qsl-tag-list">
-            <span v-for="(item, index) in selectedRig.antennas" :key="`${item}-${index}`" class="qsl-tag-pill">
+            <span
+              v-for="(item, index) in selectedRig.antennas"
+              :key="`${item}-${index}`"
+              class="qsl-tag-pill"
+            >
               {{ item }}
               <button type="button" @click="removeRigProperty('antennas', index)">×</button>
             </span>
@@ -311,10 +326,16 @@ onMounted(loadStationEquipment)
                 @keyup.enter="addRigProperty('powers')"
               />
             </div>
-            <VButton size="sm" :disabled="loading || saving" @click="addRigProperty('powers')">添加</VButton>
+            <VButton size="sm" :disabled="loading || saving" @click="addRigProperty('powers')"
+              >添加</VButton
+            >
           </div>
           <div v-if="selectedRig.powers.length" class="qsl-tag-list">
-            <span v-for="(item, index) in selectedRig.powers" :key="`${item}-${index}`" class="qsl-tag-pill">
+            <span
+              v-for="(item, index) in selectedRig.powers"
+              :key="`${item}-${index}`"
+              class="qsl-tag-pill"
+            >
               {{ item }}
               <button type="button" @click="removeRigProperty('powers', index)">×</button>
             </span>
@@ -333,10 +354,16 @@ onMounted(loadStationEquipment)
                 @keyup.enter="addRigProperty('modes')"
               />
             </div>
-            <VButton size="sm" :disabled="loading || saving" @click="addRigProperty('modes')">添加</VButton>
+            <VButton size="sm" :disabled="loading || saving" @click="addRigProperty('modes')"
+              >添加</VButton
+            >
           </div>
           <div v-if="selectedRig.modes.length" class="qsl-tag-list">
-            <span v-for="(item, index) in selectedRig.modes" :key="`${item}-${index}`" class="qsl-tag-pill">
+            <span
+              v-for="(item, index) in selectedRig.modes"
+              :key="`${item}-${index}`"
+              class="qsl-tag-pill"
+            >
               {{ item }}
               <button type="button" @click="removeRigProperty('modes', index)">×</button>
             </span>
@@ -345,7 +372,9 @@ onMounted(loadStationEquipment)
         </div>
 
         <div class="qsl-actions">
-          <VButton type="secondary" :disabled="loading || saving" @click="saveStationEquipment">保存设备配置</VButton>
+          <VButton type="secondary" :disabled="loading || saving" @click="saveStationEquipment"
+            >保存设备配置</VButton
+          >
         </div>
       </div>
 

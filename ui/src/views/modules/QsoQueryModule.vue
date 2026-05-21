@@ -5,7 +5,12 @@ import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
-import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  applySortDirection,
+  compareCallSign,
+  compareText,
+  type QslSortDirection,
+} from '../../utils/qsl-table-sort'
 
 interface QsoRecordSpec {
   date: string
@@ -158,11 +163,12 @@ const filteredRows = computed(() => {
 
 const sortedRows = computed(() => {
   return [...filteredRows.value].sort((left, right) => {
-    const result = sortKey.value === 'callSign'
-      ? compareCallSign(left.callSign, right.callSign)
-      : sortKey.value === 'datetime'
-        ? compareText(`${left.date} ${left.time}`, `${right.date} ${right.time}`)
-        : compareText(left[sortKey.value], right[sortKey.value])
+    const result =
+      sortKey.value === 'callSign'
+        ? compareCallSign(left.callSign, right.callSign)
+        : sortKey.value === 'datetime'
+          ? compareText(`${left.date} ${left.time}`, `${right.date} ${right.time}`)
+          : compareText(left[sortKey.value], right[sortKey.value])
     return applySortDirection(result, sortDirection.value)
   })
 })
@@ -306,31 +312,35 @@ onMounted(loadRows)
     <VCard>
       <QslQueryToolbar>
         <template #left>
-            <div class="qsl-input-shell qsl-filter-toolbar__search">
-              <input
-                v-model.trim="keywordInput"
-                type="text"
-                placeholder="输入关键词搜索"
-                @keyup.enter="applyKeywordSearch"
-              />
-            </div>
-            <VButton type="secondary" :disabled="loading" @click="applyKeywordSearch">搜索</VButton>
+          <div class="qsl-input-shell qsl-filter-toolbar__search">
+            <input
+              v-model.trim="keywordInput"
+              type="text"
+              placeholder="输入关键词搜索"
+              @keyup.enter="applyKeywordSearch"
+            />
+          </div>
+          <VButton type="secondary" :disabled="loading" @click="applyKeywordSearch">搜索</VButton>
         </template>
 
         <template #right>
-            <label class="qsl-filter-inline">
-              <span>模式：</span>
-              <select v-model="quickMode">
-                <option v-for="mode in quickModes" :key="mode" :value="mode">{{ mode }}</option>
-              </select>
-            </label>
+          <label class="qsl-filter-inline">
+            <span>模式：</span>
+            <select v-model="quickMode">
+              <option v-for="mode in quickModes" :key="mode" :value="mode">{{ mode }}</option>
+            </select>
+          </label>
 
-            <button type="button" class="qsl-filter-link" @click="showAdvancedFilters = !showAdvancedFilters">
-              {{ showAdvancedFilters ? '收起筛选' : '高级筛选' }}
-            </button>
+          <button
+            type="button"
+            class="qsl-filter-link"
+            @click="showAdvancedFilters = !showAdvancedFilters"
+          >
+            {{ showAdvancedFilters ? '收起筛选' : '高级筛选' }}
+          </button>
 
-            <VButton :disabled="loading" @click="resetFilters">重置</VButton>
-            <VButton :disabled="loading" @click="loadRows">刷新</VButton>
+          <VButton :disabled="loading" @click="resetFilters">重置</VButton>
+          <VButton :disabled="loading" @click="loadRows">刷新</VButton>
         </template>
       </QslQueryToolbar>
 
@@ -400,12 +410,60 @@ onMounted(loadRows)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="id" label="QSO_ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="callSign" label="对方呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="datetime" label="日期时间" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="freq" label="频率" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="mode" label="模式" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="qth" label="位置" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="id"
+                  label="QSO_ID"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="对方呼号"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="datetime"
+                  label="日期时间"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="freq"
+                  label="频率"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="mode"
+                  label="模式"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="qth"
+                  label="位置"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
             </tr>
           </thead>
           <tbody>

@@ -239,7 +239,10 @@ const totalPages = computed(() => {
 
 const sortedRows = computed(() => {
   return [...rows.value].sort((left, right) => {
-    return applySortDirection(compareText(left[sortKey.value], right[sortKey.value]), sortDirection.value)
+    return applySortDirection(
+      compareText(left[sortKey.value], right[sortKey.value]),
+      sortDirection.value,
+    )
   })
 })
 
@@ -319,7 +322,9 @@ onMounted(loadRows)
         <VButton type="secondary" :disabled="loading || submitting" @click="submitBureau">
           {{ editingId ? '保存修改' : '新增卡片局' }}
         </VButton>
-        <VButton v-if="editingId" :disabled="loading || submitting" @click="resetForm">取消编辑</VButton>
+        <VButton v-if="editingId" :disabled="loading || submitting" @click="resetForm"
+          >取消编辑</VButton
+        >
         <VButton :disabled="loading || submitting" @click="loadRows">刷新</VButton>
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
@@ -330,11 +335,51 @@ onMounted(loadRows)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="bureauName" label="名称" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="telephone" label="电话" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="postalCode" label="邮编" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="address" label="地址" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="remarks" label="备注" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="bureauName"
+                  label="名称"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="telephone"
+                  label="电话"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="postalCode"
+                  label="邮编"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="address"
+                  label="地址"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="remarks"
+                  label="备注"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
               <th>操作</th>
             </tr>
           </thead>
@@ -346,8 +391,16 @@ onMounted(loadRows)
               <td>{{ row.address || '-' }}</td>
               <td>{{ row.remarks || '-' }}</td>
               <td>
-                <VButton size="xs" :disabled="loading || submitting" @click="startEdit(row)">编辑</VButton>
-                <VButton size="xs" type="danger" :disabled="loading || submitting" @click="removeBureau(row.id)">删除</VButton>
+                <VButton size="xs" :disabled="loading || submitting" @click="startEdit(row)"
+                  >编辑</VButton
+                >
+                <VButton
+                  size="xs"
+                  type="danger"
+                  :disabled="loading || submitting"
+                  @click="removeBureau(row.id)"
+                  >删除</VButton
+                >
               </td>
             </tr>
             <tr v-if="!pagedRows.length">

@@ -18,7 +18,12 @@ import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vu
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
-import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  applySortDirection,
+  compareCallSign,
+  compareText,
+  type QslSortDirection,
+} from '../../utils/qsl-table-sort'
 import { resolveCardFlowStatus } from '../../utils/qsl-card-state'
 
 interface CardRecordSpec {
@@ -131,7 +136,13 @@ interface OfflineActivityItem {
 
 type CardType = 'QSO' | 'SWL' | 'EYEBALL'
 type SceneType = 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
-type CardHistorySortKey = 'resourceName' | 'callSign' | 'cardType' | 'cardDate' | 'cardTime' | 'cardVersion'
+type CardHistorySortKey =
+  | 'resourceName'
+  | 'callSign'
+  | 'cardType'
+  | 'cardDate'
+  | 'cardTime'
+  | 'cardVersion'
 
 const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
 
@@ -165,9 +176,7 @@ const normalizeSceneType = (sceneType?: string, cardType?: string): SceneType =>
 }
 
 const normalizedSceneTypes = computed<SceneType[]>(() => {
-  const deduplicated = Array.from(
-    new Set(props.sceneTypes.map((item) => normalizeSceneType(item))),
-  )
+  const deduplicated = Array.from(new Set(props.sceneTypes.map((item) => normalizeSceneType(item))))
   return deduplicated.length ? deduplicated : ['QSO']
 })
 
@@ -180,8 +189,8 @@ const availableCardTypes = computed<CardType[]>(() => {
     options.push('SWL')
   }
   if (
-    normalizedSceneTypes.value.includes('EYEBALL')
-    || normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+    normalizedSceneTypes.value.includes('EYEBALL') ||
+    normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
   ) {
     options.push('EYEBALL')
   }
@@ -280,7 +289,8 @@ const DAILY_OFFLINE_ACTIVITY_NAME = '日常换卡'
 const NO_CARD_PLACEHOLDER_REMARK = '不创建卡片'
 const NO_CARD_SEQUENCE_START = 0
 const NO_CARD_NAME_PATTERN = /^NC(\d+)$/i
-const DEFAULT_ONLINE_EXCHANGE_CARD_REMARKS = '期待与您空中相遇。\nLooking forward to meeting you on the air.'
+const DEFAULT_ONLINE_EXCHANGE_CARD_REMARKS =
+  '期待与您空中相遇。\nLooking forward to meeting you on the air.'
 
 const selectedQso = computed(() => {
   if (!form.qsoRecordName.trim()) {
@@ -294,7 +304,11 @@ const isOfflineExchangeScene = computed(() => {
   return normalizedSceneTypes.value.length === 1 && normalizedSceneTypes.value[0] === 'EYEBALL'
 })
 const allowDeleteCardRecord = computed(() => {
-  return isOfflineExchangeScene.value || normalizedSceneTypes.value.includes('QSO') || normalizedSceneTypes.value.includes('SWL')
+  return (
+    isOfflineExchangeScene.value ||
+    normalizedSceneTypes.value.includes('QSO') ||
+    normalizedSceneTypes.value.includes('SWL')
+  )
 })
 const dateTimeRequired = computed(() => {
   return form.cardType === 'EYEBALL' && !isOfflineExchangeScene.value
@@ -307,20 +321,24 @@ const allowMultiEyeballVersions = computed(() => {
 })
 const showOfflineActivitySelect = computed(() => {
   return (
-    form.cardType === 'EYEBALL'
-    && normalizedSceneTypes.value.includes('EYEBALL')
-    && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+    form.cardType === 'EYEBALL' &&
+    normalizedSceneTypes.value.includes('EYEBALL') &&
+    !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
   )
 })
 const showOfflineActivityFields = computed(() => {
-  return normalizedSceneTypes.value.includes('EYEBALL')
-    && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  return (
+    normalizedSceneTypes.value.includes('EYEBALL') &&
+    !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  )
 })
 const selectedOfflineActivity = computed(() => {
   if (!showOfflineActivitySelect.value) {
     return null
   }
-  return offlineActivities.value.find((item) => item.resourceName === form.offlineActivityName) ?? null
+  return (
+    offlineActivities.value.find((item) => item.resourceName === form.offlineActivityName) ?? null
+  )
 })
 const offlineActivityDateTimeText = computed(() => {
   if (!showOfflineActivitySelect.value) {
@@ -380,7 +398,12 @@ const batchEditFields = computed(() => {
       placeholder: '请输入卡片版本',
     },
     { value: 'cardDate', label: '卡片日期', inputType: 'date' },
-    { value: 'businessRemarks', label: '业务备注', inputType: 'textarea', placeholder: '输入业务备注' },
+    {
+      value: 'businessRemarks',
+      label: '业务备注',
+      inputType: 'textarea',
+      placeholder: '输入业务备注',
+    },
     { value: 'cardRemarks', label: '卡片备注', inputType: 'textarea', placeholder: '输入备注' },
   ] as const
   if (!isOfflineExchangeScene.value) {
@@ -402,11 +425,11 @@ const batchEditFields = computed(() => {
 
 const isNoCardPlaceholder = (item: CardRecordItem): boolean => {
   return (
-    item.qsoRecordName.trim().length > 0
-    && !item.cardVersion.trim()
-    && !item.cardDate.trim()
-    && !item.cardTime.trim()
-    && item.spec.businessRemarks.trim() === NO_CARD_PLACEHOLDER_REMARK
+    item.qsoRecordName.trim().length > 0 &&
+    !item.cardVersion.trim() &&
+    !item.cardDate.trim() &&
+    !item.cardTime.trim() &&
+    item.spec.businessRemarks.trim() === NO_CARD_PLACEHOLDER_REMARK
   )
 }
 
@@ -423,7 +446,9 @@ const isQsoRecordConsumed = (qsoRecordName: string, excludedResourceName = ''): 
     return false
   }
   return records.value.some((item) => {
-    return item.resourceName !== excludedResourceName && item.qsoRecordName.trim() === normalizedName
+    return (
+      item.resourceName !== excludedResourceName && item.qsoRecordName.trim() === normalizedName
+    )
   })
 }
 
@@ -432,15 +457,22 @@ const filteredQsoRecords = computed(() => {
   return qsoRecords.value
     .filter((item) => !isQsoRecordConsumed(item.id, editingResourceName.value))
     .filter((item) => {
-      return !keyword || item.callSign.toUpperCase().includes(keyword) || item.id.toUpperCase().includes(keyword)
+      return (
+        !keyword ||
+        item.callSign.toUpperCase().includes(keyword) ||
+        item.id.toUpperCase().includes(keyword)
+      )
     })
     .slice(0, 50)
 })
 
 const filteredRecords = computed(() => {
-  const filteredByActivity = showOfflineActivityFields.value && activityFilter.value
-    ? records.value.filter((item) => (item.spec.offlineActivityName || '') === activityFilter.value)
-    : records.value
+  const filteredByActivity =
+    showOfflineActivityFields.value && activityFilter.value
+      ? records.value.filter(
+          (item) => (item.spec.offlineActivityName || '') === activityFilter.value,
+        )
+      : records.value
   const keyword = historyKeyword.value.trim().toUpperCase()
   if (!keyword) {
     return filteredByActivity
@@ -455,7 +487,11 @@ const filteredRecords = computed(() => {
   })
 })
 
-const compareHistoryRows = (left: CardRecordItem, right: CardRecordItem, key: CardHistorySortKey): number => {
+const compareHistoryRows = (
+  left: CardRecordItem,
+  right: CardRecordItem,
+  key: CardHistorySortKey,
+): number => {
   if (key === 'callSign') {
     return compareCallSign(left.callSign, right.callSign)
   }
@@ -464,7 +500,10 @@ const compareHistoryRows = (left: CardRecordItem, right: CardRecordItem, key: Ca
 
 const sortedFilteredRecords = computed(() => {
   return [...filteredRecords.value].sort((left, right) => {
-    return applySortDirection(compareHistoryRows(left, right, historySortKey.value), historySortDirection.value)
+    return applySortDirection(
+      compareHistoryRows(left, right, historySortKey.value),
+      historySortDirection.value,
+    )
   })
 })
 
@@ -499,7 +538,9 @@ const allFilteredSelected = computed(() => {
   if (!filteredRecords.value.length) {
     return false
   }
-  return filteredRecords.value.every((item) => selectedHistoryNames.value.includes(item.resourceName))
+  return filteredRecords.value.every((item) =>
+    selectedHistoryNames.value.includes(item.resourceName),
+  )
 })
 const totalPages = computed(() => {
   if (!filteredRecords.value.length) {
@@ -699,7 +740,10 @@ const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
 }
 
 const extractCardSequence = (resourceName: string): number => {
-  const matched = resourceName.trim().toUpperCase().match(/^C(\d+)$/)
+  const matched = resourceName
+    .trim()
+    .toUpperCase()
+    .match(/^C(\d+)$/)
   if (!matched) {
     return -1
   }
@@ -736,7 +780,10 @@ const resolveDefaultCardRemarks = (cardType: CardType = form.cardType): string =
 }
 
 const allocateCardResourceName = async (): Promise<string> => {
-  const currentExtension = await getExtensionOrNull<SystemSettingSpec>(systemSettingPlural, systemSettingName)
+  const currentExtension = await getExtensionOrNull<SystemSettingSpec>(
+    systemSettingPlural,
+    systemSettingName,
+  )
   const baseSpec = {
     ...createDefaultSystemSettingSpec(),
     ...(currentExtension?.spec ?? {}),
@@ -761,7 +808,10 @@ const allocateCardResourceName = async (): Promise<string> => {
 
 const allocateCardResourceNames = async (count: number): Promise<string[]> => {
   const safeCount = Math.max(1, Math.floor(count))
-  const currentExtension = await getExtensionOrNull<SystemSettingSpec>(systemSettingPlural, systemSettingName)
+  const currentExtension = await getExtensionOrNull<SystemSettingSpec>(
+    systemSettingPlural,
+    systemSettingName,
+  )
   const baseSpec = {
     ...createDefaultSystemSettingSpec(),
     ...(currentExtension?.spec ?? {}),
@@ -827,7 +877,9 @@ const isReceivedFlowStatus = (status?: Partial<CardRecordStatus>): boolean => {
   return (status?.flowStatus ?? '').trim() === '已收卡片'
 }
 
-const toRecordItem = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): CardRecordItem => {
+const toRecordItem = (
+  extension: QslExtension<CardRecordSpec, CardRecordStatus>,
+): CardRecordItem => {
   const spec = normalizeCardRecordSpec(extension.spec)
   return {
     resourceName: extension.metadata.name,
@@ -889,7 +941,9 @@ const loadQsoRecords = async () => {
   qsoRecords.value = extensions.map((extension) => toQsoRecordItem(extension))
 }
 
-const resolveOfflineActivityDateTime = (offlineActivityName: string): { offlineActivityName: string; cardDate: string; cardTime: string } => {
+const resolveOfflineActivityDateTime = (
+  offlineActivityName: string,
+): { offlineActivityName: string; cardDate: string; cardTime: string } => {
   const selected = offlineActivities.value.find((item) => item.resourceName === offlineActivityName)
   if (!selected || selected.isDaily) {
     const now = new Date()
@@ -917,9 +971,10 @@ const loadOfflineActivities = async () => {
       const spec = extension.spec
       const activityName = spec?.activityName?.trim() ?? ''
       const activityDate = spec?.activityDate?.trim() ?? ''
-      const title = activityDate && activityName
-        ? `【${activityDate}】${activityName}`
-        : (activityName || extension.metadata.name)
+      const title =
+        activityDate && activityName
+          ? `【${activityDate}】${activityName}`
+          : activityName || extension.metadata.name
       return {
         resourceName: extension.metadata.name,
         title,
@@ -982,17 +1037,16 @@ const loadCardVersions = async () => {
     }
   }
 
-  const ordered = [...stationCardExtensions]
-    .sort((a, b) => {
-      const aOrder = Number(a.spec?.sortOrder ?? Number.MAX_SAFE_INTEGER)
-      const bOrder = Number(b.spec?.sortOrder ?? Number.MAX_SAFE_INTEGER)
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder
-      }
-      const aCreated = a.metadata.creationTimestamp ?? ''
-      const bCreated = b.metadata.creationTimestamp ?? ''
-      return aCreated.localeCompare(bCreated)
-    })
+  const ordered = [...stationCardExtensions].sort((a, b) => {
+    const aOrder = Number(a.spec?.sortOrder ?? Number.MAX_SAFE_INTEGER)
+    const bOrder = Number(b.spec?.sortOrder ?? Number.MAX_SAFE_INTEGER)
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder
+    }
+    const aCreated = a.metadata.creationTimestamp ?? ''
+    const bCreated = b.metadata.creationTimestamp ?? ''
+    return aCreated.localeCompare(bCreated)
+  })
 
   const seen = new Set<string>()
   const nextRemainingMap: Record<string, number> = {}
@@ -1002,13 +1056,21 @@ const loadCardVersions = async () => {
       const version = extension.spec?.cardVersion?.trim() ?? ''
       const key = version.toUpperCase()
       const availableInventoryRaw = extension.spec?.availableInventory
-      const hasConfiguredInventory = availableInventoryRaw !== undefined && availableInventoryRaw !== null
+      const hasConfiguredInventory =
+        availableInventoryRaw !== undefined && availableInventoryRaw !== null
       const availableInventory = Number(availableInventoryRaw ?? 0)
-      const safeInventory = Number.isFinite(availableInventory) && availableInventory > 0 ? Math.floor(availableInventory) : 0
+      const safeInventory =
+        Number.isFinite(availableInventory) && availableInventory > 0
+          ? Math.floor(availableInventory)
+          : 0
       const usedCount = usedCounter[key] ?? 0
-      const remaining = hasConfiguredInventory ? safeInventory - usedCount : Number.POSITIVE_INFINITY
+      const remaining = hasConfiguredInventory
+        ? safeInventory - usedCount
+        : Number.POSITIVE_INFINITY
       if (key) {
-        nextRemainingMap[key] = Number.isFinite(remaining) ? Math.max(0, remaining) : Number.MAX_SAFE_INTEGER
+        nextRemainingMap[key] = Number.isFinite(remaining)
+          ? Math.max(0, remaining)
+          : Number.MAX_SAFE_INTEGER
         nextConfiguredMap[key] = hasConfiguredInventory
       }
       return {
@@ -1042,7 +1104,10 @@ const loadCardVersions = async () => {
 }
 
 const loadSystemSetting = async () => {
-  const extension = await getExtensionOrNull<SystemSettingSpec>(systemSettingPlural, systemSettingName)
+  const extension = await getExtensionOrNull<SystemSettingSpec>(
+    systemSettingPlural,
+    systemSettingName,
+  )
   const legacyCreated = Boolean(extension?.spec?.autoNotifyOnCardCreated)
   autoNotifyOnCardCreated.value = {
     qso: extension?.spec?.qsoAutoNotifyOnCardCreated ?? legacyCreated,
@@ -1079,9 +1144,8 @@ const loadPageData = async () => {
 }
 
 const resetForm = () => {
-  const defaultCardType = activeFunctionTab.value === 'batch'
-    ? resolveDefaultCardType()
-    : activeFunctionTab.value
+  const defaultCardType =
+    activeFunctionTab.value === 'batch' ? resolveDefaultCardType() : activeFunctionTab.value
   form.callSign = ''
   form.cardType = defaultCardType
   form.cardVersion = cardVersionOptions.value[0] ?? ''
@@ -1105,15 +1169,16 @@ const fillFormFromRecord = (item: CardRecordItem) => {
   form.cardType = item.cardType
   form.cardVersion = item.cardVersion
   form.qsoRecordName = item.qsoRecordName
-  form.offlineActivityName = item.spec.offlineActivityName || (isOfflineExchangeScene.value ? DAILY_OFFLINE_ACTIVITY_NAME : '')
+  form.offlineActivityName =
+    item.spec.offlineActivityName ||
+    (isOfflineExchangeScene.value ? DAILY_OFFLINE_ACTIVITY_NAME : '')
   form.addressEntryName = item.addressEntryName
   form.cardDate = item.cardDate
   form.cardTime = item.cardTime
   form.businessRemarks = isNoCardPlaceholder(item) ? '' : item.spec.businessRemarks
   form.cardRemarks = isNoCardPlaceholder(item) ? '' : item.cardRemarks
-  const normalizedVersions = item.cardType === 'EYEBALL'
-    ? normalizeCardVersions(splitCardVersions(item.cardVersion))
-    : []
+  const normalizedVersions =
+    item.cardType === 'EYEBALL' ? normalizeCardVersions(splitCardVersions(item.cardVersion)) : []
   if (item.cardType === 'EYEBALL' && isOfflineExchangeScene.value) {
     form.cardVersion = normalizedVersions[0] ?? item.cardVersion
     eyeballCardVersions.value = []
@@ -1369,7 +1434,9 @@ const clearHistorySelection = () => {
 const toggleAllFilteredHistorySelection = () => {
   if (allFilteredSelected.value) {
     const filteredNameSet = new Set(filteredRecords.value.map((item) => item.resourceName))
-    selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => !filteredNameSet.has(name))
+    selectedHistoryNames.value = selectedHistoryNames.value.filter(
+      (name) => !filteredNameSet.has(name),
+    )
     return
   }
 
@@ -1424,24 +1491,29 @@ const applyHistoryBatchEdit = async () => {
 
   batchUpdating.value = true
   try {
-    const targets = records.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName))
+    const targets = records.value.filter((item) =>
+      selectedHistoryNames.value.includes(item.resourceName),
+    )
 
     for (const item of targets) {
-      const nextCardType = batchEditField.value === 'cardType'
-        ? (nextValue as CardRecordSpec['cardType'])
-        : item.spec.cardType
+      const nextCardType =
+        batchEditField.value === 'cardType'
+          ? (nextValue as CardRecordSpec['cardType'])
+          : item.spec.cardType
       const nextSpec: CardRecordSpec = {
         ...item.spec,
         cardType: nextCardType,
         sceneType: resolveSceneTypeByCardType(nextCardType),
         cardVersion: batchEditField.value === 'cardVersion' ? nextValue : item.spec.cardVersion,
         cardDate: batchEditField.value === 'cardDate' ? nextValue : item.spec.cardDate,
-        businessRemarks: batchEditField.value === 'businessRemarks' ? nextValue : item.spec.businessRemarks,
+        businessRemarks:
+          batchEditField.value === 'businessRemarks' ? nextValue : item.spec.businessRemarks,
         cardRemarks: batchEditField.value === 'cardRemarks' ? nextValue : item.spec.cardRemarks,
       }
-      const persistedSpec = batchEditField.value === 'cardIssued'
-        ? applyBatchCardIssuedState(nextSpec, nextValue)
-        : nextSpec
+      const persistedSpec =
+        batchEditField.value === 'cardIssued'
+          ? applyBatchCardIssuedState(nextSpec, nextValue)
+          : nextSpec
 
       await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, item.resourceName, {
         apiVersion: qslApiVersion,
@@ -1463,7 +1535,8 @@ const applyHistoryBatchEdit = async () => {
       resourceType: 'card-record',
       resourceName: `count=${targets.length}`,
       detail: `批量修改字段：${
-        batchEditFields.value.find((item) => item.value === batchEditField.value)?.label ?? batchEditField.value
+        batchEditFields.value.find((item) => item.value === batchEditField.value)?.label ??
+        batchEditField.value
       }，值：${nextValue}`,
     })
 
@@ -1583,10 +1656,7 @@ const createOfflineBatchCards = async () => {
       detail: `活动=${resolved.offlineActivityName}，版本=${cardVersion}，创建数量=${quantity}`,
     })
 
-    await Promise.all([
-      loadCardRecords({ silent: true }),
-      loadCardVersions(),
-    ])
+    await Promise.all([loadCardRecords({ silent: true }), loadCardVersions()])
     feedback.value = `线下换卡卡片批量创建完成：已创建 ${quantity} 条，版本 ${cardVersion}。`
     offlineBatchQuantity.value = 1
   } catch (error) {
@@ -1628,7 +1698,9 @@ const saveCardRecord = async () => {
     return
   }
 
-  const rawOfflineActivityName = showOfflineActivitySelect.value ? form.offlineActivityName.trim() : ''
+  const rawOfflineActivityName = showOfflineActivitySelect.value
+    ? form.offlineActivityName.trim()
+    : ''
   let offlineActivityName = rawOfflineActivityName
   const nextSceneType = resolveSceneTypeByCardType(form.cardType)
   const nextAddressEntryName = nextSceneType === 'EYEBALL' ? '' : form.addressEntryName.trim()
@@ -1654,15 +1726,16 @@ const saveCardRecord = async () => {
 
   saving.value = true
   try {
-    const cardVersions =
-      allowMultiEyeballVersions.value
-        ? normalizeCardVersions(eyeballCardVersions.value)
-        : normalizeCardVersions([form.cardVersion])
+    const cardVersions = allowMultiEyeballVersions.value
+      ? normalizeCardVersions(eyeballCardVersions.value)
+      : normalizeCardVersions([form.cardVersion])
     if (!cardVersions.length) {
       feedback.value = '请先选择卡片版本。'
       return
     }
-    const persistedCardVersion = allowMultiEyeballVersions.value ? cardVersions.join('、') : cardVersions[0]
+    const persistedCardVersion = allowMultiEyeballVersions.value
+      ? cardVersions.join('、')
+      : cardVersions[0]
 
     if (isEditing.value) {
       const target = records.value.find((item) => item.resourceName === editingResourceName.value)
@@ -1709,10 +1782,7 @@ const saveCardRecord = async () => {
           detail: `${nextSpec.callSign} ${nextSpec.cardType}，原占位记录=${target.resourceName}`,
         })
 
-        await Promise.all([
-          loadCardRecords({ silent: true }),
-          loadCardVersions(),
-        ])
+        await Promise.all([loadCardRecords({ silent: true }), loadCardVersions()])
         editingResourceName.value = ''
         resetForm()
         feedback.value = `未编号记录已转为正式卡片记录：${nextCardResourceName}。`
@@ -1877,30 +1947,59 @@ onBeforeUnmount(() => {
           </label>
 
           <label class="qsl-field">
-            <span class="qsl-field__label">{{ allowMultiEyeballVersions ? '添加卡片版本（Card_Version）' : '卡片版本（Card_Version）' }}</span>
+            <span class="qsl-field__label">{{
+              allowMultiEyeballVersions
+                ? '添加卡片版本（Card_Version）'
+                : '卡片版本（Card_Version）'
+            }}</span>
             <div v-if="allowMultiEyeballVersions" class="qsl-input-shell qsl-input-shell--stack">
               <div class="qsl-inline-row">
-              <select v-model="eyeballCardVersionDraft">
-                <option value="">请选择卡片版本</option>
-                  <option v-for="item in cardVersionSelectOptions" :key="item" :value="item">{{ item }}</option>
-              </select>
-                <VButton size="sm" type="secondary" :disabled="saving || loading" @click="addEyeballCardVersion">添加版本</VButton>
+                <select v-model="eyeballCardVersionDraft">
+                  <option value="">请选择卡片版本</option>
+                  <option v-for="item in cardVersionSelectOptions" :key="item" :value="item">
+                    {{ item }}
+                  </option>
+                </select>
+                <VButton
+                  size="sm"
+                  type="secondary"
+                  :disabled="saving || loading"
+                  @click="addEyeballCardVersion"
+                  >添加版本</VButton
+                >
               </div>
               <div class="qsl-inline-option-list" v-if="eyeballCardVersions.length">
-                <span v-for="item in eyeballCardVersions" :key="`eyeball-version-${item}`" class="qsl-chip">
+                <span
+                  v-for="item in eyeballCardVersions"
+                  :key="`eyeball-version-${item}`"
+                  class="qsl-chip"
+                >
                   {{ item }}
-                  <button type="button" class="qsl-chip__remove" @click="removeEyeballCardVersion(item)">×</button>
+                  <button
+                    type="button"
+                    class="qsl-chip__remove"
+                    @click="removeEyeballCardVersion(item)"
+                  >
+                    ×
+                  </button>
                 </span>
               </div>
             </div>
             <div v-else class="qsl-input-shell">
               <select v-model="form.cardVersion">
                 <option value="">请选择卡片版本</option>
-                <option v-for="item in cardVersionSelectOptions" :key="item" :value="item">{{ item }}</option>
+                <option v-for="item in cardVersionSelectOptions" :key="item" :value="item">
+                  {{ item }}
+                </option>
               </select>
             </div>
-            <small class="qsl-field__tip" v-if="!cardVersionOptions.length">暂无可用卡片版本，请先到“本台卡片”中配置。</small>
-            <small class="qsl-field__tip" v-if="isOfflineExchangeScene && selectedCardVersionHasConfiguredInventory">
+            <small class="qsl-field__tip" v-if="!cardVersionOptions.length"
+              >暂无可用卡片版本，请先到“本台卡片”中配置。</small
+            >
+            <small
+              class="qsl-field__tip"
+              v-if="isOfflineExchangeScene && selectedCardVersionHasConfiguredInventory"
+            >
               当前版本库存余量：{{ selectedCardVersionRemaining }}
             </small>
           </label>
@@ -1909,13 +2008,26 @@ onBeforeUnmount(() => {
             <span class="qsl-field__label">关联记录 QSO_ID</span>
             <div class="qsl-form-inline">
               <div class="qsl-input-shell">
-                <input :value="form.qsoRecordName" type="text" placeholder="必填，点击右侧按钮选择" readonly />
+                <input
+                  :value="form.qsoRecordName"
+                  type="text"
+                  placeholder="必填，点击右侧按钮选择"
+                  readonly
+                />
               </div>
-              <VButton size="sm" type="secondary" :disabled="loading" @click="openQsoSelector">选择QSO</VButton>
-              <VButton size="sm" :disabled="loading || !form.qsoRecordName" @click="clearSelectedQso">清空</VButton>
+              <VButton size="sm" type="secondary" :disabled="loading" @click="openQsoSelector"
+                >选择QSO</VButton
+              >
+              <VButton
+                size="sm"
+                :disabled="loading || !form.qsoRecordName"
+                @click="clearSelectedQso"
+                >清空</VButton
+              >
             </div>
             <small class="qsl-field__tip" v-if="selectedQso">
-              已关联：{{ selectedQso.id }}（{{ selectedQso.callSign }} {{ selectedQso.date }} {{ selectedQso.time }}）
+              已关联：{{ selectedQso.id }}（{{ selectedQso.callSign }} {{ selectedQso.date }}
+              {{ selectedQso.time }}）
             </small>
           </label>
 
@@ -1923,7 +2035,11 @@ onBeforeUnmount(() => {
             <span class="qsl-field__label">关联活动</span>
             <div class="qsl-input-shell">
               <select v-model="form.offlineActivityName">
-                <option v-for="item in offlineActivities" :key="item.resourceName" :value="item.resourceName">
+                <option
+                  v-for="item in offlineActivities"
+                  :key="item.resourceName"
+                  :value="item.resourceName"
+                >
                   {{ item.title }}
                 </option>
               </select>
@@ -1941,7 +2057,13 @@ onBeforeUnmount(() => {
           <label v-if="dateTimeRequired" class="qsl-field">
             <span class="qsl-field__label">卡片创建时间（Card_TIME）</span>
             <div class="qsl-input-shell">
-              <input v-model="form.cardTime" type="text" maxlength="4" placeholder="HHmm" :disabled="lockCardDateTime" />
+              <input
+                v-model="form.cardTime"
+                type="text"
+                maxlength="4"
+                placeholder="HHmm"
+                :disabled="lockCardDateTime"
+              />
             </div>
           </label>
 
@@ -1969,7 +2091,9 @@ onBeforeUnmount(() => {
           <VButton type="secondary" :disabled="loading || saving" @click="saveCardRecord">{{
             isEditing ? '保存编辑' : '保存卡片记录'
           }}</VButton>
-          <VButton v-if="isEditing" :disabled="loading || saving" @click="cancelEditRecord">取消编辑</VButton>
+          <VButton v-if="isEditing" :disabled="loading || saving" @click="cancelEditRecord"
+            >取消编辑</VButton
+          >
           <VButton
             v-if="isEditing"
             type="danger"
@@ -2000,7 +2124,9 @@ onBeforeUnmount(() => {
 
       <template v-else>
         <div class="qsl-actions">
-          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">清空选择</VButton>
+          <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection"
+            >清空选择</VButton
+          >
         </div>
         <QslBatchFieldEditor
           :fields="batchEditFields"
@@ -2047,8 +2173,18 @@ onBeforeUnmount(() => {
               <td>{{ item.mode || '-' }}</td>
               <td>
                 <div class="qsl-row-actions">
-                  <VButton size="xs" type="secondary" :disabled="saving" @click="selectQsoRecord(item)">选择</VButton>
-                  <VButton size="xs" :disabled="saving || isQsoRecordConsumed(item.id)" @click="markQsoAsNoCard(item)">
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="saving"
+                    @click="selectQsoRecord(item)"
+                    >选择</VButton
+                  >
+                  <VButton
+                    size="xs"
+                    :disabled="saving || isQsoRecordConsumed(item.id)"
+                    @click="markQsoAsNoCard(item)"
+                  >
                     不创建卡片
                   </VButton>
                 </div>
@@ -2082,7 +2218,9 @@ onBeforeUnmount(() => {
           <div class="qsl-input-shell">
             <select v-model="activityFilter">
               <option value="">全部活动</option>
-              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">
+                {{ item }}
+              </option>
             </select>
           </div>
         </label>
@@ -2114,15 +2252,17 @@ onBeforeUnmount(() => {
         </template>
 
         <template #cell-cardDate="{ row }">
-          {{ isNoCardPlaceholder(toHistoryItem(row)) ? '' : (toHistoryItem(row).cardDate || '-') }}
+          {{ isNoCardPlaceholder(toHistoryItem(row)) ? '' : toHistoryItem(row).cardDate || '-' }}
         </template>
 
         <template #cell-cardTime="{ row }">
-          {{ isNoCardPlaceholder(toHistoryItem(row)) ? '' : (toHistoryItem(row).cardTime || '-') }}
+          {{ isNoCardPlaceholder(toHistoryItem(row)) ? '' : toHistoryItem(row).cardTime || '-' }}
         </template>
 
         <template #cell-cardVersion="{ row }">
-          {{ isNoCardPlaceholder(toHistoryItem(row)) ? '' : (toHistoryItem(row).cardVersion || '未填') }}
+          {{
+            isNoCardPlaceholder(toHistoryItem(row)) ? '' : toHistoryItem(row).cardVersion || '未填'
+          }}
         </template>
 
         <template #row-actions="{ row }">

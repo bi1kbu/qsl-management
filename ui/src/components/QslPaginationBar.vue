@@ -65,21 +65,41 @@ watch(
     <span class="qsl-muted qsl-pagination__summary">共 {{ total }} 项数据</span>
     <div class="qsl-pagination__controls">
       <nav class="qsl-pagination__nav" aria-label="分页">
-        <button class="qsl-pagination__btn" :disabled="disabled || currentPage <= 1" @click="goPrevPage">上一页</button>
-        <button class="qsl-pagination__btn" :disabled="disabled || currentPage >= totalPages" @click="goNextPage">
+        <button
+          class="qsl-pagination__btn"
+          :disabled="disabled || currentPage <= 1"
+          @click="goPrevPage"
+        >
+          上一页
+        </button>
+        <button
+          class="qsl-pagination__btn"
+          :disabled="disabled || currentPage >= totalPages"
+          @click="goNextPage"
+        >
           下一页
         </button>
       </nav>
 
       <div class="qsl-input-shell qsl-pagination__select">
-        <select :value="currentPage" :disabled="disabled" @change="setCurrentPage(Number(($event.target as HTMLSelectElement).value))">
-          <option v-for="page in pageOptions" :key="page" :value="page">{{ page }} / {{ totalPages }}</option>
+        <select
+          :value="currentPage"
+          :disabled="disabled"
+          @change="setCurrentPage(Number(($event.target as HTMLSelectElement).value))"
+        >
+          <option v-for="page in pageOptions" :key="page" :value="page">
+            {{ page }} / {{ totalPages }}
+          </option>
         </select>
       </div>
       <span class="qsl-muted">页</span>
 
       <div class="qsl-input-shell qsl-pagination__size-select">
-        <select :value="pageSize" :disabled="disabled" @change="updatePageSize(Number(($event.target as HTMLSelectElement).value))">
+        <select
+          :value="pageSize"
+          :disabled="disabled"
+          @change="updatePageSize(Number(($event.target as HTMLSelectElement).value))"
+        >
           <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
         </select>
       </div>

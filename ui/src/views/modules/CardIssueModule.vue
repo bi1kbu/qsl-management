@@ -3,7 +3,12 @@ import { VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onMounted, ref } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import { sendNotificationMail } from '../../api/qsl-console-api'
-import { listExtensions, qslApiVersion, updateExtension, type QslExtension } from '../../api/qsl-extension-api'
+import {
+  listExtensions,
+  qslApiVersion,
+  updateExtension,
+  type QslExtension,
+} from '../../api/qsl-extension-api'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
 import {
   applySortDirection,
@@ -128,7 +133,17 @@ type IssueCardSortKey =
   | 'receiptConfirmed'
   | 'addressEntryName'
 type RemarkSortKey = 'type' | 'content'
-type IssueQsoSortKey = 'id' | 'callSign' | 'date' | 'time' | 'timezone' | 'freq' | 'mode' | 'myRig' | 'qth' | 'remarks'
+type IssueQsoSortKey =
+  | 'id'
+  | 'callSign'
+  | 'date'
+  | 'time'
+  | 'timezone'
+  | 'freq'
+  | 'mode'
+  | 'myRig'
+  | 'qth'
+  | 'remarks'
 type IssueAddressSortKey =
   | 'sourceType'
   | 'id'
@@ -172,17 +187,17 @@ const normalizeSceneType = (sceneType?: string, cardType?: string): SceneType =>
 }
 
 const normalizedSceneTypes = computed<SceneType[]>(() => {
-  const deduplicated = Array.from(
-    new Set(props.sceneTypes.map((item) => normalizeSceneType(item))),
-  )
+  const deduplicated = Array.from(new Set(props.sceneTypes.map((item) => normalizeSceneType(item))))
   return deduplicated.length ? deduplicated : ['QSO']
 })
 const shouldLoadOfflineActivities = computed(() => {
   return normalizedSceneTypes.value.includes('EYEBALL')
 })
 const showOfflineActivity = computed(() => {
-  return normalizedSceneTypes.value.includes('EYEBALL')
-    && !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  return (
+    normalizedSceneTypes.value.includes('EYEBALL') &&
+    !normalizedSceneTypes.value.includes('ONLINE_EYEBALL')
+  )
 })
 const showAssociationColumns = computed(() => {
   return normalizedSceneTypes.value.some((item) => item === 'QSO' || item === 'SWL')
@@ -289,9 +304,10 @@ const matchedCardRows = computed(() => {
   }
   return cardRows.value.filter((item) => {
     const matchesCallSign = item.callSign.toUpperCase().includes(normalizedKeyword.value)
-    const matchesActivity = showOfflineActivity.value && activityFilter.value
-      ? (item.spec.offlineActivityName || '') === activityFilter.value
-      : true
+    const matchesActivity =
+      showOfflineActivity.value && activityFilter.value
+        ? (item.spec.offlineActivityName || '') === activityFilter.value
+        : true
     return matchesCallSign && matchesActivity && !item.cardIssued
   })
 })
@@ -302,9 +318,10 @@ const queriedCardRows = computed(() => {
   }
   return cardRows.value.filter((item) => {
     const matchesCallSign = item.callSign.toUpperCase().includes(normalizedKeyword.value)
-    const matchesActivity = showOfflineActivity.value && activityFilter.value
-      ? (item.spec.offlineActivityName || '') === activityFilter.value
-      : true
+    const matchesActivity =
+      showOfflineActivity.value && activityFilter.value
+        ? (item.spec.offlineActivityName || '') === activityFilter.value
+        : true
     return matchesCallSign && matchesActivity
   })
 })
@@ -333,7 +350,14 @@ const matchedAddressRows = computed(() => {
 
   const keyword = normalizedAddressLookupKeyword.value
   return allAddressRows.value.filter((item) => {
-    const searchText = [item.id, item.callSign, item.bureauName, item.name, item.address, item.telephone]
+    const searchText = [
+      item.id,
+      item.callSign,
+      item.bureauName,
+      item.name,
+      item.address,
+      item.telephone,
+    ]
       .join(' ')
       .toUpperCase()
     return searchText.includes(keyword)
@@ -377,17 +401,25 @@ const remarkRows = computed(() => {
 
 const pendingIssueCardRows = computed(() => {
   return cardRows.value.filter((item) => {
-    const matchesActivity = showOfflineActivity.value && activityFilter.value
-      ? (item.spec.offlineActivityName || '') === activityFilter.value
-      : true
+    const matchesActivity =
+      showOfflineActivity.value && activityFilter.value
+        ? (item.spec.offlineActivityName || '') === activityFilter.value
+        : true
     if (isOfflineExchangeScene.value) {
       return matchesActivity && !item.cardIssued
     }
-    return matchesActivity && (!item.cardIssued || !item.envelopePrinted || item.spec.createdMailStatus !== 'SENT')
+    return (
+      matchesActivity &&
+      (!item.cardIssued || !item.envelopePrinted || item.spec.createdMailStatus !== 'SENT')
+    )
   })
 })
 
-const compareIssueCardRows = (left: CardIssueCardRow, right: CardIssueCardRow, key: IssueCardSortKey): number => {
+const compareIssueCardRows = (
+  left: CardIssueCardRow,
+  right: CardIssueCardRow,
+  key: IssueCardSortKey,
+): number => {
   switch (key) {
     case 'callSign':
       return compareCallSign(left.callSign, right.callSign)
@@ -406,26 +438,37 @@ const compareIssueCardRows = (left: CardIssueCardRow, right: CardIssueCardRow, k
 
 const sortedMatchedCardRows = computed(() => {
   return [...matchedCardRows.value].sort((left, right) => {
-    return applySortDirection(compareIssueCardRows(left, right, cardSortKey.value), cardSortDirection.value)
+    return applySortDirection(
+      compareIssueCardRows(left, right, cardSortKey.value),
+      cardSortDirection.value,
+    )
   })
 })
 
 const sortedRemarkRows = computed(() => {
   return [...remarkRows.value].sort((left, right) => {
-    return applySortDirection(compareText(left[remarkSortKey.value], right[remarkSortKey.value]), remarkSortDirection.value)
+    return applySortDirection(
+      compareText(left[remarkSortKey.value], right[remarkSortKey.value]),
+      remarkSortDirection.value,
+    )
   })
 })
 
 const sortedMatchedQsoRows = computed(() => {
   return [...matchedQsoRows.value].sort((left, right) => {
-    const result = qsoSortKey.value === 'callSign'
-      ? compareCallSign(left.callSign, right.callSign)
-      : compareText(left[qsoSortKey.value], right[qsoSortKey.value])
+    const result =
+      qsoSortKey.value === 'callSign'
+        ? compareCallSign(left.callSign, right.callSign)
+        : compareText(left[qsoSortKey.value], right[qsoSortKey.value])
     return applySortDirection(result, qsoSortDirection.value)
   })
 })
 
-const compareIssueAddressRows = (left: CardIssueAddressRow, right: CardIssueAddressRow, key: IssueAddressSortKey): number => {
+const compareIssueAddressRows = (
+  left: CardIssueAddressRow,
+  right: CardIssueAddressRow,
+  key: IssueAddressSortKey,
+): number => {
   if (key === 'callSign') {
     return compareCallSign(left.callSign || left.bureauName, right.callSign || right.bureauName)
   }
@@ -434,13 +477,19 @@ const compareIssueAddressRows = (left: CardIssueAddressRow, right: CardIssueAddr
 
 const sortedMatchedAddressRows = computed(() => {
   return [...matchedAddressRows.value].sort((left, right) => {
-    return applySortDirection(compareIssueAddressRows(left, right, addressSortKey.value), addressSortDirection.value)
+    return applySortDirection(
+      compareIssueAddressRows(left, right, addressSortKey.value),
+      addressSortDirection.value,
+    )
   })
 })
 
 const sortedPendingIssueCardRows = computed(() => {
   return [...pendingIssueCardRows.value].sort((left, right) => {
-    return applySortDirection(compareIssueCardRows(left, right, pendingSortKey.value), pendingSortDirection.value)
+    return applySortDirection(
+      compareIssueCardRows(left, right, pendingSortKey.value),
+      pendingSortDirection.value,
+    )
   })
 })
 
@@ -651,9 +700,13 @@ const loadSourceData = async () => {
   try {
     const [cards, addresses, bureaus, qsos] = await Promise.all([
       listExtensions<CardRecordSpec, CardRecordStatus>(cardRecordPlural),
-      showAddressSection.value ? listExtensions<AddressBookSpec>(addressBookPlural) : Promise.resolve([]),
+      showAddressSection.value
+        ? listExtensions<AddressBookSpec>(addressBookPlural)
+        : Promise.resolve([]),
       showAddressSection.value ? listExtensions<BureauSpec>(bureauPlural) : Promise.resolve([]),
-      showAssociationColumns.value ? listExtensions<QsoRecordSpec>(qsoRecordPlural) : Promise.resolve([]),
+      showAssociationColumns.value
+        ? listExtensions<QsoRecordSpec>(qsoRecordPlural)
+        : Promise.resolve([]),
     ])
     let activityExtensions: QslExtension<OfflineActivitySpec>[] = []
     if (shouldLoadOfflineActivities.value) {
@@ -663,8 +716,13 @@ const loadSourceData = async () => {
         activityExtensions = []
       }
     }
-    cardRows.value = cards.map((item) => toCardRow(item))
-      .filter((item) => normalizedSceneTypes.value.includes(normalizeSceneType(item.spec.sceneType, item.spec.cardType)))
+    cardRows.value = cards
+      .map((item) => toCardRow(item))
+      .filter((item) =>
+        normalizedSceneTypes.value.includes(
+          normalizeSceneType(item.spec.sceneType, item.spec.cardType),
+        ),
+      )
       .filter((item) => isFormalCardRecord(item))
     addressRows.value = addresses.map((item) => toAddressRow(item))
     bureauRows.value = bureaus.map((item) => toBureauRow(item))
@@ -688,8 +746,12 @@ const loadSourceData = async () => {
     if (!hasKeyword.value && !hasAddressKeyword.value) {
       feedback.value = ''
     } else {
-      const qsoFeedback = showAssociationColumns.value ? `，关联QSO ${matchedQsoRows.value.length} 条` : ''
-      const addressFeedback = showAddressSection.value ? `，地址候选 ${matchedAddressRows.value.length} 条` : ''
+      const qsoFeedback = showAssociationColumns.value
+        ? `，关联QSO ${matchedQsoRows.value.length} 条`
+        : ''
+      const addressFeedback = showAddressSection.value
+        ? `，地址候选 ${matchedAddressRows.value.length} 条`
+        : ''
       feedback.value = `查询完成：未制卡卡片 ${matchedCardRows.value.length} 条${qsoFeedback}${addressFeedback}。`
     }
   } catch (error) {
@@ -728,14 +790,17 @@ const selectPendingIssueRow = async (row: CardIssueCardRow) => {
   const boundAddressId = row.addressEntryName.trim()
   const fallbackAddressId = `${callSign}-1`
   const addressKeyword = boundAddressId || fallbackAddressId
-  const boundAddressRow = allAddressRows.value.find((item) => item.id.trim().toUpperCase() === boundAddressId.toUpperCase())
+  const boundAddressRow = allAddressRows.value.find(
+    (item) => item.id.trim().toUpperCase() === boundAddressId.toUpperCase(),
+  )
 
   callSignInput.value = callSign
   addressLookupInput.value = addressKeyword
   searchedCallSign.value = callSign
   activityFilter.value = row.spec.offlineActivityName?.trim() || ''
   selectedAddressId.value = boundAddressRow?.id ?? ''
-  selectedAddressEmail.value = boundAddressRow?.sourceType === 'ADDRESS' ? boundAddressRow.email.trim() : ''
+  selectedAddressEmail.value =
+    boundAddressRow?.sourceType === 'ADDRESS' ? boundAddressRow.email.trim() : ''
   await loadSourceData()
 }
 
@@ -826,11 +891,15 @@ const resolveDefaultAddressRow = (callSign: string): CardIssueAddressRow | null 
   return addressRows.value.find((item) => item.id.trim().toUpperCase() === expectedId) ?? null
 }
 
-const resolveAddressBinding = (spec: CardRecordSpec): Pick<CardRecordSpec, 'addressEntryName' | 'mailTargetEmail'> => {
+const resolveAddressBinding = (
+  spec: CardRecordSpec,
+): Pick<CardRecordSpec, 'addressEntryName' | 'mailTargetEmail'> => {
   if (!selectedAddressId.value) {
     const boundAddressId = spec.addressEntryName.trim()
     if (boundAddressId) {
-      const boundAddressRow = allAddressRows.value.find((item) => item.id.trim().toUpperCase() === boundAddressId.toUpperCase())
+      const boundAddressRow = allAddressRows.value.find(
+        (item) => item.id.trim().toUpperCase() === boundAddressId.toUpperCase(),
+      )
       return {
         addressEntryName: boundAddressId,
         mailTargetEmail:
@@ -1090,7 +1159,9 @@ onMounted(loadSourceData)
           <div class="qsl-input-shell">
             <select v-model="activityFilter">
               <option value="">全部活动</option>
-              <option v-for="item in activityFilterOptions" :key="item" :value="item">{{ item }}</option>
+              <option v-for="item in activityFilterOptions" :key="item" :value="item">
+                {{ item }}
+              </option>
             </select>
           </div>
         </label>
@@ -1099,15 +1170,24 @@ onMounted(loadSourceData)
       <div class="qsl-actions">
         <VButton type="secondary" :disabled="loading || issuing" @click="applySearch">查询</VButton>
         <VButton :disabled="loading || issuing" @click="clearSearch">清空</VButton>
-        <VButton :disabled="loading || issuing || !hasKeyword || !matchedCardRows.length" @click="confirmCardIssue">
+        <VButton
+          :disabled="loading || issuing || !hasKeyword || !matchedCardRows.length"
+          @click="confirmCardIssue"
+        >
           确认制卡
         </VButton>
-        <VButton v-if="showAddressSection" :disabled="loading || issuing || !selectedAddressId" @click="clearSelectedAddress">
+        <VButton
+          v-if="showAddressSection"
+          :disabled="loading || issuing || !selectedAddressId"
+          @click="clearSelectedAddress"
+        >
           清空已选地址
         </VButton>
         <span v-if="showAddressSection && selectedAddressRow" class="qsl-selected-address">
           已选地址：{{ selectedAddressRow.id }}
-          <template v-if="selectedAddressRow.sourceType === 'ADDRESS'">（{{ selectedAddressRow.callSign || '-' }}）</template>
+          <template v-if="selectedAddressRow.sourceType === 'ADDRESS'"
+            >（{{ selectedAddressRow.callSign || '-' }}）</template
+          >
           <template v-else>（{{ selectedAddressRow.bureauName || '-' }}）</template>
         </span>
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
@@ -1119,18 +1199,114 @@ onMounted(loadSourceData)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="id" label="卡片编号" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th><QslSortableHeader column-key="cardType" label="卡片类型" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th><QslSortableHeader column-key="cardVersion" label="卡片版本" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th v-if="showAssociationColumns"><QslSortableHeader column-key="qsoRecordName" label="关联QSO" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th v-if="showAssociationColumns"><QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th><QslSortableHeader column-key="cardDate" label="日期" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th><QslSortableHeader column-key="cardTime" label="时间" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th><QslSortableHeader column-key="cardSent" label="发卡" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th><QslSortableHeader column-key="cardReceived" label="收卡" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th><QslSortableHeader column-key="receiptConfirmed" label="签收" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
-              <th v-if="showAddressSection"><QslSortableHeader column-key="addressEntryName" label="绑定地址编号" :sort-key="cardSortKey" :sort-direction="cardSortDirection" @sort="toggleCardSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="id"
+                  label="卡片编号"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="呼号"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardType"
+                  label="卡片类型"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardVersion"
+                  label="卡片版本"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th v-if="showAssociationColumns">
+                <QslSortableHeader
+                  column-key="qsoRecordName"
+                  label="关联QSO"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th v-if="showAssociationColumns">
+                <QslSortableHeader
+                  column-key="offlineActivityName"
+                  label="关联活动"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardDate"
+                  label="日期"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardTime"
+                  label="时间"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardSent"
+                  label="发卡"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardReceived"
+                  label="收卡"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="receiptConfirmed"
+                  label="签收"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
+              <th v-if="showAddressSection">
+                <QslSortableHeader
+                  column-key="addressEntryName"
+                  label="绑定地址编号"
+                  :sort-key="cardSortKey"
+                  :sort-direction="cardSortDirection"
+                  @sort="toggleCardSort"
+                />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1152,7 +1328,9 @@ onMounted(loadSourceData)
               <td :colspan="cardInfoColumnCount" class="qsl-table-empty">请输入呼号进行查询。</td>
             </tr>
             <tr v-else-if="!matchedCardRows.length">
-              <td :colspan="cardInfoColumnCount" class="qsl-table-empty">未找到对应未制卡卡片记录。</td>
+              <td :colspan="cardInfoColumnCount" class="qsl-table-empty">
+                未找到对应未制卡卡片记录。
+              </td>
             </tr>
           </tbody>
         </table>
@@ -1164,8 +1342,24 @@ onMounted(loadSourceData)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="type" label="备注类型" :sort-key="remarkSortKey" :sort-direction="remarkSortDirection" @sort="toggleRemarkSort" /></th>
-              <th><QslSortableHeader column-key="content" label="备注内容" :sort-key="remarkSortKey" :sort-direction="remarkSortDirection" @sort="toggleRemarkSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="type"
+                  label="备注类型"
+                  :sort-key="remarkSortKey"
+                  :sort-direction="remarkSortDirection"
+                  @sort="toggleRemarkSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="content"
+                  label="备注内容"
+                  :sort-key="remarkSortKey"
+                  :sort-direction="remarkSortDirection"
+                  @sort="toggleRemarkSort"
+                />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1189,16 +1383,96 @@ onMounted(loadSourceData)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="id" label="QSO编号" :sort-key="qsoSortKey" :sort-direction="qsoSortDirection" @sort="toggleQsoSort" /></th>
-              <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="qsoSortKey" :sort-direction="qsoSortDirection" @sort="toggleQsoSort" /></th>
-              <th><QslSortableHeader column-key="date" label="日期" :sort-key="qsoSortKey" :sort-direction="qsoSortDirection" @sort="toggleQsoSort" /></th>
-              <th><QslSortableHeader column-key="time" label="时间" :sort-key="qsoSortKey" :sort-direction="qsoSortDirection" @sort="toggleQsoSort" /></th>
-              <th><QslSortableHeader column-key="timezone" label="时区" :sort-key="qsoSortKey" :sort-direction="qsoSortDirection" @sort="toggleQsoSort" /></th>
-              <th><QslSortableHeader column-key="freq" label="频率" :sort-key="qsoSortKey" :sort-direction="qsoSortDirection" @sort="toggleQsoSort" /></th>
-              <th><QslSortableHeader column-key="mode" label="模式" :sort-key="qsoSortKey" :sort-direction="qsoSortDirection" @sort="toggleQsoSort" /></th>
-              <th><QslSortableHeader column-key="myRig" label="本台设备" :sort-key="qsoSortKey" :sort-direction="qsoSortDirection" @sort="toggleQsoSort" /></th>
-              <th><QslSortableHeader column-key="qth" label="位置" :sort-key="qsoSortKey" :sort-direction="qsoSortDirection" @sort="toggleQsoSort" /></th>
-              <th><QslSortableHeader column-key="remarks" label="备注" :sort-key="qsoSortKey" :sort-direction="qsoSortDirection" @sort="toggleQsoSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="id"
+                  label="QSO编号"
+                  :sort-key="qsoSortKey"
+                  :sort-direction="qsoSortDirection"
+                  @sort="toggleQsoSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="呼号"
+                  :sort-key="qsoSortKey"
+                  :sort-direction="qsoSortDirection"
+                  @sort="toggleQsoSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="date"
+                  label="日期"
+                  :sort-key="qsoSortKey"
+                  :sort-direction="qsoSortDirection"
+                  @sort="toggleQsoSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="time"
+                  label="时间"
+                  :sort-key="qsoSortKey"
+                  :sort-direction="qsoSortDirection"
+                  @sort="toggleQsoSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="timezone"
+                  label="时区"
+                  :sort-key="qsoSortKey"
+                  :sort-direction="qsoSortDirection"
+                  @sort="toggleQsoSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="freq"
+                  label="频率"
+                  :sort-key="qsoSortKey"
+                  :sort-direction="qsoSortDirection"
+                  @sort="toggleQsoSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="mode"
+                  label="模式"
+                  :sort-key="qsoSortKey"
+                  :sort-direction="qsoSortDirection"
+                  @sort="toggleQsoSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="myRig"
+                  label="本台设备"
+                  :sort-key="qsoSortKey"
+                  :sort-direction="qsoSortDirection"
+                  @sort="toggleQsoSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="qth"
+                  label="位置"
+                  :sort-key="qsoSortKey"
+                  :sort-direction="qsoSortDirection"
+                  @sort="toggleQsoSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="remarks"
+                  label="备注"
+                  :sort-key="qsoSortKey"
+                  :sort-direction="qsoSortDirection"
+                  @sort="toggleQsoSort"
+                />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1230,15 +1504,87 @@ onMounted(loadSourceData)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="sourceType" label="来源" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-              <th><QslSortableHeader column-key="id" label="地址编号" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-              <th><QslSortableHeader column-key="callSign" label="呼号/卡片局" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-              <th><QslSortableHeader column-key="name" label="姓名" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-              <th><QslSortableHeader column-key="telephone" label="电话" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-              <th><QslSortableHeader column-key="postalCode" label="邮编" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-              <th><QslSortableHeader column-key="address" label="收件地址" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-              <th><QslSortableHeader column-key="email" label="邮箱" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
-              <th><QslSortableHeader column-key="remarks" label="备注" :sort-key="addressSortKey" :sort-direction="addressSortDirection" @sort="toggleAddressSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="sourceType"
+                  label="来源"
+                  :sort-key="addressSortKey"
+                  :sort-direction="addressSortDirection"
+                  @sort="toggleAddressSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="id"
+                  label="地址编号"
+                  :sort-key="addressSortKey"
+                  :sort-direction="addressSortDirection"
+                  @sort="toggleAddressSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="呼号/卡片局"
+                  :sort-key="addressSortKey"
+                  :sort-direction="addressSortDirection"
+                  @sort="toggleAddressSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="name"
+                  label="姓名"
+                  :sort-key="addressSortKey"
+                  :sort-direction="addressSortDirection"
+                  @sort="toggleAddressSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="telephone"
+                  label="电话"
+                  :sort-key="addressSortKey"
+                  :sort-direction="addressSortDirection"
+                  @sort="toggleAddressSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="postalCode"
+                  label="邮编"
+                  :sort-key="addressSortKey"
+                  :sort-direction="addressSortDirection"
+                  @sort="toggleAddressSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="address"
+                  label="收件地址"
+                  :sort-key="addressSortKey"
+                  :sort-direction="addressSortDirection"
+                  @sort="toggleAddressSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="email"
+                  label="邮箱"
+                  :sort-key="addressSortKey"
+                  :sort-direction="addressSortDirection"
+                  @sort="toggleAddressSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="remarks"
+                  label="备注"
+                  :sort-key="addressSortKey"
+                  :sort-direction="addressSortDirection"
+                  @sort="toggleAddressSort"
+                />
+              </th>
               <th>操作</th>
             </tr>
           </thead>
@@ -1250,7 +1596,9 @@ onMounted(loadSourceData)
             >
               <td>{{ item.sourceType === 'ADDRESS' ? '地址簿' : '卡片局' }}</td>
               <td>{{ item.id }}</td>
-              <td>{{ item.sourceType === 'ADDRESS' ? item.callSign || '-' : item.bureauName || '-' }}</td>
+              <td>
+                {{ item.sourceType === 'ADDRESS' ? item.callSign || '-' : item.bureauName || '-' }}
+              </td>
               <td>{{ item.name || '-' }}</td>
               <td>{{ item.telephone || '-' }}</td>
               <td>{{ item.postalCode || '-' }}</td>
@@ -1284,20 +1632,78 @@ onMounted(loadSourceData)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="id" label="卡片记录编号" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
-              <th><QslSortableHeader column-key="callSign" label="呼号" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
-              <th><QslSortableHeader column-key="cardType" label="卡片类型" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
-              <th><QslSortableHeader column-key="cardDate" label="日期" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
-              <th><QslSortableHeader column-key="cardTime" label="时间" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
-              <th><QslSortableHeader column-key="cardVersion" label="卡片版本" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
-              <th v-if="showOfflineActivity"><QslSortableHeader column-key="offlineActivityName" label="关联活动" :sort-key="pendingSortKey" :sort-direction="pendingSortDirection" @sort="togglePendingSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="id"
+                  label="卡片记录编号"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="呼号"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardType"
+                  label="卡片类型"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardDate"
+                  label="日期"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardTime"
+                  label="时间"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardVersion"
+                  label="卡片版本"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
+              <th v-if="showOfflineActivity">
+                <QslSortableHeader
+                  column-key="offlineActivityName"
+                  label="关联活动"
+                  :sort-key="pendingSortKey"
+                  :sort-direction="pendingSortDirection"
+                  @sort="togglePendingSort"
+                />
+              </th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="item in sortedPendingIssueCardRows" :key="item.id">
               <td>{{ item.id }}</td>
-              <td class="qsl-row-clickable" @click="selectPendingIssueRow(item)">{{ item.callSign || '-' }}</td>
+              <td class="qsl-row-clickable" @click="selectPendingIssueRow(item)">
+                {{ item.callSign || '-' }}
+              </td>
               <td>{{ item.cardType || '-' }}</td>
               <td>{{ item.cardDate || '-' }}</td>
               <td>{{ item.cardTime || '-' }}</td>
@@ -1371,7 +1777,11 @@ onMounted(loadSourceData)
                     不发邮件
                   </VButton>
                   <VTag
-                    v-if="!isOfflineExchangeScene && (item.spec.createdMailStatus === 'SENT' || item.spec.createdMailStatus === 'FAILED')"
+                    v-if="
+                      !isOfflineExchangeScene &&
+                      (item.spec.createdMailStatus === 'SENT' ||
+                        item.spec.createdMailStatus === 'FAILED')
+                    "
                     :theme="item.spec.createdMailStatus === 'SENT' ? 'secondary' : 'danger'"
                   >
                     {{ resolveMailStatusText(item.spec.createdMailStatus) }}
@@ -1380,7 +1790,9 @@ onMounted(loadSourceData)
               </td>
             </tr>
             <tr v-if="!pendingIssueCardRows.length">
-              <td :colspan="showOfflineActivity ? 8 : 7" class="qsl-table-empty">暂无待制卡记录。</td>
+              <td :colspan="showOfflineActivity ? 8 : 7" class="qsl-table-empty">
+                暂无待制卡记录。
+              </td>
             </tr>
           </tbody>
         </table>

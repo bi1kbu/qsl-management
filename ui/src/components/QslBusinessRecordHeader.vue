@@ -80,7 +80,12 @@ const resetSearch = () => {
   <div class="qsl-business-record-header">
     <div class="qsl-business-record-header__left">
       <label v-if="showSelect" class="qsl-checkbox qsl-select-only">
-        <input :checked="allSelected" type="checkbox" :disabled="!hasRows" @change="emit('toggle-all')" />
+        <input
+          :checked="allSelected"
+          type="checkbox"
+          :disabled="!hasRows"
+          @change="emit('toggle-all')"
+        />
       </label>
       <span class="qsl-business-record-header__title">{{ title }}</span>
 
@@ -93,7 +98,9 @@ const resetSearch = () => {
         />
       </div>
       <VButton size="sm" type="secondary" @click="submitSearch">搜索</VButton>
-      <VButton v-if="showReset" size="sm" type="secondary" @click="resetSearch">{{ resetText }}</VButton>
+      <VButton v-if="showReset" size="sm" type="secondary" @click="resetSearch">{{
+        resetText
+      }}</VButton>
     </div>
 
     <label v-if="showSync" class="qsl-checkbox qsl-business-record-header__sync">

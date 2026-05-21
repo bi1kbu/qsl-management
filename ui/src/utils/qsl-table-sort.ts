@@ -19,8 +19,12 @@ const callSignCharRank = (char: string): number => {
 }
 
 export const compareCallSign = (left: unknown, right: unknown): number => {
-  const normalizedLeft = String(left ?? '').trim().toUpperCase()
-  const normalizedRight = String(right ?? '').trim().toUpperCase()
+  const normalizedLeft = String(left ?? '')
+    .trim()
+    .toUpperCase()
+  const normalizedRight = String(right ?? '')
+    .trim()
+    .toUpperCase()
   const length = Math.min(normalizedLeft.length, normalizedRight.length)
   for (let index = 0; index < length; index += 1) {
     const leftRank = callSignCharRank(normalizedLeft[index])

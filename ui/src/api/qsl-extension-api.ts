@@ -70,7 +70,11 @@ const containsNotFoundMessage = (error: unknown): boolean => {
   }
 
   const mergedText = candidates.join(' ').toLowerCase()
-  return mergedText.includes('was not found') || mergedText.includes('资源不存在') || mergedText.includes('404')
+  return (
+    mergedText.includes('was not found') ||
+    mergedText.includes('资源不存在') ||
+    mergedText.includes('404')
+  )
 }
 
 export const createResourceName = (prefix: string): string => {
@@ -85,13 +89,16 @@ export async function listExtensions<TSpec, TStatus = Record<string, unknown>>(
   },
 ): Promise<QslExtension<TSpec, TStatus>[]> {
   const sort = options?.sort?.length ? options.sort : ['metadata.creationTimestamp,desc']
-  const response = await axiosInstance.get<QslExtensionListResponse<TSpec, TStatus>>(buildUrl(plural), {
-    params: {
-      page: 1,
-      size: 1000,
-      sort,
+  const response = await axiosInstance.get<QslExtensionListResponse<TSpec, TStatus>>(
+    buildUrl(plural),
+    {
+      params: {
+        page: 1,
+        size: 1000,
+        sort,
+      },
     },
-  })
+  )
   const items = Array.isArray(response.data?.items) ? response.data.items : []
   return items.filter((item) => !item.metadata?.deletionTimestamp)
 }
@@ -115,7 +122,10 @@ export async function createExtension<TSpec, TStatus = Record<string, unknown>>(
   plural: string,
   extension: QslExtension<TSpec, TStatus>,
 ): Promise<QslExtension<TSpec, TStatus>> {
-  const response = await axiosInstance.post<QslExtension<TSpec, TStatus>>(buildUrl(plural), extension)
+  const response = await axiosInstance.post<QslExtension<TSpec, TStatus>>(
+    buildUrl(plural),
+    extension,
+  )
   return response.data
 }
 
@@ -124,7 +134,10 @@ export async function updateExtension<TSpec, TStatus = Record<string, unknown>>(
   name: string,
   extension: QslExtension<TSpec, TStatus>,
 ): Promise<QslExtension<TSpec, TStatus>> {
-  const response = await axiosInstance.put<QslExtension<TSpec, TStatus>>(buildUrl(plural, name), extension)
+  const response = await axiosInstance.put<QslExtension<TSpec, TStatus>>(
+    buildUrl(plural, name),
+    extension,
+  )
   return response.data
 }
 

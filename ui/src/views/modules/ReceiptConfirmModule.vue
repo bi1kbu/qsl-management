@@ -7,7 +7,12 @@ import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
-import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  applySortDirection,
+  compareCallSign,
+  compareText,
+  type QslSortDirection,
+} from '../../utils/qsl-table-sort'
 
 interface CardRecordSpec {
   callSign: string
@@ -40,7 +45,14 @@ interface ReceiptRow {
 }
 
 type SceneType = CardRecordSpec['sceneType']
-type ReceiptSortKey = 'resourceName' | 'callSign' | 'cardType' | 'cardVersion' | 'cardDate' | 'cardSent' | 'receiptConfirmed'
+type ReceiptSortKey =
+  | 'resourceName'
+  | 'callSign'
+  | 'cardType'
+  | 'cardVersion'
+  | 'cardDate'
+  | 'cardSent'
+  | 'receiptConfirmed'
 
 const props = withDefaults(
   defineProps<{
@@ -66,7 +78,9 @@ const pageSizeOptions = [20, 30, 50, 100]
 const sortKey = ref<ReceiptSortKey>('resourceName')
 const sortDirection = ref<QslSortDirection>('asc')
 
-const normalizedSceneTypes = computed(() => new Set(props.sceneTypes.map((item) => item.trim().toUpperCase())))
+const normalizedSceneTypes = computed(
+  () => new Set(props.sceneTypes.map((item) => item.trim().toUpperCase())),
+)
 
 const isFormalCardRecordName = (value: string): boolean => /^C\d+$/i.test(value.trim())
 
@@ -110,30 +124,38 @@ const filteredRows = computed(() => {
   const text = keyword.value.trim().toUpperCase()
   return rows.value.filter((item) => {
     const tabOk = activeTab.value === 'signed' ? item.receiptConfirmed : !item.receiptConfirmed
-    const keywordOk = !text || [
-      item.resourceName,
-      item.callSign,
-      item.cardType,
-      item.cardVersion,
-      item.offlineActivityName,
-      item.publicReceiptRemarks,
-    ].join(' ').toUpperCase().includes(text)
+    const keywordOk =
+      !text ||
+      [
+        item.resourceName,
+        item.callSign,
+        item.cardType,
+        item.cardVersion,
+        item.offlineActivityName,
+        item.publicReceiptRemarks,
+      ]
+        .join(' ')
+        .toUpperCase()
+        .includes(text)
     return tabOk && keywordOk
   })
 })
 
 const sortedRows = computed(() => {
   return [...filteredRows.value].sort((left, right) => {
-    const result = sortKey.value === 'callSign'
-      ? compareCallSign(left.callSign, right.callSign)
-      : sortKey.value === 'cardSent' || sortKey.value === 'receiptConfirmed'
-        ? Number(left[sortKey.value]) - Number(right[sortKey.value])
-        : compareText(String(left[sortKey.value] ?? ''), String(right[sortKey.value] ?? ''))
+    const result =
+      sortKey.value === 'callSign'
+        ? compareCallSign(left.callSign, right.callSign)
+        : sortKey.value === 'cardSent' || sortKey.value === 'receiptConfirmed'
+          ? Number(left[sortKey.value]) - Number(right[sortKey.value])
+          : compareText(String(left[sortKey.value] ?? ''), String(right[sortKey.value] ?? ''))
     return applySortDirection(result, sortDirection.value)
   })
 })
 
-const totalPages = computed(() => sortedRows.value.length ? Math.ceil(sortedRows.value.length / pageSize.value) : 1)
+const totalPages = computed(() =>
+  sortedRows.value.length ? Math.ceil(sortedRows.value.length / pageSize.value) : 1,
+)
 const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return sortedRows.value.slice(start, start + pageSize.value)
@@ -237,12 +259,60 @@ onMounted(loadRows)
         <table class="qsl-table">
           <thead>
             <tr>
-              <th><QslSortableHeader column-key="resourceName" label="卡片ID" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="callSign" label="对方呼号" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardType" label="卡片类型" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardVersion" label="卡片版本" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="cardSent" label="发卡状态" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
-              <th><QslSortableHeader column-key="receiptConfirmed" label="签收状态" :sort-key="sortKey" :sort-direction="sortDirection" @sort="toggleSort" /></th>
+              <th>
+                <QslSortableHeader
+                  column-key="resourceName"
+                  label="卡片ID"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="callSign"
+                  label="对方呼号"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardType"
+                  label="卡片类型"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardVersion"
+                  label="卡片版本"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="cardSent"
+                  label="发卡状态"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
+              <th>
+                <QslSortableHeader
+                  column-key="receiptConfirmed"
+                  label="签收状态"
+                  :sort-key="sortKey"
+                  :sort-direction="sortDirection"
+                  @sort="toggleSort"
+                />
+              </th>
               <th>发卡时间</th>
               <th>签收备注</th>
               <th v-if="activeTab === 'pending'">操作</th>
@@ -254,8 +324,16 @@ onMounted(loadRows)
               <td>{{ item.callSign || '-' }}</td>
               <td>{{ item.cardType }}</td>
               <td>{{ item.cardVersion || '-' }}</td>
-              <td><VTag :theme="item.cardSent ? 'secondary' : 'default'">{{ item.cardSent ? '已发卡' : '未发卡' }}</VTag></td>
-              <td><VTag :theme="item.receiptConfirmed ? 'secondary' : 'default'">{{ item.receiptConfirmed ? '已签收' : '待签收' }}</VTag></td>
+              <td>
+                <VTag :theme="item.cardSent ? 'secondary' : 'default'">{{
+                  item.cardSent ? '已发卡' : '未发卡'
+                }}</VTag>
+              </td>
+              <td>
+                <VTag :theme="item.receiptConfirmed ? 'secondary' : 'default'">{{
+                  item.receiptConfirmed ? '已签收' : '待签收'
+                }}</VTag>
+              </td>
               <td>{{ item.sentAt || '-' }}</td>
               <td class="qsl-pre-line">{{ item.publicReceiptRemarks || '-' }}</td>
               <td v-if="activeTab === 'pending'">
@@ -270,7 +348,9 @@ onMounted(loadRows)
               </td>
             </tr>
             <tr v-if="!pagedRows.length">
-              <td :colspan="activeTab === 'pending' ? 9 : 8" class="qsl-table-empty">暂无签收记录。</td>
+              <td :colspan="activeTab === 'pending' ? 9 : 8" class="qsl-table-empty">
+                暂无签收记录。
+              </td>
             </tr>
           </tbody>
         </table>

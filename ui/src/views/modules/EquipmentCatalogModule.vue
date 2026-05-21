@@ -48,7 +48,9 @@ const typeTabs: { key: CatalogType; label: string }[] = [
 const currentList = computed(() => {
   return allItems.value
     .filter((item) => item.type === activeType.value)
-    .sort((left, right) => applySortDirection(compareText(left.value, right.value), sortDirection.value))
+    .sort((left, right) =>
+      applySortDirection(compareText(left.value, right.value), sortDirection.value),
+    )
 })
 
 const toggleSortDirection = () => {
@@ -159,9 +161,16 @@ onMounted(loadCatalog)
 
       <div class="qsl-form-inline">
         <div class="qsl-input-shell">
-          <input v-model.trim="inputValue" type="text" placeholder="输入新条目" @keyup.enter="addItem" />
+          <input
+            v-model.trim="inputValue"
+            type="text"
+            placeholder="输入新条目"
+            @keyup.enter="addItem"
+          />
         </div>
-        <VButton type="secondary" :disabled="loading || submitting" @click="addItem">新增条目</VButton>
+        <VButton type="secondary" :disabled="loading || submitting" @click="addItem"
+          >新增条目</VButton
+        >
         <VButton :disabled="loading || submitting" @click="toggleSortDirection">
           {{ sortDirection === 'asc' ? '名称升序' : '名称降序' }}
         </VButton>
@@ -171,7 +180,9 @@ onMounted(loadCatalog)
       <div class="qsl-tag-list qsl-tag-list--wide">
         <span v-for="item in currentList" :key="item.id" class="qsl-tag-pill">
           <VTag>{{ item.value }}</VTag>
-          <button type="button" :disabled="loading || submitting" @click="removeItem(item)">删除</button>
+          <button type="button" :disabled="loading || submitting" @click="removeItem(item)">
+            删除
+          </button>
         </span>
       </div>
 
