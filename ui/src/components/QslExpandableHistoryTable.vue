@@ -20,6 +20,7 @@ const props = withDefaults(
     emptyText?: string
     showBatchToggle?: boolean
     showToolbar?: boolean
+    showActions?: boolean
     sortKey?: string
     sortDirection?: QslSortDirection
   }>(),
@@ -28,6 +29,7 @@ const props = withDefaults(
     emptyText: '暂无数据。',
     showBatchToggle: true,
     showToolbar: true,
+    showActions: true,
     sortKey: '',
     sortDirection: 'asc',
   },
@@ -178,7 +180,7 @@ const formatCellValue = (value: unknown): string => {
             />
             <template v-else>{{ column.label }}</template>
           </th>
-          <th>操作</th>
+          <th v-if="showActions">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -203,18 +205,20 @@ const formatCellValue = (value: unknown): string => {
                 {{ formatCellValue(row[column.key]) }}
               </slot>
             </td>
-            <td @click.stop>
+            <td v-if="showActions" @click.stop>
               <slot name="row-actions" :row="row" />
             </td>
           </tr>
           <tr v-if="isRowExpanded(row)" class="qsl-history-detail-row">
-            <td :colspan="columns.length + 2">
+            <td :colspan="columns.length + (showActions ? 2 : 1)">
               <slot name="detail" :row="row" />
             </td>
           </tr>
         </template>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + 2" class="qsl-table-empty">{{ emptyText }}</td>
+          <td :colspan="columns.length + (showActions ? 2 : 1)" class="qsl-table-empty">
+            {{ emptyText }}
+          </td>
         </tr>
       </tbody>
     </table>

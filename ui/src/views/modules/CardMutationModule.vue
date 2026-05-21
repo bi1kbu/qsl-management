@@ -2174,6 +2174,7 @@ onMounted(() => {
         :batch-edit-enabled="false"
         :show-batch-toggle="false"
         :show-toolbar="false"
+        :show-actions="!isResendTab"
         :sort-key="sortKey"
         :sort-direction="sortDirection"
         :empty-text="
@@ -2197,8 +2198,7 @@ onMounted(() => {
         </template>
 
         <template #row-actions="{ row }">
-          <span v-if="isResendTab" class="qsl-muted">重发记录</span>
-          <template v-else-if="!isErrorTab">
+          <template v-if="!isErrorTab">
             <VButton size="xs" type="secondary" @click="startEditRow(toHistoryItem(row))"
               >编辑</VButton
             >
