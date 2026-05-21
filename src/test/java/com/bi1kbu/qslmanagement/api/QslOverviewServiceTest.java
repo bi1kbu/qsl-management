@@ -186,6 +186,7 @@ class QslOverviewServiceTest {
         spec.setReceiptConfirmed(receiptConfirmed);
         spec.setCardReceived(cardReceived);
         cardRecord.setSpec(spec);
+        QslCardStateTransitionSupport.refreshFlowStatus(cardRecord);
         return cardRecord;
     }
 

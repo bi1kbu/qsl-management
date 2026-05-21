@@ -1287,7 +1287,7 @@ const markReceivedMailAsSentForRow = async (item: ReceiveResult) => {
       receivedMailLastError: '',
     }
 
-    await updateExtension<CardRecordSpec>(resourcePlural, item.resourceName, {
+    await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, item.resourceName, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
@@ -1295,6 +1295,7 @@ const markReceivedMailAsSentForRow = async (item: ReceiveResult) => {
         version: item.metadataVersion,
       },
       spec: nextSpec,
+      status: item.status,
     })
 
     await appendQslAuditLog({
@@ -1327,7 +1328,7 @@ const closeReceiveForRow = async (item: ReceiveResult) => {
       receivedMailLastError: '',
     }
 
-    await updateExtension<CardRecordSpec>(resourcePlural, item.resourceName, {
+    await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, item.resourceName, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
@@ -1335,6 +1336,7 @@ const closeReceiveForRow = async (item: ReceiveResult) => {
         version: item.metadataVersion,
       },
       spec: nextSpec,
+      status: item.status,
     })
 
     await appendQslAuditLog({

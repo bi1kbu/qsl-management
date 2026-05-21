@@ -91,6 +91,18 @@ class QslCardStateTransitionSupportTest {
         assertEquals("", spec.getReceivedMailLastError());
     }
 
+    @Test
+    void shouldTreatLinkedReceiveRecordAsReceivedState() {
+        var cardRecord = cardRecord("QSO");
+        var spec = cardRecord.getSpec();
+        spec.setCardIssued(Boolean.TRUE);
+
+        QslCardStateTransitionSupport.refreshFlowStatus(cardRecord, true);
+
+        assertEquals("已收卡片", cardRecord.getStatus().getFlowStatus());
+        assertEquals("已收卡片", QslCardStateTransitionSupport.resolveFlowStatus(spec, true));
+    }
+
     private CardRecord cardRecord(String sceneType) {
         var cardRecord = new CardRecord();
         var spec = new CardRecord.CardRecordSpec();

@@ -10,6 +10,7 @@ import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import QslSortableHeader from '../../components/QslSortableHeader.vue'
 import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import { resolveMonotonicCardFlowStatus } from '../../utils/qsl-card-state'
 
 interface CardRecordSpec {
   callSign: string
@@ -47,10 +48,15 @@ interface CardRecordSpec {
   mailTargetEmail: string
 }
 
+interface CardRecordStatus {
+  flowStatus: string
+}
+
 interface SendConfirmItem {
   resourceName: string
   metadataVersion?: number | null
   spec: CardRecordSpec
+  status: CardRecordStatus
   callSign: string
   cardType: 'QSO' | 'SWL' | 'EYEBALL'
   cardDate: string
@@ -440,8 +446,9 @@ const applyCardSentSideEffects = (spec: CardRecordSpec) => {
   }
 }
 
-const toRow = (extension: QslExtension<CardRecordSpec>): SendConfirmItem => {
+const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): SendConfirmItem => {
   const spec = normalizeCardRecordSpec(extension.spec)
+  const status = { flowStatus: extension.status?.flowStatus ?? '' }
   const cardPrintAt = spec.cardDate && spec.cardTime ? `${spec.cardDate} ${spec.cardTime}` : '未制卡'
   const envelopePrintAt = spec.envelopePrinted ? '已打包' : '未打包'
 
@@ -449,6 +456,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>): SendConfirmItem => {
     resourceName: extension.metadata.name,
     metadataVersion: extension.metadata.version,
     spec,
+    status,
     callSign: spec.callSign || '未知呼号',
     cardType: spec.cardType,
     cardDate: spec.cardDate || '未设置日期',
@@ -464,7 +472,7 @@ const toRow = (extension: QslExtension<CardRecordSpec>): SendConfirmItem => {
 const loadRows = async (options: { silent?: boolean } = {}) => {
   loading.value = true
   try {
-    const extensions = await listExtensions<CardRecordSpec>(resourcePlural)
+    const extensions = await listExtensions<CardRecordSpec, CardRecordStatus>(resourcePlural)
     rows.value = extensions
       .map((extension) => toRow(extension))
       .filter((row) => normalizedSceneTypes.value.includes(normalizeSceneType(row.spec.sceneType, row.spec.cardType)))
@@ -556,7 +564,7 @@ const saveEdit = async () => {
     }
     applyCardSentSideEffects(nextSpec)
 
-    await updateExtension<CardRecordSpec>(resourcePlural, target.resourceName, {
+    await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, target.resourceName, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
@@ -564,6 +572,10 @@ const saveEdit = async () => {
         version: target.metadataVersion,
       },
       spec: nextSpec,
+      status: {
+        ...target.status,
+        flowStatus: resolveMonotonicCardFlowStatus(nextSpec, target.status),
+      },
     })
 
     await appendQslAuditLog({
@@ -698,7 +710,7 @@ const applyHistoryBatchEdit = async () => {
       }
       applyCardSentSideEffects(nextSpec)
 
-      await updateExtension<CardRecordSpec>(resourcePlural, item.resourceName, {
+      await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, item.resourceName, {
         apiVersion: qslApiVersion,
         kind: resourceKind,
         metadata: {
@@ -706,6 +718,10 @@ const applyHistoryBatchEdit = async () => {
           version: item.metadataVersion,
         },
         spec: nextSpec,
+        status: {
+          ...item.status,
+          flowStatus: resolveMonotonicCardFlowStatus(nextSpec, item.status),
+        },
       })
     }
 
@@ -761,7 +777,7 @@ const markSentMailAsSentForRow = async (row: SendConfirmItem) => {
       sentMailLastError: '',
     }
 
-    await updateExtension<CardRecordSpec>(resourcePlural, row.resourceName, {
+    await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, row.resourceName, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
@@ -769,6 +785,7 @@ const markSentMailAsSentForRow = async (row: SendConfirmItem) => {
         version: row.metadataVersion,
       },
       spec: nextSpec,
+      status: row.status,
     })
 
     await appendQslAuditLog({

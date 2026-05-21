@@ -5,15 +5,18 @@ import com.bi1kbu.qslmanagement.extension.model.BureauEntry;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
+import com.bi1kbu.qslmanagement.extension.model.ReceiveRecord;
 import com.bi1kbu.qslmanagement.extension.model.StationCard;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -84,25 +87,36 @@ public class QslPublicApiService {
             ))
             .collectList();
 
-        var cardItemsMono = client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
-            .filter(cardRecord -> cardRecord.getSpec() != null)
-            .filter(cardRecord -> normalizedCallSign.equals(QslApiSupport.normalizeCallSign(cardRecord.getSpec().getCallSign())))
-            .filter(cardRecord -> {
-                if (normalizedSceneType.isBlank()) {
-                    return true;
-                }
-                return normalizedSceneType.equals(normalizeSceneType(cardRecord.getSpec().getSceneType()));
-            })
-            .map(cardRecord -> new PublicCardItem(
-                cardRecord.getMetadata().getName(),
-                normalizedCallSign,
-                nullToEmpty(cardRecord.getSpec().getCardType()),
-                Boolean.TRUE.equals(cardRecord.getSpec().getCardSent()),
-                Boolean.TRUE.equals(cardRecord.getSpec().getCardReceived()),
-                Boolean.TRUE.equals(cardRecord.getSpec().getReceiptConfirmed()),
-                nullToEmpty(cardRecord.getSpec().getCardDate())
-            ))
-            .collectList();
+        var cardItemsMono = Mono.zip(
+                client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT).collectList(),
+                client.listAll(ReceiveRecord.class, EMPTY_OPTIONS, DEFAULT_SORT).collectList()
+            )
+            .map(tuple -> {
+                var linkedCardNames = linkedOutboundCardNames(tuple.getT2());
+                return tuple.getT1().stream()
+                    .filter(cardRecord -> cardRecord.getSpec() != null)
+                    .filter(cardRecord -> normalizedCallSign.equals(
+                        QslApiSupport.normalizeCallSign(cardRecord.getSpec().getCallSign())
+                    ))
+                    .filter(cardRecord -> {
+                        if (normalizedSceneType.isBlank()) {
+                            return true;
+                        }
+                        return normalizedSceneType.equals(normalizeSceneType(cardRecord.getSpec().getSceneType()));
+                    })
+                    .map(cardRecord -> new PublicCardItem(
+                        cardRecord.getMetadata().getName(),
+                        normalizedCallSign,
+                        nullToEmpty(cardRecord.getSpec().getCardType()),
+                        Boolean.TRUE.equals(cardRecord.getSpec().getCardSent()),
+                        isReceivedFlowStatus(cardRecord) || linkedCardNames.contains(
+                            normalizeResourceName(cardRecord.getMetadata().getName())
+                        ),
+                        Boolean.TRUE.equals(cardRecord.getSpec().getReceiptConfirmed()),
+                        nullToEmpty(cardRecord.getSpec().getCardDate())
+                    ))
+                    .toList();
+            });
 
         return Mono.zip(qsoItemsMono, cardItemsMono)
             .map(tuple -> new PublicQsoQueryResult(
@@ -502,6 +516,34 @@ public class QslPublicApiService {
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private boolean isReceivedFlowStatus(CardRecord cardRecord) {
+        return cardRecord != null
+            && cardRecord.getStatus() != null
+            && "已收卡片".equals(nullToEmpty(cardRecord.getStatus().getFlowStatus()).trim());
+    }
+
+    private Set<String> linkedOutboundCardNames(List<ReceiveRecord> receiveRecords) {
+        return receiveRecords.stream()
+            .filter(receiveRecord -> receiveRecord != null && receiveRecord.getSpec() != null)
+            .flatMap(receiveRecord -> splitResourceNames(receiveRecord.getSpec().getOutboundCardNames()).stream())
+            .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private List<String> splitResourceNames(String value) {
+        if (nullToEmpty(value).trim().isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(value.split("[,，、;；\\s]+"))
+            .map(this::normalizeResourceName)
+            .filter(item -> !item.isBlank())
+            .distinct()
+            .toList();
+    }
+
+    private String normalizeResourceName(String value) {
+        return nullToEmpty(value).trim().toUpperCase(Locale.ROOT);
     }
 
     private List<String> normalizeCardVersions(String raw) {

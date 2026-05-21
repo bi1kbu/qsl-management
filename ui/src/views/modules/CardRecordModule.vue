@@ -19,6 +19,7 @@ import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import { resolveCardFlowStatus } from '../../utils/qsl-card-state'
 
 interface CardRecordSpec {
   callSign: string
@@ -1207,7 +1208,7 @@ const markQsoAsNoCard = async (item: QsoRecordItem) => {
   saving.value = true
   try {
     const resourceName = allocateNoCardResourceName()
-    await createExtension<CardRecordSpec>(resourcePlural, {
+    await createExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
@@ -1247,6 +1248,9 @@ const markQsoAsNoCard = async (item: QsoRecordItem) => {
         receivedMailSentAt: '',
         receivedMailLastError: '',
         mailTargetEmail: '',
+      },
+      status: {
+        flowStatus: '',
       },
     })
 
@@ -1439,7 +1443,7 @@ const applyHistoryBatchEdit = async () => {
         ? applyBatchCardIssuedState(nextSpec, nextValue)
         : nextSpec
 
-      await updateExtension<CardRecordSpec>(resourcePlural, item.resourceName, {
+      await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, item.resourceName, {
         apiVersion: qslApiVersion,
         kind: resourceKind,
         metadata: {
@@ -1447,6 +1451,10 @@ const applyHistoryBatchEdit = async () => {
           version: item.metadataVersion,
         },
         spec: persistedSpec,
+        status: {
+          ...item.status,
+          flowStatus: resolveCardFlowStatus(persistedSpec),
+        },
       })
     }
 
@@ -1521,7 +1529,7 @@ const createOfflineBatchCards = async () => {
     const trimmedCardRemarks = form.cardRemarks.trim()
 
     for (const cardResourceName of nextCardResourceNames) {
-      await createExtension<CardRecordSpec>(resourcePlural, {
+      await createExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, {
         apiVersion: qslApiVersion,
         kind: resourceKind,
         metadata: {
@@ -1561,6 +1569,9 @@ const createOfflineBatchCards = async () => {
           receivedMailSentAt: '',
           receivedMailLastError: '',
           mailTargetEmail: '',
+        },
+        status: {
+          flowStatus: '',
         },
       })
     }
@@ -1678,13 +1689,16 @@ const saveCardRecord = async () => {
 
       if (isNoCardPlaceholder(target)) {
         const nextCardResourceName = await allocateCardResourceName()
-        await createExtension<CardRecordSpec>(resourcePlural, {
+        await createExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, {
           apiVersion: qslApiVersion,
           kind: resourceKind,
           metadata: {
             name: nextCardResourceName,
           },
           spec: nextSpec,
+          status: {
+            flowStatus: resolveCardFlowStatus(nextSpec),
+          },
         })
         await deleteExtension(resourcePlural, target.resourceName)
 
@@ -1705,7 +1719,7 @@ const saveCardRecord = async () => {
         return
       }
 
-      await updateExtension<CardRecordSpec>(resourcePlural, target.resourceName, {
+      await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, target.resourceName, {
         apiVersion: qslApiVersion,
         kind: resourceKind,
         metadata: {
@@ -1713,6 +1727,10 @@ const saveCardRecord = async () => {
           version: target.metadataVersion,
         },
         spec: nextSpec,
+        status: {
+          ...target.status,
+          flowStatus: resolveCardFlowStatus(nextSpec),
+        },
       })
 
       await appendQslAuditLog({
@@ -1730,7 +1748,7 @@ const saveCardRecord = async () => {
     }
 
     const nextCardResourceName = await allocateCardResourceName()
-    const createdRecord = await createExtension<CardRecordSpec>(resourcePlural, {
+    const createdRecord = await createExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, {
       apiVersion: qslApiVersion,
       kind: resourceKind,
       metadata: {
@@ -1770,6 +1788,9 @@ const saveCardRecord = async () => {
         receivedMailSentAt: '',
         receivedMailLastError: '',
         mailTargetEmail: '',
+      },
+      status: {
+        flowStatus: '',
       },
     })
 

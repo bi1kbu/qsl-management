@@ -16,6 +16,7 @@ import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import { applySortDirection, compareCallSign, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import { resolveCardFlowStatus as resolveDerivedCardFlowStatus } from '../../utils/qsl-card-state'
 
 type CardType = 'QSO' | 'SWL' | 'EYEBALL'
 type MailStatus = '' | 'PENDING' | 'SENT' | 'FAILED'
@@ -631,10 +632,10 @@ const resolveCardFlowStatus = (spec: CardRecordSpec): string => {
 
 const resolveNextFlowStatus = (spec: CardRecordSpec, requestedFlowStatus: string): string => {
   const requested = requestedFlowStatus.trim()
-  if (spec.cardReceived || requested === '已收卡片') {
+  if (!requested) {
     return resolveCardFlowStatus(spec)
   }
-  return requested
+  return resolveDerivedCardFlowStatus(spec)
 }
 
 const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>): CardMutationItem => {
@@ -1096,10 +1097,7 @@ const applyBatchField = (
       break
   }
   applyStateConsistency(nextSpec)
-  if (
-    ['cardIssuedState', 'cardSentState', 'envelopePrintedState', 'cardReceivedState', 'receiptConfirmedState'].includes(field)
-    || nextStatus.flowStatus.trim() === '已收卡片'
-  ) {
+  if (['cardIssuedState', 'cardSentState', 'envelopePrintedState', 'cardReceivedState', 'receiptConfirmedState'].includes(field)) {
     nextStatus.flowStatus = resolveNextFlowStatus(nextSpec, nextStatus.flowStatus)
   }
 

@@ -139,14 +139,14 @@ Halo 官方资料核验日期：2026-05-19
 收卡业务包含通联收卡、线上换卡收卡、线下换卡收卡。
 
 1. 三类收卡菜单复用收卡确认组件，以 `sceneType` 限定业务范围。
-2. 2.0.0 起，收卡编号来源统一为 `ReceiveRecord.metadata.name`；收卡业务页面、查询、统计与导入导出均以 `ReceiveRecord` 作为收卡编号主数据来源。2.0.7 起 `CardRecord.spec.receivedRecordCodes` 仅作为待 2.1.x 移除的历史字段保留，普通业务、查询、统计、导入导出和前端展示均不再读写该字段。前端普通业务与审计页面的“已收”展示、筛选和排序只以 `CardRecord.status.flowStatus=已收卡片` 为依据，`CardRecord.spec.cardReceived` 仅作为后台状态维护字段，不作为展示判断。
+2. 2.0.0 起，收卡编号来源统一为 `ReceiveRecord.metadata.name`；收卡业务页面、查询、统计与导入导出均以 `ReceiveRecord` 作为收卡编号主数据来源。2.0.7 起 `CardRecord.spec.receivedRecordCodes` 仅作为待 2.1.x 移除的历史字段保留，普通业务、查询、统计、导入导出和前端展示均不再读写该字段。2.0.13 起，普通业务、公开查询、审计页面与统计中的“已收”展示、筛选和排序以 `CardRecord.status.flowStatus=已收卡片` 为依据，`CardRecord.spec.cardReceived` 仅作为后台状态维护字段，不作为展示判断；`ReceiveRecord.spec.outboundCardNames` 是状态机输入事实，只要卡片存在收卡记录关联，即必须刷新为“已收卡片”。导入会忽略外部 `flowStatus` 并按卡片状态字段与 `ReceiveRecord.spec.outboundCardNames` 重建状态机，导出输出后端派生后的 `flowStatus`。
 3. 收卡业务提供基本确认、已收卡片、批量编辑与单条编辑能力；基本功能的“确认收信”和清单内“确认收卡”必须使用页面上方填写的收卡日期，未填写日期时前端弹窗提示且服务端拒绝提交，不再默认使用当前日期；该日期在本次浏览会话内按收卡子菜单记忆，提交后不清空。2.0.0 起，收卡确认先创建 `ReceiveRecord`，再把可匹配的发卡记录写入 `ReceiveRecord.spec.outboundCardNames`；无法匹配时 `matchStatus=未匹配`，不创建新的 `CardRecord`。
 4. 线上换卡业务收到对方“已签收”动作时，如果未制卡、未打包或未发卡，会联动补齐 `cardIssued/cardIssuedAt/envelopePrinted/cardSent/sentAt`；通联业务和线上换卡业务只要 `cardSent=true`，也会联动补齐制卡和打包状态。状态机被批量编辑为否或空时，对应时间、邮件状态、邮件时间和邮件错误同步置空。
 
 ### 3.8 审计与数据
 
 审计包含通联记录查询、卡片记录查询、收卡记录查询、统计报表、审计日志。统计报表除汇总指标外展示月度收发卡片数量折线图。写操作通过 `QslAuditLog` 追加记录。审计中的卡片记录查询和收卡记录查询按业务场景 tab 展示，至少区分通联业务、线上换卡业务、线下换卡业务；收卡记录查询的数据来源为 `ReceiveRecord`，卡片记录查询的数据来源为 `CardRecord`。标记“不创建卡片”时使用后台占位 `CardRecord`，资源名为 `NC0001` 递增形式；该编号不是正式卡片 ID，前台查询与业务页面保持空白展示。
-总览看板与统计报表中的卡片类统计项（卡片总数、眼球总数、待发卡片、已发卡片、发卡签收）只统计资源名为 `C{序号}` 且存在呼号的正式 `CardRecord` 记录，避免将线下换卡空呼号占位卡、`NC{序号}` 不创建卡片占位记录或其他后台记录纳入统计。待发卡片不再按裸 `cardSent=false` 统计，而是排除线上换卡签收链路记录、已签收、已收卡以及已经被 `ReceiveRecord.spec.outboundCardNames` 闭环关联的记录，仅保留仍需发卡处理的非线上换卡积压。已发卡片统计明确已发卡、已签收、有发卡时间的记录；线上换卡场景中，若 `cardIssued=true`、`envelopePrinted=true` 且 `createdMailStatus=SENT`，也视为已完成发出链路，避免历史记录未回写 `cardSent` 导致统计偏小。2.0.0 起，已收卡片优先按 `ReceiveRecord.spec.callSign` 去重统计；呼号为空时按 `ReceiveRecord.spec.outboundCardNames` 中的卡片 ID 去重统计；当不存在新收卡记录时，才回退使用旧 `CardRecord.spec.cardReceived` 并按呼号去重的口径。
+总览看板与统计报表中的卡片类统计项（卡片总数、眼球总数、待发卡片、已发卡片、发卡签收）只统计资源名为 `C{序号}` 且存在呼号的正式 `CardRecord` 记录，避免将线下换卡空呼号占位卡、`NC{序号}` 不创建卡片占位记录或其他后台记录纳入统计。待发卡片不再按裸 `cardSent=false` 统计，而是排除线上换卡签收链路记录、已签收、已收卡以及已经被 `ReceiveRecord.spec.outboundCardNames` 闭环关联的记录，仅保留仍需发卡处理的非线上换卡积压。已发卡片统计明确已发卡、已签收、有发卡时间的记录；线上换卡场景中，若 `cardIssued=true`、`envelopePrinted=true` 且 `createdMailStatus=SENT`，也视为已完成发出链路，避免历史记录未回写 `cardSent` 导致统计偏小。2.0.0 起，已收卡片优先按 `ReceiveRecord.spec.callSign` 去重统计；呼号为空时按 `ReceiveRecord.spec.outboundCardNames` 中的卡片 ID 去重统计；当不存在新收卡记录时，才回退使用 `CardRecord.status.flowStatus=已收卡片` 并按呼号去重的口径。
 
 数据包含卡片异动、地址管理、卡片局管理、设备库维护、导入导出。卡片异动提供卡片记录修正能力，权限节点为 `card-mutation`。导入导出当前由服务端执行预检、导入、导出任务，并持久化 `ImportExportJob`；备份范围包含线下换卡活动清单，以及系统参数、通知策略、通信地址、本台设备、本台卡片等配置数据。2.0.0 起新增 `ReceiveRecord` 和 `OfflineExchangeCard`，用于收卡事实与线下换卡活动卡解耦；旧导出包导入前必须通过 `tools/convert_legacy_export_to_qsl2.py` 聚合迁移收卡关联与线下活动卡关系。导入导出页面提供“旧版本迁移”能力，用于处理 Halo 卸载插件后 Extension 数据仍保留、无法通过重装后重新导入完成迁移的场景；该能力直接读取当前 Halo 存储中的旧版 `CardRecord`，原地拆分为 `ReceiveRecord` 与 `OfflineExchangeCard`，清理旧版自动收卡临时卡片和本台卡片版本占位记录，并修正系统序列号。执行前必须先完成全量导出备份，执行时必须输入确认文字“确认迁移旧版本数据”。重复执行时跳过已存在的同名收卡记录和线下换卡卡片。
 

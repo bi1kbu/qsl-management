@@ -12,6 +12,7 @@ import {
   compareText,
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
+import { maxCardFlowStatus } from '../../utils/qsl-card-state'
 
 interface CardRecordSpec {
   callSign: string
@@ -774,7 +775,7 @@ const selectAddressRow = async (row: CardIssueAddressRow) => {
         ...cardRow.status,
         flowStatus:
           addressChanged && cardRow.spec.cardIssued
-            ? '已制卡'
+            ? maxCardFlowStatus(cardRow.status.flowStatus, '已制卡')
             : cardRow.status.flowStatus,
       }
 
@@ -880,7 +881,7 @@ const confirmCardIssue = async () => {
       }
       const nextStatus: CardRecordStatus = {
         ...row.status,
-        flowStatus: '已制卡',
+        flowStatus: maxCardFlowStatus(row.status.flowStatus, '已制卡'),
       }
 
       await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, row.id, {
@@ -924,7 +925,7 @@ const confirmCardIssueForRow = async (row: CardIssueCardRow) => {
     }
     const nextStatus: CardRecordStatus = {
       ...row.status,
-      flowStatus: '已制卡',
+      flowStatus: maxCardFlowStatus(row.status.flowStatus, '已制卡'),
     }
     await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, row.id, {
       apiVersion: qslApiVersion,
@@ -965,7 +966,7 @@ const confirmEnvelopePrintedForRow = async (row: CardIssueCardRow) => {
     }
     const nextStatus: CardRecordStatus = {
       ...row.status,
-      flowStatus: '已打包',
+      flowStatus: maxCardFlowStatus(row.status.flowStatus, '已打包'),
     }
     await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, row.id, {
       apiVersion: qslApiVersion,

@@ -64,21 +64,29 @@ final class QslCardStateTransitionSupport {
     }
 
     static void refreshFlowStatus(CardRecord cardRecord) {
+        refreshFlowStatus(cardRecord, false);
+    }
+
+    static void refreshFlowStatus(CardRecord cardRecord, boolean hasLinkedReceiveRecord) {
         if (cardRecord == null || cardRecord.getSpec() == null) {
             return;
         }
         var status = cardRecord.getStatus() == null
             ? new CardRecord.CardRecordStatus()
             : cardRecord.getStatus();
-        status.setFlowStatus(resolveFlowStatus(cardRecord.getSpec()));
+        status.setFlowStatus(resolveFlowStatus(cardRecord.getSpec(), hasLinkedReceiveRecord));
         cardRecord.setStatus(status);
     }
 
     static String resolveFlowStatus(CardRecord.CardRecordSpec spec) {
+        return resolveFlowStatus(spec, false);
+    }
+
+    static String resolveFlowStatus(CardRecord.CardRecordSpec spec, boolean hasLinkedReceiveRecord) {
         if (spec == null) {
             return "";
         }
-        if (Boolean.TRUE.equals(spec.getCardReceived())) {
+        if (hasLinkedReceiveRecord || Boolean.TRUE.equals(spec.getCardReceived())) {
             return "已收卡片";
         }
         if (Boolean.TRUE.equals(spec.getReceiptConfirmed())) {

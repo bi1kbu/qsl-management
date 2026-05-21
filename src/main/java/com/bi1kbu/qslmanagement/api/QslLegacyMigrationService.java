@@ -416,16 +416,8 @@ public class QslLegacyMigrationService {
         spec.setReceivedMailSentAt("");
         spec.setReceivedMailLastError("");
         spec.setReceivedRecordCodes("");
-        if (linkedReceiveState != null) {
-            var status = cardRecord.getStatus() == null
-                ? new CardRecord.CardRecordStatus()
-                : cardRecord.getStatus();
-            status.setFlowStatus("已收卡片");
-            cardRecord.setStatus(status);
-        } else if (cardRecord.getStatus() != null
-            && "已收卡片".equals(nullToEmpty(cardRecord.getStatus().getFlowStatus()).trim())) {
-            cardRecord.getStatus().setFlowStatus(Boolean.TRUE.equals(spec.getCardSent()) ? "已发卡片" : "已制卡");
-        }
+        QslCardStateTransitionSupport.applyStateCleanup(spec);
+        QslCardStateTransitionSupport.refreshFlowStatus(cardRecord);
     }
 
     private boolean isFormalCardName(String value) {

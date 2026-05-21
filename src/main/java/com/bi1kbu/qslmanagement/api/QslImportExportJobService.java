@@ -113,6 +113,8 @@ public class QslImportExportJobService {
                     false
                 ))
                 .collectList()
+                .flatMap(importResults -> reconcileCardRecordStatesAfterImport(executionPlan.importDatasets())
+                    .thenReturn(importResults))
                 .flatMap(importResults -> {
                     applyImportResult(createdJob, importResults);
                     return client.update(createdJob);
@@ -470,9 +472,8 @@ public class QslImportExportJobService {
                     spec.setMailTargetEmail(value(row, "mailTargetEmail"));
                     record.setSpec(spec);
 
-                    var status = record.getStatus() == null ? new CardRecord.CardRecordStatus() : record.getStatus();
-                    status.setFlowStatus(value(row, "flowStatus"));
-                    record.setStatus(status);
+                    QslCardStateTransitionSupport.applyStateCleanup(spec);
+                    QslCardStateTransitionSupport.refreshFlowStatus(record);
                 }
             );
             case "receive-record" -> importRows(
@@ -771,6 +772,96 @@ public class QslImportExportJobService {
             });
     }
 
+    private Mono<Void> reconcileCardRecordStatesAfterImport(List<ImportDatasetPayload> importDatasets) {
+        if (importDatasets == null || importDatasets.stream()
+            .map(ImportDatasetPayload::dataset)
+            .noneMatch(dataset -> "card-record".equals(dataset) || "receive-record".equals(dataset))) {
+            return Mono.empty();
+        }
+        return Mono.zip(
+                client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT).collectList(),
+                client.listAll(ReceiveRecord.class, EMPTY_OPTIONS, DEFAULT_SORT).collectList()
+            )
+            .flatMapMany(tuple -> {
+                var linkedReceiveStates = buildLinkedReceiveStates(tuple.getT2());
+                return Flux.fromIterable(tuple.getT1())
+                    .filter(cardRecord -> cardRecord.getMetadata() != null)
+                    .filter(cardRecord -> isFormalCardRecordName(cardRecord.getMetadata().getName()))
+                    .concatMap(cardRecord -> {
+                        var spec = cardRecord.getSpec() == null
+                            ? new CardRecord.CardRecordSpec()
+                            : cardRecord.getSpec();
+                        cardRecord.setSpec(spec);
+                        var linkedReceivedAt = linkedReceiveStates.get(normalizeResourceName(cardRecord.getMetadata().getName()));
+                        if (linkedReceivedAt != null) {
+                            spec.setCardReceived(Boolean.TRUE);
+                            if (!isBlank(linkedReceivedAt)) {
+                                spec.setReceivedAt(linkedReceivedAt);
+                            }
+                        }
+                        QslCardStateTransitionSupport.applyStateCleanup(spec);
+                        QslCardStateTransitionSupport.refreshFlowStatus(cardRecord);
+                        return client.update(cardRecord);
+                    });
+            })
+            .then();
+    }
+
+    private Map<String, String> buildLinkedReceiveStates(List<ReceiveRecord> receiveRecords) {
+        var states = new LinkedHashMap<String, String>();
+        for (var receiveRecord : receiveRecords) {
+            if (receiveRecord == null || receiveRecord.getSpec() == null) {
+                continue;
+            }
+            var spec = receiveRecord.getSpec();
+            var receivedDate = nullToEmpty(spec.getReceivedDate()).trim();
+            var receivedAt = defaultIfBlank(spec.getReceivedAt(),
+                receivedDate.isBlank() ? "" : receivedDate + " 00:00:00");
+            for (var cardName : parseResourceNameList(spec.getOutboundCardNames())) {
+                if (!isFormalCardRecordName(cardName)) {
+                    continue;
+                }
+                var key = normalizeResourceName(cardName);
+                var current = states.get(key);
+                if (current == null || isEarlierReceivedAt(receivedAt, current)) {
+                    states.put(key, receivedAt);
+                }
+            }
+        }
+        return states;
+    }
+
+    private boolean isEarlierReceivedAt(String candidate, String current) {
+        var normalizedCandidate = nullToEmpty(candidate).trim();
+        var normalizedCurrent = nullToEmpty(current).trim();
+        if (normalizedCandidate.isBlank()) {
+            return normalizedCurrent.isBlank();
+        }
+        if (normalizedCurrent.isBlank()) {
+            return true;
+        }
+        return normalizedCandidate.compareTo(normalizedCurrent) < 0;
+    }
+
+    private boolean isFormalCardRecordName(String resourceName) {
+        return !isBlank(resourceName) && CARD_RESOURCE_PATTERN.matcher(resourceName.trim().toUpperCase(Locale.ROOT)).matches();
+    }
+
+    private String normalizeResourceName(String resourceName) {
+        return nullToEmpty(resourceName).trim().toUpperCase(Locale.ROOT);
+    }
+
+    private List<String> parseResourceNameList(String value) {
+        if (isBlank(value)) {
+            return List.of();
+        }
+        return Arrays.stream(value.split("[,，、;；\\s]+"))
+            .map(String::trim)
+            .filter(item -> !item.isBlank())
+            .distinct()
+            .toList();
+    }
+
     private ImportDatasetResult summarizeImportDatasetResult(
         String dataset,
         int totalRows,
@@ -930,49 +1021,61 @@ public class QslImportExportJobService {
                     "autoCreated",
                     "source"
                 ), rows));
-            case "card-record" -> client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
-                .map(record -> {
-                    var spec = record.getSpec();
-                    var status = record.getStatus();
-                    return csvRow(
-                        record.getMetadata().getName(),
-                        spec == null ? "" : nullToEmpty(spec.getCallSign()),
-                        spec == null ? "" : nullToEmpty(spec.getCardType()),
-                        spec == null ? "" : nullToEmpty(spec.getSceneType()),
-                        spec == null ? "" : nullToEmpty(spec.getCardVersion()),
-                        spec == null ? "" : nullToEmpty(spec.getQsoRecordName()),
-                        spec == null ? "" : nullToEmpty(spec.getOfflineActivityName()),
-                        spec == null ? "" : nullToEmpty(spec.getAddressEntryName()),
-                        spec == null ? "" : nullToEmpty(spec.getCardDate()),
-                        spec == null ? "" : nullToEmpty(spec.getCardTime()),
-                        spec == null ? "" : nullToEmpty(spec.getBusinessRemarks()),
-                        spec == null ? "" : nullToEmpty(spec.getCreatedRemarks()),
-                        spec == null ? "" : nullToEmpty(spec.getSentRemarks()),
-                        spec == null ? "" : nullToEmpty(spec.getReceivedRemarks()),
-                        spec == null ? "" : nullToEmpty(spec.getPublicReceiptRemarks()),
-                        spec == null ? "" : nullToEmpty(spec.getCardRemarks()),
-                        spec == null ? "false" : boolToText(spec.getCardSent()),
-                        spec == null ? "false" : boolToText(spec.getCardIssued()),
-                        spec == null ? "false" : boolToText(spec.getEnvelopePrinted()),
-                        spec == null ? "false" : boolToText(spec.getCardReceived()),
-                        spec == null ? "false" : boolToText(spec.getReceiptConfirmed()),
-                        spec == null ? "" : nullToEmpty(spec.getCardIssuedAt()),
-                        spec == null ? "" : nullToEmpty(spec.getSentAt()),
-                        spec == null ? "" : nullToEmpty(spec.getReceivedAt()),
-                        spec == null ? "" : nullToEmpty(spec.getCreatedMailStatus()),
-                        spec == null ? "" : nullToEmpty(spec.getCreatedMailSentAt()),
-                        spec == null ? "" : nullToEmpty(spec.getCreatedMailLastError()),
-                        spec == null ? "" : nullToEmpty(spec.getSentMailStatus()),
-                        spec == null ? "" : nullToEmpty(spec.getSentMailSentAt()),
-                        spec == null ? "" : nullToEmpty(spec.getSentMailLastError()),
-                        spec == null ? "" : nullToEmpty(spec.getReceivedMailStatus()),
-                        spec == null ? "" : nullToEmpty(spec.getReceivedMailSentAt()),
-                        spec == null ? "" : nullToEmpty(spec.getReceivedMailLastError()),
-                        spec == null ? "" : nullToEmpty(spec.getMailTargetEmail()),
-                        status == null ? "" : nullToEmpty(status.getFlowStatus())
-                    );
+            case "card-record" -> Mono.zip(
+                    client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT).collectList(),
+                    client.listAll(ReceiveRecord.class, EMPTY_OPTIONS, DEFAULT_SORT).collectList()
+                )
+                .map(tuple -> {
+                    var linkedReceiveStates = buildLinkedReceiveStates(tuple.getT2());
+                    return tuple.getT1().stream()
+                        .map(record -> {
+                            var spec = record.getSpec();
+                            var linkedReceivedAt = linkedReceiveStates.get(
+                                normalizeResourceName(record.getMetadata().getName())
+                            );
+                            var hasLinkedReceiveRecord = linkedReceivedAt != null;
+                            return csvRow(
+                                record.getMetadata().getName(),
+                                spec == null ? "" : nullToEmpty(spec.getCallSign()),
+                                spec == null ? "" : nullToEmpty(spec.getCardType()),
+                                spec == null ? "" : nullToEmpty(spec.getSceneType()),
+                                spec == null ? "" : nullToEmpty(spec.getCardVersion()),
+                                spec == null ? "" : nullToEmpty(spec.getQsoRecordName()),
+                                spec == null ? "" : nullToEmpty(spec.getOfflineActivityName()),
+                                spec == null ? "" : nullToEmpty(spec.getAddressEntryName()),
+                                spec == null ? "" : nullToEmpty(spec.getCardDate()),
+                                spec == null ? "" : nullToEmpty(spec.getCardTime()),
+                                spec == null ? "" : nullToEmpty(spec.getBusinessRemarks()),
+                                spec == null ? "" : nullToEmpty(spec.getCreatedRemarks()),
+                                spec == null ? "" : nullToEmpty(spec.getSentRemarks()),
+                                spec == null ? "" : nullToEmpty(spec.getReceivedRemarks()),
+                                spec == null ? "" : nullToEmpty(spec.getPublicReceiptRemarks()),
+                                spec == null ? "" : nullToEmpty(spec.getCardRemarks()),
+                                spec == null ? "false" : boolToText(spec.getCardSent()),
+                                spec == null ? "false" : boolToText(spec.getCardIssued()),
+                                spec == null ? "false" : boolToText(spec.getEnvelopePrinted()),
+                                spec == null ? "false" : boolToText(
+                                    Boolean.TRUE.equals(spec.getCardReceived()) || hasLinkedReceiveRecord
+                                ),
+                                spec == null ? "false" : boolToText(spec.getReceiptConfirmed()),
+                                spec == null ? "" : nullToEmpty(spec.getCardIssuedAt()),
+                                spec == null ? "" : nullToEmpty(spec.getSentAt()),
+                                spec == null ? "" : defaultIfBlank(spec.getReceivedAt(), linkedReceivedAt),
+                                spec == null ? "" : nullToEmpty(spec.getCreatedMailStatus()),
+                                spec == null ? "" : nullToEmpty(spec.getCreatedMailSentAt()),
+                                spec == null ? "" : nullToEmpty(spec.getCreatedMailLastError()),
+                                spec == null ? "" : nullToEmpty(spec.getSentMailStatus()),
+                                spec == null ? "" : nullToEmpty(spec.getSentMailSentAt()),
+                                spec == null ? "" : nullToEmpty(spec.getSentMailLastError()),
+                                spec == null ? "" : nullToEmpty(spec.getReceivedMailStatus()),
+                                spec == null ? "" : nullToEmpty(spec.getReceivedMailSentAt()),
+                                spec == null ? "" : nullToEmpty(spec.getReceivedMailLastError()),
+                                spec == null ? "" : nullToEmpty(spec.getMailTargetEmail()),
+                                QslCardStateTransitionSupport.resolveFlowStatus(spec, hasLinkedReceiveRecord)
+                            );
+                        })
+                        .toList();
                 })
-                .collectList()
                 .map(rows -> renderCsv(dataset, List.of(
                     "id",
                     "callSign",

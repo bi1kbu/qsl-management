@@ -74,6 +74,10 @@ interface CardRecordSpec {
   [key: string]: unknown
 }
 
+interface CardRecordStatus {
+  flowStatus?: string
+}
+
 interface PendingBindingItem {
   callSign: string
   unboundCount: number
@@ -444,7 +448,7 @@ const isNoCardPlaceholder = (item: QslExtension<CardRecordSpec>): boolean => {
   )
 }
 
-const isOfflineExchangeCard = (item: QslExtension<CardRecordSpec>): boolean => {
+const isOfflineExchangeCard = (item: QslExtension<CardRecordSpec, CardRecordStatus>): boolean => {
   const sceneType = String(item.spec?.sceneType ?? '').trim().toUpperCase()
   const cardType = String(item.spec?.cardType ?? '').trim().toUpperCase()
   return sceneType === 'EYEBALL' || (!sceneType && cardType === 'EYEBALL')
@@ -525,7 +529,7 @@ const bindAddressForCallSign = async (callSign: string, addressEntryName: string
     return 0
   }
 
-  const cardExtensions = await listExtensions<CardRecordSpec>(cardRecordPlural)
+  const cardExtensions = await listExtensions<CardRecordSpec, CardRecordStatus>(cardRecordPlural)
   let updatedCount = 0
   for (const record of cardExtensions) {
     if (isOfflineExchangeCard(record)) {
@@ -537,7 +541,7 @@ const bindAddressForCallSign = async (callSign: string, addressEntryName: string
       continue
     }
 
-    await updateExtension<CardRecordSpec>(cardRecordPlural, record.metadata.name, {
+    await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, record.metadata.name, {
       apiVersion: qslApiVersion,
       kind: cardRecordKind,
       metadata: {
@@ -548,6 +552,7 @@ const bindAddressForCallSign = async (callSign: string, addressEntryName: string
         ...(record.spec ?? { callSign: '', addressEntryName: '' }),
         addressEntryName: normalizedAddressEntryName,
       },
+      status: record.status,
     })
     updatedCount += 1
   }
@@ -813,13 +818,13 @@ const reindexAddressIds = async () => {
       })
     }
 
-    const cardRecords = await listExtensions<CardRecordSpec>(cardRecordPlural)
+    const cardRecords = await listExtensions<CardRecordSpec, CardRecordStatus>(cardRecordPlural)
     for (const record of cardRecords) {
       const currentBinding = record.spec?.addressEntryName?.trim() ?? ''
       if (!currentBinding || !renameMap.has(currentBinding)) {
         continue
       }
-      await updateExtension<CardRecordSpec>(cardRecordPlural, record.metadata.name, {
+      await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, record.metadata.name, {
         apiVersion: qslApiVersion,
         kind: cardRecordKind,
         metadata: {
@@ -830,6 +835,7 @@ const reindexAddressIds = async () => {
           ...(record.spec ?? { callSign: '', addressEntryName: '' }),
           addressEntryName: renameMap.get(currentBinding) ?? '',
         },
+        status: record.status,
       })
     }
 

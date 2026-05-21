@@ -134,7 +134,7 @@ public class QslOverviewService {
         var resourceName = defaultString(cardRecord.getMetadata().getName()).trim().toUpperCase(Locale.ROOT);
         return !"ONLINE_EYEBALL".equals(sceneType)
             && !Boolean.TRUE.equals(spec.getCardSent())
-            && !Boolean.TRUE.equals(spec.getCardReceived())
+            && !isReceivedFlowStatus(cardRecord)
             && !Boolean.TRUE.equals(spec.getReceiptConfirmed())
             && !linkedOutboundCardNames.contains(resourceName);
     }
@@ -172,11 +172,18 @@ public class QslOverviewService {
         }
         return filteredCardRecords.stream()
             .filter(cardRecord -> cardRecord.getSpec() != null)
-            .filter(cardRecord -> Boolean.TRUE.equals(cardRecord.getSpec().getCardReceived()))
+            .filter(this::isReceivedFlowStatus)
             .map(cardRecord -> normalizeKey(cardRecord.getSpec().getCallSign()))
             .filter(value -> !value.isBlank())
             .distinct()
             .count();
+    }
+
+    private boolean isReceivedFlowStatus(CardRecord cardRecord) {
+        if (cardRecord == null || cardRecord.getStatus() == null) {
+            return false;
+        }
+        return "已收卡片".equals(defaultString(cardRecord.getStatus().getFlowStatus()).trim());
     }
 
     private List<ReportSummary.MonthlyCardFlowPoint> monthlyCardFlow(List<CardRecord> filteredCardRecords,

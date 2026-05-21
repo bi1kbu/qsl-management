@@ -167,7 +167,7 @@ const toRow = (extension: QslExtension<CardRecordSpec, CardRecordStatus>, receiv
     envelopePrinted: Boolean(extension.spec?.envelopePrinted),
     cardSent: Boolean(extension.spec?.cardSent),
     receiptConfirmed: Boolean(extension.spec?.receiptConfirmed),
-    cardReceived: isReceivedFlowStatus(extension.status),
+    cardReceived: isReceivedFlowStatus(extension.status) || receiveRecordCodes.length > 0,
     receiveRecordCodes: receiveRecordCodes.join(', '),
     remarkFields: {
       businessRemarks: extension.spec?.businessRemarks ?? '',
