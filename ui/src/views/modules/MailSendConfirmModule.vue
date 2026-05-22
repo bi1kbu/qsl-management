@@ -16,8 +16,7 @@ import {
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import {
   applySortDirection,
   compareCallSign,
@@ -182,6 +181,24 @@ const activityFilter = ref('')
 const offlineActivities = ref<OfflineActivitySpec[]>([])
 const sortKey = ref<SendSortKey>('resourceName')
 const sortDirection = ref<QslSortDirection>('asc')
+
+const sendColumns = computed(() => {
+  const columns = [
+    { key: 'selected', label: '选择', sortable: false },
+    { key: 'resourceName', label: '卡片ID', sortable: true },
+    { key: 'callSign', label: '对方呼号', sortable: true },
+    { key: 'cardType', label: '卡片类型', sortable: true },
+    { key: 'cardPrintAt', label: '卡片打印日期', sortable: true },
+    { key: 'envelopePrintAt', label: '打包', sortable: true },
+  ]
+  if (showOfflineActivity.value) {
+    columns.push({ key: 'offlineActivityName', label: '关联活动', sortable: true })
+  }
+  columns.push({ key: 'cardRemarks', label: '卡片备注', sortable: true })
+  return columns
+})
+
+const toSendItem = (row: Record<string, unknown>): SendConfirmItem => row as unknown as SendConfirmItem
 
 const editForm = reactive({
   callSign: '',
@@ -1027,168 +1044,106 @@ onMounted(() => {
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
       </div>
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>选择</th>
-              <th>
-                <QslSortableHeader
-                  column-key="resourceName"
-                  label="卡片ID"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="对方呼号"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardType"
-                  label="卡片类型"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardPrintAt"
-                  label="卡片打印日期"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="envelopePrintAt"
-                  label="打包"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th v-if="showOfflineActivity">
-                <QslSortableHeader
-                  column-key="offlineActivityName"
-                  label="关联活动"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardRemarks"
-                  label="卡片备注"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in pagedRows" :key="row.resourceName">
-              <td @click.stop>
-                <label class="qsl-checkbox qsl-select-only">
-                  <input
-                    :checked="isHistorySelected(row.resourceName)"
-                    type="checkbox"
-                    @click.stop
-                    @change.stop="toggleHistorySelection(row.resourceName)"
-                  />
-                </label>
-              </td>
-              <td>{{ row.resourceName }}</td>
-              <td class="qsl-row-clickable" @click="selectRowForQuery(row)">{{ row.callSign }}</td>
-              <td>{{ row.cardType }}</td>
-              <td>{{ row.cardPrintAt }}</td>
-              <td>{{ row.envelopePrintAt }}</td>
-              <td v-if="showOfflineActivity">{{ row.spec.offlineActivityName || '-' }}</td>
-              <td>
-                <QslCardRemarkEntries
-                  :remark-fields="{
-                    businessRemarks: row.spec.businessRemarks,
-                    cardRemarks: row.spec.cardRemarks,
-                  }"
-                  :compact="true"
-                  empty-text="无"
-                />
-              </td>
-              <td>
-                <div class="qsl-actions qsl-actions--tight">
-                  <VButton size="xs" type="secondary" @click="startEditRow(row)">编辑</VButton>
-                  <VButton
-                    size="xs"
-                    type="secondary"
-                    :disabled="row.sent || pendingRowName === row.resourceName || loading"
-                    @click="markAsSent(row)"
-                  >
-                    确认发信
-                  </VButton>
-                  <VButton
-                    class="qsl-mail-action"
-                    size="xs"
-                    type="secondary"
-                    :disabled="
-                      pendingRowName === row.resourceName ||
-                      row.spec.sentMailStatus === 'SENT' ||
-                      !row.sent
-                    "
-                    @click="sendSentMailForRow(row)"
-                  >
-                    发送发卡邮件
-                  </VButton>
-                  <VButton
-                    size="xs"
-                    type="secondary"
-                    :disabled="
-                      pendingRowName === row.resourceName ||
-                      row.spec.sentMailStatus === 'SENT' ||
-                      !row.sent
-                    "
-                    @click="markSentMailAsSentForRow(row)"
-                  >
-                    不发邮件
-                  </VButton>
-                  <VTag
-                    v-if="
-                      row.spec.sentMailStatus === 'SENT' || row.spec.sentMailStatus === 'FAILED'
-                    "
-                    :theme="row.spec.sentMailStatus === 'SENT' ? 'secondary' : 'danger'"
-                  >
-                    {{ resolveMailStatusText(row.spec.sentMailStatus) }}
-                  </VTag>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!pagedRows.length">
-              <td :colspan="showOfflineActivity ? 9 : 8" class="qsl-table-empty">
-                暂无待发出数据。
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <QslPaginationBar
+      <QslDataTable
+        :rows="pagedRows"
+        :columns="sendColumns"
+        row-key-field="resourceName"
+        empty-text="暂无待发出数据。"
+        :sort-key="sortKey"
+        :sort-direction="sortDirection"
+        :loading="loading"
+        show-actions
+        show-pagination
         :total="filteredRows.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
+        @sort="toggleSort"
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
-      />
+      >
+        <template #cell-selected="{ row }">
+          <label class="qsl-checkbox qsl-select-only">
+            <input
+              :checked="isHistorySelected(toSendItem(row).resourceName)"
+              type="checkbox"
+              @click.stop
+              @change.stop="toggleHistorySelection(toSendItem(row).resourceName)"
+            />
+          </label>
+        </template>
+        <template #cell-callSign="{ row }">
+          <span class="qsl-row-clickable" @click="selectRowForQuery(toSendItem(row))">
+            {{ toSendItem(row).callSign }}
+          </span>
+        </template>
+        <template #cell-offlineActivityName="{ row }">
+          {{ toSendItem(row).spec.offlineActivityName || '-' }}
+        </template>
+        <template #cell-cardRemarks="{ row }">
+          <QslCardRemarkEntries
+            :remark-fields="{
+              businessRemarks: toSendItem(row).spec.businessRemarks,
+              cardRemarks: toSendItem(row).spec.cardRemarks,
+            }"
+            :compact="true"
+            empty-text="无"
+          />
+        </template>
+        <template #row-actions="{ row }">
+          <div class="qsl-actions qsl-actions--tight">
+            <VButton size="xs" type="secondary" @click="startEditRow(toSendItem(row))"
+              >编辑</VButton
+            >
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="
+                toSendItem(row).sent ||
+                pendingRowName === toSendItem(row).resourceName ||
+                loading
+              "
+              @click="markAsSent(toSendItem(row))"
+            >
+              确认发信
+            </VButton>
+            <VButton
+              class="qsl-mail-action"
+              size="xs"
+              type="secondary"
+              :disabled="
+                pendingRowName === toSendItem(row).resourceName ||
+                toSendItem(row).spec.sentMailStatus === 'SENT' ||
+                !toSendItem(row).sent
+              "
+              @click="sendSentMailForRow(toSendItem(row))"
+            >
+              发送发卡邮件
+            </VButton>
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="
+                pendingRowName === toSendItem(row).resourceName ||
+                toSendItem(row).spec.sentMailStatus === 'SENT' ||
+                !toSendItem(row).sent
+              "
+              @click="markSentMailAsSentForRow(toSendItem(row))"
+            >
+              不发邮件
+            </VButton>
+            <VTag
+              v-if="
+                toSendItem(row).spec.sentMailStatus === 'SENT' ||
+                toSendItem(row).spec.sentMailStatus === 'FAILED'
+              "
+              :theme="toSendItem(row).spec.sentMailStatus === 'SENT' ? 'secondary' : 'danger'"
+            >
+              {{ resolveMailStatusText(toSendItem(row).spec.sentMailStatus) }}
+            </VTag>
+          </div>
+        </template>
+      </QslDataTable>
       <div class="qsl-actions">
         <VButton size="sm" :disabled="loading || pendingRowName !== ''" @click="loadRows"
           >刷新清单</VButton
@@ -1217,11 +1172,6 @@ onMounted(() => {
 .qsl-select-only {
   display: inline-flex;
   align-items: center;
-}
-
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
 }
 
 .qsl-row-clickable {

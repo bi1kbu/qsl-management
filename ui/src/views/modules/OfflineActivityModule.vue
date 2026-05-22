@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { VButton, VCard } from '@halo-dev/components'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
   createExtension,
@@ -10,7 +10,8 @@ import {
   updateExtension,
   type QslExtension,
 } from '../../api/qsl-extension-api'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import { applySortDirection, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 type ActivitySortKey =
@@ -51,6 +52,9 @@ const keyword = ref('')
 const editingName = ref('')
 const sortKey = ref<ActivitySortKey>('resourceName')
 const sortDirection = ref<QslSortDirection>('asc')
+const currentPage = ref(1)
+const pageSize = ref(20)
+const pageSizeOptions: number[] = [20, 30, 50, 100]
 
 const form = reactive<OfflineActivitySpec>({
   activityName: '',
@@ -63,6 +67,40 @@ const form = reactive<OfflineActivitySpec>({
 const rows = ref<OfflineActivityItem[]>([])
 
 const isEditing = computed(() => Boolean(editingName.value))
+
+const activityColumns = [
+  { key: 'resourceName', label: '活动ID', sortable: true },
+  {
+    key: 'activityName',
+    label: '活动名称',
+    sortable: true,
+    value: (row: Record<string, any>) => (row as OfflineActivityItem).spec.activityName,
+  },
+  {
+    key: 'activityLocation',
+    label: '活动地点',
+    sortable: true,
+    value: (row: Record<string, any>) => (row as OfflineActivityItem).spec.activityLocation,
+  },
+  {
+    key: 'activityDate',
+    label: '活动日期',
+    sortable: true,
+    value: (row: Record<string, any>) => (row as OfflineActivityItem).spec.activityDate,
+  },
+  {
+    key: 'activityTime',
+    label: '活动时间',
+    sortable: true,
+    value: (row: Record<string, any>) => (row as OfflineActivityItem).spec.activityTime,
+  },
+  {
+    key: 'cardRemarks',
+    label: '卡片备注',
+    sortable: true,
+    value: (row: Record<string, any>) => (row as OfflineActivityItem).spec.cardRemarks,
+  },
+]
 
 const filteredRows = computed(() => {
   const normalized = keyword.value.trim().toUpperCase()
@@ -100,6 +138,18 @@ const sortedRows = computed(() => {
   })
 })
 
+const totalPages = computed(() => {
+  if (!filteredRows.value.length) {
+    return 1
+  }
+  return Math.ceil(filteredRows.value.length / pageSize.value)
+})
+
+const pagedRows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return sortedRows.value.slice(start, start + pageSize.value)
+})
+
 const toggleSort = (key: string) => {
   const nextKey = key as ActivitySortKey
   if (sortKey.value === nextKey) {
@@ -108,7 +158,21 @@ const toggleSort = (key: string) => {
     sortKey.value = nextKey
     sortDirection.value = 'asc'
   }
+  currentPage.value = 1
 }
+
+watch(filteredRows, () => {
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+  if (currentPage.value < 1) {
+    currentPage.value = 1
+  }
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
 
 const normalizeSpec = (spec?: Partial<OfflineActivitySpec>): OfflineActivitySpec => ({
   activityName: spec?.activityName ?? '',
@@ -203,6 +267,10 @@ const startEdit = (row: OfflineActivityItem) => {
   feedback.value = `正在编辑活动：${row.resourceName}`
 }
 
+const toActivityItem = (row: Record<string, unknown>): OfflineActivityItem => {
+  return row as unknown as OfflineActivityItem
+}
+
 const saveActivity = async () => {
   if (!form.activityName.trim()) {
     feedback.value = '活动名称不能为空。'
@@ -288,11 +356,6 @@ const saveActivity = async () => {
 }
 
 const removeActivity = async (row: OfflineActivityItem) => {
-  const confirmed = window.confirm(`确认删除活动“${row.spec.activityName || row.resourceName}”吗？`)
-  if (!confirmed) {
-    return
-  }
-
   deletingName.value = row.resourceName
   try {
     await deleteExtension(resourcePlural, row.resourceName)
@@ -387,107 +450,47 @@ onMounted(() => {
         <VButton :disabled="loading" @click="loadRows">刷新</VButton>
       </div>
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="resourceName"
-                  label="活动ID"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="activityName"
-                  label="活动名称"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="activityLocation"
-                  label="活动地点"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="activityDate"
-                  label="活动日期"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="activityTime"
-                  label="活动时间"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardRemarks"
-                  label="卡片备注"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in sortedRows" :key="row.resourceName">
-              <td>{{ row.resourceName }}</td>
-              <td>{{ row.spec.activityName || '-' }}</td>
-              <td>{{ row.spec.activityLocation || '-' }}</td>
-              <td>{{ row.spec.activityDate || '-' }}</td>
-              <td>{{ row.spec.activityTime || '-' }}</td>
-              <td>{{ row.spec.cardRemarks || '-' }}</td>
-              <td>
-                <div class="qsl-actions qsl-actions--tight">
-                  <VButton
-                    size="xs"
-                    type="secondary"
-                    :disabled="saving || loading"
-                    @click="startEdit(row)"
-                    >编辑</VButton
-                  >
-                  <VButton
-                    size="xs"
-                    :disabled="deletingName === row.resourceName || saving || loading"
-                    @click="removeActivity(row)"
-                  >
-                    删除
-                  </VButton>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!sortedRows.length">
-              <td colspan="7" class="qsl-table-empty">暂无活动记录。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <QslDataTable
+        :rows="pagedRows"
+        :columns="activityColumns"
+        row-key-field="resourceName"
+        :sort-key="sortKey"
+        :sort-direction="sortDirection"
+        :loading="loading"
+        show-actions
+        show-pagination
+        empty-text="暂无活动记录。"
+        :total="filteredRows.length"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        @sort="toggleSort"
+        @update:current-page="(value) => (currentPage = value)"
+        @update:page-size="(value) => (pageSize = value)"
+      >
+        <template #row-actions="{ row }">
+          <div class="qsl-actions qsl-actions--tight">
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="saving || loading"
+              @click="startEdit(toActivityItem(row))"
+              >编辑</VButton
+            >
+            <QslConfirmActionButton
+              size="xs"
+              label="删除"
+              danger-level="danger"
+              :disabled="deletingName === toActivityItem(row).resourceName || saving || loading"
+              confirm-enabled
+              confirm-title="确认删除线下活动"
+              :confirm-message="`确认删除活动“${toActivityItem(row).spec.activityName || toActivityItem(row).resourceName}”吗？`"
+              confirm-text="确认删除"
+              @confirm="removeActivity(toActivityItem(row))"
+            />
+          </div>
+        </template>
+      </QslDataTable>
     </VCard>
   </div>
 </template>
-
-<style scoped lang="scss">
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
-}
-</style>

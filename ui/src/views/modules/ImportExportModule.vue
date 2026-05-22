@@ -25,8 +25,7 @@ import {
   type LegacyMigrationResult,
 } from '../../api/qsl-console-api'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import {
   applySortDirection,
   compareNumber,
@@ -110,6 +109,18 @@ const jobPlural = 'import-export-jobs'
 const activeTab = ref<'import' | 'export' | 'migration' | 'jobs'>('import')
 const operationSortKey = ref<OperationSortKey>('time')
 const operationSortDirection = ref<QslSortDirection>('desc')
+const operationColumns = [
+  { key: 'id', label: '任务ID', sortable: true },
+  { key: 'time', label: '时间', sortable: true },
+  { key: 'action', label: '类型', sortable: true },
+  { key: 'dataset', label: '数据集', sortable: true },
+  { key: 'format', label: '格式', sortable: true },
+  { key: 'detail', label: '详情', sortable: true },
+  { key: 'status', label: '状态', sortable: true },
+]
+
+const toOperationItem = (row: Record<string, unknown>): OperationRecord =>
+  row as unknown as OperationRecord
 
 const totalPages = computed(() => {
   if (!operationRecords.value.length) {
@@ -953,122 +964,48 @@ onBeforeUnmount(() => {
         </VTabItem>
 
         <VTabItem id="jobs" label="任务记录">
-          <div class="qsl-table-wrap">
-            <table class="qsl-table">
-              <thead>
-                <tr>
-                  <th>
-                    <QslSortableHeader
-                      column-key="id"
-                      label="任务ID"
-                      :sort-key="operationSortKey"
-                      :sort-direction="operationSortDirection"
-                      @sort="toggleOperationSort"
-                    />
-                  </th>
-                  <th>
-                    <QslSortableHeader
-                      column-key="time"
-                      label="时间"
-                      :sort-key="operationSortKey"
-                      :sort-direction="operationSortDirection"
-                      @sort="toggleOperationSort"
-                    />
-                  </th>
-                  <th>
-                    <QslSortableHeader
-                      column-key="action"
-                      label="类型"
-                      :sort-key="operationSortKey"
-                      :sort-direction="operationSortDirection"
-                      @sort="toggleOperationSort"
-                    />
-                  </th>
-                  <th>
-                    <QslSortableHeader
-                      column-key="dataset"
-                      label="数据集"
-                      :sort-key="operationSortKey"
-                      :sort-direction="operationSortDirection"
-                      @sort="toggleOperationSort"
-                    />
-                  </th>
-                  <th>
-                    <QslSortableHeader
-                      column-key="format"
-                      label="格式"
-                      :sort-key="operationSortKey"
-                      :sort-direction="operationSortDirection"
-                      @sort="toggleOperationSort"
-                    />
-                  </th>
-                  <th>
-                    <QslSortableHeader
-                      column-key="detail"
-                      label="详情"
-                      :sort-key="operationSortKey"
-                      :sort-direction="operationSortDirection"
-                      @sort="toggleOperationSort"
-                    />
-                  </th>
-                  <th>
-                    <QslSortableHeader
-                      column-key="status"
-                      label="状态"
-                      :sort-key="operationSortKey"
-                      :sort-direction="operationSortDirection"
-                      @sort="toggleOperationSort"
-                    />
-                  </th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in pagedOperationRecords" :key="item.id">
-                  <td>{{ item.id }}</td>
-                  <td>{{ item.time }}</td>
-                  <td>{{ item.action }}</td>
-                  <td>{{ item.dataset }}</td>
-                  <td>{{ item.format }}</td>
-                  <td>{{ item.detail }}</td>
-                  <td>
-                    <VTag
-                      :theme="
-                        item.status === '成功' || item.status === '已完成'
-                          ? 'secondary'
-                          : item.status === '部分成功' || item.status === '待处理'
-                            ? 'default'
-                            : 'danger'
-                      "
-                    >
-                      {{ item.status }}
-                    </VTag>
-                  </td>
-                  <td>
-                    <VButton
-                      v-if="item.action === '导入' && item.errorReportPath"
-                      type="secondary"
-                      @click="downloadImportErrorReport(item)"
-                    >
-                      下载错误回执
-                    </VButton>
-                    <span v-else class="qsl-muted">-</span>
-                  </td>
-                </tr>
-                <tr v-if="!pagedOperationRecords.length">
-                  <td colspan="8" class="qsl-table-empty">暂无任务记录。</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <QslPaginationBar
+          <QslDataTable
+            :rows="pagedOperationRecords"
+            :columns="operationColumns"
+            row-key-field="id"
+            empty-text="暂无任务记录。"
+            :sort-key="operationSortKey"
+            :sort-direction="operationSortDirection"
+            show-actions
+            show-pagination
             :total="operationRecords.length"
             :current-page="currentPage"
             :page-size="pageSize"
             :page-size-options="pageSizeOptions"
+            @sort="toggleOperationSort"
             @update:current-page="(value) => (currentPage = value)"
             @update:page-size="(value) => (pageSize = value)"
-          />
+          >
+            <template #cell-status="{ row }">
+              <VTag
+                :theme="
+                  toOperationItem(row).status === '成功' || toOperationItem(row).status === '已完成'
+                    ? 'secondary'
+                    : toOperationItem(row).status === '部分成功' ||
+                        toOperationItem(row).status === '待处理'
+                      ? 'default'
+                      : 'danger'
+                "
+              >
+                {{ toOperationItem(row).status }}
+              </VTag>
+            </template>
+            <template #row-actions="{ row }">
+              <VButton
+                v-if="toOperationItem(row).action === '导入' && toOperationItem(row).errorReportPath"
+                type="secondary"
+                @click="downloadImportErrorReport(toOperationItem(row))"
+              >
+                下载错误回执
+              </VButton>
+              <span v-else class="qsl-muted">-</span>
+            </template>
+          </QslDataTable>
         </VTabItem>
       </VTabs>
     </VCard>
@@ -1084,11 +1021,6 @@ onBeforeUnmount(() => {
 
 .qsl-feedback--error {
   color: #dc2626;
-}
-
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
 }
 
 .qsl-import-file-box {

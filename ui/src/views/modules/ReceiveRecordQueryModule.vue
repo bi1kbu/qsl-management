@@ -2,9 +2,8 @@
 import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
 import {
   applySortDirection,
   compareCallSign,
@@ -205,9 +204,26 @@ const showActivityFilter = computed(
 const showMatchColumns = computed(
   () => activeBusinessTab.value !== 'QSO' && activeBusinessTab.value !== 'SWL',
 )
-const tableColumnCount = computed(
-  () => 7 + (showActivityColumn.value ? 1 : 0) + (showMatchColumns.value ? 2 : 0),
-)
+
+const receiveColumns = computed(() => {
+  const columns = [
+    { key: 'receiveRecordCode', label: '收卡编号', sortable: true },
+    { key: 'cardId', label: '卡片ID', sortable: true },
+    { key: 'callSign', label: '呼号', sortable: true },
+    { key: 'cardType', label: '类型', sortable: true },
+  ]
+  if (showActivityColumn.value) {
+    columns.push({ key: 'offlineActivityName', label: '活动', sortable: true })
+  }
+  if (showMatchColumns.value) {
+    columns.push({ key: 'matchStatus', label: '匹配状态', sortable: true })
+    columns.push({ key: 'matchReason', label: '匹配说明', sortable: false })
+  }
+  columns.push({ key: 'receivedDate', label: '收卡日期', sortable: true })
+  columns.push({ key: 'receivedTime', label: '收卡时间', sortable: true })
+  columns.push({ key: 'receivedRemarks', label: '收卡确认备注', sortable: true })
+  return columns
+})
 
 const activityFilterOptions = computed(() => {
   const activitySet = new Set<string>()
@@ -381,119 +397,20 @@ onMounted(loadRows)
         </label>
       </div>
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="receiveRecordCode"
-                  label="收卡编号"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardId"
-                  label="卡片ID"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="呼号"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardType"
-                  label="类型"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th v-if="showActivityColumn">
-                <QslSortableHeader
-                  column-key="offlineActivityName"
-                  label="活动"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th v-if="showMatchColumns">
-                <QslSortableHeader
-                  column-key="matchStatus"
-                  label="匹配状态"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th v-if="showMatchColumns">匹配说明</th>
-              <th>
-                <QslSortableHeader
-                  column-key="receivedDate"
-                  label="收卡日期"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="receivedTime"
-                  label="收卡时间"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="receivedRemarks"
-                  label="收卡确认备注"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in pagedRows" :key="`${item.receiveRecordCode}-${item.cardId}`">
-              <td>{{ item.receiveRecordCode }}</td>
-              <td>{{ item.cardId }}</td>
-              <td>{{ item.callSign || '-' }}</td>
-              <td>{{ item.cardType }}</td>
-              <td v-if="showActivityColumn">{{ item.offlineActivityName || '-' }}</td>
-              <td v-if="showMatchColumns">{{ item.matchStatus || '-' }}</td>
-              <td v-if="showMatchColumns">{{ item.matchReason || '-' }}</td>
-              <td>{{ item.receivedDate || '-' }}</td>
-              <td>{{ item.receivedTime || '-' }}</td>
-              <td>{{ item.receivedRemarks || '-' }}</td>
-            </tr>
-            <tr v-if="!pagedRows.length">
-              <td :colspan="tableColumnCount" class="qsl-table-empty">暂无收卡记录。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <QslPaginationBar
+      <QslDataTable
+        :rows="pagedRows"
+        :columns="receiveColumns"
+        row-key-field="receiveRecordCode"
+        empty-text="暂无收卡记录。"
+        :sort-key="sortKey"
+        :sort-direction="sortDirection"
+        :loading="loading"
+        show-pagination
         :total="filteredRows.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
+        @sort="toggleSort"
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
       />
@@ -502,10 +419,3 @@ onMounted(loadRows)
     </VCard>
   </div>
 </template>
-
-<style scoped lang="scss">
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
-}
-</style>

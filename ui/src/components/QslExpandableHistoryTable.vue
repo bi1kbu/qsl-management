@@ -20,6 +20,7 @@ const props = withDefaults(
     emptyText?: string
     showBatchToggle?: boolean
     showToolbar?: boolean
+    showSelect?: boolean
     showActions?: boolean
     sortKey?: string
     sortDirection?: QslSortDirection
@@ -29,6 +30,7 @@ const props = withDefaults(
     emptyText: '暂无数据。',
     showBatchToggle: true,
     showToolbar: true,
+    showSelect: true,
     showActions: true,
     sortKey: '',
     sortDirection: 'asc',
@@ -52,7 +54,14 @@ const selectedKeySet = computed(() => new Set(props.selectedKeys))
 
 const selectedCount = computed(() => props.selectedKeys.length)
 
+const tableExtraColumnCount = computed(() => {
+  return (props.showSelect ? 1 : 0) + (props.showActions ? 1 : 0)
+})
+
 const allRowsSelected = computed(() => {
+  if (!props.showSelect) {
+    return false
+  }
   if (!props.rows.length) {
     return false
   }
@@ -72,6 +81,9 @@ watch(
 )
 
 const toggleAllRowsSelection = () => {
+  if (!props.showSelect) {
+    return
+  }
   const rowKeys = props.rows.map((row) => getRowKey(row)).filter((key) => key.length > 0)
   if (allRowsSelected.value) {
     const currentRowKeySet = new Set(rowKeys)
@@ -88,10 +100,16 @@ const toggleAllRowsSelection = () => {
 }
 
 const isRowSelected = (row: Record<string, unknown>): boolean => {
+  if (!props.showSelect) {
+    return false
+  }
   return selectedKeySet.value.has(getRowKey(row))
 }
 
 const toggleRowSelection = (row: Record<string, unknown>) => {
+  if (!props.showSelect) {
+    return
+  }
   const rowKey = getRowKey(row)
   if (!rowKey) {
     return
@@ -133,7 +151,7 @@ const formatCellValue = (value: unknown): string => {
 
 <template>
   <div v-if="showToolbar" class="qsl-history-toolbar">
-    <label class="qsl-checkbox qsl-history-toolbar__title">
+    <label v-if="showSelect" class="qsl-checkbox qsl-history-toolbar__title">
       <input
         :checked="allRowsSelected"
         type="checkbox"
@@ -142,6 +160,7 @@ const formatCellValue = (value: unknown): string => {
       />
       <span>{{ title }}</span>
     </label>
+    <span v-else class="qsl-history-toolbar__title">{{ title }}</span>
     <label v-if="showBatchToggle" class="qsl-checkbox">
       <input
         :checked="batchEditEnabled"
@@ -152,7 +171,7 @@ const formatCellValue = (value: unknown): string => {
     </label>
     <div class="qsl-history-toolbar__right">
       <slot name="toolbar-extra" />
-      <span class="qsl-muted">已选 {{ selectedCount }} 条</span>
+      <span v-if="showSelect" class="qsl-muted">已选 {{ selectedCount }} 条</span>
     </div>
   </div>
 
@@ -168,7 +187,7 @@ const formatCellValue = (value: unknown): string => {
     <table class="qsl-table qsl-table--clickable">
       <thead>
         <tr>
-          <th class="qsl-select-col"></th>
+          <th v-if="showSelect" class="qsl-select-col"></th>
           <th v-for="column in columns" :key="column.key">
             <QslSortableHeader
               v-if="column.sortable"
@@ -190,7 +209,7 @@ const formatCellValue = (value: unknown): string => {
             :class="{ 'is-expanded': isRowExpanded(row) }"
             @click="toggleRowExpand(row)"
           >
-            <td @click.stop>
+            <td v-if="showSelect" @click.stop>
               <label class="qsl-checkbox qsl-select-only">
                 <input
                   :checked="isRowSelected(row)"
@@ -210,13 +229,13 @@ const formatCellValue = (value: unknown): string => {
             </td>
           </tr>
           <tr v-if="isRowExpanded(row)" class="qsl-history-detail-row">
-            <td :colspan="columns.length + (showActions ? 2 : 1)">
+            <td :colspan="columns.length + tableExtraColumnCount">
               <slot name="detail" :row="row" />
             </td>
           </tr>
         </template>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + (showActions ? 2 : 1)" class="qsl-table-empty">
+          <td :colspan="columns.length + tableExtraColumnCount" class="qsl-table-empty">
             {{ emptyText }}
           </td>
         </tr>
@@ -233,6 +252,7 @@ const formatCellValue = (value: unknown): string => {
   gap: 12px;
 }
 
+.qsl-history-toolbar__title,
 .qsl-history-toolbar__title span {
   color: #111827;
   font-weight: 600;

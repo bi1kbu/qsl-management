@@ -5,8 +5,7 @@ import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import { confirmReceipt } from '../../api/qsl-console-api'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import {
   applySortDirection,
   compareCallSign,
@@ -77,6 +76,18 @@ const pageSize = ref(20)
 const pageSizeOptions = [20, 30, 50, 100]
 const sortKey = ref<ReceiptSortKey>('resourceName')
 const sortDirection = ref<QslSortDirection>('asc')
+const receiptColumns = [
+  { key: 'resourceName', label: '卡片ID', sortable: true },
+  { key: 'callSign', label: '对方呼号', sortable: true },
+  { key: 'cardType', label: '卡片类型', sortable: true },
+  { key: 'cardVersion', label: '卡片版本', sortable: true },
+  { key: 'cardSent', label: '发卡状态', sortable: true },
+  { key: 'receiptConfirmed', label: '签收状态', sortable: true },
+  { key: 'sentAt', label: '发卡时间', sortable: false },
+  { key: 'publicReceiptRemarks', label: '签收备注', sortable: false },
+]
+
+const toReceiptRow = (row: Record<string, unknown>): ReceiptRow => row as unknown as ReceiptRow
 
 const normalizedSceneTypes = computed(
   () => new Set(props.sceneTypes.map((item) => item.trim().toUpperCase())),
@@ -255,115 +266,48 @@ onMounted(loadRows)
         @reset-search="resetSearch"
       />
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="resourceName"
-                  label="卡片ID"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="对方呼号"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardType"
-                  label="卡片类型"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardVersion"
-                  label="卡片版本"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardSent"
-                  label="发卡状态"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="receiptConfirmed"
-                  label="签收状态"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>发卡时间</th>
-              <th>签收备注</th>
-              <th v-if="activeTab === 'pending'">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in pagedRows" :key="item.resourceName">
-              <td>{{ item.resourceName }}</td>
-              <td>{{ item.callSign || '-' }}</td>
-              <td>{{ item.cardType }}</td>
-              <td>{{ item.cardVersion || '-' }}</td>
-              <td>
-                <VTag :theme="item.cardSent ? 'secondary' : 'default'">{{
-                  item.cardSent ? '已发卡' : '未发卡'
-                }}</VTag>
-              </td>
-              <td>
-                <VTag :theme="item.receiptConfirmed ? 'secondary' : 'default'">{{
-                  item.receiptConfirmed ? '已签收' : '待签收'
-                }}</VTag>
-              </td>
-              <td>{{ item.sentAt || '-' }}</td>
-              <td class="qsl-pre-line">{{ item.publicReceiptRemarks || '-' }}</td>
-              <td v-if="activeTab === 'pending'">
-                <VButton
-                  size="xs"
-                  type="secondary"
-                  :disabled="pendingRowName === item.resourceName"
-                  @click="confirmReceiptForRow(item)"
-                >
-                  {{ pendingRowName === item.resourceName ? '确认中' : '确认签收' }}
-                </VButton>
-              </td>
-            </tr>
-            <tr v-if="!pagedRows.length">
-              <td :colspan="activeTab === 'pending' ? 9 : 8" class="qsl-table-empty">
-                暂无签收记录。
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <QslPaginationBar
+      <QslDataTable
+        :rows="pagedRows"
+        :columns="receiptColumns"
+        row-key-field="resourceName"
+        empty-text="暂无签收记录。"
+        :sort-key="sortKey"
+        :sort-direction="sortDirection"
+        :loading="loading"
+        :show-actions="activeTab === 'pending'"
+        show-pagination
         :total="sortedRows.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
+        @sort="toggleSort"
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
-      />
+      >
+        <template #cell-cardSent="{ row }">
+          <VTag :theme="toReceiptRow(row).cardSent ? 'secondary' : 'default'">
+            {{ toReceiptRow(row).cardSent ? '已发卡' : '未发卡' }}
+          </VTag>
+        </template>
+        <template #cell-receiptConfirmed="{ row }">
+          <VTag :theme="toReceiptRow(row).receiptConfirmed ? 'secondary' : 'default'">
+            {{ toReceiptRow(row).receiptConfirmed ? '已签收' : '待签收' }}
+          </VTag>
+        </template>
+        <template #cell-publicReceiptRemarks="{ row }">
+          <span class="qsl-pre-line">{{ toReceiptRow(row).publicReceiptRemarks || '-' }}</span>
+        </template>
+        <template #row-actions="{ row }">
+          <VButton
+            size="xs"
+            type="secondary"
+            :disabled="pendingRowName === toReceiptRow(row).resourceName"
+            @click="confirmReceiptForRow(toReceiptRow(row))"
+          >
+            {{ pendingRowName === toReceiptRow(row).resourceName ? '确认中' : '确认签收' }}
+          </VButton>
+        </template>
+      </QslDataTable>
 
       <div class="qsl-actions">
         <VButton :disabled="loading" @click="loadRows">刷新清单</VButton>
@@ -372,10 +316,3 @@ onMounted(loadRows)
     </VCard>
   </div>
 </template>
-
-<style scoped lang="scss">
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
-}
-</style>

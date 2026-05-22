@@ -14,6 +14,8 @@ import {
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
+import QslDetailTable from '../../components/QslDetailTable.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import {
@@ -221,6 +223,7 @@ const historyColumns = [
 const isBatchTab = computed(() => activeTab.value === 'batch')
 const isResendTab = computed(() => activeTab.value === 'resend')
 const isErrorTab = computed(() => activeTab.value === 'error')
+const canSelectCurrentRows = computed(() => !isResendTab.value && !isErrorTab.value)
 const isEditing = computed(() => Boolean(editingResourceName.value))
 const selectedNormalRows = computed(() =>
   normalRows.value.filter((item) => selectedHistoryNames.value.includes(item.resourceName)),
@@ -379,6 +382,12 @@ const currentSortedRows = computed(() => {
   }
   return sortedRows.value
 })
+const currentSelectableRows = computed(() => {
+  if (!canSelectCurrentRows.value) {
+    return []
+  }
+  return filteredRows.value
+})
 
 const toggleSort = (key: string) => {
   const nextKey = key as MutationSortKey
@@ -403,10 +412,10 @@ const activityFilterOptions = computed(() => {
 })
 
 const allFilteredSelected = computed(() => {
-  if (!currentTableRows.value.length) {
+  if (!currentSelectableRows.value.length) {
     return false
   }
-  return currentTableRows.value.every((item) =>
+  return currentSelectableRows.value.every((item) =>
     selectedHistoryNames.value.includes(item.resourceName),
   )
 })
@@ -616,7 +625,8 @@ const batchEditFields = computed(() => {
 
 watch(rows, () => {
   const nameSet = new Set(rows.value.map((item) => item.resourceName))
-  selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => nameSet.has(name))
+  const normalNameSet = new Set(normalRows.value.map((item) => item.resourceName))
+  selectedHistoryNames.value = selectedHistoryNames.value.filter((name) => normalNameSet.has(name))
   if (editingResourceName.value && !nameSet.has(editingResourceName.value)) {
     editingResourceName.value = ''
   }
@@ -1071,17 +1081,28 @@ const selectHistoryRowForQuery = (item: CardMutationItem) => {
   currentPage.value = 1
 }
 
+const updateHistorySelection = (value: string[]) => {
+  if (!canSelectCurrentRows.value) {
+    return
+  }
+  const normalNameSet = new Set(normalRows.value.map((item) => item.resourceName))
+  selectedHistoryNames.value = Array.from(new Set(value.filter((name) => normalNameSet.has(name))))
+}
+
 const toggleAllFilteredHistorySelection = () => {
+  if (!canSelectCurrentRows.value) {
+    return
+  }
   if (allFilteredSelected.value) {
-    const filteredNameSet = new Set(currentTableRows.value.map((item) => item.resourceName))
+    const filteredNameSet = new Set(currentSelectableRows.value.map((item) => item.resourceName))
     selectedHistoryNames.value = selectedHistoryNames.value.filter(
       (name) => !filteredNameSet.has(name),
     )
     return
   }
   const merged = new Set(selectedHistoryNames.value)
-  currentTableRows.value.forEach((item) => merged.add(item.resourceName))
-  selectedHistoryNames.value = Array.from(merged)
+  currentSelectableRows.value.forEach((item) => merged.add(item.resourceName))
+  updateHistorySelection(Array.from(merged))
 }
 
 const clearHistorySelection = () => {
@@ -1213,20 +1234,6 @@ const withTimeout = async <T,>(task: Promise<T>, timeoutMs = 15000): Promise<T> 
 }
 
 const removeRow = async (item: CardMutationItem) => {
-  const firstConfirmed = window.confirm(`确认删除卡片 ${item.resourceName} 吗？`)
-  if (!firstConfirmed) {
-    feedback.value = `已取消删除：${item.resourceName}`
-    return
-  }
-
-  const secondConfirmed = window.confirm(
-    `二次确认：删除后卡片ID ${item.resourceName} 将作废且不可复用，是否继续？`,
-  )
-  if (!secondConfirmed) {
-    feedback.value = `已取消删除：${item.resourceName}`
-    return
-  }
-
   deletingRowName.value = item.resourceName
   feedback.value = `正在删除卡片：${item.resourceName}`
   try {
@@ -1247,7 +1254,6 @@ const removeRow = async (item: CardMutationItem) => {
   } catch (error) {
     const message = `删除卡片失败：${error instanceof Error ? error.message : '未知错误'}`
     feedback.value = message
-    window.alert(message)
   } finally {
     deletingRowName.value = ''
   }
@@ -1262,12 +1268,6 @@ const applyResendAction = async () => {
   const target = normalRows.value.find((item) => item.resourceName === targetName)
   if (!target) {
     feedback.value = '未找到可重发的正常卡片记录。'
-    return
-  }
-
-  const confirmed = window.confirm(`确认将卡片 ${target.resourceName} 重置为待重发吗？`)
-  if (!confirmed) {
-    feedback.value = `已取消卡片重发操作：${target.resourceName}`
     return
   }
 
@@ -1291,34 +1291,6 @@ const applyResendAction = async () => {
   }
 }
 
-const applySingleResendAction = async (item: CardMutationItem) => {
-  const confirmed = window.confirm(`确认将卡片 ${item.resourceName} 重置为待重发吗？`)
-  if (!confirmed) {
-    feedback.value = `已取消卡片重发操作：${item.resourceName}`
-    return
-  }
-
-  mutationActionRunning.value = true
-  try {
-    await withTimeout(resendCard(item.resourceName))
-    await appendQslAuditLog({
-      action: '卡片异动-卡片重发',
-      resourceType: 'card-record',
-      resourceName: item.resourceName,
-      detail: `重发卡片：呼号=${item.callSign}，类型=${item.cardType}`,
-    })
-    await loadRows({ silent: true })
-    selectedHistoryNames.value = selectedHistoryNames.value.filter(
-      (name) => name !== item.resourceName,
-    )
-    feedback.value = `已提交卡片重发动作：${item.resourceName}`
-  } catch (error) {
-    feedback.value = `卡片重发失败：${error instanceof Error ? error.message : '未知错误'}`
-  } finally {
-    mutationActionRunning.value = false
-  }
-}
-
 const applyMarkErrorAction = async () => {
   const targetName = errorTargetName.value.trim()
   if (!targetName) {
@@ -1328,12 +1300,6 @@ const applyMarkErrorAction = async () => {
   const target = normalRows.value.find((item) => item.resourceName === targetName)
   if (!target) {
     feedback.value = '未找到可标记异常的正常卡片记录。'
-    return
-  }
-
-  const confirmed = window.confirm(`确认将卡片 ${target.resourceName} 标记为发卡异常吗？`)
-  if (!confirmed) {
-    feedback.value = `已取消标记异常：${target.resourceName}`
     return
   }
 
@@ -1360,12 +1326,6 @@ const applyMarkErrorAction = async () => {
 }
 
 const applyMarkResendAction = async (item: CardMutationItem) => {
-  const confirmed = window.confirm(`确认将异常卡片 ${item.resourceName} 标记为重发吗？`)
-  if (!confirmed) {
-    feedback.value = `已取消标记重发：${item.resourceName}`
-    return
-  }
-
   mutationActionRunning.value = true
   try {
     await withTimeout(markCardResend(item.resourceName))
@@ -1505,7 +1465,7 @@ const applyBatchField = (
 }
 
 const applyHistoryBatchEdit = async () => {
-  if (!selectedHistoryNames.value.length) {
+  if (!selectedHistoryCount.value) {
     feedback.value = '请先选择要批量编辑的记录。'
     return
   }
@@ -1654,13 +1614,20 @@ onMounted(() => {
           </div>
 
           <div class="qsl-actions qsl-actions--tight">
-            <VButton
-              type="secondary"
+            <QslConfirmActionButton
+              label="确认重发"
+              danger-level="warning"
               :disabled="!resendTargetName || mutationActionRunning"
-              @click="applyResendAction"
-            >
-              确认重发
-            </VButton>
+              confirm-enabled
+              confirm-title="确认卡片重发"
+              :confirm-message="
+                selectedResendTarget
+                  ? `确认将卡片 ${selectedResendTarget.resourceName} 重置为待重发吗？该操作会清空制卡、打包、发卡状态。`
+                  : '确认执行卡片重发吗？'
+              "
+              confirm-text="确认重发"
+              @confirm="applyResendAction"
+            />
             <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
           </div>
         </div>
@@ -1739,12 +1706,20 @@ onMounted(() => {
           </div>
 
           <div class="qsl-actions qsl-actions--tight">
-            <VButton
-              type="secondary"
+            <QslConfirmActionButton
+              label="标记发卡异常"
+              danger-level="warning"
               :disabled="!errorTargetName || mutationActionRunning"
-              @click="applyMarkErrorAction"
-              >标记发卡异常</VButton
-            >
+              confirm-enabled
+              confirm-title="确认标记发卡异常"
+              :confirm-message="
+                selectedErrorTarget
+                  ? `确认将卡片 ${selectedErrorTarget.resourceName} 标记为发卡异常吗？该卡片会进入异常清单，并从正常业务列表中移出。`
+                  : '确认标记发卡异常吗？'
+              "
+              confirm-text="确认标记异常"
+              @confirm="applyMarkErrorAction"
+            />
             <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
           </div>
         </div>
@@ -2142,7 +2117,8 @@ onMounted(() => {
         :title="isErrorTab ? '发卡异常清单' : isResendTab ? '卡片重发清单' : '卡片异动清单'"
         :keyword="historyKeywordInput"
         :all-selected="allFilteredSelected"
-        :has-rows="currentTableRows.length > 0"
+        :has-rows="currentSelectableRows.length > 0"
+        :show-select="canSelectCurrentRows"
         :sync-enabled="syncHistoryQuery"
         placeholder="按呼号、卡片ID、地址编号筛选"
         @update:keyword="(value) => (historyKeywordInput = value)"
@@ -2174,13 +2150,14 @@ onMounted(() => {
         :batch-edit-enabled="false"
         :show-batch-toggle="false"
         :show-toolbar="false"
+        :show-select="canSelectCurrentRows"
         :show-actions="!isResendTab"
         :sort-key="sortKey"
         :sort-direction="sortDirection"
         :empty-text="
           isErrorTab ? '暂无发卡异常记录。' : isResendTab ? '暂无卡片重发记录。' : '暂无卡片记录。'
         "
-        @update:selected-keys="(value) => (selectedHistoryNames = value)"
+        @update:selected-keys="updateHistorySelection"
         @sort="toggleSort"
       >
         <template #cell-callSign="{ row }">
@@ -2202,9 +2179,10 @@ onMounted(() => {
             <VButton size="xs" type="secondary" @click="startEditRow(toHistoryItem(row))"
               >编辑</VButton
             >
-            <button
-              type="button"
-              class="qsl-row-delete-button"
+            <QslConfirmActionButton
+              size="xs"
+              label="删除"
+              danger-level="danger"
               :disabled="
                 deletingRowName === toHistoryItem(row).resourceName ||
                 savingEdit ||
@@ -2212,25 +2190,30 @@ onMounted(() => {
                 loading ||
                 mutationActionRunning
               "
-              @click.stop.prevent="removeRow(toHistoryItem(row))"
-            >
-              删除
-            </button>
+              confirm-enabled
+              confirm-title="确认删除卡片"
+              :confirm-message="`删除后卡片ID ${toHistoryItem(row).resourceName} 将作废且不可复用，是否继续？`"
+              confirm-text="确认删除"
+              @confirm="removeRow(toHistoryItem(row))"
+            />
           </template>
           <template v-else>
-            <VButton
+            <QslConfirmActionButton
               size="xs"
-              type="secondary"
+              label="标记重发"
+              danger-level="warning"
               :disabled="loading || mutationActionRunning"
-              @click="applyMarkResendAction(toHistoryItem(row))"
-              >标记重发</VButton
-            >
+              confirm-enabled
+              confirm-title="确认标记重发"
+              :confirm-message="`确认将异常卡片 ${toHistoryItem(row).resourceName} 解除异常并重置为待重发吗？`"
+              confirm-text="确认标记重发"
+              @confirm="applyMarkResendAction(toHistoryItem(row))"
+            />
           </template>
         </template>
 
         <template #detail="{ row }">
-          <table class="qsl-history-detail-table">
-            <tbody>
+          <QslDetailTable>
               <tr>
                 <th>关联QSO_ID</th>
                 <td>{{ toHistoryItem(row).spec.qsoRecordName || '-' }}</td>
@@ -2301,8 +2284,7 @@ onMounted(() => {
                   />
                 </td>
               </tr>
-            </tbody>
-          </table>
+          </QslDetailTable>
         </template>
       </QslExpandableHistoryTable>
 
@@ -2373,48 +2355,6 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.qsl-history-detail-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: #f9fafb;
-}
-
-.qsl-history-detail-table th,
-.qsl-history-detail-table td {
-  padding: 8px 12px;
-  border-top: 1px solid #e5e7eb;
-  font-size: 13px;
-  line-height: 20px;
-  text-align: left;
-}
-
-.qsl-history-detail-table th {
-  width: 130px;
-  color: #4b5563;
-  font-weight: 500;
-}
-
-.qsl-history-detail-table td {
-  color: #111827;
-}
-
-.qsl-row-delete-button {
-  appearance: none;
-  border: 1px solid #ef4444;
-  background: #fff;
-  color: #dc2626;
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 20px;
-  padding: 2px 10px;
-  cursor: pointer;
-}
-
-.qsl-row-delete-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .qsl-row-clickable {

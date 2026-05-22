@@ -2,7 +2,7 @@
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 
 interface QslAuditLogSpec {
@@ -36,6 +36,16 @@ const filters = reactive({
 })
 
 const resourcePlural = 'qsl-audit-logs'
+
+const logColumns = [
+  { key: 'id', label: '日志ID' },
+  { key: 'time', label: '时间' },
+  { key: 'operator', label: '操作人' },
+  { key: 'action', label: '动作' },
+  { key: 'resource', label: '资源' },
+  { key: 'ip', label: 'IP' },
+  { key: 'detail', label: '详情' },
+]
 
 const toLog = (extension: QslExtension<QslAuditLogSpec>): AuditLogItem => {
   return {
@@ -134,37 +144,12 @@ onMounted(loadLogs)
         </template>
       </QslQueryToolbar>
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>日志ID</th>
-              <th>时间</th>
-              <th>操作人</th>
-              <th>动作</th>
-              <th>资源</th>
-              <th>IP</th>
-              <th>详情</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in pagedLogs" :key="item.id">
-              <td>{{ item.id }}</td>
-              <td>{{ item.time }}</td>
-              <td>{{ item.operator }}</td>
-              <td>{{ item.action }}</td>
-              <td>{{ item.resource || '-' }}</td>
-              <td>{{ item.ip }}</td>
-              <td>{{ item.detail || '-' }}</td>
-            </tr>
-            <tr v-if="!pagedLogs.length">
-              <td colspan="7" class="qsl-table-empty">暂无数据。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <QslPaginationBar
+      <QslDataTable
+        :rows="pagedLogs"
+        :columns="logColumns"
+        row-key-field="id"
+        :loading="loading"
+        show-pagination
         :total="filteredLogs.length"
         :current-page="currentPage"
         :page-size="pageSize"
@@ -177,10 +162,3 @@ onMounted(loadLogs)
     </VCard>
   </div>
 </template>
-
-<style scoped lang="scss">
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
-}
-</style>

@@ -5,9 +5,11 @@ import { computed, onMounted, ref } from 'vue'
 import {
   importBh6syxCards,
   type Bh6syxImportResult,
+  type Bh6syxImportRowResult,
   type Bh6syxImportRowPayload,
 } from '../../api/qsl-console-api'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
+import QslDataTable from '../../components/QslDataTable.vue'
 
 interface StationCardSpec {
   cardVersion: string
@@ -48,6 +50,30 @@ const parsedRows = ref<ParsedBh6syxRow[]>([])
 const excludedStatusCount = ref(0)
 const missingHeaders = ref<string[]>([])
 const importResult = ref<Bh6syxImportResult | null>(null)
+const importPreviewColumns = [
+  { key: 'included', label: '选择', sortable: false },
+  { key: 'callSign', label: '对方呼号', sortable: false },
+  { key: 'cardVersion', label: '卡片版本', sortable: false },
+  { key: 'status', label: '状态', sortable: false },
+  { key: 'recipientName', label: '对方收件人', sortable: false },
+  { key: 'telephone', label: '对方电话', sortable: false },
+  { key: 'address', label: '对方地址', sortable: false },
+  { key: 'postalCode', label: '对方邮编', sortable: false },
+  { key: 'email', label: '邮箱', sortable: false },
+  { key: 'remarks', label: '对方备注', sortable: false },
+]
+const importResultColumns = [
+  { key: 'rowIndex', label: '序号', sortable: false },
+  { key: 'callSign', label: '对方呼号', sortable: false },
+  { key: 'cardRecordName', label: '卡片记录', sortable: false },
+  { key: 'addressEntryName', label: '地址记录', sortable: false },
+  { key: 'result', label: '结果', sortable: false },
+  { key: 'message', label: '消息', sortable: false },
+]
+const toParsedRow = (row: Record<string, unknown>): ParsedBh6syxRow =>
+  row as unknown as ParsedBh6syxRow
+const toImportRowResult = (row: Record<string, unknown>): Bh6syxImportRowResult =>
+  row as unknown as Bh6syxImportRowResult
 
 const selectedRows = computed(() => parsedRows.value.filter((row) => row.included))
 const canImport = computed(
@@ -354,49 +380,31 @@ onMounted(() => {
         <span>导入清单</span>
         <VTag theme="primary">{{ selectedRows.length }} / {{ parsedRows.length }}</VTag>
       </div>
-      <div v-if="parsedRows.length" class="table-scroll">
-        <table class="preview-table qsl-table">
-          <thead>
-            <tr>
-              <th>选择</th>
-              <th>对方呼号</th>
-              <th>卡片版本</th>
-              <th>状态</th>
-              <th>对方收件人</th>
-              <th>对方电话</th>
-              <th>对方地址</th>
-              <th>对方邮编</th>
-              <th>邮箱</th>
-              <th>对方备注</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in parsedRows" :key="`${row.sourceRowNumber}-${row.callSign}`">
-              <td><input v-model="row.included" type="checkbox" :disabled="importing" /></td>
-              <td class="strong-cell">{{ row.callSign }}</td>
-              <td>
-                <select v-model="row.cardVersion" :disabled="importing">
-                  <option value="">使用默认卡片</option>
-                  <option
-                    v-for="option in stationCardOptions"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </option>
-                </select>
-              </td>
-              <td>{{ row.status }}</td>
-              <td>{{ row.recipientName }}</td>
-              <td>{{ row.telephone }}</td>
-              <td class="address-cell">{{ row.address }}</td>
-              <td>{{ row.postalCode }}</td>
-              <td>{{ row.email }}</td>
-              <td>{{ row.remarks }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <QslDataTable
+        v-if="parsedRows.length"
+        class="table-scroll"
+        :rows="parsedRows"
+        :columns="importPreviewColumns"
+        row-key-field="sourceRowNumber"
+      >
+        <template #cell-included="{ row }">
+          <input v-model="toParsedRow(row).included" type="checkbox" :disabled="importing" />
+        </template>
+        <template #cell-callSign="{ row }">
+          <span class="strong-cell">{{ toParsedRow(row).callSign }}</span>
+        </template>
+        <template #cell-cardVersion="{ row }">
+          <select v-model="toParsedRow(row).cardVersion" :disabled="importing">
+            <option value="">使用默认卡片</option>
+            <option v-for="option in stationCardOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </template>
+        <template #cell-address="{ row }">
+          <span class="address-cell">{{ toParsedRow(row).address }}</span>
+        </template>
+      </QslDataTable>
       <VEmpty
         v-else
         title="尚未解析到可导入记录"
@@ -409,33 +417,19 @@ onMounted(() => {
         <span>导入结果</span>
         <VTag theme="secondary">成功 {{ importResult.successCount }}</VTag>
       </div>
-      <div class="table-scroll compact">
-        <table class="preview-table qsl-table">
-          <thead>
-            <tr>
-              <th>序号</th>
-              <th>对方呼号</th>
-              <th>卡片记录</th>
-              <th>地址记录</th>
-              <th>结果</th>
-              <th>消息</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="item in importResult.results"
-              :key="`${item.rowIndex}-${item.cardRecordName || item.callSign}`"
-            >
-              <td>{{ item.rowIndex }}</td>
-              <td>{{ item.callSign }}</td>
-              <td>{{ item.cardRecordName || '-' }}</td>
-              <td>{{ item.addressEntryName || '-' }}</td>
-              <td>{{ item.result }}</td>
-              <td>{{ item.message }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <QslDataTable
+        class="table-scroll compact"
+        :rows="importResult.results"
+        :columns="importResultColumns"
+        row-key-field="rowIndex"
+      >
+        <template #cell-cardRecordName="{ row }">
+          {{ toImportRowResult(row).cardRecordName || '-' }}
+        </template>
+        <template #cell-addressEntryName="{ row }">
+          {{ toImportRowResult(row).addressEntryName || '-' }}
+        </template>
+      </QslDataTable>
     </VCard>
   </div>
 </template>

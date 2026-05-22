@@ -2,9 +2,8 @@
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
 import {
   applySortDirection,
   compareCallSign,
@@ -81,8 +80,17 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const resourcePlural = 'qso-records'
+const qsoColumns = [
+  { key: 'id', label: 'QSO_ID', sortable: true },
+  { key: 'callSign', label: '对方呼号', sortable: true },
+  { key: 'datetime', label: '日期时间', sortable: true },
+  { key: 'freq', label: '频率', sortable: true },
+  { key: 'mode', label: '模式', sortable: true },
+  { key: 'qth', label: '位置', sortable: true },
+]
 
 const normalize = (value: string) => value.trim().toUpperCase()
+const toQsoItem = (row: Record<string, unknown>): QsoQueryItem => row as unknown as QsoQueryItem
 
 const toRow = (extension: QslExtension<QsoRecordSpec>): QsoQueryItem => {
   return {
@@ -406,136 +414,55 @@ onMounted(loadRows)
         </span>
       </div>
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="id"
-                  label="QSO_ID"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="对方呼号"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="datetime"
-                  label="日期时间"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="freq"
-                  label="频率"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="mode"
-                  label="模式"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="qth"
-                  label="位置"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="item in pagedRows" :key="item.id">
-              <tr
-                class="qsl-table-clickable-row"
-                tabindex="0"
-                role="button"
-                :aria-expanded="expandedId === item.id"
-                @click="toggleDetail(item.id)"
-                @keydown.enter.prevent="toggleDetail(item.id)"
-                @keydown.space.prevent="toggleDetail(item.id)"
-              >
-                <td>{{ item.id }}</td>
-                <td>
-                  <VTag>{{ item.callSign || '未填呼号' }}</VTag>
-                </td>
-                <td>{{ item.date }} {{ item.time }} {{ item.timezone }}</td>
-                <td>{{ item.freq || '-' }}</td>
-                <td>{{ item.mode || '-' }}</td>
-                <td>{{ item.qth || '-' }}</td>
-              </tr>
-
-              <tr v-if="expandedId === item.id" class="qsl-table-detail-row">
-                <td colspan="6">
-                  <div class="qsl-detail-grid">
-                    <p><strong>QSO_ID：</strong>{{ item.id }}</p>
-                    <p><strong>对方呼号：</strong>{{ item.callSign || '-' }}</p>
-                    <p><strong>日期：</strong>{{ item.date || '-' }}</p>
-                    <p><strong>时间：</strong>{{ item.time || '-' }}</p>
-                    <p><strong>时区：</strong>{{ item.timezone || '-' }}</p>
-                    <p><strong>频率：</strong>{{ item.freq || '-' }}</p>
-                    <p><strong>模式：</strong>{{ item.mode || '-' }}</p>
-                    <p><strong>我方设备：</strong>{{ item.myRig || '-' }}</p>
-                    <p><strong>我方天线：</strong>{{ item.myRigAnt || '-' }}</p>
-                    <p><strong>我方功率：</strong>{{ item.myRigPwr || '-' }}</p>
-                    <p><strong>对方设备：</strong>{{ item.rig || '-' }}</p>
-                    <p><strong>对方天线：</strong>{{ item.ant || '-' }}</p>
-                    <p><strong>对方功率：</strong>{{ item.pwr || '-' }}</p>
-                    <p><strong>位置：</strong>{{ item.qth || '-' }}</p>
-                    <p><strong>给对方信号：</strong>{{ item.rstSent || '-' }}</p>
-                    <p><strong>给我方信号：</strong>{{ item.rstRcvd || '-' }}</p>
-                    <p class="qsl-detail-full"><strong>备注：</strong>{{ item.remarks || '无' }}</p>
-                  </div>
-                </td>
-              </tr>
-            </template>
-
-            <tr v-if="!pagedRows.length">
-              <td colspan="6" class="qsl-table-empty">暂无数据。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <QslPaginationBar
+      <QslDataTable
+        :rows="pagedRows"
+        :columns="qsoColumns"
+        row-key-field="id"
+        :sort-key="sortKey"
+        :sort-direction="sortDirection"
+        :loading="loading"
+        clickable-rows
+        :expanded-row-key="expandedId"
+        show-pagination
         :total="sortedRows.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
+        @sort="toggleSort"
+        @row-click="(row) => toggleDetail(toQsoItem(row).id)"
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
-      />
+      >
+        <template #cell-callSign="{ row }">
+          <VTag>{{ toQsoItem(row).callSign || '未填呼号' }}</VTag>
+        </template>
+        <template #cell-datetime="{ row }">
+          {{ toQsoItem(row).date }} {{ toQsoItem(row).time }} {{ toQsoItem(row).timezone }}
+        </template>
+        <template #detail="{ row }">
+          <div class="qsl-detail-grid">
+            <p><strong>QSO_ID：</strong>{{ toQsoItem(row).id }}</p>
+            <p><strong>对方呼号：</strong>{{ toQsoItem(row).callSign || '-' }}</p>
+            <p><strong>日期：</strong>{{ toQsoItem(row).date || '-' }}</p>
+            <p><strong>时间：</strong>{{ toQsoItem(row).time || '-' }}</p>
+            <p><strong>时区：</strong>{{ toQsoItem(row).timezone || '-' }}</p>
+            <p><strong>频率：</strong>{{ toQsoItem(row).freq || '-' }}</p>
+            <p><strong>模式：</strong>{{ toQsoItem(row).mode || '-' }}</p>
+            <p><strong>我方设备：</strong>{{ toQsoItem(row).myRig || '-' }}</p>
+            <p><strong>我方天线：</strong>{{ toQsoItem(row).myRigAnt || '-' }}</p>
+            <p><strong>我方功率：</strong>{{ toQsoItem(row).myRigPwr || '-' }}</p>
+            <p><strong>对方设备：</strong>{{ toQsoItem(row).rig || '-' }}</p>
+            <p><strong>对方天线：</strong>{{ toQsoItem(row).ant || '-' }}</p>
+            <p><strong>对方功率：</strong>{{ toQsoItem(row).pwr || '-' }}</p>
+            <p><strong>位置：</strong>{{ toQsoItem(row).qth || '-' }}</p>
+            <p><strong>给对方信号：</strong>{{ toQsoItem(row).rstSent || '-' }}</p>
+            <p><strong>给我方信号：</strong>{{ toQsoItem(row).rstRcvd || '-' }}</p>
+            <p class="qsl-detail-full"><strong>备注：</strong>{{ toQsoItem(row).remarks || '无' }}</p>
+          </div>
+        </template>
+      </QslDataTable>
 
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
     </VCard>
   </div>
 </template>
-
-<style scoped lang="scss">
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
-}
-</style>

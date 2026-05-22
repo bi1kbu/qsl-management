@@ -10,6 +10,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
 import { applySortDirection, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
 type CatalogType = 'RIG' | 'ANT' | 'PWR' | 'MODE'
@@ -180,9 +181,18 @@ onMounted(loadCatalog)
       <div class="qsl-tag-list qsl-tag-list--wide">
         <span v-for="item in currentList" :key="item.id" class="qsl-tag-pill">
           <VTag>{{ item.value }}</VTag>
-          <button type="button" :disabled="loading || submitting" @click="removeItem(item)">
-            删除
-          </button>
+          <QslConfirmActionButton
+            size="xs"
+            label="删除"
+            type="danger"
+            danger-level="danger"
+            :disabled="loading || submitting"
+            confirm-enabled
+            confirm-title="确认删除设备库条目"
+            :confirm-message="`确认删除${item.type}条目：${item.value} 吗？`"
+            confirm-text="确认删除"
+            @confirm="removeItem(item)"
+          />
         </span>
       </div>
 

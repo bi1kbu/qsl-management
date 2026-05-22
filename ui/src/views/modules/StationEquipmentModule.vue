@@ -11,6 +11,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
 
 interface StationRig {
   resourceName?: string
@@ -272,9 +273,18 @@ onMounted(loadStationEquipment)
           >
             {{ rig.name }}
           </button>
-          <VButton size="xs" type="danger" :disabled="loading || saving" @click="removeRig(rig.id)"
-            >删除</VButton
-          >
+          <QslConfirmActionButton
+            size="xs"
+            label="删除"
+            type="danger"
+            danger-level="danger"
+            :disabled="loading || saving"
+            confirm-enabled
+            confirm-title="确认删除本台设备"
+            :confirm-message="`确认删除本台设备：${rig.name} 吗？保存设备配置后将持久化删除。`"
+            confirm-text="确认删除"
+            @confirm="removeRig(rig.id)"
+          />
         </li>
       </ul>
 
@@ -309,7 +319,18 @@ onMounted(loadStationEquipment)
               class="qsl-tag-pill"
             >
               {{ item }}
-              <button type="button" @click="removeRigProperty('antennas', index)">×</button>
+              <QslConfirmActionButton
+                size="xs"
+                label="移除"
+                type="danger"
+                danger-level="warning"
+                :disabled="loading || saving"
+                confirm-enabled
+                confirm-title="确认移除天线"
+                :confirm-message="`确认从当前设备中移除天线：${item} 吗？`"
+                confirm-text="确认移除"
+                @confirm="removeRigProperty('antennas', index)"
+              />
             </span>
           </div>
           <p v-else class="qsl-muted">暂无天线配置。</p>
@@ -337,7 +358,18 @@ onMounted(loadStationEquipment)
               class="qsl-tag-pill"
             >
               {{ item }}
-              <button type="button" @click="removeRigProperty('powers', index)">×</button>
+              <QslConfirmActionButton
+                size="xs"
+                label="移除"
+                type="danger"
+                danger-level="warning"
+                :disabled="loading || saving"
+                confirm-enabled
+                confirm-title="确认移除功率"
+                :confirm-message="`确认从当前设备中移除功率：${item} 吗？`"
+                confirm-text="确认移除"
+                @confirm="removeRigProperty('powers', index)"
+              />
             </span>
           </div>
           <p v-else class="qsl-muted">暂无功率配置。</p>
@@ -365,7 +397,18 @@ onMounted(loadStationEquipment)
               class="qsl-tag-pill"
             >
               {{ item }}
-              <button type="button" @click="removeRigProperty('modes', index)">×</button>
+              <QslConfirmActionButton
+                size="xs"
+                label="移除"
+                type="danger"
+                danger-level="warning"
+                :disabled="loading || saving"
+                confirm-enabled
+                confirm-title="确认移除模式"
+                :confirm-message="`确认从当前设备中移除模式：${item} 吗？`"
+                confirm-text="确认移除"
+                @confirm="removeRigProperty('modes', index)"
+              />
             </span>
           </div>
           <p v-else class="qsl-muted">暂无模式配置。</p>

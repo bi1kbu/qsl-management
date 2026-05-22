@@ -16,6 +16,9 @@ import { sendNotificationMail } from '../../api/qsl-console-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
+import QslDetailTable from '../../components/QslDetailTable.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import {
@@ -102,6 +105,15 @@ interface QsoRecordItem {
   freq: string
   mode: string
 }
+const qsoSelectorColumns = [
+  { key: 'id', label: 'QSO_ID', sortable: false },
+  { key: 'callSign', label: '呼号', sortable: false },
+  { key: 'datetime', label: '日期时间', sortable: false },
+  { key: 'freq', label: '频率', sortable: false },
+  { key: 'mode', label: '模式', sortable: false },
+]
+const asQsoRecordItemRow = (row: Record<string, unknown>): QsoRecordItem =>
+  row as unknown as QsoRecordItem
 
 interface StationCardSpec {
   cardVersion: string
@@ -534,6 +546,9 @@ const activityFilterOptions = computed(() => {
 
 const selectedHistoryCount = computed(() => selectedHistoryNames.value.length)
 const isEditing = computed(() => Boolean(editingResourceName.value))
+const editingCardRecord = computed(
+  () => records.value.find((item) => item.resourceName === editingResourceName.value) ?? null,
+)
 const allFilteredSelected = computed(() => {
   if (!filteredRecords.value.length) {
     return false
@@ -1383,19 +1398,6 @@ const cancelEditRecord = () => {
 
 const removeCardRecord = async (item: CardRecordItem) => {
   const displayName = getCardRecordDisplayName(item)
-  const firstConfirmed = window.confirm(`确认删除卡片记录 ${displayName} 吗？`)
-  if (!firstConfirmed) {
-    feedback.value = `已取消删除：${displayName}`
-    return
-  }
-  const secondConfirmText = isNoCardPlaceholder(item)
-    ? `二次确认：删除后关联记录 ${item.qsoRecordName} 会重新进入创建卡片候选，是否继续？`
-    : `二次确认：删除后卡片ID ${item.resourceName} 将作废且不可复用，是否继续？`
-  const secondConfirmed = window.confirm(secondConfirmText)
-  if (!secondConfirmed) {
-    feedback.value = `已取消删除：${displayName}`
-    return
-  }
 
   saving.value = true
   try {
@@ -1419,7 +1421,7 @@ const removeCardRecord = async (item: CardRecordItem) => {
 }
 
 const removeEditingCardRecord = async () => {
-  const target = records.value.find((item) => item.resourceName === editingResourceName.value)
+  const target = editingCardRecord.value
   if (!target) {
     feedback.value = '未找到待删除的卡片记录，请刷新后重试。'
     return
@@ -2094,14 +2096,23 @@ onBeforeUnmount(() => {
           <VButton v-if="isEditing" :disabled="loading || saving" @click="cancelEditRecord"
             >取消编辑</VButton
           >
-          <VButton
+          <QslConfirmActionButton
             v-if="isEditing"
-            type="danger"
+            label="删除当前记录"
+            danger-level="danger"
             :disabled="loading || saving"
-            @click="removeEditingCardRecord"
-          >
-            删除当前记录
-          </VButton>
+            confirm-enabled
+            confirm-title="确认删除卡片记录"
+            :confirm-message="
+              editingCardRecord && isNoCardPlaceholder(editingCardRecord)
+                ? `删除后关联记录 ${editingCardRecord.qsoRecordName} 会重新进入创建卡片候选，是否继续？`
+                : editingCardRecord
+                  ? `删除后卡片ID ${editingCardRecord.resourceName} 将作废且不可复用，是否继续？`
+                  : '确认删除当前卡片记录吗？'
+            "
+            confirm-text="确认删除"
+            @confirm="removeEditingCardRecord"
+          />
           <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
         </div>
 
@@ -2152,50 +2163,37 @@ onBeforeUnmount(() => {
         <VButton :disabled="loading" @click="closeQsoSelector">关闭</VButton>
       </div>
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>QSO_ID</th>
-              <th>呼号</th>
-              <th>日期时间</th>
-              <th>频率</th>
-              <th>模式</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in filteredQsoRecords" :key="item.id">
-              <td>{{ item.id }}</td>
-              <td>{{ item.callSign }}</td>
-              <td>{{ item.date }} {{ item.time }} {{ item.timezone }}</td>
-              <td>{{ item.freq || '-' }}</td>
-              <td>{{ item.mode || '-' }}</td>
-              <td>
-                <div class="qsl-row-actions">
-                  <VButton
-                    size="xs"
-                    type="secondary"
-                    :disabled="saving"
-                    @click="selectQsoRecord(item)"
-                    >选择</VButton
-                  >
-                  <VButton
-                    size="xs"
-                    :disabled="saving || isQsoRecordConsumed(item.id)"
-                    @click="markQsoAsNoCard(item)"
-                  >
-                    不创建卡片
-                  </VButton>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!filteredQsoRecords.length">
-              <td colspan="6" class="qsl-table-empty">暂无可选QSO记录。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <QslDataTable
+        :rows="filteredQsoRecords"
+        :columns="qsoSelectorColumns"
+        row-key-field="id"
+        empty-text="暂无可选QSO记录。"
+        :loading="loading"
+        show-actions
+      >
+        <template #cell-datetime="{ row }">
+          {{ asQsoRecordItemRow(row).date }} {{ asQsoRecordItemRow(row).time }}
+          {{ asQsoRecordItemRow(row).timezone }}
+        </template>
+        <template #row-actions="{ row }">
+          <div class="qsl-row-actions">
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="saving"
+              @click="selectQsoRecord(asQsoRecordItemRow(row))"
+              >选择</VButton
+            >
+            <VButton
+              size="xs"
+              :disabled="saving || isQsoRecordConsumed(asQsoRecordItemRow(row).id)"
+              @click="markQsoAsNoCard(asQsoRecordItemRow(row))"
+            >
+              不创建卡片
+            </VButton>
+          </div>
+        </template>
+      </QslDataTable>
     </VCard>
 
     <VCard>
@@ -2268,21 +2266,27 @@ onBeforeUnmount(() => {
         <template #row-actions="{ row }">
           <div class="qsl-row-actions">
             <VButton size="xs" @click="startEditRecord(toHistoryItem(row))">编辑</VButton>
-            <VButton
+            <QslConfirmActionButton
               v-if="allowDeleteCardRecord"
               size="xs"
-              type="danger"
+              label="删除"
+              danger-level="danger"
               :disabled="saving || loading"
-              @click="removeCardRecord(toHistoryItem(row))"
-            >
-              删除
-            </VButton>
+              confirm-enabled
+              confirm-title="确认删除卡片记录"
+              :confirm-message="
+                isNoCardPlaceholder(toHistoryItem(row))
+                  ? `删除后关联记录 ${toHistoryItem(row).qsoRecordName} 会重新进入创建卡片候选，是否继续？`
+                  : `删除后卡片ID ${toHistoryItem(row).resourceName} 将作废且不可复用，是否继续？`
+              "
+              confirm-text="确认删除"
+              @confirm="removeCardRecord(toHistoryItem(row))"
+            />
           </div>
         </template>
 
         <template #detail="{ row }">
-          <table class="qsl-history-detail-table">
-            <tbody>
+          <QslDetailTable>
               <tr v-if="showOfflineActivityFields">
                 <th>关联QSO</th>
                 <td>{{ toHistoryItem(row).qsoRecordName || '无' }}</td>
@@ -2315,8 +2319,7 @@ onBeforeUnmount(() => {
                 <th>制卡邮件时间</th>
                 <td>{{ toHistoryItem(row).spec.createdMailSentAt || '未记录' }}</td>
               </tr>
-            </tbody>
-          </table>
+          </QslDetailTable>
         </template>
       </QslExpandableHistoryTable>
       <QslPaginationBar
@@ -2385,11 +2388,6 @@ onBeforeUnmount(() => {
   line-height: 1;
 }
 
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
-}
-
 .qsl-row-clickable {
   cursor: pointer;
 }
@@ -2408,28 +2406,4 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
-.qsl-history-detail-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: #f9fafb;
-}
-
-.qsl-history-detail-table th,
-.qsl-history-detail-table td {
-  padding: 8px 12px;
-  border-top: 1px solid #e5e7eb;
-  font-size: 13px;
-  line-height: 20px;
-  text-align: left;
-}
-
-.qsl-history-detail-table th {
-  width: 120px;
-  color: #4b5563;
-  font-weight: 500;
-}
-
-.qsl-history-detail-table td {
-  color: #111827;
-}
 </style>

@@ -10,8 +10,8 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import { buildBureauResourceName } from '../../utils/resource-name'
 import { applySortDirection, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
@@ -56,6 +56,15 @@ const sortDirection = ref<QslSortDirection>('asc')
 
 const resourcePlural = 'bureau-entries'
 const resourceKind = 'BureauEntry'
+const bureauColumns = [
+  { key: 'bureauName', label: '名称', sortable: true },
+  { key: 'telephone', label: '电话', sortable: true },
+  { key: 'postalCode', label: '邮编', sortable: true },
+  { key: 'address', label: '地址', sortable: true },
+  { key: 'remarks', label: '备注', sortable: true },
+]
+
+const toBureauItem = (row: Record<string, unknown>): BureauItem => row as unknown as BureauItem
 
 const toRow = (extension: QslExtension<BureauSpec>): BureauItem => {
   return {
@@ -331,99 +340,44 @@ onMounted(loadRows)
     </VCard>
 
     <VCard title="卡片局列表">
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="bureauName"
-                  label="名称"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="telephone"
-                  label="电话"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="postalCode"
-                  label="邮编"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="address"
-                  label="地址"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="remarks"
-                  label="备注"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in pagedRows" :key="row.id">
-              <td>{{ row.bureauName }}</td>
-              <td>{{ row.telephone || '-' }}</td>
-              <td>{{ row.postalCode || '-' }}</td>
-              <td>{{ row.address || '-' }}</td>
-              <td>{{ row.remarks || '-' }}</td>
-              <td>
-                <VButton size="xs" :disabled="loading || submitting" @click="startEdit(row)"
-                  >编辑</VButton
-                >
-                <VButton
-                  size="xs"
-                  type="danger"
-                  :disabled="loading || submitting"
-                  @click="removeBureau(row.id)"
-                  >删除</VButton
-                >
-              </td>
-            </tr>
-            <tr v-if="!pagedRows.length">
-              <td colspan="6" class="qsl-table-empty">暂无数据。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <QslPaginationBar
+      <QslDataTable
+        :rows="pagedRows"
+        :columns="bureauColumns"
+        row-key-field="id"
+        :sort-key="sortKey"
+        :sort-direction="sortDirection"
+        :loading="loading"
+        show-actions
+        show-pagination
         :total="rows.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
+        @sort="toggleSort"
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
-      />
+      >
+        <template #row-actions="{ row }">
+          <VButton
+            size="xs"
+            :disabled="loading || submitting"
+            @click="startEdit(toBureauItem(row))"
+            >编辑</VButton
+          >
+          <QslConfirmActionButton
+            size="xs"
+            label="删除"
+            type="danger"
+            danger-level="danger"
+            :disabled="loading || submitting"
+            confirm-enabled
+            confirm-title="确认删除卡片局"
+            :confirm-message="`确认删除卡片局：${toBureauItem(row).bureauName || toBureauItem(row).id} 吗？`"
+            confirm-text="确认删除"
+            @confirm="removeBureau(toBureauItem(row).id)"
+          />
+        </template>
+      </QslDataTable>
     </VCard>
   </div>
 </template>
-
-<style scoped lang="scss">
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
-}
-</style>

@@ -14,6 +14,8 @@ import {
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
+import QslDetailTable from '../../components/QslDetailTable.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
 import { buildQsoResourceName } from '../../utils/resource-name'
@@ -816,20 +818,6 @@ const applyHistoryBatchEdit = async () => {
 }
 
 const removeRecord = async (item: QsoRecordItem) => {
-  const firstConfirmed = window.confirm(`确认删除通联记录 ${item.resourceName} 吗？`)
-  if (!firstConfirmed) {
-    feedback.value = `已取消删除：${item.resourceName}`
-    return
-  }
-
-  const secondConfirmed = window.confirm(
-    `二次确认：删除后通联记录编号 ${item.resourceName} 将作废且不可复用，是否继续？`,
-  )
-  if (!secondConfirmed) {
-    feedback.value = `已取消删除：${item.resourceName}`
-    return
-  }
-
   deletingResourceName.value = item.resourceName
   try {
     await deleteExtension(resourcePlural, item.resourceName)
@@ -865,18 +853,6 @@ const removeSelectedRecords = async () => {
   )
   if (!targets.length) {
     feedback.value = '未找到可删除的通联记录，请刷新后重试。'
-    return
-  }
-
-  const firstConfirmed = window.confirm(`确认批量删除 ${targets.length} 条通联记录吗？`)
-  if (!firstConfirmed) {
-    feedback.value = '已取消批量删除。'
-    return
-  }
-
-  const secondConfirmed = window.confirm('二次确认：删除后通联记录编号将作废且不可复用，是否继续？')
-  if (!secondConfirmed) {
-    feedback.value = '已取消批量删除。'
     return
   }
 
@@ -1273,14 +1249,17 @@ onMounted(() => {
             @click="clearHistorySelection"
             >清空选择</VButton
           >
-          <VButton
+          <QslConfirmActionButton
             size="sm"
-            type="danger"
+            label="批量删除"
+            danger-level="danger"
             :disabled="!selectedHistoryCount || batchUpdating || batchDeleting || loading || saving"
-            @click="removeSelectedRecords"
-          >
-            批量删除
-          </VButton>
+            confirm-enabled
+            confirm-title="确认批量删除"
+            :confirm-message="`确认批量删除 ${selectedHistoryCount} 条通联记录吗？删除后通联记录编号将作废且不可复用。`"
+            confirm-text="确认删除"
+            @confirm="removeSelectedRecords"
+          />
         </div>
         <QslBatchFieldEditor
           :fields="batchEditFields"
@@ -1341,9 +1320,10 @@ onMounted(() => {
           <VButton size="xs" type="secondary" @click="startEditRecord(toHistoryItem(row))"
             >编辑</VButton
           >
-          <VButton
+          <QslConfirmActionButton
             size="xs"
-            type="danger"
+            label="删除"
+            danger-level="danger"
             :disabled="
               loading ||
               saving ||
@@ -1351,15 +1331,16 @@ onMounted(() => {
               batchDeleting ||
               deletingResourceName === toHistoryItem(row).resourceName
             "
-            @click="removeRecord(toHistoryItem(row))"
-          >
-            删除
-          </VButton>
+            confirm-enabled
+            confirm-title="确认删除通联记录"
+            :confirm-message="`删除后通联记录编号 ${toHistoryItem(row).resourceName} 将作废且不可复用，是否继续？`"
+            confirm-text="确认删除"
+            @confirm="removeRecord(toHistoryItem(row))"
+          />
         </template>
 
         <template #detail="{ row }">
-          <table class="qsl-history-detail-table">
-            <tbody>
+          <QslDetailTable>
               <tr>
                 <th>本台设备</th>
                 <td>{{ toHistoryItem(row).myRig || '未填' }}</td>
@@ -1402,8 +1383,7 @@ onMounted(() => {
                 <th>备注</th>
                 <td colspan="3">{{ toHistoryItem(row).remarks || '无' }}</td>
               </tr>
-            </tbody>
-          </table>
+          </QslDetailTable>
         </template>
       </QslExpandableHistoryTable>
       <QslPaginationBar
@@ -1447,28 +1427,4 @@ onMounted(() => {
   line-height: 20px;
 }
 
-.qsl-history-detail-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: #f9fafb;
-}
-
-.qsl-history-detail-table th,
-.qsl-history-detail-table td {
-  padding: 8px 12px;
-  border-top: 1px solid #e5e7eb;
-  font-size: 13px;
-  line-height: 20px;
-  text-align: left;
-}
-
-.qsl-history-detail-table th {
-  width: 120px;
-  color: #4b5563;
-  font-weight: 500;
-}
-
-.qsl-history-detail-table td {
-  color: #111827;
-}
 </style>

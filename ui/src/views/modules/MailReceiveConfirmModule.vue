@@ -18,8 +18,8 @@ import {
 } from '../../api/qsl-extension-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import {
   compareBoolean,
   compareCallSign,
@@ -282,7 +282,6 @@ const rememberReceivedDate = (value: string) => {
 const requireReceivedDate = (): string => {
   const receivedDate = form.receivedDate.trim()
   if (!receivedDate) {
-    window.alert('请先填写收卡日期。')
     feedback.value = '请先填写收卡日期。'
     return ''
   }
@@ -422,6 +421,41 @@ const singleEditTarget = computed(() => {
   return results.value.find((item) => item.resourceName === editingResourceName.value) ?? null
 })
 const showReceivedMailActions = computed(() => !props.hideReceivedMailActions)
+const receivedRecordColumns = computed(() => {
+  const columns = [
+    { key: 'receiveRecordCode', label: '收卡编号', sortable: true },
+    { key: 'outboundCardNames', label: '关联发卡编号', sortable: true },
+    { key: 'callSign', label: '对方呼号', sortable: true },
+    { key: 'cardType', label: '卡片类型', sortable: true },
+  ]
+  if (showOfflineActivity.value) {
+    columns.push({ key: 'offlineActivityName', label: '关联活动', sortable: true })
+  }
+  columns.push({ key: 'matchStatus', label: '匹配状态', sortable: true })
+  columns.push({ key: 'receivedDate', label: '收卡日期', sortable: false })
+  columns.push({ key: 'remarks', label: '收卡确认备注', sortable: false })
+  return columns
+})
+const receiveConfirmColumns = computed(() => {
+  const columns = [
+    { key: 'selected', label: '选择', sortable: false },
+    { key: 'resourceName', label: '卡片ID', sortable: true },
+    { key: 'callSign', label: '对方呼号', sortable: true },
+    { key: 'cardType', label: '卡片类型', sortable: true },
+    { key: 'cardReceived', label: '收卡状态', sortable: true },
+    { key: 'cardSent', label: '发卡状态', sortable: true },
+  ]
+  if (showOfflineActivity.value) {
+    columns.push({ key: 'offlineActivityName', label: '关联活动', sortable: true })
+  }
+  columns.push({ key: 'receiveRecordCodes', label: '收卡编号', sortable: true })
+  columns.push({ key: 'receivedRemarks', label: '收卡确认备注', sortable: true })
+  return columns
+})
+const asReceiveResultRow = (row: Record<string, unknown>): ReceiveResult =>
+  row as unknown as ReceiveResult
+const asReceivedRecordResultRow = (row: Record<string, unknown>): ReceivedRecordResult =>
+  row as unknown as ReceivedRecordResult
 const batchEditFields = [
   {
     value: 'cardType',
@@ -979,7 +1013,6 @@ const submitReceive = async () => {
   }
   const offlineActivityName = showOfflineActivity.value ? selectedOfflineActivity.value.trim() : ''
   if (showOfflineActivity.value && !offlineActivityName) {
-    window.alert('请选择收卡归属活动。')
     feedback.value = '请选择收卡归属活动。'
     return
   }
@@ -1022,7 +1055,6 @@ const confirmReceiveForRow = async (item: ReceiveResult) => {
     ? selectedOfflineActivity.value.trim()
     : item.spec.offlineActivityName
   if (showOfflineActivity.value && !offlineActivityName) {
-    window.alert('请选择收卡归属活动。')
     feedback.value = '请选择收卡归属活动。'
     return
   }
@@ -1194,9 +1226,6 @@ const deleteSingleEdit = async () => {
   const target = singleEditTarget.value
   if (!target) {
     feedback.value = '未找到要删除的记录，请刷新清单后重试。'
-    return
-  }
-  if (!window.confirm(`确认删除卡片记录 ${target.resourceName}？删除后不可恢复。`)) {
     return
   }
 
@@ -1642,13 +1671,20 @@ onMounted(() => {
             >
               保存编辑
             </VButton>
-            <VButton
-              type="danger"
+            <QslConfirmActionButton
+              label="删除本条记录"
+              danger-level="danger"
               :disabled="savingSingleEdit || deletingSingleEdit"
-              @click="deleteSingleEdit"
-            >
-              删除本条记录
-            </VButton>
+              confirm-enabled
+              confirm-title="确认删除卡片记录"
+              :confirm-message="
+                singleEditTarget
+                  ? `确认删除卡片记录 ${singleEditTarget.resourceName}？删除后不可恢复。`
+                  : '确认删除当前记录吗？'
+              "
+              confirm-text="确认删除"
+              @confirm="deleteSingleEdit"
+            />
             <VButton :disabled="savingSingleEdit || deletingSingleEdit" @click="cancelSingleEdit"
               >取消编辑</VButton
             >
@@ -1673,93 +1709,27 @@ onMounted(() => {
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="receiveRecordCode"
-                  label="收卡编号"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="outboundCardNames"
-                  label="关联发卡编号"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="对方呼号"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardType"
-                  label="卡片类型"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th v-if="showOfflineActivity">
-                <QslSortableHeader
-                  column-key="offlineActivityName"
-                  label="关联活动"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="matchStatus"
-                  label="匹配状态"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>收卡日期</th>
-              <th>收卡确认备注</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in pagedReceivedResults" :key="`received-${item.receiveRecordCode}`">
-              <td>{{ item.receiveRecordCode }}</td>
-              <td>{{ item.outboundCardNames || '-' }}</td>
-              <td>{{ item.callSign || '-' }}</td>
-              <td>{{ item.cardType }}</td>
-              <td v-if="showOfflineActivity">{{ item.offlineActivityName || '-' }}</td>
-              <td>{{ item.matchStatus || '-' }}</td>
-              <td>{{ item.receivedDate || '-' }}</td>
-              <td class="qsl-pre-line">{{ item.remarks || '-' }}</td>
-            </tr>
-            <tr v-if="!pagedReceivedResults.length">
-              <td :colspan="showOfflineActivity ? 8 : 7" class="qsl-table-empty">暂无收卡记录。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <QslPaginationBar
+      <QslDataTable
+        :rows="pagedReceivedResults"
+        :columns="receivedRecordColumns"
+        row-key-field="receiveRecordCode"
+        empty-text="暂无收卡记录。"
+        :sort-key="receiveSortKey"
+        :sort-direction="receiveSortDirection"
+        :loading="loadingResults"
+        show-pagination
         :total="sortedReceivedResults.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
+        @sort="(value) => toggleReceiveSort(value as ReceiveSortKey)"
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
-      />
+      >
+        <template #cell-remarks="{ row }">
+          <span class="qsl-pre-line">{{ asReceivedRecordResultRow(row).remarks || '-' }}</span>
+        </template>
+      </QslDataTable>
       <div class="qsl-actions">
         <VButton :disabled="loadingResults || submitting" @click="loadResults">刷新清单</VButton>
       </div>
@@ -1788,214 +1758,142 @@ onMounted(() => {
         <span class="qsl-muted">已选 {{ selectedHistoryCount }} 条</span>
       </div>
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>选择</th>
-              <th>
-                <QslSortableHeader
-                  column-key="resourceName"
-                  label="卡片ID"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="对方呼号"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardType"
-                  label="卡片类型"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardReceived"
-                  label="收卡状态"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardSent"
-                  label="发卡状态"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th v-if="showOfflineActivity">
-                <QslSortableHeader
-                  column-key="offlineActivityName"
-                  label="关联活动"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="receiveRecordCodes"
-                  label="收卡编号"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="receivedRemarks"
-                  label="收卡确认备注"
-                  :sort-key="receiveSortKey"
-                  :sort-direction="receiveSortDirection"
-                  @sort="toggleReceiveSort($event as ReceiveSortKey)"
-                />
-              </th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in pagedFilteredResults" :key="item.resourceName">
-              <td @click.stop>
-                <label class="qsl-checkbox qsl-select-only">
-                  <input
-                    :checked="isHistorySelected(item.resourceName)"
-                    type="checkbox"
-                    @click.stop
-                    @change.stop="toggleHistorySelection(item.resourceName)"
-                  />
-                </label>
-              </td>
-              <td>{{ item.resourceName }}</td>
-              <td class="qsl-row-clickable" @click="selectRowForQuery(item)">
-                {{ item.callSign || '-' }}
-              </td>
-              <td>{{ item.cardType }}</td>
-              <td>
-                <VTag :theme="isCardReceivedForDisplay(item) ? 'secondary' : 'default'">{{
-                  isCardReceivedForDisplay(item) ? '是' : '否'
-                }}</VTag>
-              </td>
-              <td>
-                <VTag :theme="item.spec.cardSent ? 'secondary' : 'default'">{{
-                  item.spec.cardSent ? '是' : '否'
-                }}</VTag>
-              </td>
-              <td v-if="showOfflineActivity">{{ item.spec.offlineActivityName || '-' }}</td>
-              <td>{{ formatReceiveRecordCodesForCard(item) }}</td>
-              <td class="qsl-pre-line">{{ resolveReceiveRemarkText(item) }}</td>
-              <td>
-                <div v-if="isBatchTab" class="qsl-actions qsl-actions--tight">
-                  <VButton
-                    size="xs"
-                    type="secondary"
-                    :disabled="savingSingleEdit"
-                    @click="startSingleEdit(item)"
-                  >
-                    {{ editingResourceName === item.resourceName ? '正在编辑' : '编辑' }}
-                  </VButton>
-                </div>
-                <div v-else class="qsl-actions qsl-actions--tight">
-                  <VButton
-                    size="xs"
-                    type="secondary"
-                    :disabled="pendingReceiveRowName === item.resourceName || submitting"
-                    @click="confirmReceiveForRow(item)"
-                  >
-                    确认收卡
-                  </VButton>
-                  <VButton
-                    size="xs"
-                    type="secondary"
-                    :disabled="
-                      pendingReceiveRowName === item.resourceName ||
-                      pendingMailRowName === item.resourceName ||
-                      !isCardReceivedForDisplay(item) ||
-                      item.spec.receivedMailStatus === 'SENT' ||
-                      item.spec.receivedMailStatus === 'PENDING'
-                    "
-                    @click="closeReceiveForRow(item)"
-                  >
-                    结束收卡
-                  </VButton>
-                  <VButton
-                    v-if="showReceivedMailActions"
-                    class="qsl-mail-action"
-                    size="xs"
-                    type="secondary"
-                    :disabled="
-                      pendingMailRowName === item.resourceName ||
-                      item.spec.receivedMailStatus === 'SENT' ||
-                      !isCardReceivedForDisplay(item) ||
-                      (item.spec.receivedMailStatus !== 'PENDING' &&
-                        item.spec.receivedMailStatus !== 'FAILED')
-                    "
-                    @click="sendReceivedMailForRow(item)"
-                  >
-                    发送收卡回执
-                  </VButton>
-                  <VButton
-                    v-if="showReceivedMailActions"
-                    size="xs"
-                    type="secondary"
-                    :disabled="
-                      pendingMailRowName === item.resourceName ||
-                      item.spec.receivedMailStatus === 'SENT' ||
-                      !isCardReceivedForDisplay(item) ||
-                      (item.spec.receivedMailStatus !== 'PENDING' &&
-                        item.spec.receivedMailStatus !== 'FAILED')
-                    "
-                    @click="markReceivedMailAsSentForRow(item)"
-                  >
-                    不发邮件
-                  </VButton>
-                  <VTag
-                    v-if="
-                      ['PENDING', 'SENT', 'FAILED'].includes(item.spec.receivedMailStatus || '')
-                    "
-                    :theme="
-                      item.spec.receivedMailStatus === 'SENT'
-                        ? 'secondary'
-                        : item.spec.receivedMailStatus === 'FAILED'
-                          ? 'danger'
-                          : 'default'
-                    "
-                  >
-                    {{ resolveMailStatusText(item.spec.receivedMailStatus) }}
-                  </VTag>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!pagedFilteredResults.length">
-              <td :colspan="showOfflineActivity ? 10 : 9" class="qsl-table-empty">
-                暂无收信确认记录。
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <QslPaginationBar
+      <QslDataTable
+        :rows="pagedFilteredResults"
+        :columns="receiveConfirmColumns"
+        row-key-field="resourceName"
+        empty-text="暂无收信确认记录。"
+        :sort-key="receiveSortKey"
+        :sort-direction="receiveSortDirection"
+        :loading="loadingResults"
+        show-actions
+        show-pagination
         :total="activeHistoryResults.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
+        @sort="(value) => toggleReceiveSort(value as ReceiveSortKey)"
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
-      />
+      >
+        <template #cell-selected="{ row }">
+          <label class="qsl-checkbox qsl-select-only">
+            <input
+              :checked="isHistorySelected(asReceiveResultRow(row).resourceName)"
+              type="checkbox"
+              @click.stop
+              @change.stop="toggleHistorySelection(asReceiveResultRow(row).resourceName)"
+            />
+          </label>
+        </template>
+        <template #cell-callSign="{ row }">
+          <span class="qsl-row-clickable" @click="selectRowForQuery(asReceiveResultRow(row))">
+            {{ asReceiveResultRow(row).callSign || '-' }}
+          </span>
+        </template>
+        <template #cell-cardReceived="{ row }">
+          <VTag :theme="isCardReceivedForDisplay(asReceiveResultRow(row)) ? 'secondary' : 'default'">
+            {{ isCardReceivedForDisplay(asReceiveResultRow(row)) ? '是' : '否' }}
+          </VTag>
+        </template>
+        <template #cell-cardSent="{ row }">
+          <VTag :theme="asReceiveResultRow(row).spec.cardSent ? 'secondary' : 'default'">
+            {{ asReceiveResultRow(row).spec.cardSent ? '是' : '否' }}
+          </VTag>
+        </template>
+        <template #cell-offlineActivityName="{ row }">
+          {{ asReceiveResultRow(row).spec.offlineActivityName || '-' }}
+        </template>
+        <template #cell-receiveRecordCodes="{ row }">
+          {{ formatReceiveRecordCodesForCard(asReceiveResultRow(row)) }}
+        </template>
+        <template #cell-receivedRemarks="{ row }">
+          <span class="qsl-pre-line">{{ resolveReceiveRemarkText(asReceiveResultRow(row)) }}</span>
+        </template>
+        <template #row-actions="{ row }">
+          <div v-if="isBatchTab" class="qsl-actions qsl-actions--tight">
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="savingSingleEdit"
+              @click="startSingleEdit(asReceiveResultRow(row))"
+            >
+              {{ editingResourceName === asReceiveResultRow(row).resourceName ? '正在编辑' : '编辑' }}
+            </VButton>
+          </div>
+          <div v-else class="qsl-actions qsl-actions--tight">
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="pendingReceiveRowName === asReceiveResultRow(row).resourceName || submitting"
+              @click="confirmReceiveForRow(asReceiveResultRow(row))"
+            >
+              确认收卡
+            </VButton>
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="
+                pendingReceiveRowName === asReceiveResultRow(row).resourceName ||
+                pendingMailRowName === asReceiveResultRow(row).resourceName ||
+                !isCardReceivedForDisplay(asReceiveResultRow(row)) ||
+                asReceiveResultRow(row).spec.receivedMailStatus === 'SENT' ||
+                asReceiveResultRow(row).spec.receivedMailStatus === 'PENDING'
+              "
+              @click="closeReceiveForRow(asReceiveResultRow(row))"
+            >
+              结束收卡
+            </VButton>
+            <VButton
+              v-if="showReceivedMailActions"
+              class="qsl-mail-action"
+              size="xs"
+              type="secondary"
+              :disabled="
+                pendingMailRowName === asReceiveResultRow(row).resourceName ||
+                asReceiveResultRow(row).spec.receivedMailStatus === 'SENT' ||
+                !isCardReceivedForDisplay(asReceiveResultRow(row)) ||
+                (asReceiveResultRow(row).spec.receivedMailStatus !== 'PENDING' &&
+                  asReceiveResultRow(row).spec.receivedMailStatus !== 'FAILED')
+              "
+              @click="sendReceivedMailForRow(asReceiveResultRow(row))"
+            >
+              发送收卡回执
+            </VButton>
+            <VButton
+              v-if="showReceivedMailActions"
+              size="xs"
+              type="secondary"
+              :disabled="
+                pendingMailRowName === asReceiveResultRow(row).resourceName ||
+                asReceiveResultRow(row).spec.receivedMailStatus === 'SENT' ||
+                !isCardReceivedForDisplay(asReceiveResultRow(row)) ||
+                (asReceiveResultRow(row).spec.receivedMailStatus !== 'PENDING' &&
+                  asReceiveResultRow(row).spec.receivedMailStatus !== 'FAILED')
+              "
+              @click="markReceivedMailAsSentForRow(asReceiveResultRow(row))"
+            >
+              不发邮件
+            </VButton>
+            <VTag
+              v-if="
+                ['PENDING', 'SENT', 'FAILED'].includes(
+                  asReceiveResultRow(row).spec.receivedMailStatus || '',
+                )
+              "
+              :theme="
+                asReceiveResultRow(row).spec.receivedMailStatus === 'SENT'
+                  ? 'secondary'
+                  : asReceiveResultRow(row).spec.receivedMailStatus === 'FAILED'
+                    ? 'danger'
+                    : 'default'
+              "
+            >
+              {{ resolveMailStatusText(asReceiveResultRow(row).spec.receivedMailStatus) }}
+            </VTag>
+          </div>
+        </template>
+      </QslDataTable>
       <div class="qsl-actions">
         <VButton :disabled="loadingResults || submitting" @click="loadResults">刷新清单</VButton>
       </div>
@@ -2016,11 +1914,6 @@ onMounted(() => {
 .qsl-select-only {
   display: inline-flex;
   align-items: center;
-}
-
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
 }
 
 .qsl-row-clickable {

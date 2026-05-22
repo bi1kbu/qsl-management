@@ -12,6 +12,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
 
 interface AttachmentOption {
   name: string
@@ -722,13 +723,18 @@ onMounted(() => {
                     @click="cancelInventoryEdit"
                     >取消</VButton
                   >
-                  <VButton
+                  <QslConfirmActionButton
                     size="xs"
+                    label="删除"
                     type="danger"
+                    danger-level="danger"
                     :disabled="loading || saving"
-                    @click="removeStationCard(card.id)"
-                    >删除</VButton
-                  >
+                    confirm-enabled
+                    confirm-title="确认删除卡片版本"
+                    :confirm-message="`确认删除卡片版本：${card.versionName} 吗？保存卡片配置后将持久化删除。`"
+                    confirm-text="确认删除"
+                    @confirm="removeStationCard(card.id)"
+                  />
                 </div>
               </div>
             </template>
@@ -749,13 +755,18 @@ onMounted(() => {
                 >
                   更换图片
                 </VButton>
-                <VButton
+                <QslConfirmActionButton
                   size="xs"
+                  label="删除"
                   type="danger"
+                  danger-level="danger"
                   :disabled="loading || saving"
-                  @click="removeStationCard(card.id)"
-                  >删除</VButton
-                >
+                  confirm-enabled
+                  confirm-title="确认删除卡片版本"
+                  :confirm-message="`确认删除卡片版本：${card.versionName} 吗？保存卡片配置后将持久化删除。`"
+                  confirm-text="确认删除"
+                  @confirm="removeStationCard(card.id)"
+                />
               </div>
             </template>
           </div>

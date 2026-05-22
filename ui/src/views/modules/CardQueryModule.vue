@@ -3,10 +3,9 @@ import { VButton, VCard, VTabItem, VTabs, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 import { summarizeCardRemark, type CardRemarkFields } from '../../utils/card-remark'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
 import {
   applySortDirection,
   compareBoolean,
@@ -113,6 +112,8 @@ const resourcePlural = 'card-records'
 const receiveRecordPlural = 'receive-records'
 
 const normalize = (value: string) => value.trim().toUpperCase()
+const toCardQueryItem = (row: Record<string, unknown>): CardQueryItem =>
+  row as unknown as CardQueryItem
 const isNoCardId = (value: string) => {
   const normalized = value.trim()
   return normalized.toLowerCase().startsWith('no-card-') || /^NC\d+$/i.test(normalized)
@@ -319,13 +320,31 @@ const showReceivedColumn = computed(
     activeSceneTab.value === 'ONLINE_EYEBALL',
 )
 const showPackColumn = computed(() => activeSceneTab.value !== 'EYEBALL')
-const tableColumnCount = computed(
-  () =>
-    9 +
-    (showActivityColumn.value ? 1 : 0) +
-    (showPackColumn.value ? 1 : 0) +
-    (showReceivedColumn.value ? 2 : 0),
-)
+
+const cardQueryColumns = computed(() => {
+  const columns = [
+    { key: 'id', label: '卡片ID', sortable: true },
+    { key: 'callSign', label: '呼号', sortable: true },
+    { key: 'cardType', label: '类型', sortable: true },
+  ]
+  if (showActivityColumn.value) {
+    columns.push({ key: 'offlineActivityName', label: '活动', sortable: true })
+  }
+  columns.push({ key: 'cardVersion', label: '版本', sortable: true })
+  columns.push({ key: 'datetime', label: '日期时间', sortable: true })
+  columns.push({ key: 'cardIssued', label: '制卡', sortable: true })
+  if (showPackColumn.value) {
+    columns.push({ key: 'envelopePrinted', label: '打包', sortable: true })
+  }
+  columns.push({ key: 'cardSent', label: '已发', sortable: true })
+  columns.push({ key: 'receiptConfirmed', label: '签收', sortable: true })
+  if (showReceivedColumn.value) {
+    columns.push({ key: 'cardReceived', label: '已收', sortable: true })
+    columns.push({ key: 'receiveRecordCodes', label: '收卡编号', sortable: true })
+  }
+  columns.push({ key: 'remarksText', label: '备注', sortable: true })
+  return columns
+})
 
 const activityFilterOptions = computed(() => {
   const activitySet = new Set<string>()
@@ -669,226 +688,85 @@ onMounted(loadRows)
         </span>
       </div>
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="id"
-                  label="卡片ID"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="呼号"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardType"
-                  label="类型"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th v-if="showActivityColumn">
-                <QslSortableHeader
-                  column-key="offlineActivityName"
-                  label="活动"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardVersion"
-                  label="版本"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="datetime"
-                  label="日期时间"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardIssued"
-                  label="制卡"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th v-if="showPackColumn">
-                <QslSortableHeader
-                  column-key="envelopePrinted"
-                  label="打包"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardSent"
-                  label="已发"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="receiptConfirmed"
-                  label="签收"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th v-if="showReceivedColumn">
-                <QslSortableHeader
-                  column-key="cardReceived"
-                  label="已收"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th v-if="showReceivedColumn">
-                <QslSortableHeader
-                  column-key="receiveRecordCodes"
-                  label="收卡编号"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="remarksText"
-                  label="备注"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="item in pagedRows" :key="item.id">
-              <tr
-                class="qsl-table-clickable-row"
-                tabindex="0"
-                role="button"
-                :aria-expanded="expandedId === item.id"
-                @click="toggleDetail(item.id)"
-                @keydown.enter.prevent="toggleDetail(item.id)"
-                @keydown.space.prevent="toggleDetail(item.id)"
-              >
-                <td>{{ displayCardId(item.id) }}</td>
-                <td>{{ item.callSign || '-' }}</td>
-                <td>{{ item.cardType }}</td>
-                <td v-if="showActivityColumn">{{ item.offlineActivityName || '-' }}</td>
-                <td>{{ item.cardVersion || '-' }}</td>
-                <td>{{ item.cardDate }} {{ item.cardTime }}</td>
-                <td>
-                  <VTag :theme="item.cardIssued ? 'secondary' : 'default'">{{
-                    item.cardIssued ? '是' : '否'
-                  }}</VTag>
-                </td>
-                <td v-if="showPackColumn">
-                  <VTag :theme="item.envelopePrinted ? 'secondary' : 'default'">{{
-                    item.envelopePrinted ? '是' : '否'
-                  }}</VTag>
-                </td>
-                <td>
-                  <VTag :theme="item.cardSent ? 'secondary' : 'default'">{{
-                    item.cardSent ? '是' : '否'
-                  }}</VTag>
-                </td>
-                <td>
-                  <VTag :theme="item.receiptConfirmed ? 'secondary' : 'default'">{{
-                    item.receiptConfirmed ? '是' : '否'
-                  }}</VTag>
-                </td>
-                <td v-if="showReceivedColumn">
-                  <VTag :theme="item.cardReceived ? 'secondary' : 'default'">{{
-                    item.cardReceived ? '是' : '否'
-                  }}</VTag>
-                </td>
-                <td v-if="showReceivedColumn">{{ item.receiveRecordCodes || '-' }}</td>
-                <td>
-                  {{ summarizeRemarks(item.remarkFields) }}
-                </td>
-              </tr>
-              <tr v-if="expandedId === item.id" class="qsl-table-detail-row">
-                <td :colspan="tableColumnCount">
-                  <div class="qsl-detail-grid">
-                    <p><strong>卡片ID：</strong>{{ displayCardId(item.id) }}</p>
-                    <p><strong>呼号：</strong>{{ item.callSign || '-' }}</p>
-                    <p><strong>卡片类型：</strong>{{ item.cardType }}</p>
-                    <p v-if="showActivityColumn">
-                      <strong>关联活动：</strong>{{ item.offlineActivityName || '-' }}
-                    </p>
-                    <p><strong>卡片版本：</strong>{{ item.cardVersion || '-' }}</p>
-                    <p><strong>卡片日期：</strong>{{ item.cardDate || '-' }}</p>
-                    <p><strong>卡片时间：</strong>{{ item.cardTime || '-' }}</p>
-                    <p><strong>制卡：</strong>{{ item.cardIssued ? '是' : '否' }}</p>
-                    <p><strong>打包：</strong>{{ item.envelopePrinted ? '是' : '否' }}</p>
-                    <p><strong>已发：</strong>{{ item.cardSent ? '是' : '否' }}</p>
-                    <p><strong>签收：</strong>{{ item.receiptConfirmed ? '是' : '否' }}</p>
-                    <p><strong>已收：</strong>{{ item.cardReceived ? '是' : '否' }}</p>
-                    <p><strong>收卡编号：</strong>{{ item.receiveRecordCodes || '-' }}</p>
-                    <div class="qsl-detail-full">
-                      <strong>备注：</strong>
-                      <QslCardRemarkEntries :remark-fields="item.remarkFields" empty-text="无" />
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            </template>
-            <tr v-if="!pagedRows.length">
-              <td :colspan="tableColumnCount" class="qsl-table-empty">暂无数据。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <QslPaginationBar
+      <QslDataTable
+        :rows="pagedRows"
+        :columns="cardQueryColumns"
+        row-key-field="id"
+        :sort-key="sortKey"
+        :sort-direction="sortDirection"
+        :loading="loading"
+        clickable-rows
+        :expanded-row-key="expandedId"
+        show-pagination
         :total="sortedRows.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
+        @sort="toggleSort"
+        @row-click="(row) => toggleDetail(toCardQueryItem(row).id)"
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
-      />
+      >
+        <template #cell-id="{ row }">
+          {{ displayCardId(toCardQueryItem(row).id) }}
+        </template>
+        <template #cell-datetime="{ row }">
+          {{ toCardQueryItem(row).cardDate }} {{ toCardQueryItem(row).cardTime }}
+        </template>
+        <template #cell-cardIssued="{ row }">
+          <VTag :theme="toCardQueryItem(row).cardIssued ? 'secondary' : 'default'">
+            {{ toCardQueryItem(row).cardIssued ? '是' : '否' }}
+          </VTag>
+        </template>
+        <template #cell-envelopePrinted="{ row }">
+          <VTag :theme="toCardQueryItem(row).envelopePrinted ? 'secondary' : 'default'">
+            {{ toCardQueryItem(row).envelopePrinted ? '是' : '否' }}
+          </VTag>
+        </template>
+        <template #cell-cardSent="{ row }">
+          <VTag :theme="toCardQueryItem(row).cardSent ? 'secondary' : 'default'">
+            {{ toCardQueryItem(row).cardSent ? '是' : '否' }}
+          </VTag>
+        </template>
+        <template #cell-receiptConfirmed="{ row }">
+          <VTag :theme="toCardQueryItem(row).receiptConfirmed ? 'secondary' : 'default'">
+            {{ toCardQueryItem(row).receiptConfirmed ? '是' : '否' }}
+          </VTag>
+        </template>
+        <template #cell-cardReceived="{ row }">
+          <VTag :theme="toCardQueryItem(row).cardReceived ? 'secondary' : 'default'">
+            {{ toCardQueryItem(row).cardReceived ? '是' : '否' }}
+          </VTag>
+        </template>
+        <template #cell-remarksText="{ row }">
+          {{ summarizeRemarks(toCardQueryItem(row).remarkFields) }}
+        </template>
+        <template #detail="{ row }">
+          <div class="qsl-detail-grid">
+            <p><strong>卡片ID：</strong>{{ displayCardId(toCardQueryItem(row).id) }}</p>
+            <p><strong>呼号：</strong>{{ toCardQueryItem(row).callSign || '-' }}</p>
+            <p><strong>卡片类型：</strong>{{ toCardQueryItem(row).cardType }}</p>
+            <p v-if="showActivityColumn">
+              <strong>关联活动：</strong>{{ toCardQueryItem(row).offlineActivityName || '-' }}
+            </p>
+            <p><strong>卡片版本：</strong>{{ toCardQueryItem(row).cardVersion || '-' }}</p>
+            <p><strong>卡片日期：</strong>{{ toCardQueryItem(row).cardDate || '-' }}</p>
+            <p><strong>卡片时间：</strong>{{ toCardQueryItem(row).cardTime || '-' }}</p>
+            <p><strong>制卡：</strong>{{ toCardQueryItem(row).cardIssued ? '是' : '否' }}</p>
+            <p><strong>打包：</strong>{{ toCardQueryItem(row).envelopePrinted ? '是' : '否' }}</p>
+            <p><strong>已发：</strong>{{ toCardQueryItem(row).cardSent ? '是' : '否' }}</p>
+            <p><strong>签收：</strong>{{ toCardQueryItem(row).receiptConfirmed ? '是' : '否' }}</p>
+            <p><strong>已收：</strong>{{ toCardQueryItem(row).cardReceived ? '是' : '否' }}</p>
+            <p><strong>收卡编号：</strong>{{ toCardQueryItem(row).receiveRecordCodes || '-' }}</p>
+            <div class="qsl-detail-full">
+              <strong>备注：</strong>
+              <QslCardRemarkEntries :remark-fields="toCardQueryItem(row).remarkFields" empty-text="无" />
+            </div>
+          </div>
+        </template>
+      </QslDataTable>
 
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
     </VCard>
   </div>
 </template>
-
-<style scoped lang="scss">
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
-}
-</style>

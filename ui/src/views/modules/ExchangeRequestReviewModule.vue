@@ -14,8 +14,8 @@ import {
   rejectExchangeRequest,
 } from '../../api/qsl-console-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import {
   applySortDirection,
   compareCallSign,
@@ -94,6 +94,15 @@ const sortDirection = ref<QslSortDirection>('asc')
 
 const resourcePlural = 'exchange-requests'
 const resourceKind = 'ExchangeRequest'
+const exchangeColumns = [
+  { key: 'id', label: '申请ID', sortable: true },
+  { key: 'callSign', label: '呼号', sortable: true },
+  { key: 'status', label: '状态', sortable: true },
+  { key: 'reviewedAt', label: '审核时间', sortable: true },
+]
+
+const toExchangeItem = (row: Record<string, unknown>): ExchangeRequestItem =>
+  row as unknown as ExchangeRequestItem
 
 const editForm = reactive({
   callSign: '',
@@ -349,19 +358,6 @@ const deleteEditingRequest = async () => {
     return
   }
 
-  const firstConfirmed = window.confirm(`确认删除换卡申请 ${target.id} 吗？`)
-  if (!firstConfirmed) {
-    feedback.value = `已取消删除：${target.id}`
-    return
-  }
-  const secondConfirmed = window.confirm(
-    '二次确认：删除后只移除本条换卡申请记录，不会删除已生成的卡片记录，是否继续？',
-  )
-  if (!secondConfirmed) {
-    feedback.value = `已取消删除：${target.id}`
-    return
-  }
-
   savingEdit.value = true
   try {
     await deleteExtension(resourcePlural, target.id)
@@ -489,221 +485,170 @@ onMounted(loadRows)
 <template>
   <div class="qsl-block">
     <VCard title="换卡申请审核">
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="id"
-                  label="申请ID"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="呼号"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="status"
-                  label="状态"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="reviewedAt"
-                  label="审核时间"
-                  :sort-key="sortKey"
-                  :sort-direction="sortDirection"
-                  @sort="toggleSort"
-                />
-              </th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="row in pagedRows" :key="row.id">
-              <tr
-                class="qsl-table-clickable-row"
-                tabindex="0"
-                role="button"
-                :aria-expanded="expandedId === row.id"
-                @click="toggleDetails(row.id)"
-                @keydown.enter.prevent="toggleDetails(row.id)"
-                @keydown.space.prevent="toggleDetails(row.id)"
-              >
-                <td>{{ row.id }}</td>
-                <td>{{ row.callSign }}</td>
-                <td>
-                  <VTag
-                    :theme="
-                      row.status === '待审核'
-                        ? 'default'
-                        : row.status === '已通过'
-                          ? 'secondary'
-                          : 'danger'
-                    "
-                  >
-                    {{ row.status }}
-                  </VTag>
-                </td>
-                <td>{{ row.reviewedAt || '-' }}</td>
-                <td @click.stop>
-                  <div class="qsl-actions qsl-actions--tight">
-                    <VButton
-                      size="xs"
-                      type="secondary"
-                      :disabled="savingReviewReasonId === row.id || loading"
-                      @click="startReviewReasonEdit(row)"
-                    >
-                      审核说明
-                    </VButton>
-                    <VButton
-                      v-if="row.status === '待审核'"
-                      size="xs"
-                      type="secondary"
-                      :disabled="pendingId === row.id || loading"
-                      @click="approve(row)"
-                    >
-                      同意
-                    </VButton>
-                    <VButton
-                      v-if="row.status === '待审核'"
-                      size="xs"
-                      type="danger"
-                      :disabled="pendingId === row.id || loading"
-                      @click="reject(row)"
-                    >
-                      拒绝
-                    </VButton>
-                    <VButton
-                      v-if="row.status !== '待审核'"
-                      class="qsl-mail-action"
-                      size="xs"
-                      type="secondary"
-                      :disabled="
-                        row.reviewMailStatus === 'SENT' ||
-                        notifyingId === row.id ||
-                        pendingId === row.id ||
-                        loading
-                      "
-                      @click="sendReviewMail(row)"
-                    >
-                      发送邮件通知
-                    </VButton>
-                    <VTag
-                      v-if="row.reviewMailStatus"
-                      :theme="
-                        row.reviewMailStatus === 'SENT'
-                          ? 'secondary'
-                          : row.reviewMailStatus === 'FAILED'
-                            ? 'danger'
-                            : 'default'
-                      "
-                    >
-                      {{ resolveMailStatusText(row.reviewMailStatus) }}
-                    </VTag>
-                    <VButton
-                      v-if="row.status !== '待审核'"
-                      size="xs"
-                      :disabled="savingEdit || pendingId === row.id || loading"
-                      @click="startEdit(row)"
-                    >
-                      修改
-                    </VButton>
-                  </div>
-                </td>
-              </tr>
-              <tr v-if="expandedId === row.id" class="qsl-table-detail-row">
-                <td colspan="5">
-                  <div class="qsl-detail-grid">
-                    <p><strong>卡片版本：</strong>{{ row.cardVersion || '-' }}</p>
-                    <p><strong>是否使用卡片局：</strong>{{ row.useBureau ? '是' : '否' }}</p>
-                    <p><strong>卡片局名称：</strong>{{ row.bureauName || '-' }}</p>
-                    <p><strong>姓名：</strong>{{ row.name || '-' }}</p>
-                    <p><strong>电子邮件：</strong>{{ row.email || '-' }}</p>
-                    <p><strong>电话：</strong>{{ row.telephone || '-' }}</p>
-                    <p><strong>邮编：</strong>{{ row.postalCode || '-' }}</p>
-                    <p class="qsl-detail-full">
-                      <strong>收件地址：</strong>{{ row.address || '-' }}
-                    </p>
-                    <p class="qsl-detail-full">
-                      <strong>申请备注：</strong>{{ row.remarks || '-' }}
-                    </p>
-                    <p><strong>审核人：</strong>{{ row.reviewedBy || '-' }}</p>
-                    <p>
-                      <strong>审核通知：</strong>{{ resolveMailStatusText(row.reviewMailStatus) }}
-                    </p>
-                    <p><strong>通知时间：</strong>{{ row.reviewMailSentAt || '-' }}</p>
-                    <p class="qsl-detail-full">
-                      <strong>通知邮箱：</strong>{{ row.reviewMailTargetEmail || '-' }}
-                    </p>
-                    <p v-if="row.reviewMailLastError" class="qsl-detail-full">
-                      <strong>通知错误：</strong>{{ row.reviewMailLastError }}
-                    </p>
-                    <div class="qsl-detail-full qsl-review-reason-editor" @click.stop>
-                      <div class="qsl-review-reason-editor__header">
-                        <strong>审核说明：</strong>
-                      </div>
-                      <template v-if="reviewReasonEditingId === row.id">
-                        <div class="qsl-input-shell qsl-input-shell--textarea">
-                          <textarea
-                            v-model.trim="reviewReasonDraft"
-                            rows="2"
-                            placeholder="输入审核说明"
-                          />
-                        </div>
-                        <div class="qsl-actions qsl-actions--tight">
-                          <VButton
-                            size="xs"
-                            type="secondary"
-                            :disabled="savingReviewReasonId === row.id"
-                            @click="saveReviewReason(row)"
-                          >
-                            保存
-                          </VButton>
-                          <VButton
-                            size="xs"
-                            :disabled="savingReviewReasonId === row.id"
-                            @click="cancelReviewReasonEdit"
-                          >
-                            取消
-                          </VButton>
-                        </div>
-                      </template>
-                      <p v-else class="qsl-review-reason-editor__text">
-                        {{ row.reviewReason || '-' }}
-                      </p>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            </template>
-            <tr v-if="!pagedRows.length">
-              <td colspan="5" class="qsl-table-empty">暂无数据。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <QslPaginationBar
+      <QslDataTable
+        :rows="pagedRows"
+        :columns="exchangeColumns"
+        row-key-field="id"
+        :sort-key="sortKey"
+        :sort-direction="sortDirection"
+        :loading="loading"
+        clickable-rows
+        :expanded-row-key="expandedId"
+        show-actions
+        show-pagination
         :total="rows.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"
+        @sort="toggleSort"
+        @row-click="(row) => toggleDetails(toExchangeItem(row).id)"
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
-      />
+      >
+        <template #cell-status="{ row }">
+          <VTag
+            :theme="
+              toExchangeItem(row).status === '待审核'
+                ? 'default'
+                : toExchangeItem(row).status === '已通过'
+                  ? 'secondary'
+                  : 'danger'
+            "
+          >
+            {{ toExchangeItem(row).status }}
+          </VTag>
+        </template>
+        <template #row-actions="{ row }">
+          <div class="qsl-actions qsl-actions--tight">
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="savingReviewReasonId === toExchangeItem(row).id || loading"
+              @click="startReviewReasonEdit(toExchangeItem(row))"
+            >
+              审核说明
+            </VButton>
+            <VButton
+              v-if="toExchangeItem(row).status === '待审核'"
+              size="xs"
+              type="secondary"
+              :disabled="pendingId === toExchangeItem(row).id || loading"
+              @click="approve(toExchangeItem(row))"
+            >
+              同意
+            </VButton>
+            <VButton
+              v-if="toExchangeItem(row).status === '待审核'"
+              size="xs"
+              type="danger"
+              :disabled="pendingId === toExchangeItem(row).id || loading"
+              @click="reject(toExchangeItem(row))"
+            >
+              拒绝
+            </VButton>
+            <VButton
+              v-if="toExchangeItem(row).status !== '待审核'"
+              class="qsl-mail-action"
+              size="xs"
+              type="secondary"
+              :disabled="
+                toExchangeItem(row).reviewMailStatus === 'SENT' ||
+                notifyingId === toExchangeItem(row).id ||
+                pendingId === toExchangeItem(row).id ||
+                loading
+              "
+              @click="sendReviewMail(toExchangeItem(row))"
+            >
+              发送邮件通知
+            </VButton>
+            <VTag
+              v-if="toExchangeItem(row).reviewMailStatus"
+              :theme="
+                toExchangeItem(row).reviewMailStatus === 'SENT'
+                  ? 'secondary'
+                  : toExchangeItem(row).reviewMailStatus === 'FAILED'
+                    ? 'danger'
+                    : 'default'
+              "
+            >
+              {{ resolveMailStatusText(toExchangeItem(row).reviewMailStatus) }}
+            </VTag>
+            <VButton
+              v-if="toExchangeItem(row).status !== '待审核'"
+              size="xs"
+              :disabled="savingEdit || pendingId === toExchangeItem(row).id || loading"
+              @click="startEdit(toExchangeItem(row))"
+            >
+              修改
+            </VButton>
+          </div>
+        </template>
+        <template #detail="{ row }">
+          <div class="qsl-detail-grid">
+            <p><strong>卡片版本：</strong>{{ toExchangeItem(row).cardVersion || '-' }}</p>
+            <p>
+              <strong>是否使用卡片局：</strong>{{ toExchangeItem(row).useBureau ? '是' : '否' }}
+            </p>
+            <p><strong>卡片局名称：</strong>{{ toExchangeItem(row).bureauName || '-' }}</p>
+            <p><strong>姓名：</strong>{{ toExchangeItem(row).name || '-' }}</p>
+            <p><strong>电子邮件：</strong>{{ toExchangeItem(row).email || '-' }}</p>
+            <p><strong>电话：</strong>{{ toExchangeItem(row).telephone || '-' }}</p>
+            <p><strong>邮编：</strong>{{ toExchangeItem(row).postalCode || '-' }}</p>
+            <p class="qsl-detail-full">
+              <strong>收件地址：</strong>{{ toExchangeItem(row).address || '-' }}
+            </p>
+            <p class="qsl-detail-full">
+              <strong>申请备注：</strong>{{ toExchangeItem(row).remarks || '-' }}
+            </p>
+            <p><strong>审核人：</strong>{{ toExchangeItem(row).reviewedBy || '-' }}</p>
+            <p>
+              <strong>审核通知：</strong
+              >{{ resolveMailStatusText(toExchangeItem(row).reviewMailStatus) }}
+            </p>
+            <p><strong>通知时间：</strong>{{ toExchangeItem(row).reviewMailSentAt || '-' }}</p>
+            <p class="qsl-detail-full">
+              <strong>通知邮箱：</strong>{{ toExchangeItem(row).reviewMailTargetEmail || '-' }}
+            </p>
+            <p v-if="toExchangeItem(row).reviewMailLastError" class="qsl-detail-full">
+              <strong>通知错误：</strong>{{ toExchangeItem(row).reviewMailLastError }}
+            </p>
+            <div class="qsl-detail-full qsl-review-reason-editor" @click.stop>
+              <div class="qsl-review-reason-editor__header">
+                <strong>审核说明：</strong>
+              </div>
+              <template v-if="reviewReasonEditingId === toExchangeItem(row).id">
+                <div class="qsl-input-shell qsl-input-shell--textarea">
+                  <textarea
+                    v-model.trim="reviewReasonDraft"
+                    rows="2"
+                    placeholder="输入审核说明"
+                  />
+                </div>
+                <div class="qsl-actions qsl-actions--tight">
+                  <VButton
+                    size="xs"
+                    type="secondary"
+                    :disabled="savingReviewReasonId === toExchangeItem(row).id"
+                    @click="saveReviewReason(toExchangeItem(row))"
+                  >
+                    保存
+                  </VButton>
+                  <VButton
+                    size="xs"
+                    :disabled="savingReviewReasonId === toExchangeItem(row).id"
+                    @click="cancelReviewReasonEdit"
+                  >
+                    取消
+                  </VButton>
+                </div>
+              </template>
+              <p v-else class="qsl-review-reason-editor__text">
+                {{ toExchangeItem(row).reviewReason || '-' }}
+              </p>
+            </div>
+          </div>
+        </template>
+      </QslDataTable>
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
     </VCard>
 
@@ -812,9 +757,16 @@ onMounted(loadRows)
       <div class="qsl-actions">
         <VButton type="secondary" :disabled="savingEdit" @click="saveEdit">保存修改</VButton>
         <VButton :disabled="savingEdit" @click="cancelEdit">取消</VButton>
-        <VButton type="danger" :disabled="savingEdit" @click="deleteEditingRequest"
-          >删除本条数据</VButton
-        >
+        <QslConfirmActionButton
+          label="删除本条数据"
+          danger-level="danger"
+          :disabled="savingEdit"
+          confirm-enabled
+          confirm-title="确认删除换卡申请"
+          :confirm-message="`确认删除换卡申请 ${editingId} 吗？删除后只移除本条换卡申请记录，不会删除已生成的卡片记录。`"
+          confirm-text="确认删除"
+          @confirm="deleteEditingRequest"
+        />
       </div>
     </VCard>
   </div>
@@ -824,11 +776,6 @@ onMounted(loadRows)
 :deep(.qsl-mail-action:not(:disabled)) {
   color: #ff0e0e !important;
   font-weight: 600;
-}
-
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
 }
 
 .qsl-review-reason-editor {

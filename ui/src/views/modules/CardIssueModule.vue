@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import { sendNotificationMail } from '../../api/qsl-console-api'
 import {
@@ -9,7 +9,7 @@ import {
   updateExtension,
   type QslExtension,
 } from '../../api/qsl-extension-api'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import {
   applySortDirection,
   compareBoolean,
@@ -209,6 +209,80 @@ const showAddressSection = computed(() => !isOfflineExchangeScene.value)
 const cardInfoColumnCount = computed(() => {
   return 9 + (showAssociationColumns.value ? 2 : 0) + (showAddressSection.value ? 1 : 0)
 })
+const cardInfoColumns = computed(() => {
+  const columns = [
+    { key: 'id', label: '卡片编号', sortable: true },
+    { key: 'callSign', label: '呼号', sortable: true },
+    { key: 'cardType', label: '卡片类型', sortable: true },
+    { key: 'cardVersion', label: '卡片版本', sortable: true },
+  ]
+  if (showAssociationColumns.value) {
+    columns.push({ key: 'qsoRecordName', label: '关联QSO', sortable: true })
+    columns.push({ key: 'offlineActivityName', label: '关联活动', sortable: true })
+  }
+  columns.push({ key: 'cardDate', label: '日期', sortable: true })
+  columns.push({ key: 'cardTime', label: '时间', sortable: true })
+  columns.push({ key: 'cardSent', label: '发卡', sortable: true })
+  columns.push({ key: 'cardReceived', label: '收卡', sortable: true })
+  columns.push({ key: 'receiptConfirmed', label: '签收', sortable: true })
+  if (showAddressSection.value) {
+    columns.push({ key: 'addressEntryName', label: '绑定地址编号', sortable: true })
+  }
+  return columns
+})
+const remarkColumns = [
+  { key: 'type', label: '备注类型', sortable: true },
+  { key: 'content', label: '备注内容', sortable: true },
+]
+const qsoInfoColumns = [
+  { key: 'id', label: 'QSO编号', sortable: true },
+  { key: 'callSign', label: '呼号', sortable: true },
+  { key: 'date', label: '日期', sortable: true },
+  { key: 'time', label: '时间', sortable: true },
+  { key: 'timezone', label: '时区', sortable: true },
+  { key: 'freq', label: '频率', sortable: true },
+  { key: 'mode', label: '模式', sortable: true },
+  { key: 'myRig', label: '本台设备', sortable: true },
+  { key: 'qth', label: '位置', sortable: true },
+  { key: 'remarks', label: '备注', sortable: true },
+]
+const issueAddressColumns = [
+  { key: 'sourceType', label: '来源', sortable: true },
+  { key: 'id', label: '地址编号', sortable: true },
+  { key: 'callSign', label: '呼号/卡片局', sortable: true },
+  { key: 'name', label: '姓名', sortable: true },
+  { key: 'telephone', label: '电话', sortable: true },
+  { key: 'postalCode', label: '邮编', sortable: true },
+  { key: 'address', label: '收件地址', sortable: true },
+  { key: 'email', label: '邮箱', sortable: true },
+  { key: 'remarks', label: '备注', sortable: true },
+]
+const pendingIssueColumns = computed(() => {
+  const columns = [
+    { key: 'id', label: '卡片记录编号', sortable: true },
+    { key: 'callSign', label: '呼号', sortable: true },
+    { key: 'cardType', label: '卡片类型', sortable: true },
+    { key: 'cardDate', label: '日期', sortable: true },
+    { key: 'cardTime', label: '时间', sortable: true },
+    { key: 'cardVersion', label: '卡片版本', sortable: true },
+  ]
+  if (showOfflineActivity.value) {
+    columns.push({ key: 'offlineActivityName', label: '关联活动', sortable: true })
+  }
+  return columns
+})
+const cardInfoEmptyText = computed(() =>
+  hasKeyword.value ? '未找到对应未制卡卡片记录。' : '请输入呼号进行查询。',
+)
+const remarkEmptyText = computed(() =>
+  hasKeyword.value ? '未找到对应备注信息。' : '请输入呼号进行查询。',
+)
+const qsoEmptyText = computed(() =>
+  hasKeyword.value ? '未找到关联QSO记录。' : '请输入呼号进行查询。',
+)
+const addressEmptyText = computed(() =>
+  hasAddressKeyword.value ? '未找到对应收件地址。' : '请输入呼号或卡片局进行地址查询。',
+)
 
 interface CardIssueAddressRow {
   id: string
@@ -242,6 +316,15 @@ interface OfflineActivitySpec {
   activityDate: string
   activityTime: string
 }
+
+const toCardIssueCardRow = (row: Record<string, unknown>): CardIssueCardRow =>
+  row as unknown as CardIssueCardRow
+const toRemarkRow = (row: Record<string, unknown>): { type: string; content: string } =>
+  row as { type: string; content: string }
+const toCardIssueQsoRow = (row: Record<string, unknown>): CardIssueQsoRow =>
+  row as unknown as CardIssueQsoRow
+const toCardIssueAddressRow = (row: Record<string, unknown>): CardIssueAddressRow =>
+  row as unknown as CardIssueAddressRow
 
 const cardRecordPlural = 'card-records'
 const addressBookPlural = 'address-book-entries'
@@ -277,6 +360,9 @@ const addressSortKey = ref<IssueAddressSortKey>('id')
 const addressSortDirection = ref<QslSortDirection>('asc')
 const pendingSortKey = ref<IssueCardSortKey>('id')
 const pendingSortDirection = ref<QslSortDirection>('asc')
+const pendingIssueCurrentPage = ref(1)
+const pendingIssuePageSize = ref(20)
+const pendingIssuePageSizeOptions: number[] = [20, 30, 50, 100]
 
 const normalizedKeyword = computed(() => searchedCallSign.value.trim().toUpperCase())
 const hasKeyword = computed(() => normalizedKeyword.value.length > 0)
@@ -493,6 +579,18 @@ const sortedPendingIssueCardRows = computed(() => {
   })
 })
 
+const pendingIssueTotalPages = computed(() => {
+  if (!pendingIssueCardRows.value.length) {
+    return 1
+  }
+  return Math.ceil(pendingIssueCardRows.value.length / pendingIssuePageSize.value)
+})
+
+const pagedPendingIssueCardRows = computed(() => {
+  const start = (pendingIssueCurrentPage.value - 1) * pendingIssuePageSize.value
+  return sortedPendingIssueCardRows.value.slice(start, start + pendingIssuePageSize.value)
+})
+
 const toggleCardSort = (key: string) => {
   const nextKey = key as IssueCardSortKey
   if (cardSortKey.value === nextKey) {
@@ -541,7 +639,21 @@ const togglePendingSort = (key: string) => {
     pendingSortKey.value = nextKey
     pendingSortDirection.value = 'asc'
   }
+  pendingIssueCurrentPage.value = 1
 }
+
+watch(pendingIssueCardRows, () => {
+  if (pendingIssueCurrentPage.value > pendingIssueTotalPages.value) {
+    pendingIssueCurrentPage.value = pendingIssueTotalPages.value
+  }
+  if (pendingIssueCurrentPage.value < 1) {
+    pendingIssueCurrentPage.value = 1
+  }
+})
+
+watch(pendingIssuePageSize, () => {
+  pendingIssueCurrentPage.value = 1
+})
 
 const isFormalCardRecord = (row: CardIssueCardRow): boolean => {
   return /^C\d+$/i.test(row.id.trim())
@@ -1195,608 +1307,213 @@ onMounted(loadSourceData)
     </VCard>
 
     <VCard title="卡片信息">
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="id"
-                  label="卡片编号"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="呼号"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardType"
-                  label="卡片类型"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardVersion"
-                  label="卡片版本"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th v-if="showAssociationColumns">
-                <QslSortableHeader
-                  column-key="qsoRecordName"
-                  label="关联QSO"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th v-if="showAssociationColumns">
-                <QslSortableHeader
-                  column-key="offlineActivityName"
-                  label="关联活动"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardDate"
-                  label="日期"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardTime"
-                  label="时间"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardSent"
-                  label="发卡"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardReceived"
-                  label="收卡"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="receiptConfirmed"
-                  label="签收"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-              <th v-if="showAddressSection">
-                <QslSortableHeader
-                  column-key="addressEntryName"
-                  label="绑定地址编号"
-                  :sort-key="cardSortKey"
-                  :sort-direction="cardSortDirection"
-                  @sort="toggleCardSort"
-                />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in sortedMatchedCardRows" :key="item.id">
-              <td>{{ item.id }}</td>
-              <td>{{ item.callSign || '-' }}</td>
-              <td>{{ item.cardType || '-' }}</td>
-              <td>{{ item.cardVersion || '-' }}</td>
-              <td v-if="showAssociationColumns">{{ item.qsoRecordName || '-' }}</td>
-              <td v-if="showAssociationColumns">{{ resolveActivityText(item) }}</td>
-              <td>{{ item.cardDate || '-' }}</td>
-              <td>{{ item.cardTime || '-' }}</td>
-              <td>{{ item.cardSent ? '是' : '否' }}</td>
-              <td>{{ item.cardReceived ? '是' : '否' }}</td>
-              <td>{{ item.receiptConfirmed ? '是' : '否' }}</td>
-              <td v-if="showAddressSection">{{ item.addressEntryName || '-' }}</td>
-            </tr>
-            <tr v-if="!hasKeyword">
-              <td :colspan="cardInfoColumnCount" class="qsl-table-empty">请输入呼号进行查询。</td>
-            </tr>
-            <tr v-else-if="!matchedCardRows.length">
-              <td :colspan="cardInfoColumnCount" class="qsl-table-empty">
-                未找到对应未制卡卡片记录。
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <QslDataTable
+        :rows="sortedMatchedCardRows"
+        :columns="cardInfoColumns"
+        row-key-field="id"
+        :empty-text="cardInfoEmptyText"
+        :sort-key="cardSortKey"
+        :sort-direction="cardSortDirection"
+        :loading="loading"
+        @sort="toggleCardSort"
+      >
+        <template #cell-offlineActivityName="{ row }">
+          {{ resolveActivityText(toCardIssueCardRow(row)) }}
+        </template>
+        <template #cell-cardSent="{ row }">
+          {{ toCardIssueCardRow(row).cardSent ? '是' : '否' }}
+        </template>
+        <template #cell-cardReceived="{ row }">
+          {{ toCardIssueCardRow(row).cardReceived ? '是' : '否' }}
+        </template>
+        <template #cell-receiptConfirmed="{ row }">
+          {{ toCardIssueCardRow(row).receiptConfirmed ? '是' : '否' }}
+        </template>
+      </QslDataTable>
     </VCard>
 
     <VCard title="备注信息">
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="type"
-                  label="备注类型"
-                  :sort-key="remarkSortKey"
-                  :sort-direction="remarkSortDirection"
-                  @sort="toggleRemarkSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="content"
-                  label="备注内容"
-                  :sort-key="remarkSortKey"
-                  :sort-direction="remarkSortDirection"
-                  @sort="toggleRemarkSort"
-                />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(item, index) in sortedRemarkRows" :key="`remarks-${index}`">
-              <td>{{ item.type }}</td>
-              <td>{{ item.content }}</td>
-            </tr>
-            <tr v-if="!hasKeyword">
-              <td colspan="2" class="qsl-table-empty">请输入呼号进行查询。</td>
-            </tr>
-            <tr v-else-if="!remarkRows.length">
-              <td colspan="2" class="qsl-table-empty">未找到对应备注信息。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <QslDataTable
+        :rows="sortedRemarkRows"
+        :columns="remarkColumns"
+        row-key-field="type"
+        :empty-text="remarkEmptyText"
+        :sort-key="remarkSortKey"
+        :sort-direction="remarkSortDirection"
+        :loading="loading"
+        @sort="toggleRemarkSort"
+      >
+        <template #cell-content="{ row }">
+          {{ toRemarkRow(row).content }}
+        </template>
+      </QslDataTable>
     </VCard>
 
     <VCard v-if="showAssociationColumns" title="关联QSO信息">
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="id"
-                  label="QSO编号"
-                  :sort-key="qsoSortKey"
-                  :sort-direction="qsoSortDirection"
-                  @sort="toggleQsoSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="呼号"
-                  :sort-key="qsoSortKey"
-                  :sort-direction="qsoSortDirection"
-                  @sort="toggleQsoSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="date"
-                  label="日期"
-                  :sort-key="qsoSortKey"
-                  :sort-direction="qsoSortDirection"
-                  @sort="toggleQsoSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="time"
-                  label="时间"
-                  :sort-key="qsoSortKey"
-                  :sort-direction="qsoSortDirection"
-                  @sort="toggleQsoSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="timezone"
-                  label="时区"
-                  :sort-key="qsoSortKey"
-                  :sort-direction="qsoSortDirection"
-                  @sort="toggleQsoSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="freq"
-                  label="频率"
-                  :sort-key="qsoSortKey"
-                  :sort-direction="qsoSortDirection"
-                  @sort="toggleQsoSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="mode"
-                  label="模式"
-                  :sort-key="qsoSortKey"
-                  :sort-direction="qsoSortDirection"
-                  @sort="toggleQsoSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="myRig"
-                  label="本台设备"
-                  :sort-key="qsoSortKey"
-                  :sort-direction="qsoSortDirection"
-                  @sort="toggleQsoSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="qth"
-                  label="位置"
-                  :sort-key="qsoSortKey"
-                  :sort-direction="qsoSortDirection"
-                  @sort="toggleQsoSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="remarks"
-                  label="备注"
-                  :sort-key="qsoSortKey"
-                  :sort-direction="qsoSortDirection"
-                  @sort="toggleQsoSort"
-                />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in sortedMatchedQsoRows" :key="item.id">
-              <td>{{ item.id }}</td>
-              <td>{{ item.callSign || '-' }}</td>
-              <td>{{ item.date || '-' }}</td>
-              <td>{{ item.time || '-' }}</td>
-              <td>{{ item.timezone || '-' }}</td>
-              <td>{{ item.freq || '-' }}</td>
-              <td>{{ item.mode || '-' }}</td>
-              <td>{{ item.myRig || '-' }}</td>
-              <td>{{ item.qth || '-' }}</td>
-              <td>{{ item.remarks || '-' }}</td>
-            </tr>
-            <tr v-if="!hasKeyword">
-              <td colspan="10" class="qsl-table-empty">请输入呼号进行查询。</td>
-            </tr>
-            <tr v-else-if="!matchedQsoRows.length">
-              <td colspan="10" class="qsl-table-empty">未找到关联QSO记录。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <QslDataTable
+        :rows="sortedMatchedQsoRows"
+        :columns="qsoInfoColumns"
+        row-key-field="id"
+        :empty-text="qsoEmptyText"
+        :sort-key="qsoSortKey"
+        :sort-direction="qsoSortDirection"
+        :loading="loading"
+        @sort="toggleQsoSort"
+      />
     </VCard>
 
     <VCard v-if="showAddressSection" title="收件地址">
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="sourceType"
-                  label="来源"
-                  :sort-key="addressSortKey"
-                  :sort-direction="addressSortDirection"
-                  @sort="toggleAddressSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="id"
-                  label="地址编号"
-                  :sort-key="addressSortKey"
-                  :sort-direction="addressSortDirection"
-                  @sort="toggleAddressSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="呼号/卡片局"
-                  :sort-key="addressSortKey"
-                  :sort-direction="addressSortDirection"
-                  @sort="toggleAddressSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="name"
-                  label="姓名"
-                  :sort-key="addressSortKey"
-                  :sort-direction="addressSortDirection"
-                  @sort="toggleAddressSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="telephone"
-                  label="电话"
-                  :sort-key="addressSortKey"
-                  :sort-direction="addressSortDirection"
-                  @sort="toggleAddressSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="postalCode"
-                  label="邮编"
-                  :sort-key="addressSortKey"
-                  :sort-direction="addressSortDirection"
-                  @sort="toggleAddressSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="address"
-                  label="收件地址"
-                  :sort-key="addressSortKey"
-                  :sort-direction="addressSortDirection"
-                  @sort="toggleAddressSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="email"
-                  label="邮箱"
-                  :sort-key="addressSortKey"
-                  :sort-direction="addressSortDirection"
-                  @sort="toggleAddressSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="remarks"
-                  label="备注"
-                  :sort-key="addressSortKey"
-                  :sort-direction="addressSortDirection"
-                  @sort="toggleAddressSort"
-                />
-              </th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="item in sortedMatchedAddressRows"
-              :key="item.id"
-              :class="{ 'qsl-table-row--active': isAddressSelected(item.id) }"
-            >
-              <td>{{ item.sourceType === 'ADDRESS' ? '地址簿' : '卡片局' }}</td>
-              <td>{{ item.id }}</td>
-              <td>
-                {{ item.sourceType === 'ADDRESS' ? item.callSign || '-' : item.bureauName || '-' }}
-              </td>
-              <td>{{ item.name || '-' }}</td>
-              <td>{{ item.telephone || '-' }}</td>
-              <td>{{ item.postalCode || '-' }}</td>
-              <td>{{ item.address || '-' }}</td>
-              <td>{{ item.email || '-' }}</td>
-              <td>{{ item.remarks || '-' }}</td>
-              <td>
-                <VButton
-                  size="xs"
-                  type="secondary"
-                  :disabled="loading || issuing || bindingAddress || isAddressSelected(item.id)"
-                  @click="selectAddressRow(item)"
-                >
-                  {{ isAddressSelected(item.id) ? '已选定' : '选定地址' }}
-                </VButton>
-              </td>
-            </tr>
-            <tr v-if="!hasAddressKeyword">
-              <td colspan="10" class="qsl-table-empty">请输入呼号或卡片局进行地址查询。</td>
-            </tr>
-            <tr v-else-if="!matchedAddressRows.length">
-              <td colspan="10" class="qsl-table-empty">未找到对应收件地址。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <QslDataTable
+        :rows="sortedMatchedAddressRows"
+        :columns="issueAddressColumns"
+        row-key-field="id"
+        :empty-text="addressEmptyText"
+        :sort-key="addressSortKey"
+        :sort-direction="addressSortDirection"
+        :loading="loading"
+        :row-class="
+          (row) => ({ 'qsl-table-row--active': isAddressSelected(toCardIssueAddressRow(row).id) })
+        "
+        show-actions
+        @sort="toggleAddressSort"
+      >
+        <template #cell-sourceType="{ row }">
+          {{ toCardIssueAddressRow(row).sourceType === 'ADDRESS' ? '地址簿' : '卡片局' }}
+        </template>
+        <template #cell-callSign="{ row }">
+          {{
+            toCardIssueAddressRow(row).sourceType === 'ADDRESS'
+              ? toCardIssueAddressRow(row).callSign || '-'
+              : toCardIssueAddressRow(row).bureauName || '-'
+          }}
+        </template>
+        <template #row-actions="{ row }">
+          <VButton
+            size="xs"
+            type="secondary"
+            :disabled="
+              loading ||
+              issuing ||
+              bindingAddress ||
+              isAddressSelected(toCardIssueAddressRow(row).id)
+            "
+            @click="selectAddressRow(toCardIssueAddressRow(row))"
+          >
+            {{ isAddressSelected(toCardIssueAddressRow(row).id) ? '已选定' : '选定地址' }}
+          </VButton>
+        </template>
+      </QslDataTable>
     </VCard>
 
     <VCard title="待制卡">
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>
-                <QslSortableHeader
-                  column-key="id"
-                  label="卡片记录编号"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="呼号"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardType"
-                  label="卡片类型"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardDate"
-                  label="日期"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardTime"
-                  label="时间"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardVersion"
-                  label="卡片版本"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th v-if="showOfflineActivity">
-                <QslSortableHeader
-                  column-key="offlineActivityName"
-                  label="关联活动"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in sortedPendingIssueCardRows" :key="item.id">
-              <td>{{ item.id }}</td>
-              <td class="qsl-row-clickable" @click="selectPendingIssueRow(item)">
-                {{ item.callSign || '-' }}
-              </td>
-              <td>{{ item.cardType || '-' }}</td>
-              <td>{{ item.cardDate || '-' }}</td>
-              <td>{{ item.cardTime || '-' }}</td>
-              <td>{{ item.cardVersion || '-' }}</td>
-              <td v-if="showOfflineActivity">{{ resolveActivityText(item) }}</td>
-              <td @click.stop>
-                <div class="qsl-actions qsl-actions--tight">
-                  <VButton
-                    size="xs"
-                    type="secondary"
-                    :disabled="
-                      item.cardIssued ||
-                      pendingIssueRowName === item.id ||
-                      pendingEnvelopeRowName === item.id ||
-                      pendingIssueMailRowName === item.id ||
-                      loading
-                    "
-                    @click="confirmCardIssueForRow(item)"
-                  >
-                    确认制卡
-                  </VButton>
-                  <VButton
-                    v-if="!isOfflineExchangeScene"
-                    size="xs"
-                    type="secondary"
-                    :disabled="
-                      !item.cardIssued ||
-                      item.envelopePrinted ||
-                      pendingEnvelopeRowName === item.id ||
-                      pendingIssueRowName === item.id ||
-                      pendingIssueMailRowName === item.id ||
-                      loading
-                    "
-                    @click="confirmEnvelopePrintedForRow(item)"
-                  >
-                    确认打包
-                  </VButton>
-                  <VButton
-                    v-if="!isOfflineExchangeScene"
-                    class="qsl-mail-action"
-                    size="xs"
-                    type="secondary"
-                    :disabled="
-                      !item.cardIssued ||
-                      !item.envelopePrinted ||
-                      item.spec.createdMailStatus === 'SENT' ||
-                      pendingIssueMailRowName === item.id ||
-                      pendingIssueRowName === item.id ||
-                      pendingEnvelopeRowName === item.id ||
-                      loading
-                    "
-                    @click="sendCreatedMailForRow(item)"
-                  >
-                    发送制卡邮件
-                  </VButton>
-                  <VButton
-                    v-if="!isOfflineExchangeScene"
-                    size="xs"
-                    type="secondary"
-                    :disabled="
-                      !item.cardIssued ||
-                      !item.envelopePrinted ||
-                      item.spec.createdMailStatus === 'SENT' ||
-                      pendingIssueMailRowName === item.id ||
-                      pendingIssueRowName === item.id ||
-                      pendingEnvelopeRowName === item.id ||
-                      loading
-                    "
-                    @click="markCreatedMailAsSentForRow(item)"
-                  >
-                    不发邮件
-                  </VButton>
-                  <VTag
-                    v-if="
-                      !isOfflineExchangeScene &&
-                      (item.spec.createdMailStatus === 'SENT' ||
-                        item.spec.createdMailStatus === 'FAILED')
-                    "
-                    :theme="item.spec.createdMailStatus === 'SENT' ? 'secondary' : 'danger'"
-                  >
-                    {{ resolveMailStatusText(item.spec.createdMailStatus) }}
-                  </VTag>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!pendingIssueCardRows.length">
-              <td :colspan="showOfflineActivity ? 8 : 7" class="qsl-table-empty">
-                暂无待制卡记录。
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <QslDataTable
+        :rows="pagedPendingIssueCardRows"
+        :columns="pendingIssueColumns"
+        row-key-field="id"
+        empty-text="暂无待制卡记录。"
+        :sort-key="pendingSortKey"
+        :sort-direction="pendingSortDirection"
+        :loading="loading"
+        show-actions
+        show-pagination
+        :total="pendingIssueCardRows.length"
+        :current-page="pendingIssueCurrentPage"
+        :page-size="pendingIssuePageSize"
+        :page-size-options="pendingIssuePageSizeOptions"
+        @sort="togglePendingSort"
+        @update:current-page="(value) => (pendingIssueCurrentPage = value)"
+        @update:page-size="(value) => (pendingIssuePageSize = value)"
+      >
+        <template #cell-callSign="{ row }">
+          <span class="qsl-row-clickable" @click="selectPendingIssueRow(toCardIssueCardRow(row))">
+            {{ toCardIssueCardRow(row).callSign || '-' }}
+          </span>
+        </template>
+        <template #cell-offlineActivityName="{ row }">
+          {{ resolveActivityText(toCardIssueCardRow(row)) }}
+        </template>
+        <template #row-actions="{ row }">
+          <div class="qsl-actions qsl-actions--tight">
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="
+                toCardIssueCardRow(row).cardIssued ||
+                pendingIssueRowName === toCardIssueCardRow(row).id ||
+                pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
+                pendingIssueMailRowName === toCardIssueCardRow(row).id ||
+                loading
+              "
+              @click="confirmCardIssueForRow(toCardIssueCardRow(row))"
+            >
+              确认制卡
+            </VButton>
+            <VButton
+              v-if="!isOfflineExchangeScene"
+              size="xs"
+              type="secondary"
+              :disabled="
+                !toCardIssueCardRow(row).cardIssued ||
+                toCardIssueCardRow(row).envelopePrinted ||
+                pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
+                pendingIssueRowName === toCardIssueCardRow(row).id ||
+                pendingIssueMailRowName === toCardIssueCardRow(row).id ||
+                loading
+              "
+              @click="confirmEnvelopePrintedForRow(toCardIssueCardRow(row))"
+            >
+              确认打包
+            </VButton>
+            <VButton
+              v-if="!isOfflineExchangeScene"
+              class="qsl-mail-action"
+              size="xs"
+              type="secondary"
+              :disabled="
+                !toCardIssueCardRow(row).cardIssued ||
+                !toCardIssueCardRow(row).envelopePrinted ||
+                toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ||
+                pendingIssueMailRowName === toCardIssueCardRow(row).id ||
+                pendingIssueRowName === toCardIssueCardRow(row).id ||
+                pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
+                loading
+              "
+              @click="sendCreatedMailForRow(toCardIssueCardRow(row))"
+            >
+              发送制卡邮件
+            </VButton>
+            <VButton
+              v-if="!isOfflineExchangeScene"
+              size="xs"
+              type="secondary"
+              :disabled="
+                !toCardIssueCardRow(row).cardIssued ||
+                !toCardIssueCardRow(row).envelopePrinted ||
+                toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ||
+                pendingIssueMailRowName === toCardIssueCardRow(row).id ||
+                pendingIssueRowName === toCardIssueCardRow(row).id ||
+                pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
+                loading
+              "
+              @click="markCreatedMailAsSentForRow(toCardIssueCardRow(row))"
+            >
+              不发邮件
+            </VButton>
+            <VTag
+              v-if="
+                !isOfflineExchangeScene &&
+                (toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ||
+                  toCardIssueCardRow(row).spec.createdMailStatus === 'FAILED')
+              "
+              :theme="
+                toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ? 'secondary' : 'danger'
+              "
+            >
+              {{ resolveMailStatusText(toCardIssueCardRow(row).spec.createdMailStatus) }}
+            </VTag>
+          </div>
+        </template>
+      </QslDataTable>
     </VCard>
   </div>
 </template>
@@ -1805,11 +1522,6 @@ onMounted(loadSourceData)
 :deep(.qsl-mail-action:not(:disabled)) {
   color: #ff0e0e !important;
   font-weight: 600;
-}
-
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
 }
 
 .qsl-selected-address {

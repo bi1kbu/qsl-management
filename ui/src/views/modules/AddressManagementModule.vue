@@ -10,9 +10,9 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
+import QslDataTable from '../../components/QslDataTable.vue'
 import { buildAddressResourceName } from '../../utils/resource-name'
-import QslSortableHeader from '../../components/QslSortableHeader.vue'
 import {
   applySortDirection,
   compareCallSign,
@@ -134,6 +134,23 @@ const addressSortKey = ref<AddressSortKey>('id')
 const addressSortDirection = ref<QslSortDirection>('asc')
 const pendingSortKey = ref<PendingBindingSortKey>('callSign')
 const pendingSortDirection = ref<QslSortDirection>('asc')
+const addressColumns = [
+  { key: 'id', label: '地址编号', sortable: true },
+  { key: 'callSign', label: '呼号', sortable: true },
+  { key: 'name', label: '姓名', sortable: true },
+  { key: 'telephone', label: '电话', sortable: true },
+  { key: 'postalCode', label: '邮编', sortable: true },
+  { key: 'address', label: '地址', sortable: true },
+  { key: 'email', label: '邮箱', sortable: true },
+  { key: 'remarks', label: '地址备注', sortable: true },
+]
+const pendingBindingColumns = [
+  { key: 'sequence', label: '序号', sortable: false },
+  { key: 'callSign', label: '呼号', sortable: true },
+  { key: 'unboundCount', label: '待绑定卡片数', sortable: true },
+  { key: 'cardIdsText', label: '涉及卡片', sortable: true },
+  { key: 'matchedAddressId', label: '建议地址编号', sortable: true },
+]
 
 const resourcePlural = 'address-book-entries'
 const resourceKind = 'AddressBookEntry'
@@ -141,6 +158,9 @@ const bureauPlural = 'bureau-entries'
 const cardRecordPlural = 'card-records'
 const NO_CARD_PLACEHOLDER_REMARK = '不创建卡片'
 const cardRecordKind = 'CardRecord'
+const toAddressItem = (row: Record<string, unknown>): AddressItem => row as unknown as AddressItem
+const toPendingBindingItem = (row: Record<string, unknown>): PendingBindingItem =>
+  row as unknown as PendingBindingItem
 
 const normalizeCallSign = (value: string): string => {
   return value.trim().toUpperCase()
@@ -769,10 +789,6 @@ const submitAddress = async () => {
 }
 
 const removeAddress = async (id: string) => {
-  if (!window.confirm(`确认删除地址 ${id} 吗？`)) {
-    return
-  }
-
   submitting.value = true
   try {
     const target = rows.value.find((item) => item.id === id)
@@ -1022,125 +1038,47 @@ onMounted(() => {
           <VButton size="sm" :disabled="loading || submitting" @click="loadRows">刷新</VButton>
         </div>
 
-        <div class="qsl-table-wrap">
-          <table class="qsl-table">
-            <thead>
-              <tr>
-                <th>
-                  <QslSortableHeader
-                    column-key="id"
-                    label="地址编号"
-                    :sort-key="addressSortKey"
-                    :sort-direction="addressSortDirection"
-                    @sort="toggleAddressSort"
-                  />
-                </th>
-                <th>
-                  <QslSortableHeader
-                    column-key="callSign"
-                    label="呼号"
-                    :sort-key="addressSortKey"
-                    :sort-direction="addressSortDirection"
-                    @sort="toggleAddressSort"
-                  />
-                </th>
-                <th>
-                  <QslSortableHeader
-                    column-key="name"
-                    label="姓名"
-                    :sort-key="addressSortKey"
-                    :sort-direction="addressSortDirection"
-                    @sort="toggleAddressSort"
-                  />
-                </th>
-                <th>
-                  <QslSortableHeader
-                    column-key="telephone"
-                    label="电话"
-                    :sort-key="addressSortKey"
-                    :sort-direction="addressSortDirection"
-                    @sort="toggleAddressSort"
-                  />
-                </th>
-                <th>
-                  <QslSortableHeader
-                    column-key="postalCode"
-                    label="邮编"
-                    :sort-key="addressSortKey"
-                    :sort-direction="addressSortDirection"
-                    @sort="toggleAddressSort"
-                  />
-                </th>
-                <th>
-                  <QslSortableHeader
-                    column-key="address"
-                    label="地址"
-                    :sort-key="addressSortKey"
-                    :sort-direction="addressSortDirection"
-                    @sort="toggleAddressSort"
-                  />
-                </th>
-                <th>
-                  <QslSortableHeader
-                    column-key="email"
-                    label="邮箱"
-                    :sort-key="addressSortKey"
-                    :sort-direction="addressSortDirection"
-                    @sort="toggleAddressSort"
-                  />
-                </th>
-                <th>
-                  <QslSortableHeader
-                    column-key="remarks"
-                    label="地址备注"
-                    :sort-key="addressSortKey"
-                    :sort-direction="addressSortDirection"
-                    @sort="toggleAddressSort"
-                  />
-                </th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in pagedFilteredRows" :key="item.id">
-                <td>{{ item.id }}</td>
-                <td>{{ item.callSign || '-' }}</td>
-                <td>{{ item.name || '-' }}</td>
-                <td>{{ item.telephone || '-' }}</td>
-                <td>{{ item.postalCode || '-' }}</td>
-                <td>{{ item.address || '-' }}</td>
-                <td>{{ item.email || '-' }}</td>
-                <td>{{ item.remarks || '-' }}</td>
-                <td>
-                  <div class="qsl-actions qsl-actions--tight">
-                    <VButton size="xs" :disabled="loading || submitting" @click="startEdit(item)"
-                      >编辑</VButton
-                    >
-                    <VButton
-                      size="xs"
-                      type="danger"
-                      :disabled="loading || submitting"
-                      @click="removeAddress(item.id)"
-                      >删除</VButton
-                    >
-                  </div>
-                </td>
-              </tr>
-              <tr v-if="!pagedFilteredRows.length">
-                <td colspan="9" class="qsl-table-empty">暂无地址记录。</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <QslPaginationBar
+        <QslDataTable
+          :rows="pagedFilteredRows"
+          :columns="addressColumns"
+          row-key-field="id"
+          empty-text="暂无地址记录。"
+          :sort-key="addressSortKey"
+          :sort-direction="addressSortDirection"
+          :loading="loading"
+          show-actions
+          show-pagination
           :total="filteredRows.length"
           :current-page="currentPage"
           :page-size="pageSize"
           :page-size-options="pageSizeOptions"
+          @sort="toggleAddressSort"
           @update:current-page="(value) => (currentPage = value)"
           @update:page-size="(value) => (pageSize = value)"
-        />
+        >
+          <template #row-actions="{ row }">
+            <div class="qsl-actions qsl-actions--tight">
+              <VButton
+                size="xs"
+                :disabled="loading || submitting"
+                @click="startEdit(toAddressItem(row))"
+                >编辑</VButton
+              >
+              <QslConfirmActionButton
+                size="xs"
+                label="删除"
+                type="danger"
+                danger-level="danger"
+                :disabled="loading || submitting"
+                confirm-enabled
+                confirm-title="确认删除地址"
+                :confirm-message="`确认删除地址记录：${toAddressItem(row).id}（${toAddressItem(row).callSign || '无呼号'}）吗？`"
+                confirm-text="确认删除"
+                @confirm="removeAddress(toAddressItem(row).id)"
+              />
+            </div>
+          </template>
+        </QslDataTable>
       </template>
     </VCard>
 
@@ -1155,126 +1093,88 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="qsl-table-wrap">
-        <table class="qsl-table">
-          <thead>
-            <tr>
-              <th>序号</th>
-              <th>
-                <QslSortableHeader
-                  column-key="callSign"
-                  label="呼号"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="unboundCount"
-                  label="待绑定卡片数"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="cardIdsText"
-                  label="涉及卡片"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th>
-                <QslSortableHeader
-                  column-key="matchedAddressId"
-                  label="建议地址编号"
-                  :sort-key="pendingSortKey"
-                  :sort-direction="pendingSortDirection"
-                  @sort="togglePendingSort"
-                />
-              </th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(item, index) in sortedPendingBindings" :key="item.callSign">
-              <td>{{ index + 1 }}</td>
-              <td>{{ item.callSign }}</td>
-              <td>{{ item.unboundCount }}</td>
-              <td>{{ item.cardIdsText }}</td>
-              <td>{{ item.matchedAddressId || '未配置' }}</td>
-              <td>
-                <div class="qsl-actions qsl-actions--tight qsl-pending-actions">
-                  <VButton
-                    size="xs"
-                    type="secondary"
-                    :disabled="loading || submitting"
-                    @click="usePendingCallSign(item)"
-                  >
-                    新增地址
-                  </VButton>
-                  <VButton
-                    size="xs"
-                    :disabled="loading || submitting"
-                    @click="bindSelfAddress(item)"
-                  >
-                    绑定本人地址
-                  </VButton>
-                  <VButton
-                    size="xs"
-                    type="secondary"
-                    :disabled="loading || submitting"
-                    @click="toggleBureauBinding(item)"
-                  >
-                    绑定卡局地址
-                  </VButton>
-                </div>
-                <div
-                  v-if="pendingBureauExpandMap[item.callSign]"
-                  class="qsl-pending-actions qsl-pending-actions--expand"
+      <QslDataTable
+        :rows="sortedPendingBindings"
+        :columns="pendingBindingColumns"
+        row-key-field="callSign"
+        empty-text="当前没有待绑定地址的呼号。"
+        :sort-key="pendingSortKey"
+        :sort-direction="pendingSortDirection"
+        :loading="loading"
+        show-actions
+        @sort="togglePendingSort"
+      >
+        <template #cell-sequence="{ row }">
+          {{ sortedPendingBindings.findIndex((item) => item.callSign === toPendingBindingItem(row).callSign) + 1 }}
+        </template>
+        <template #cell-matchedAddressId="{ row }">
+          {{ toPendingBindingItem(row).matchedAddressId || '未配置' }}
+        </template>
+        <template #row-actions="{ row }">
+          <div class="qsl-actions qsl-actions--tight qsl-pending-actions">
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="loading || submitting"
+              @click="usePendingCallSign(toPendingBindingItem(row))"
+            >
+              新增地址
+            </VButton>
+            <VButton
+              size="xs"
+              :disabled="loading || submitting"
+              @click="bindSelfAddress(toPendingBindingItem(row))"
+            >
+              绑定本人地址
+            </VButton>
+            <VButton
+              size="xs"
+              type="secondary"
+              :disabled="loading || submitting"
+              @click="toggleBureauBinding(toPendingBindingItem(row))"
+            >
+              绑定卡局地址
+            </VButton>
+          </div>
+          <div
+            v-if="pendingBureauExpandMap[toPendingBindingItem(row).callSign]"
+            class="qsl-pending-actions qsl-pending-actions--expand"
+          >
+            <div class="qsl-input-shell qsl-pending-actions__keyword">
+              <input
+                v-model.trim="pendingBureauKeywordMap[toPendingBindingItem(row).callSign]"
+                type="text"
+                placeholder="输入卡局名称、呼号或地址编号（如 BURO）"
+              />
+            </div>
+            <div class="qsl-input-shell qsl-pending-actions__select-shell">
+              <select v-model="pendingBureauSelectedMap[toPendingBindingItem(row).callSign]">
+                <option value="">请选择地址</option>
+                <option
+                  v-for="candidate in getBureauAddressCandidates(toPendingBindingItem(row))"
+                  :key="candidate.id"
+                  :value="candidate.id"
                 >
-                  <div class="qsl-input-shell qsl-pending-actions__keyword">
-                    <input
-                      v-model.trim="pendingBureauKeywordMap[item.callSign]"
-                      type="text"
-                      placeholder="输入卡局名称、呼号或地址编号（如 BURO）"
-                    />
-                  </div>
-                  <div class="qsl-input-shell qsl-pending-actions__select-shell">
-                    <select v-model="pendingBureauSelectedMap[item.callSign]">
-                      <option value="">请选择地址</option>
-                      <option
-                        v-for="candidate in getBureauAddressCandidates(item)"
-                        :key="candidate.id"
-                        :value="candidate.id"
-                      >
-                        {{ candidate.id }} ｜
-                        {{ candidate.sourceType === 'BURO' ? '卡片局' : '地址簿' }} ｜
-                        {{ candidate.callSign || candidate.name || '-' }}
-                      </option>
-                    </select>
-                  </div>
-                  <VButton
-                    size="xs"
-                    :disabled="
-                      loading || submitting || !getSelectedBureauAddressForPendingItem(item)
-                    "
-                    @click="saveBureauBinding(item)"
-                  >
-                    保存绑定
-                  </VButton>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!filteredPendingBindings.length">
-              <td colspan="6" class="qsl-table-empty">当前没有待绑定地址的呼号。</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                  {{ candidate.id }} ｜
+                  {{ candidate.sourceType === 'BURO' ? '卡片局' : '地址簿' }} ｜
+                  {{ candidate.callSign || candidate.name || '-' }}
+                </option>
+              </select>
+            </div>
+            <VButton
+              size="xs"
+              :disabled="
+                loading ||
+                submitting ||
+                !getSelectedBureauAddressForPendingItem(toPendingBindingItem(row))
+              "
+              @click="saveBureauBinding(toPendingBindingItem(row))"
+            >
+              保存绑定
+            </VButton>
+          </div>
+        </template>
+      </QslDataTable>
     </VCard>
   </div>
 </template>
@@ -1294,11 +1194,6 @@ onMounted(() => {
 
 .qsl-list-toolbar__search {
   min-width: 280px;
-}
-
-.qsl-table-empty {
-  text-align: center;
-  color: #6b7280;
 }
 
 .qsl-pending-actions {
