@@ -165,10 +165,15 @@ const normalizeImportKey = (key: string): string => {
     对方收件人: 'recipientName',
     电话: 'telephone',
     联系电话: 'telephone',
+    收件电话: 'telephone',
     手机: 'telephone',
+    手机号: 'telephone',
+    联系手机: 'telephone',
     邮箱: 'email',
     电子邮箱: 'email',
     地址: 'address',
+    收件地址: 'address',
+    对方地址: 'address',
     通信地址: 'address',
     邮编: 'postalCode',
     邮政编码: 'postalCode',
@@ -176,6 +181,65 @@ const normalizeImportKey = (key: string): string => {
     卡片版式: 'cardVersion',
   }
   return mapping[normalized] ?? ''
+}
+
+const importFieldLabels = [
+  '对方收件人',
+  '收件地址',
+  '对方地址',
+  '通信地址',
+  '邮政编码',
+  '卡片版本',
+  '卡片版式',
+  '对方呼号',
+  '联系电话',
+  '收件电话',
+  '联系手机',
+  '电子邮箱',
+  '收件人',
+  '手机号',
+  '呼号',
+  '电话',
+  '手机',
+  '邮箱',
+  '地址',
+  '邮编',
+]
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const extractManualFieldPairs = (line: string): Array<{ key: string; value: string }> => {
+  const labelPattern = importFieldLabels.map(escapeRegExp).join('|')
+  const pairPattern = new RegExp(
+    `(?:^|[，,；;\\s]+)(${labelPattern})\\s*[:：]\\s*([\\s\\S]*?)(?=(?:[，,；;\\s]+(?:${labelPattern})\\s*[:：])|$)`,
+    'g',
+  )
+  const pairs: Array<{ key: string; value: string }> = []
+  for (const match of line.matchAll(pairPattern)) {
+    const key = normalizeImportKey(match[1] ?? '')
+    if (key) {
+      pairs.push({
+        key,
+        value: (match[2] ?? '').trim(),
+      })
+    }
+  }
+  if (pairs.length) {
+    return pairs
+  }
+  const singlePair = line.match(/^([^:：]+)[:：](.*)$/)
+  if (!singlePair) {
+    return []
+  }
+  const key = normalizeImportKey(singlePair[1] ?? '')
+  return key
+    ? [
+        {
+          key,
+          value: (singlePair[2] ?? '').trim(),
+        },
+      ]
+    : []
 }
 
 const buildValidationMessage = (row: ManualImportRow): string => {
@@ -201,23 +265,14 @@ const parseManualImportText = (text: string, limitToSingle: boolean): ManualImpo
     if (!line) {
       continue
     }
-    const match = line.match(/^([^:：]+)[:：](.*)$/)
-    if (!match) {
-      continue
+    for (const { key, value } of extractManualFieldPairs(line)) {
+      const currentHasIdentity = Boolean(current.callSign || current.recipientName)
+      if (current[key] != null && currentHasIdentity) {
+        records.push(current)
+        current = {}
+      }
+      current[key] = value
     }
-    const key = normalizeImportKey(match[1])
-    if (!key) {
-      continue
-    }
-    const currentHasIdentity = Boolean(current.callSign || current.recipientName)
-    const currentHasPayload = Boolean(
-      current.telephone || current.email || current.address || current.postalCode || current.cardVersion,
-    )
-    if ((key === 'recipientName' || key === 'callSign') && currentHasIdentity && currentHasPayload) {
-      records.push(current)
-      current = {}
-    }
-    current[key] = match[2].trim()
   }
   if (Object.keys(current).length > 0) {
     records.push(current)
