@@ -5,6 +5,7 @@ import { VButton, VModal } from '@halo-dev/components'
 type ConfirmButtonType = 'secondary' | 'danger'
 type ConfirmButtonSize = 'xs' | 'sm' | 'md' | 'lg'
 type DangerLevel = 'normal' | 'warning' | 'danger'
+type ConfirmButtonAppearance = 'default' | 'danger-outline'
 
 const props = withDefaults(
   defineProps<{
@@ -13,6 +14,7 @@ const props = withDefaults(
     type?: ConfirmButtonType
     size?: ConfirmButtonSize
     dangerLevel?: DangerLevel
+    appearance?: ConfirmButtonAppearance
     confirmEnabled?: boolean
     confirmTitle?: string
     confirmMessage?: string
@@ -23,6 +25,7 @@ const props = withDefaults(
     disabled: false,
     size: 'sm',
     dangerLevel: 'normal',
+    appearance: 'default',
     confirmEnabled: false,
     confirmTitle: '确认操作',
     confirmMessage: '确认执行该操作吗？',
@@ -47,7 +50,13 @@ const buttonType = computed<ConfirmButtonType>(() => {
   return props.type ?? 'secondary'
 })
 
-const buttonClass = computed(() => ({
+const triggerButtonClass = computed(() => ({
+  'qsl-confirm-action-button--warning': props.dangerLevel === 'warning',
+  'qsl-confirm-action-button--danger': props.dangerLevel === 'danger',
+  'qsl-confirm-action-button--danger-outline': props.appearance === 'danger-outline',
+}))
+
+const confirmButtonClass = computed(() => ({
   'qsl-confirm-action-button--warning': props.dangerLevel === 'warning',
   'qsl-confirm-action-button--danger': props.dangerLevel === 'danger',
 }))
@@ -75,7 +84,7 @@ const confirm = () => {
 
 <template>
   <VButton
-    :class="buttonClass"
+    :class="triggerButtonClass"
     :disabled="disabled"
     :size="size"
     :type="buttonType"
@@ -89,7 +98,7 @@ const confirm = () => {
 
     <template #footer>
       <VButton :disabled="disabled" @click="close">{{ cancelText }}</VButton>
-      <VButton :class="buttonClass" :disabled="disabled" :type="buttonType" @click="confirm">
+      <VButton :class="confirmButtonClass" :disabled="disabled" :type="buttonType" @click="confirm">
         {{ confirmText }}
       </VButton>
     </template>
@@ -112,5 +121,17 @@ const confirm = () => {
 
 .qsl-confirm-action-button--danger {
   font-weight: 600;
+}
+
+.qsl-confirm-action-button--danger-outline {
+  border-color: #fecaca;
+  background: transparent !important;
+  color: #dc2626 !important;
+}
+
+.qsl-confirm-action-button--danger-outline:hover {
+  border-color: #fca5a5;
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
 }
 </style>

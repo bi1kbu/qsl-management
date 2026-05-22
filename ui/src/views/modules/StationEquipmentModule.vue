@@ -324,6 +324,7 @@ onMounted(loadStationEquipment)
                 label="移除"
                 type="danger"
                 danger-level="warning"
+                appearance="danger-outline"
                 :disabled="loading || saving"
                 confirm-enabled
                 confirm-title="确认移除天线"
@@ -363,6 +364,7 @@ onMounted(loadStationEquipment)
                 label="移除"
                 type="danger"
                 danger-level="warning"
+                appearance="danger-outline"
                 :disabled="loading || saving"
                 confirm-enabled
                 confirm-title="确认移除功率"
@@ -402,6 +404,7 @@ onMounted(loadStationEquipment)
                 label="移除"
                 type="danger"
                 danger-level="warning"
+                appearance="danger-outline"
                 :disabled="loading || saving"
                 confirm-enabled
                 confirm-title="确认移除模式"
