@@ -85,10 +85,10 @@ class QslPublicApiServiceValidationTest {
             Boolean.FALSE,
             "",
             "invalid-email",
-            "张三",
-            "13800000000",
+            "测试台",
+            "010-00000000",
             "510000",
-            "广东省广州市",
+            "广东省某市",
             "测试",
             "2026春季版"
         );
@@ -110,10 +110,10 @@ class QslPublicApiServiceValidationTest {
             Boolean.FALSE,
             "",
             "",
-            "张三",
+            "测试台",
             "",
             "510000",
-            "广东省广州市",
+            "广东省某市",
             "测试",
             "2026春季版"
         );
@@ -176,10 +176,10 @@ class QslPublicApiServiceValidationTest {
             Boolean.FALSE,
             "",
             "",
-            "张三",
-            "13800000000",
+            "测试台",
+            "010-00000000",
             "510000",
-            "广东省广州市",
+            "广东省某市",
             "测试",
             "2026春季版"
         );
@@ -214,7 +214,7 @@ class QslPublicApiServiceValidationTest {
         var stationProfile = new StationProfile();
         var profileSpec = new StationProfile.StationProfileSpec();
         profileSpec.setMyCallSign("BI1KBU");
-        profileSpec.setMyAddress("北京市测试路1号");
+        profileSpec.setMyAddress("北京市某区某路");
         stationProfile.setSpec(profileSpec);
 
         when(client.listAll(eq(ExchangeRequest.class), any(), any()))
@@ -254,10 +254,10 @@ class QslPublicApiServiceValidationTest {
             Boolean.FALSE,
             "",
             "",
-            "张三",
-            "13800000000",
+            "测试台",
+            "010-00000000",
             "510000",
-            "广东省广州市",
+            "广东省某市",
             "测试",
             "2026春季版"
         );
@@ -325,7 +325,7 @@ class QslPublicApiServiceValidationTest {
 
         var stationProfile = new StationProfile();
         var profileSpec = new StationProfile.StationProfileSpec();
-        profileSpec.setMyAddress("北京市测试路1号");
+        profileSpec.setMyAddress("北京市某区某路");
         profileSpec.setMyEmail("bi1kbu@example.test");
         stationProfile.setSpec(profileSpec);
 
@@ -394,7 +394,7 @@ class QslPublicApiServiceValidationTest {
 
         var stationProfile = new StationProfile();
         var profileSpec = new StationProfile.StationProfileSpec();
-        profileSpec.setMyAddress("北京市测试路1号");
+        profileSpec.setMyAddress("北京市某区某路");
         profileSpec.setMyEmail("bi1kbu@example.test");
         stationProfile.setSpec(profileSpec);
 

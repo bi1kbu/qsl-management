@@ -37,6 +37,7 @@ public class QslConsoleActionService {
     private static final DateTimeFormatter RECEIVED_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final String SYSTEM_SETTING_NAME = "qsl-system-setting-default";
     private static final String BH6SYX_IMPORT_SOURCE = "BH6SYX卡片广场";
+    private static final String MANUAL_IMPORT_SOURCE = "手工文本导入";
     private static final int CARD_SEQUENCE_START = 1000;
     private static final int RECEIVE_SEQUENCE_START = 0;
     private static final String ERROR_CARD_TYPE_SUFFIX = "（ERROR）";
@@ -526,9 +527,15 @@ public class QslConsoleActionService {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "导入记录不能为空"));
         }
         var defaultCardVersion = command == null ? "" : defaultIfBlank(command.defaultCardVersion(), "");
+        var source = command == null ? BH6SYX_IMPORT_SOURCE : normalizeOnlineImportSource(command.source());
         return reactor.core.publisher.Flux.fromIterable(rows)
             .index()
-            .concatMap(tuple -> importSingleBh6syxCard(tuple.getT1().intValue() + 1, tuple.getT2(), defaultCardVersion)
+            .concatMap(tuple -> importSingleBh6syxCard(
+                    tuple.getT1().intValue() + 1,
+                    tuple.getT2(),
+                    defaultCardVersion,
+                    source
+                )
                 .onErrorResume(error -> Mono.just(new Bh6syxImportRowResult(
                     tuple.getT1().intValue() + 1,
                     tuple.getT2() == null ? "" : QslApiSupport.normalizeCallSign(tuple.getT2().callSign()),
@@ -543,13 +550,13 @@ public class QslConsoleActionService {
                 var skippedCount = (int) results.stream().filter(item -> "SKIPPED".equals(item.result())).count();
                 var failedCount = (int) results.stream().filter(item -> "FAILED".equals(item.result())).count();
                 var result = new Bh6syxImportResult(rows.size(), successCount, skippedCount, failedCount, results);
-                var detail = "来源：" + BH6SYX_IMPORT_SOURCE
+                var detail = "来源：" + source
                     + "；总数：" + result.totalCount()
                     + "；成功：" + result.successCount()
                     + "；跳过：" + result.skippedCount()
                     + "；失败：" + result.failedCount();
                 return qslAuditService.appendAuditLog(
-                    "导入BH6SYX卡片广场数据",
+                    BH6SYX_IMPORT_SOURCE.equals(source) ? "导入BH6SYX卡片广场数据" : "导入线上换卡数据",
                     "card-record",
                     "batch",
                     detail,
@@ -681,8 +688,12 @@ public class QslConsoleActionService {
             ));
     }
 
-    private Mono<Bh6syxImportRowResult> importSingleBh6syxCard(int rowIndex, Bh6syxImportRow row,
-        String defaultCardVersion) {
+    private Mono<Bh6syxImportRowResult> importSingleBh6syxCard(
+        int rowIndex,
+        Bh6syxImportRow row,
+        String defaultCardVersion,
+        String source
+    ) {
         if (row == null) {
             return Mono.just(new Bh6syxImportRowResult(rowIndex, "", "", "", "FAILED", "导入行不能为空"));
         }
@@ -706,8 +717,8 @@ public class QslConsoleActionService {
             return Mono.just(new Bh6syxImportRowResult(rowIndex, callSign, "", "", "FAILED", "卡片版本不能为空"));
         }
 
-        return resolveBh6syxAddressBinding(row, callSign)
-            .flatMap(binding -> createBh6syxCardRecord(row, callSign, cardVersion, binding)
+        return resolveBh6syxAddressBinding(row, callSign, source)
+            .flatMap(binding -> createBh6syxCardRecord(row, callSign, cardVersion, binding, source)
                 .map(cardRecord -> new Bh6syxImportRowResult(
                     rowIndex,
                     callSign,
@@ -718,7 +729,11 @@ public class QslConsoleActionService {
                 )));
     }
 
-    private Mono<ExchangeAddressBinding> resolveBh6syxAddressBinding(Bh6syxImportRow row, String callSign) {
+    private Mono<ExchangeAddressBinding> resolveBh6syxAddressBinding(
+        Bh6syxImportRow row,
+        String callSign,
+        String source
+    ) {
         var name = defaultIfBlank(row.recipientName(), "");
         var telephone = defaultIfBlank(row.telephone(), "");
         var postalCode = defaultIfBlank(row.postalCode(), "");
@@ -740,7 +755,7 @@ public class QslConsoleActionService {
             })
             .next()
             .map(entry -> new ExchangeAddressBinding(entry.getMetadata().getName(), email))
-            .switchIfEmpty(createBh6syxAddressBookEntry(callSign, name, telephone, postalCode, address, email));
+            .switchIfEmpty(createBh6syxAddressBookEntry(callSign, name, telephone, postalCode, address, email, source));
     }
 
     private Mono<ExchangeAddressBinding> createBh6syxAddressBookEntry(
@@ -749,7 +764,8 @@ public class QslConsoleActionService {
         String telephone,
         String postalCode,
         String address,
-        String email
+        String email,
+        String source
     ) {
         return nextAddressResourceName(callSign)
             .flatMap(resourceName -> {
@@ -762,7 +778,7 @@ public class QslConsoleActionService {
                 spec.setPostalCode(postalCode);
                 spec.setAddress(address);
                 spec.setEmail(email);
-                spec.setAddressRemarks("BH6SYX卡片广场导入");
+                spec.setAddressRemarks(source + "导入");
                 entry.setSpec(spec);
                 var status = new AddressBookEntry.AddressBookStatus();
                 status.setSyncStatus("BH6SYX_IMPORT");
@@ -775,7 +791,8 @@ public class QslConsoleActionService {
         Bh6syxImportRow row,
         String callSign,
         String cardVersion,
-        ExchangeAddressBinding binding
+        ExchangeAddressBinding binding,
+        String source
     ) {
         return nextCardRecordName()
             .flatMap(resourceName -> {
@@ -793,7 +810,7 @@ public class QslConsoleActionService {
                 spec.setAddressEntryName(binding.addressEntryName());
                 spec.setCardDate(QslApiSupport.utcDate());
                 spec.setCardTime(QslApiSupport.utcTime());
-                spec.setBusinessRemarks(buildBh6syxBusinessRemarks(row));
+                spec.setBusinessRemarks(buildBh6syxBusinessRemarks(row, source));
                 spec.setCreatedRemarks("");
                 spec.setSentRemarks("");
                 spec.setReceivedRemarks("");
@@ -826,14 +843,22 @@ public class QslConsoleActionService {
             });
     }
 
-    private String buildBh6syxBusinessRemarks(Bh6syxImportRow row) {
+    private String buildBh6syxBusinessRemarks(Bh6syxImportRow row, String source) {
         var parts = new ArrayList<String>();
-        parts.add("BH6SYX卡片广场导入");
+        parts.add(source + "导入");
         var status = defaultIfBlank(row.status(), "");
         if (!status.isBlank()) {
             parts.add("状态：" + status);
         }
         return String.join("；", parts);
+    }
+
+    private String normalizeOnlineImportSource(String source) {
+        var normalized = defaultIfBlank(source, BH6SYX_IMPORT_SOURCE);
+        if (MANUAL_IMPORT_SOURCE.equals(normalized)) {
+            return MANUAL_IMPORT_SOURCE;
+        }
+        return BH6SYX_IMPORT_SOURCE;
     }
 
     private Mono<ExchangeAddressBinding> resolveExchangeAddressBinding(ExchangeRequest exchangeRequest) {
@@ -1755,6 +1780,7 @@ public class QslConsoleActionService {
 
     public record Bh6syxImportCommand(
         String defaultCardVersion,
+        String source,
         List<Bh6syxImportRow> rows
     ) {
     }

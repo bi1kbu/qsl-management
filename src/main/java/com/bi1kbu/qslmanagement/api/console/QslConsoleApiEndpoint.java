@@ -64,6 +64,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/exchange-requests/{name}/approve"), this::approveExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/reject"), this::rejectExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
+            .andRoute(POST("/online-card-imports"), this::importOnlineCards)
             .andRoute(POST("/bh6syx-imports"), this::importBh6syxCards)
             .andRoute(POST("/notification-mails/send"), this::sendNotificationMail)
             .andRoute(POST("/notification-mails/batch-send"), this::batchSendNotificationMail)
@@ -265,12 +266,21 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     }
 
     private Mono<ServerResponse> importBh6syxCards(ServerRequest request) {
+        return importOnlineCards(request, "BH6SYX卡片广场");
+    }
+
+    private Mono<ServerResponse> importOnlineCards(ServerRequest request) {
+        return importOnlineCards(request, "手工文本导入");
+    }
+
+    private Mono<ServerResponse> importOnlineCards(ServerRequest request, String defaultSource) {
         return ensureAuthenticated(request)
             .flatMap(authenticatedOperator -> request.bodyToMono(Bh6syxImportRequest.class)
-                .defaultIfEmpty(new Bh6syxImportRequest("", List.of()))
+                .defaultIfEmpty(new Bh6syxImportRequest("", defaultSource, List.of()))
                 .flatMap(payload -> actionService.importBh6syxCards(
                     new QslConsoleActionService.Bh6syxImportCommand(
                         payload.defaultCardVersion(),
+                        payload.source() == null || payload.source().isBlank() ? defaultSource : payload.source(),
                         payload.rows() == null
                             ? List.of()
                             : payload.rows().stream()
@@ -523,6 +533,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
 
     private record Bh6syxImportRequest(
         String defaultCardVersion,
+        String source,
         List<Bh6syxImportRowRequest> rows
     ) {
     }

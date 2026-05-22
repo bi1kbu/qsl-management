@@ -114,6 +114,7 @@ export interface Bh6syxImportRowPayload {
 
 export interface Bh6syxImportPayload {
   defaultCardVersion: string
+  source?: string
   rows: Bh6syxImportRowPayload[]
 }
 
@@ -372,6 +373,14 @@ export async function sendTestNotificationMail(
 export async function importBh6syxCards(payload: Bh6syxImportPayload): Promise<Bh6syxImportResult> {
   const response = await axiosInstance.post<ApiResult<Bh6syxImportResult>>(
     `${consoleApiBase}/bh6syx-imports`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function importOnlineCards(payload: Bh6syxImportPayload): Promise<Bh6syxImportResult> {
+  const response = await axiosInstance.post<ApiResult<Bh6syxImportResult>>(
+    `${consoleApiBase}/online-card-imports`,
     payload,
   )
   return response.data.data

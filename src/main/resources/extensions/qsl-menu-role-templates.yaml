@@ -330,7 +330,7 @@ metadata:
     halo.run/role-template: "true"
   annotations:
     rbac.authorization.halo.run/module: "QSL 菜单权限"
-    rbac.authorization.halo.run/display-name: "导入BH6SYX卡片广场数据（只读）"
+    rbac.authorization.halo.run/display-name: "导入数据（只读）"
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:online-bh6syx-import:view"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-station-profile-view","qsl-management-card-record-view","qsl-management-address-bureau-view"]'
 rules:
@@ -346,7 +346,7 @@ metadata:
     halo.run/role-template: "true"
   annotations:
     rbac.authorization.halo.run/module: "QSL 菜单权限"
-    rbac.authorization.halo.run/display-name: "导入BH6SYX卡片广场数据（编辑）"
+    rbac.authorization.halo.run/display-name: "导入数据（编辑）"
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:online-bh6syx-import:edit"]'
     rbac.authorization.halo.run/dependencies: '["qsl-management-online-bh6syx-import-view","qsl-management-card-record-edit","qsl-management-address-bureau-edit","qsl-management-system-settings-edit"]'
 rules:
@@ -360,7 +360,7 @@ rules:
     resources: [ "system-settings" ]
     verbs: [ "update", "patch" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
-    resources: [ "bh6syx-imports" ]
+    resources: [ "bh6syx-imports", "online-card-imports" ]
     verbs: [ "create" ]
 ---
 apiVersion: v1alpha1

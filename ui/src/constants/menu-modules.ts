@@ -152,7 +152,7 @@ export const qslMenuModules: QslMenuModule[] = [
   },
   {
     key: 'online-bh6syx-import',
-    title: '导入BH6SYX卡片广场数据',
+    title: '导入数据',
     group: '线上换卡业务',
     priority: 15,
     viewPermission: toViewPermission('online-bh6syx-import'),

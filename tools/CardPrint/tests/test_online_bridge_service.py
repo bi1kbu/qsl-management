@@ -309,11 +309,11 @@ def test_fetch_envelopes_enrich_address_info(monkeypatch) -> None:
       "items": [
         {
           "metadata": {"name": "card-record-c2001"},
-          "spec": {"callSign": "BA3NZH", "sceneType": "ONLINE_EYEBALL", "addressEntryName": "BA3NZH-1"}
+          "spec": {"callSign": "BI1KBU", "sceneType": "ONLINE_EYEBALL", "addressEntryName": "BI1KBU-1"}
         },
         {
           "metadata": {"name": "card-record-c2002"},
-          "spec": {"callSign": "BA1OFF", "sceneType": "EYEBALL", "addressEntryName": "BA1OFF-1"}
+          "spec": {"callSign": "BI1KBU", "sceneType": "EYEBALL", "addressEntryName": "BI1KBU-2"}
         }
       ]
     }
@@ -322,8 +322,8 @@ def test_fetch_envelopes_enrich_address_info(monkeypatch) -> None:
     {
       "items": [
         {
-          "metadata": {"name": "BA3NZH-1"},
-          "spec": {"name": "BA3NZH", "address": "北京市朝阳区XX路", "postalCode": "100000", "telephone": "13800000000"}
+          "metadata": {"name": "BI1KBU-1"},
+          "spec": {"name": "测试台", "address": "北京市某区某路", "postalCode": "100000", "telephone": "138****0000"}
         }
       ]
     }
@@ -350,10 +350,10 @@ def test_fetch_envelopes_enrich_address_info(monkeypatch) -> None:
     assert result["count"] == 1
     assert result["records"][0]["record_id"] == "card-record-c2001"
     mapped = result["records"][0]["mapped_row"]
-    assert mapped["name"] == "BA3NZH"
-    assert mapped["address"] == "北京市朝阳区XX路"
+    assert mapped["name"] == "测试台"
+    assert mapped["address"] == "北京市某区某路"
     assert mapped["postCode"] == "100000"
-    assert mapped["phone"] == "13800000000"
+    assert mapped["phone"] == "138****0000"
 
 
 def test_fetch_address_envelopes_reads_address_and_bureau_entries(monkeypatch) -> None:
@@ -364,9 +364,9 @@ def test_fetch_address_envelopes_reads_address_and_bureau_entries(monkeypatch) -
           "metadata": {"name": "qsl-station-profile-default"},
           "spec": {
             "myName": "BI1KBU",
-            "myTelephone": "13900000000",
+            "myTelephone": "139****0000",
             "myPostalCode": "100001",
-            "myAddress": "北京市海淀区本台地址"
+            "myAddress": "北京市某区本台地址"
           }
         }
       ]
@@ -376,14 +376,14 @@ def test_fetch_address_envelopes_reads_address_and_bureau_entries(monkeypatch) -
     {
       "items": [
         {
-          "metadata": {"name": "BA3NZH-1"},
+          "metadata": {"name": "BI1KBU-1"},
           "spec": {
-            "callSign": "BA3NZH",
-            "name": "张三",
-            "address": "北京市朝阳区XX路",
+            "callSign": "BI1KBU",
+            "name": "测试台",
+            "address": "北京市某区某路",
             "postalCode": "100000",
-            "telephone": "13800000000",
-            "email": "ba3nzh@example.com"
+            "telephone": "138****0000",
+            "email": "bi1kbu@example.test"
           }
         }
       ]
@@ -396,7 +396,7 @@ def test_fetch_address_envelopes_reads_address_and_bureau_entries(monkeypatch) -
           "metadata": {"name": "BURO-001"},
           "spec": {
             "bureauName": "北京卡片局",
-            "address": "北京市西城区YY路",
+            "address": "北京市某区卡片局地址",
             "postalCode": "100010",
             "telephone": "010-12345678"
           }
@@ -431,14 +431,14 @@ def test_fetch_address_envelopes_reads_address_and_bureau_entries(monkeypatch) -
     assert result["count"] == 2
     assert result["id_field"] == ""
     address_mapped = result["records"][0]["mapped_row"]
-    assert address_mapped["name"] == "张三"
-    assert address_mapped["address"] == "北京市朝阳区XX路"
+    assert address_mapped["name"] == "测试台"
+    assert address_mapped["address"] == "北京市某区某路"
     assert address_mapped["postCode"] == "100000"
-    assert address_mapped["phone"] == "13800000000"
+    assert address_mapped["phone"] == "138****0000"
     assert address_mapped["my_name"] == "BI1KBU"
     bureau_mapped = result["records"][1]["mapped_row"]
     assert bureau_mapped["name"] == "北京卡片局"
-    assert bureau_mapped["address"] == "北京市西城区YY路"
+    assert bureau_mapped["address"] == "北京市某区卡片局地址"
     assert bureau_mapped["postCode"] == "100010"
 
 

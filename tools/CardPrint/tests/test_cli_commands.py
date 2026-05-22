@@ -64,14 +64,14 @@ def test_cli_render_preview(tmp_path: Path, capsys) -> None:
             "--preset",
             str(preset_path),
             "--row",
-            json.dumps({"name": "张三"}, ensure_ascii=False),
+            json.dumps({"name": "测试台"}, ensure_ascii=False),
         ]
     )
     output = capsys.readouterr().out
     payload = json.loads(output)
     assert code == 0
     assert payload["ok"] is True
-    assert payload["scene"]["items"][0]["text"] == "张三"
+    assert payload["scene"]["items"][0]["text"] == "测试台"
 
 
 def test_cli_print_run(tmp_path: Path, capsys) -> None:
@@ -82,7 +82,7 @@ def test_cli_print_run(tmp_path: Path, capsys) -> None:
         json.dumps(
             {
                 "preset_path": str(preset_path),
-                "rows": [{"name": "张三"}],
+                "rows": [{"name": "测试台"}],
                 "printer_name": "MockPrinter",
                 "paper_name": "CustomCard",
             },

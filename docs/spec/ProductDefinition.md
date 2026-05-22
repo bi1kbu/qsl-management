@@ -48,7 +48,7 @@ Halo 官方资料核验日期：2026-05-19
 | 通联业务 | 发信确认 | `/qsl/traffic-business/mail-send-confirm` | `mail-send-confirm` |
 | 通联业务 | 送达确认 | `/qsl/traffic-business/mail-receive-confirm` | `mail-receive-confirm` |
 | 线上换卡业务 | 换卡申请审核 | `/qsl/online-exchange-business/online-exchange-request-review` | `exchange-request-review` |
-| 线上换卡业务 | 导入BH6SYX卡片广场数据 | `/qsl/online-exchange-business/online-bh6syx-import` | `online-bh6syx-import` |
+| 线上换卡业务 | 导入数据 | `/qsl/online-exchange-business/online-bh6syx-import` | `online-bh6syx-import` |
 | 线上换卡业务 | 创建卡片 | `/qsl/online-exchange-business/online-card-record` | `card-record` |
 | 线上换卡业务 | 制卡签发 | `/qsl/online-exchange-business/online-card-issue` | `card-issue` |
 | 线上换卡业务 | 发信确认 | `/qsl/online-exchange-business/online-mail-send-confirm` | `mail-send-confirm` |
@@ -114,7 +114,7 @@ Halo 官方资料核验日期：2026-05-19
 
 ### 3.5 线上换卡业务
 
-线上换卡业务包含换卡申请审核、导入BH6SYX卡片广场数据、创建卡片、制卡签发、发信确认、签收确认。
+线上换卡业务包含换卡申请审核、导入数据、创建卡片、制卡签发、发信确认、签收确认。
 
 1. 前台匿名提交线上换卡申请写入 `ExchangeRequest`，`sceneType=ONLINE_EYEBALL`；公开表单先填写呼号，再从本台卡片版本列表选择最多两张卡片，页面按 `StationCard.spec.sortOrder` 展示卡片预览缩略图、版本号、版本总量和库存余量，公开卡片版本列表使用短缓存并在 Extension 查询短暂失败时回退到上一次成功结果，随后选择“个人地址”或“卡片局地址”，地址类型默认不选。
 2. 个人地址模式填写姓名、电话、邮编、通信地址，电子邮箱可选；卡片局地址模式从 `BureauEntry` 候选选择已有卡片局，或填写新的卡片局名称、邮编、地址。新的卡片局仅随本次申请保存，不由匿名接口写入卡片局管理主数据。
@@ -122,7 +122,7 @@ Halo 官方资料核验日期：2026-05-19
 4. 线上换卡提交校验通过并成功写入 `ExchangeRequest` 后，提交接口返回本站通信地址，前台在成功提示中展示寄送信息。
 5. 后台审核通过后自动创建 `ONLINE_EYEBALL` 场景卡片，并把 `ExchangeRequest.spec.cardVersion` 写入新建 `CardRecord.spec.cardVersion`；同时根据申请中的个人地址或卡片局地址复用/创建地址资源，并写入 `CardRecord.spec.addressEntryName`。审核通过只代表申请通过与我方待发卡，不代表我方已收到对方卡片，新建卡片的 `cardReceived=false`。线上换卡自动建卡和手工创建卡片的默认 `CardRecord.spec.cardRemarks` 为“期待与您空中相遇。\nLooking forward to meeting you on the air.”。
 6. 换卡申请审核在同意或拒绝后显示“发送邮件通知”和“修改”操作；操作区提供“审核说明”按钮，审核前后均可编辑说明。手动同意时审核说明为空则保持为空，已有说明时以人工填写内容为准；手动拒绝时说明为空则默认“审批拒绝”。当 `SystemSetting.spec.onlineAutoNotifyOnExchangeReviewed=true` 时，审核同意或拒绝后自动发送审核结果邮件。邮件通知面向 `ExchangeRequest.spec.email`，发送结果写入 `ExchangeRequest.status.reviewMailStatus/reviewMailSentAt/reviewMailLastError/reviewMailTargetEmail`；状态为 `SENT` 时，服务端跳过重复发送，后台按钮禁用。无邮箱时按跳过处理；修改操作可调整申请信息与审核状态，并可删除本条换卡申请记录。
-7. 导入BH6SYX卡片广场数据支持上传 `.xls/.xlsx` 文件，自动识别表头行，按“状态”仅保留 `对方已寄出，待我签收` 与 `待双方寄出`，字段缺失时留空。页面可批量设置默认卡片版本，也可逐行选择卡片版本；默认卡片版本下拉按 `station-cards.availableInventory - card-records` 已用数量显示剩余量，不显示库存量。若源表“对方地址”开头重复包含“对方QTH”，导入预览与提交会去掉重复 QTH 前缀，仅保留通信地址。导入提交到服务端后直接创建 `ONLINE_EYEBALL` 场景 `CardRecord`，并按收件人、电话、地址、邮编和邮箱复用或创建 `AddressBookEntry`。该导入不创建 `ExchangeRequest`；BH6SYX 表格中的“交换ID”与“对方备注”仅用于源表识别或导入清单预览，不写入数据，后续流程统一围绕本站卡片编号处理。
+7. 导入数据菜单包含单条导入、批量导入、BH6SYX卡片广场导入三个 tab。单条导入和批量导入支持粘贴 `收件人/电话/邮箱/地址/邮编/卡片版本` 文本，`呼号` 未单独填写时使用 `收件人` 作为对方呼号；多条导入按重复出现的 `收件人` 或 `呼号` 分段。未填写卡片版本时，默认使用按本台卡片排序中最早且仍有余量的一版卡片。BH6SYX卡片广场导入支持上传 `.xls/.xlsx` 文件，自动识别表头行，按“状态”仅保留 `对方已寄出，待我签收` 与 `待双方寄出`，字段缺失时留空。页面可批量设置默认卡片版本，也可逐行选择卡片版本；默认卡片版本下拉按 `station-cards.availableInventory - card-records` 已用数量显示剩余量，不显示库存量。若源表“对方地址”开头重复包含“对方QTH”，导入预览与提交会去掉重复 QTH 前缀，仅保留通信地址。导入提交到服务端后直接创建 `ONLINE_EYEBALL` 场景 `CardRecord`，并按收件人、电话、地址、邮编和邮箱复用或创建 `AddressBookEntry`。该导入不创建 `ExchangeRequest`；BH6SYX 表格中的“交换ID”与“对方备注”仅用于源表识别或导入清单预览，不写入数据，后续流程统一围绕本站卡片编号处理。
 8. 后续流程复用创建卡片、制卡签发、发信确认组件；签收确认使用独立控制台页面。线上换卡“签收确认”用于记录对方是否签收我方寄出的卡片；签收事实落点为 `CardRecord.spec.receiptConfirmed`，不作为收卡编号或我方收到对方卡片的主数据。
 
 ### 3.6 线下换卡业务

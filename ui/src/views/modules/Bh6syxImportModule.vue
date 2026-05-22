@@ -133,7 +133,9 @@ const loadStationCards = async () => {
         left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, 'zh-CN'),
     )
   if (!defaultCardVersion.value && stationCardOptions.value.length) {
-    defaultCardVersion.value = stationCardOptions.value[0].value
+    defaultCardVersion.value =
+      stationCardOptions.value.find((item) => item.remainingInventory > 0)?.value ??
+      stationCardOptions.value[0].value
   }
 }
 
@@ -294,6 +296,7 @@ const submitImport = async () => {
   try {
     const result = await importBh6syxCards({
       defaultCardVersion: defaultCardVersion.value,
+      source: 'BH6SYX卡片广场',
       rows: selectedRows.value.map((row) => ({
         callSign: row.callSign,
         status: row.status,

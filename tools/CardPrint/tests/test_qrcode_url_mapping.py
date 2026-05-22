@@ -200,11 +200,11 @@ def test_address_envelope_page_filters_by_call_sign_or_resource_name() -> None:
     page._enable_card_version_filter = False
     page._enable_activity_filter = False
     page._enable_address_envelope_filter = True
-    page.address_envelope_filter_edit = FakeLineEdit("ba3")
+    page.address_envelope_filter_edit = FakeLineEdit("bi1")
 
     address_row = {
-        "metadata": {"name": "BA3NZH-1"},
-        "spec": {"callSign": "BA3NZH", "name": "张三"},
+        "metadata": {"name": "BI1KBU-1"},
+        "spec": {"callSign": "BI1KBU", "name": "测试台"},
     }
     bureau_row = {
         "metadata": {"name": "BURO-001"},

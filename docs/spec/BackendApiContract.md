@@ -105,6 +105,7 @@ API 版本：`v1alpha1`
 | POST | `/exchange-requests/{name}/approve` | 换卡申请通过并创建线上换卡卡片 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/reject` | 换卡申请拒绝 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/notify` | 发送线上换卡申请审核结果邮件 | `exchange-request-review:edit` |
+| POST | `/online-card-imports` | 导入手工文本解析后的线上换卡数据，直接创建 `ONLINE_EYEBALL` 卡片记录并按需创建/绑定地址簿 | `online-bh6syx-import:edit` |
 | POST | `/bh6syx-imports` | 导入 BH6SYX 卡片广场表格解析结果，直接创建 `ONLINE_EYEBALL` 卡片记录并按需创建/绑定地址簿 | `online-bh6syx-import:edit` |
 | POST | `/notification-mails/send` | 单条发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
 | POST | `/notification-mails/batch-send` | 批量发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
@@ -220,27 +221,28 @@ API 版本：`v1alpha1`
 
 `scene` 允许：`created`、`sent`、`received`、`exchange-reviewed`。服务端使用 `StationProfile.spec.myEmail` 作为收件地址，测试数据中对方呼号等字段临时使用本台资料，卡片类型固定为 `EYEBALL`，卡片编号固定为 `C0001`。
 
-BH6SYX 卡片广场导入：
+线上换卡数据导入：
 
 ```json
 {
   "defaultCardVersion": "默认卡片A",
+  "source": "手工文本导入",
   "rows": [
     {
-      "callSign": "BI4NCG",
+      "callSign": "BI1KBU",
       "status": "对方已寄出，待我签收",
-      "recipientName": "丁际博",
-      "telephone": "15066483560",
-      "address": "山东省聊城市临清市",
-      "postalCode": "252600",
-      "email": "",
+      "recipientName": "测试台",
+      "telephone": "138****0000",
+      "address": "北京市某区某路",
+      "postalCode": "100000",
+      "email": "bi1kbu@example.test",
       "cardVersion": ""
     }
   ]
 }
 ```
 
-服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。线上换卡创建卡片默认写入卡片备注“期待与您空中相遇。\nLooking forward to meeting you on the air.”。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
+`source` 只允许 `手工文本导入` 或 `BH6SYX卡片广场`，旧的 `/bh6syx-imports` 入口默认按 `BH6SYX卡片广场` 处理，新的 `/online-card-imports` 入口默认按 `手工文本导入` 处理。服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。线上换卡创建卡片默认写入卡片备注“期待与您空中相遇。\nLooking forward to meeting you on the air.”。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
 
 导入预检/导入任务：
 
@@ -388,7 +390,7 @@ BH6SYX 卡片广场导入：
 4. 线下活动使用 `OfflineActivity` 持久化。
 5. 通知邮件接口已落地在 `/notification-mails/send` 与 `/notification-mails/batch-send`。
 6. RBAC 模板已覆盖控制台 CustomEndpoint、扩展资源 CRUD 与公开匿名接口。
-7. BH6SYX 卡片广场导入属于线上换卡业务菜单，服务端直接创建线上换卡卡片记录，不创建 `ExchangeRequest`。
+7. 线上换卡业务的“导入数据”菜单包含单条导入、批量导入、BH6SYX卡片广场导入。服务端直接创建线上换卡卡片记录，不创建 `ExchangeRequest`；普通文本导入写入“手工文本导入”来源，BH6SYX导入写入“BH6SYX卡片广场”来源。
 8. 2.0.0 起新增 `ReceiveRecord` 与 `OfflineExchangeCard`，收卡事实与线下换卡活动卡开始从 `CardRecord` 中解耦。
 9. 审计卡片记录查询和收卡记录查询按业务场景 tab 展示；卡片记录查询聚合 `CardRecord`，收卡记录查询聚合 `ReceiveRecord`，收卡编号以 `ReceiveRecord.metadata.name` 为准。
 

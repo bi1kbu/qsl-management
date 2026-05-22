@@ -4,7 +4,6 @@ import type { QslMenuModule } from '../constants/menu-modules'
 import QslModuleFrame from '../components/qsl/QslModuleFrame.vue'
 import AddressManagementModule from './modules/AddressManagementModule.vue'
 import AuditLogModule from './modules/AuditLogModule.vue'
-import Bh6syxImportModule from './modules/Bh6syxImportModule.vue'
 import BureauManagementModule from './modules/BureauManagementModule.vue'
 import CardIssueModule from './modules/CardIssueModule.vue'
 import CardMutationModule from './modules/CardMutationModule.vue'
@@ -18,6 +17,7 @@ import MailReceiveConfirmModule from './modules/MailReceiveConfirmModule.vue'
 import MailSendConfirmModule from './modules/MailSendConfirmModule.vue'
 import OverviewDashboardModule from './modules/OverviewDashboardModule.vue'
 import OfflineActivityModule from './modules/OfflineActivityModule.vue'
+import OnlineImportDataModule from './modules/OnlineImportDataModule.vue'
 import QsoQueryModule from './modules/QsoQueryModule.vue'
 import ReceiveRecordQueryModule from './modules/ReceiveRecordQueryModule.vue'
 import ReceiptConfirmModule from './modules/ReceiptConfirmModule.vue'
@@ -186,7 +186,7 @@ const renderer = computed<ModuleRenderer>(() => {
     case 'online-exchange-request-review':
       return { component: ExchangeRequestReviewModule }
     case 'online-bh6syx-import':
-      return { component: Bh6syxImportModule }
+      return { component: OnlineImportDataModule }
     case 'offline-activity':
       return { component: OfflineActivityModule }
     case 'qso-query':

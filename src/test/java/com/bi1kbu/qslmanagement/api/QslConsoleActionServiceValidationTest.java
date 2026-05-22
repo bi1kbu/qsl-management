@@ -719,14 +719,15 @@ class QslConsoleActionServiceValidationTest {
         var result = service.importBh6syxCards(
             new QslConsoleActionService.Bh6syxImportCommand(
                 "默认卡片A",
+                "BH6SYX卡片广场",
                 List.of(new QslConsoleActionService.Bh6syxImportRow(
-                    "bi4ncg",
+                    "bi1kbu",
                     "对方已寄出，待我签收",
-                    "丁际博",
-                    "15066483560",
-                    "山东省聊城市临清市",
-                    "252600",
-                    "bi4ncg@example.com",
+                    "测试台",
+                    "138****0000",
+                    "北京市某区某路",
+                    "100000",
+                    "bi1kbu@example.test",
                     ""
                 ))
             ),
@@ -738,12 +739,12 @@ class QslConsoleActionServiceValidationTest {
         var cardRecord = capturedCardRecord.get();
         assertEquals("C1001", cardRecord.getMetadata().getName());
         assertEquals(null, cardRecord.getMetadata().getAnnotations());
-        assertEquals("BI4NCG", cardRecord.getSpec().getCallSign());
+        assertEquals("BI1KBU", cardRecord.getSpec().getCallSign());
         assertEquals("EYEBALL", cardRecord.getSpec().getCardType());
         assertEquals("ONLINE_EYEBALL", cardRecord.getSpec().getSceneType());
         assertEquals("默认卡片A", cardRecord.getSpec().getCardVersion());
-        assertEquals("BI4NCG-1", cardRecord.getSpec().getAddressEntryName());
-        assertEquals("bi4ncg@example.com", cardRecord.getSpec().getMailTargetEmail());
+        assertEquals("BI1KBU-1", cardRecord.getSpec().getAddressEntryName());
+        assertEquals("bi1kbu@example.test", cardRecord.getSpec().getMailTargetEmail());
         assertEquals("BH6SYX卡片广场导入；状态：对方已寄出，待我签收", cardRecord.getSpec().getBusinessRemarks());
         assertEquals(Boolean.FALSE, cardRecord.getSpec().getCardReceived());
     }
@@ -762,8 +763,9 @@ class QslConsoleActionServiceValidationTest {
         var result = service.importBh6syxCards(
             new QslConsoleActionService.Bh6syxImportCommand(
                 "默认卡片A",
+                "BH6SYX卡片广场",
                 List.of(new QslConsoleActionService.Bh6syxImportRow(
-                    "BI4NCG",
+                    "BI1KBU",
                     "已完成",
                     "",
                     "",
