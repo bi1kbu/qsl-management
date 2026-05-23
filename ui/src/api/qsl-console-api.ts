@@ -246,6 +246,98 @@ export interface ImportErrorDownloadPayload {
   contentType: string
 }
 
+export interface AiRuntimeConfig {
+  enabled: boolean
+  provider: string
+  baseUrl: string
+  model: string
+  secretName: string
+  temperature: number
+  timeoutSeconds: number
+}
+
+export interface AiConfigTestPayload {
+  config: AiRuntimeConfig
+  apiKey?: string
+  saveApiKey?: boolean
+}
+
+export interface AiConfigTestResult {
+  success: boolean
+  message: string
+  provider: string
+  model: string
+  testedAt: string
+}
+
+export interface AiAddressNormalizationInput {
+  addressEntryName: string
+  callSign: string
+  recipientName: string
+  telephone: string
+  postalCode: string
+  address: string
+  email: string
+  addressRemarks: string
+}
+
+export interface AiAddressNormalizationRow {
+  addressEntryName: string
+  callSign: string
+  originalRecipientName: string
+  originalTelephone: string
+  originalPostalCode: string
+  originalAddress: string
+  originalEmail: string
+  originalAddressRemarks: string
+  normalizedRecipientName: string
+  normalizedTelephone: string
+  normalizedPostalCode: string
+  normalizedAddress: string
+  normalizedEmail: string
+  normalizedAddressRemarks: string
+  confidence: number
+  changed: boolean
+  message: string
+}
+
+export interface AiAddressNormalizationPreviewPayload {
+  rows: AiAddressNormalizationInput[]
+}
+
+export interface AiAddressNormalizationPreviewResult {
+  totalCount: number
+  changedCount: number
+  rows: AiAddressNormalizationRow[]
+}
+
+export interface AiAddressNormalizationApplyPayload {
+  rows: AiAddressNormalizationRow[]
+}
+
+export interface AiAddressNormalizationApplyResult {
+  totalCount: number
+  successCount: number
+  skippedCount: number
+  failedCount: number
+  results: Array<{
+    addressEntryName: string
+    status: 'UPDATED' | 'SKIPPED' | 'FAILED'
+    message: string
+  }>
+}
+
+export interface AiOnlineImportParsePayload {
+  text: string
+  defaultCardVersion: string
+  limitToSingle: boolean
+}
+
+export interface AiOnlineImportParseResult {
+  rows: Bh6syxImportRowPayload[]
+  message: string
+}
+
 export async function confirmMailSend(cardRecordName: string): Promise<void> {
   await axiosInstance.post(
     `${consoleApiBase}/mail-send-confirms/${encodeURIComponent(cardRecordName)}/confirm`,
@@ -370,9 +462,39 @@ export async function sendTestNotificationMail(
   return response.data.data
 }
 
-export async function importBh6syxCards(payload: Bh6syxImportPayload): Promise<Bh6syxImportResult> {
-  const response = await axiosInstance.post<ApiResult<Bh6syxImportResult>>(
-    `${consoleApiBase}/bh6syx-imports`,
+export async function testAiConfig(payload: AiConfigTestPayload): Promise<AiConfigTestResult> {
+  const response = await axiosInstance.post<ApiResult<AiConfigTestResult>>(
+    `${consoleApiBase}/ai-config-tests`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function previewAiAddressNormalizations(
+  payload: AiAddressNormalizationPreviewPayload,
+): Promise<AiAddressNormalizationPreviewResult> {
+  const response = await axiosInstance.post<ApiResult<AiAddressNormalizationPreviewResult>>(
+    `${consoleApiBase}/ai-address-normalizations/preview`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function applyAiAddressNormalizations(
+  payload: AiAddressNormalizationApplyPayload,
+): Promise<AiAddressNormalizationApplyResult> {
+  const response = await axiosInstance.post<ApiResult<AiAddressNormalizationApplyResult>>(
+    `${consoleApiBase}/ai-address-normalizations/apply`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function parseOnlineImportByAi(
+  payload: AiOnlineImportParsePayload,
+): Promise<AiOnlineImportParseResult> {
+  const response = await axiosInstance.post<ApiResult<AiOnlineImportParseResult>>(
+    `${consoleApiBase}/ai-online-import-parses`,
     payload,
   )
   return response.data.data

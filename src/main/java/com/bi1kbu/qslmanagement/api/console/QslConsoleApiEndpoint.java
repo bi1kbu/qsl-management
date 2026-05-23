@@ -7,6 +7,8 @@ import static org.springframework.web.reactive.function.server.RouterFunctions.r
 import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslApiResponses;
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
+import com.bi1kbu.qslmanagement.api.QslAuditService;
+import com.bi1kbu.qslmanagement.api.QslAiService;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
@@ -15,6 +17,7 @@ import com.bi1kbu.qslmanagement.api.QslOverviewService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -25,6 +28,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
+import run.halo.app.extension.ReactiveExtensionClient;
 
 @Component
 public class QslConsoleApiEndpoint implements CustomEndpoint {
@@ -34,19 +38,42 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private final QslImportExportJobService importExportJobService;
     private final QslLegacyMigrationService legacyMigrationService;
     private final QslNotificationMailService notificationMailService;
+    private final QslAiService aiService;
 
+    @Autowired
     public QslConsoleApiEndpoint(
         QslOverviewService overviewService,
         QslConsoleActionService actionService,
         QslImportExportJobService importExportJobService,
         QslLegacyMigrationService legacyMigrationService,
-        QslNotificationMailService notificationMailService
+        QslNotificationMailService notificationMailService,
+        ReactiveExtensionClient client,
+        QslAuditService auditService
+    ) {
+        this(
+            overviewService,
+            actionService,
+            importExportJobService,
+            legacyMigrationService,
+            notificationMailService,
+            new QslAiService(client, auditService)
+        );
+    }
+
+    QslConsoleApiEndpoint(
+        QslOverviewService overviewService,
+        QslConsoleActionService actionService,
+        QslImportExportJobService importExportJobService,
+        QslLegacyMigrationService legacyMigrationService,
+        QslNotificationMailService notificationMailService,
+        QslAiService aiService
     ) {
         this.overviewService = overviewService;
         this.actionService = actionService;
         this.importExportJobService = importExportJobService;
         this.legacyMigrationService = legacyMigrationService;
         this.notificationMailService = notificationMailService;
+        this.aiService = aiService;
     }
 
     @Override
@@ -65,7 +92,10 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/exchange-requests/{name}/reject"), this::rejectExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
             .andRoute(POST("/online-card-imports"), this::importOnlineCards)
-            .andRoute(POST("/bh6syx-imports"), this::importBh6syxCards)
+            .andRoute(POST("/ai-config-tests"), this::testAiConfig)
+            .andRoute(POST("/ai-address-normalizations/preview"), this::previewAiAddressNormalizations)
+            .andRoute(POST("/ai-address-normalizations/apply"), this::applyAiAddressNormalizations)
+            .andRoute(POST("/ai-online-import-parses"), this::parseAiOnlineImport)
             .andRoute(POST("/notification-mails/send"), this::sendNotificationMail)
             .andRoute(POST("/notification-mails/batch-send"), this::batchSendNotificationMail)
             .andRoute(POST("/notification-mails/test"), this::sendTestNotificationMail)
@@ -265,10 +295,6 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .onErrorResume(QslApiResponses::handleError);
     }
 
-    private Mono<ServerResponse> importBh6syxCards(ServerRequest request) {
-        return importOnlineCards(request, "BH6SYX卡片广场");
-    }
-
     private Mono<ServerResponse> importOnlineCards(ServerRequest request) {
         return importOnlineCards(request, "手工文本导入");
     }
@@ -298,6 +324,77 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                     ),
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> testAiConfig(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(AiConfigTestRequest.class)
+                .defaultIfEmpty(new AiConfigTestRequest(
+                    new AiRuntimeConfigRequest(Boolean.FALSE, "", "", "", "", null, null),
+                    "",
+                    Boolean.FALSE
+                ))
+                .flatMap(payload -> aiService.testConfig(
+                    new QslAiService.AiConfigTestCommand(
+                        payload.config() == null ? "" : payload.config().provider(),
+                        payload.config() == null ? "" : payload.config().baseUrl(),
+                        payload.config() == null ? "" : payload.config().model(),
+                        payload.config() == null ? "" : payload.config().secretName(),
+                        payload.config() == null ? null : payload.config().temperature(),
+                        payload.config() == null ? null : payload.config().timeoutSeconds(),
+                        payload.apiKey(),
+                        payload.saveApiKey()
+                    ),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> previewAiAddressNormalizations(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(ignored -> request.bodyToMono(AddressNormalizationPreviewRequest.class)
+                .defaultIfEmpty(new AddressNormalizationPreviewRequest(List.of()))
+                .flatMap(payload -> aiService.previewAddressNormalizations(
+                    new QslAiService.AddressNormalizationPreviewCommand(
+                        payload.rows() == null ? List.of() : payload.rows()
+                    )
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> applyAiAddressNormalizations(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(AddressNormalizationApplyRequest.class)
+                .defaultIfEmpty(new AddressNormalizationApplyRequest(List.of()))
+                .flatMap(payload -> aiService.applyAddressNormalizations(
+                    new QslAiService.AddressNormalizationApplyCommand(
+                        payload.rows() == null ? List.of() : payload.rows()
+                    ),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> parseAiOnlineImport(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(ignored -> request.bodyToMono(OnlineImportParseRequest.class)
+                .defaultIfEmpty(new OnlineImportParseRequest("", "", Boolean.FALSE))
+                .flatMap(payload -> aiService.parseOnlineImport(
+                    new QslAiService.OnlineImportParseCommand(
+                        payload.limitToSingle() == null
+                            ? "batch"
+                            : (payload.limitToSingle() ? "single" : "batch"),
+                        payload.text(),
+                        payload.defaultCardVersion()
+                    )
                 )))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
@@ -548,6 +645,33 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         String email,
         String cardVersion
     ) {
+    }
+
+    private record AiConfigTestRequest(
+        AiRuntimeConfigRequest config,
+        String apiKey,
+        Boolean saveApiKey
+    ) {
+    }
+
+    private record AiRuntimeConfigRequest(
+        Boolean enabled,
+        String provider,
+        String baseUrl,
+        String model,
+        String secretName,
+        Double temperature,
+        Integer timeoutSeconds
+    ) {
+    }
+
+    private record AddressNormalizationPreviewRequest(List<QslAiService.AddressNormalizationInput> rows) {
+    }
+
+    private record AddressNormalizationApplyRequest(List<QslAiService.AddressNormalizationApplyItem> rows) {
+    }
+
+    private record OnlineImportParseRequest(String text, String defaultCardVersion, Boolean limitToSingle) {
     }
 
     private record ImportJobRequest(

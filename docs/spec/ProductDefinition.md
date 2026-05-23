@@ -1,6 +1,6 @@
 # QSL 卡片管理系统产品定义
 
-更新时间：2026-05-19
+更新时间：2026-05-22
 代码核验范围：`插件工程根目录` 后端、控制台前端、RBAC 模板与 `tools/CardPrint` 在线打印桥接
 Halo 官方资料核验日期：2026-05-19
 
@@ -38,7 +38,7 @@ Halo 官方资料核验日期：2026-05-19
 | 一级菜单 | 二级菜单 | 控制台路由 | 权限节点 |
 | --- | --- | --- | --- |
 | 总览 | 总览看板 | `/qsl/overview/overview-dashboard` | `overview-dashboard` |
-| 配置 | 系统参数 | `/qsl/settings/system-settings` | `system-settings` |
+| 配置 | 系统配置 | `/qsl/settings/system-settings` | `system-settings` |
 | 配置 | 通信地址 | `/qsl/settings/station-profile` | `station-profile` |
 | 配置 | 本台设备 | `/qsl/settings/station-equipment` | `station-profile` |
 | 配置 | 本台卡片 | `/qsl/settings/station-card` | `station-profile` |
@@ -99,6 +99,7 @@ Halo 官方资料核验日期：2026-05-19
 3. `qsoAutoNotifyOnCardCreated/qsoAutoNotifyOnCardSent/qsoAutoNotifyOnCardReceived`、`onlineAutoNotifyOnCardCreated/onlineAutoNotifyOnCardSent/onlineAutoNotifyOnCardReceived/onlineAutoNotifyOnExchangeReviewed`：按通联、线上换卡拆分的邮件自动通知开关。`offlineAutoNotifyOnCardReceived` 作为历史配置字段保留但不再使用，线下换卡收卡与送达确认默认不发送邮件。旧的 `autoNotifyOnCardCreated/autoNotifyOnCardSent/autoNotifyOnCardReceived/autoNotifyOnExchangeReviewed` 仅作为已有配置读取兜底。邮件通知策略支持向 `StationProfile.spec.myEmail` 发送测试邮件，测试数据中对方呼号等字段临时使用本台资料，卡片类型固定为 `EYEBALL`，卡片编号固定为 `C0001`。通知备注来源为：制卡/发卡使用卡片备注，收卡回执使用签收备注，线上换卡审核使用审核说明。
 4. `cardRecordSequence`：卡片编号序列。
 5. `receiveRecordSequence`：收卡编号序列。
+6. AI 配置字段：`aiEnabled/aiProvider/aiBaseUrl/aiModel/aiSecretName/aiTemperature/aiTimeoutSeconds/aiMaxInputCharacters/aiOnlineImportParseEnabled/aiAddressCleanupEnabled/aiSystemPrompt/aiOnlineImportPrompt/aiAddressCleanupPrompt`。AI API Key 使用 Halo `Secret` 存储，系统参数只保存 Secret 引用和非敏感配置；AI 功能默认关闭。配置页展示完整提示词模板，支持编辑并按项重置为内置默认值。自定义提示词必须保持系统指定的 JSON 返回结构：线上换卡导入顶层字段为 `rows`，地址整理顶层字段为 `items`，不得修改字段名、字段类型和状态枚举值；线上换卡导入提示词需保留 `{defaultCardVersion}`、`{mode}`、`{text}` 占位符，地址整理提示词需保留 `{rows}` 占位符。线上换卡导入 AI 解析和地址管理 AI 地址整理均必须在服务端鉴权后调用，AI 结果只作为预览或建议，不绕过现有导入和地址写入校验。
 
 通信地址、本台设备、本台卡片分别落在 `StationProfile`、`StationEquipment`、`StationCard` 扩展资源中。本台卡片图案不直接写入 `StationCard`，必须通过后台图片选择入口打开 Halo 附件库弹窗，在弹窗内上传或选择图片后写入附件引用；`StationCard` 仅保存附件名称、访问地址与缩略图地址等引用信息；旧版 `imageUrl` base64 字段不再兼容，后台不再提供旧图片字段清理入口。备份导入导出必须覆盖上述配置资源，`all` 导出需同时包含业务数据与配置数据。
 
@@ -122,7 +123,7 @@ Halo 官方资料核验日期：2026-05-19
 4. 线上换卡提交校验通过并成功写入 `ExchangeRequest` 后，提交接口返回本站通信地址，前台在成功提示中展示寄送信息。
 5. 后台审核通过后自动创建 `ONLINE_EYEBALL` 场景卡片，并把 `ExchangeRequest.spec.cardVersion` 写入新建 `CardRecord.spec.cardVersion`；同时根据申请中的个人地址或卡片局地址复用/创建地址资源，并写入 `CardRecord.spec.addressEntryName`。审核通过只代表申请通过与我方待发卡，不代表我方已收到对方卡片，新建卡片的 `cardReceived=false`。线上换卡自动建卡和手工创建卡片的默认 `CardRecord.spec.cardRemarks` 为“期待与您空中相遇。\nLooking forward to meeting you on the air.”。
 6. 换卡申请审核在同意或拒绝后显示“发送邮件通知”和“修改”操作；操作区提供“审核说明”按钮，审核前后均可编辑说明。手动同意时审核说明为空则保持为空，已有说明时以人工填写内容为准；手动拒绝时说明为空则默认“审批拒绝”。当 `SystemSetting.spec.onlineAutoNotifyOnExchangeReviewed=true` 时，审核同意或拒绝后自动发送审核结果邮件。邮件通知面向 `ExchangeRequest.spec.email`，发送结果写入 `ExchangeRequest.status.reviewMailStatus/reviewMailSentAt/reviewMailLastError/reviewMailTargetEmail`；状态为 `SENT` 时，服务端跳过重复发送，后台按钮禁用。无邮箱时按跳过处理；修改操作可调整申请信息与审核状态，并可删除本条换卡申请记录。
-7. 导入数据菜单包含单条导入、批量导入、BH6SYX卡片广场导入三个 tab。单条导入和批量导入支持粘贴 `收件人/电话/邮箱/地址/邮编/卡片版本` 文本，`呼号` 未单独填写时使用 `收件人` 作为对方呼号；多条导入按重复出现的 `收件人` 或 `呼号` 分段。未填写卡片版本时，默认使用按本台卡片排序中最早且仍有余量的一版卡片。BH6SYX卡片广场导入支持上传 `.xls/.xlsx` 文件，自动识别表头行，按“状态”仅保留 `对方已寄出，待我签收` 与 `待双方寄出`，字段缺失时留空。页面可批量设置默认卡片版本，也可逐行选择卡片版本；默认卡片版本下拉按 `station-cards.availableInventory - card-records` 已用数量显示剩余量，不显示库存量。若源表“对方地址”开头重复包含“对方QTH”，导入预览与提交会去掉重复 QTH 前缀，仅保留通信地址。导入提交到服务端后直接创建 `ONLINE_EYEBALL` 场景 `CardRecord`，并按收件人、电话、地址、邮编和邮箱复用或创建 `AddressBookEntry`。该导入不创建 `ExchangeRequest`；BH6SYX 表格中的“交换ID”与“对方备注”仅用于源表识别或导入清单预览，不写入数据，后续流程统一围绕本站卡片编号处理。
+7. 导入数据菜单包含单条导入、批量导入、BH6SYX卡片广场导入三个 tab。单条导入和批量导入支持粘贴 `收件人/电话/邮箱/地址/邮编/卡片版本` 文本，`呼号` 未单独填写时使用 `收件人` 作为对方呼号；多条导入按重复出现的 `收件人` 或 `呼号` 分段。未填写卡片版本时，默认使用按本台卡片排序中最早且仍有余量的一版卡片。若 AI 功能与线上换卡导入 AI 解析开关启用，解析预览优先调用服务端 AI 解析接口；AI 不可用、失败或返回空结果时回退本地解析。BH6SYX卡片广场导入支持上传 `.xls/.xlsx` 文件，自动识别表头行，按“状态”仅保留 `对方已寄出，待我签收` 与 `待双方寄出`，字段缺失时留空。页面可批量设置默认卡片版本，也可逐行选择卡片版本；默认卡片版本下拉按 `station-cards.availableInventory - card-records` 已用数量显示剩余量，不显示库存量。若源表“对方地址”开头重复包含“对方QTH”，导入预览与提交会去掉重复 QTH 前缀，仅保留通信地址。导入提交到服务端后直接创建 `ONLINE_EYEBALL` 场景 `CardRecord`，并按收件人、电话、地址、邮编和邮箱复用或创建 `AddressBookEntry`。该导入不创建 `ExchangeRequest`；BH6SYX 表格中的“交换ID”与“对方备注”仅用于源表识别或导入清单预览，不写入数据，后续流程统一围绕本站卡片编号处理。
 8. 后续流程复用创建卡片、制卡签发、发信确认组件；签收确认使用独立控制台页面。线上换卡“签收确认”用于记录对方是否签收我方寄出的卡片；签收事实落点为 `CardRecord.spec.receiptConfirmed`，不作为收卡编号或我方收到对方卡片的主数据。
 
 ### 3.6 线下换卡业务
@@ -148,7 +149,7 @@ Halo 官方资料核验日期：2026-05-19
 审计包含通联记录查询、卡片记录查询、收卡记录查询、统计报表、审计日志。统计报表除汇总指标外展示月度收发卡片数量折线图。写操作通过 `QslAuditLog` 追加记录。审计中的卡片记录查询和收卡记录查询按业务场景 tab 展示，至少区分通联业务、线上换卡业务、线下换卡业务；收卡记录查询的数据来源为 `ReceiveRecord`，卡片记录查询的数据来源为 `CardRecord`。标记“不创建卡片”时使用后台占位 `CardRecord`，资源名为 `NC0001` 递增形式；该编号不是正式卡片 ID，前台查询与业务页面保持空白展示。
 总览看板与统计报表中的卡片类统计项（卡片总数、眼球总数、待发卡片、已发卡片、发卡签收）只统计资源名为 `C{序号}` 且存在呼号的正式 `CardRecord` 记录，避免将线下换卡空呼号占位卡、`NC{序号}` 不创建卡片占位记录或其他后台记录纳入统计。待发卡片不再按裸 `cardSent=false` 统计，而是排除线上换卡签收链路记录、已签收、已收卡以及已经被 `ReceiveRecord.spec.outboundCardNames` 闭环关联的记录，仅保留仍需发卡处理的非线上换卡积压。已发卡片统计明确已发卡、已签收、有发卡时间的记录；线上换卡场景中，若 `cardIssued=true`、`envelopePrinted=true` 且 `createdMailStatus=SENT`，也视为已完成发出链路，避免历史记录未回写 `cardSent` 导致统计偏小。2.0.0 起，已收卡片优先按 `ReceiveRecord.spec.callSign` 去重统计；呼号为空时按 `ReceiveRecord.spec.outboundCardNames` 中的卡片 ID 去重统计；当不存在新收卡记录时，才回退使用 `CardRecord.status.flowStatus=已收卡片` 并按呼号去重的口径。
 
-数据包含卡片异动、地址管理、卡片局管理、设备库维护、导入导出。卡片异动提供卡片记录修正能力，权限节点为 `card-mutation`；其中“卡片重发”用于接收方长期未收到时清理制卡、打包、发卡及相关邮件状态并保留收卡事实，页面上方按卡片ID或呼号筛选并提交重发，下方只展示已处于重发待处理状态的卡片；“发卡异常”用于邮局退回等异常场景，将卡片类型标记为 `原类型（ERROR）` 并在独立清单显示，正常清单不再显示异常卡片；发卡异常清单中的“标记重发”先解除异常状态，再调用卡片重发动作完成状态清理。导入导出当前由服务端执行预检、导入、导出任务，并持久化 `ImportExportJob`；备份范围包含线下换卡活动清单，以及系统参数、通知策略、通信地址、本台设备、本台卡片等配置数据。2.0.0 起新增 `ReceiveRecord` 和 `OfflineExchangeCard`，用于收卡事实与线下换卡活动卡解耦；旧导出包导入前必须通过 `tools/convert_legacy_export_to_qsl2.py` 聚合迁移收卡关联与线下活动卡关系。导入导出页面提供“旧版本迁移”能力，用于处理 Halo 卸载插件后 Extension 数据仍保留、无法通过重装后重新导入完成迁移的场景；该能力直接读取当前 Halo 存储中的旧版 `CardRecord`，原地拆分为 `ReceiveRecord` 与 `OfflineExchangeCard`，清理旧版自动收卡临时卡片和本台卡片版本占位记录，并修正系统序列号。执行前必须先完成全量导出备份，执行时必须输入确认文字“确认迁移旧版本数据”。重复执行时跳过已存在的同名收卡记录和线下换卡卡片。
+数据包含卡片异动、地址管理、卡片局管理、设备库维护、导入导出。卡片异动提供卡片记录修正能力，权限节点为 `card-mutation`；其中“卡片重发”用于接收方长期未收到时清理制卡、打包、发卡及相关邮件状态并保留收卡事实，页面上方按卡片ID或呼号筛选并提交重发，下方只展示已处于重发待处理状态的卡片；“发卡异常”用于邮局退回等异常场景，将卡片类型标记为 `原类型（ERROR）` 并在独立清单显示，正常清单不再显示异常卡片；发卡异常清单中的“标记重发”先解除异常状态，再调用卡片重发动作完成状态清理。地址管理包含“AI地址整理”页签，支持勾选或全选地址记录，调用服务端 AI 地址整理生成预览，并在二次确认后仅更新 `AddressBookEntry.spec.address`，不修改卡片绑定编号。导入导出当前由服务端执行预检、导入、导出任务，并持久化 `ImportExportJob`；备份范围包含线下换卡活动清单，以及系统参数、通知策略、通信地址、本台设备、本台卡片等配置数据。2.0.0 起新增 `ReceiveRecord` 和 `OfflineExchangeCard`，用于收卡事实与线下换卡活动卡解耦；旧导出包导入前必须通过 `tools/convert_legacy_export_to_qsl2.py` 聚合迁移收卡关联与线下活动卡关系。导入导出页面提供“旧版本迁移”能力，用于处理 Halo 卸载插件后 Extension 数据仍保留、无法通过重装后重新导入完成迁移的场景；该能力直接读取当前 Halo 存储中的旧版 `CardRecord`，原地拆分为 `ReceiveRecord` 与 `OfflineExchangeCard`，清理旧版自动收卡临时卡片和本台卡片版本占位记录，并修正系统序列号。执行前必须先完成全量导出备份，执行时必须输入确认文字“确认迁移旧版本数据”。重复执行时跳过已存在的同名收卡记录和线下换卡卡片。
 
 ## 4. 前台公开能力
 

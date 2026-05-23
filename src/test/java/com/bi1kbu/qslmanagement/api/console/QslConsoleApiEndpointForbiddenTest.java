@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.api.OverviewSummary;
+import com.bi1kbu.qslmanagement.api.QslAiService;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
@@ -28,6 +29,7 @@ class QslConsoleApiEndpointForbiddenTest {
     private final QslImportExportJobService importExportJobService = mock(QslImportExportJobService.class);
     private final QslLegacyMigrationService legacyMigrationService = mock(QslLegacyMigrationService.class);
     private final QslNotificationMailService notificationMailService = mock(QslNotificationMailService.class);
+    private final QslAiService aiService = mock(QslAiService.class);
 
     @Test
     void shouldRejectReportSummaryWhenAuthorizedButForbidden() {
@@ -112,7 +114,8 @@ class QslConsoleApiEndpointForbiddenTest {
             actionService,
             importExportJobService,
             legacyMigrationService,
-            notificationMailService
+            notificationMailService,
+            aiService
         );
         var principal = (Principal) () -> "operator";
         return WebTestClient.bindToRouterFunction(endpoint.endpoint())

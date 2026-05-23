@@ -1,6 +1,6 @@
 # QSL 管理插件后端 API 合同
 
-更新时间：2026-05-21
+更新时间：2026-05-22
 适用插件：`qsl-management`
 目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.24 官方文档核验
 API 版本：`v1alpha1`
@@ -106,12 +106,22 @@ API 版本：`v1alpha1`
 | POST | `/exchange-requests/{name}/reject` | 换卡申请拒绝 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/notify` | 发送线上换卡申请审核结果邮件 | `exchange-request-review:edit` |
 | POST | `/online-card-imports` | 导入手工文本解析后的线上换卡数据，直接创建 `ONLINE_EYEBALL` 卡片记录并按需创建/绑定地址簿 | `online-bh6syx-import:edit` |
-| POST | `/bh6syx-imports` | 导入 BH6SYX 卡片广场表格解析结果，直接创建 `ONLINE_EYEBALL` 卡片记录并按需创建/绑定地址簿 | `online-bh6syx-import:edit` |
 | POST | `/notification-mails/send` | 单条发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
 | POST | `/notification-mails/batch-send` | 批量发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
 | POST | `/notification-mails/test` | 向“本台电子邮件”发送测试通知邮件 | `system-settings:edit` |
 
-### 6.3 导入导出
+### 6.3 AI 能力
+
+AI 能力仅在控制台登录态下可用，不提供公开接口。AI API Key 写入 Halo `Secret`，`SystemSetting.spec` 只保存供应商、接口地址、模型、超时、功能开关、完整提示词模板等非敏感配置；前端不回显 API Key。自定义提示词不允许改变服务端指定的 JSON Schema 返回结构；服务端在调用 OpenAI 兼容接口时仍通过 `response_format=json_schema` 约束返回。AI 调用可能将姓名、电话、邮箱、邮编和通信地址发送到配置的第三方模型服务，因此功能默认关闭。
+
+| 方法 | 路径 | 说明 | 权限 |
+| --- | --- | --- | --- |
+| POST | `/ai-config-tests` | 测试 OpenAI 兼容接口；请求中 `saveApiKey=true` 且 `apiKey` 非空时写入 Secret | `system-settings:edit` |
+| POST | `/ai-address-normalizations/preview` | 对选中的 `AddressBookEntry` 地址做 AI 规范化预览，不落库 | `address-bureau:edit` |
+| POST | `/ai-address-normalizations/apply` | 应用选中的 AI 地址整理结果，仅更新 `AddressBookEntry.spec.address` | `address-bureau:edit` |
+| POST | `/ai-online-import-parses` | 将线上换卡单条/批量导入文本解析为导入预览行，不直接创建卡片 | `online-bh6syx-import:edit` |
+
+### 6.4 导入导出
 
 | 方法 | 路径 | 说明 | 权限 |
 | --- | --- | --- | --- |
@@ -126,7 +136,7 @@ API 版本：`v1alpha1`
 | GET | `/exports/jobs/{jobName}` | 查询导出任务 | `import-export:view` |
 | GET | `/exports/jobs/{jobName}/download` | 下载导出文件 | `import-export:view` |
 
-### 6.4 控制台请求体
+### 6.5 控制台请求体
 
 收卡确认：
 
@@ -242,7 +252,7 @@ API 版本：`v1alpha1`
 }
 ```
 
-`source` 只允许 `手工文本导入` 或 `BH6SYX卡片广场`，旧的 `/bh6syx-imports` 入口默认按 `BH6SYX卡片广场` 处理，新的 `/online-card-imports` 入口默认按 `手工文本导入` 处理。服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。线上换卡创建卡片默认写入卡片备注“期待与您空中相遇。\nLooking forward to meeting you on the air.”。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
+`source` 只允许 `手工文本导入` 或 `BH6SYX卡片广场`，两类导入统一提交到 `/online-card-imports`，由 `source` 区分来源。服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。线上换卡创建卡片默认写入卡片备注“期待与您空中相遇。\nLooking forward to meeting you on the air.”。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
 
 导入预检/导入任务：
 

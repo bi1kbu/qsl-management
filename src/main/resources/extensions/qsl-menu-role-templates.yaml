@@ -61,8 +61,11 @@ rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "system-settings" ]
     verbs: [ "create", "update", "patch", "delete" ]
+  - apiGroups: [ "" ]
+    resources: [ "secrets" ]
+    verbs: [ "get", "list", "create", "update", "patch" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
-    resources: [ "notification-mails" ]
+    resources: [ "notification-mails", "ai-config-tests" ]
     verbs: [ "create" ]
 ---
 apiVersion: v1alpha1
@@ -348,7 +351,7 @@ metadata:
     rbac.authorization.halo.run/module: "QSL 菜单权限"
     rbac.authorization.halo.run/display-name: "导入数据（编辑）"
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:online-bh6syx-import:edit"]'
-    rbac.authorization.halo.run/dependencies: '["qsl-management-online-bh6syx-import-view","qsl-management-card-record-edit","qsl-management-address-bureau-edit","qsl-management-system-settings-edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-online-bh6syx-import-view","qsl-management-card-record-edit","qsl-management-address-bureau-edit","qsl-management-system-settings-view"]'
 rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "station-cards", "card-records", "address-book-entries", "system-settings" ]
@@ -356,11 +359,8 @@ rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "card-records", "address-book-entries" ]
     verbs: [ "create" ]
-  - apiGroups: [ "qsl-management.bi1kbu.com" ]
-    resources: [ "system-settings" ]
-    verbs: [ "update", "patch" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
-    resources: [ "bh6syx-imports", "online-card-imports" ]
+    resources: [ "online-card-imports", "ai-online-import-parses" ]
     verbs: [ "create" ]
 ---
 apiVersion: v1alpha1
@@ -496,6 +496,9 @@ rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
     resources: [ "address-book-entries", "bureau-entries" ]
     verbs: [ "create", "update", "patch", "delete" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
+    resources: [ "ai-address-normalizations" ]
+    verbs: [ "create" ]
 ---
 apiVersion: v1alpha1
 kind: Role

@@ -648,6 +648,19 @@ public class QslImportExportJobService {
                     spec.setOfflineAutoNotifyOnCardReceived(parseBoolean(value(row, "offlineAutoNotifyOnCardReceived")));
                     spec.setCardRecordSequence(parseInteger(value(row, "cardRecordSequence")));
                     spec.setReceiveRecordSequence(parseInteger(value(row, "receiveRecordSequence")));
+                    spec.setAiEnabled(parseBoolean(value(row, "aiEnabled")));
+                    spec.setAiProvider(value(row, "aiProvider"));
+                    spec.setAiBaseUrl(value(row, "aiBaseUrl"));
+                    spec.setAiModel(value(row, "aiModel"));
+                    spec.setAiSecretName(value(row, "aiSecretName"));
+                    spec.setAiTemperature(parseDouble(value(row, "aiTemperature")));
+                    spec.setAiTimeoutSeconds(parseInteger(value(row, "aiTimeoutSeconds")));
+                    spec.setAiMaxInputCharacters(parseInteger(value(row, "aiMaxInputCharacters")));
+                    spec.setAiOnlineImportParseEnabled(parseBoolean(value(row, "aiOnlineImportParseEnabled")));
+                    spec.setAiAddressCleanupEnabled(parseBoolean(value(row, "aiAddressCleanupEnabled")));
+                    spec.setAiSystemPrompt(value(row, "aiSystemPrompt"));
+                    spec.setAiOnlineImportPrompt(value(row, "aiOnlineImportPrompt"));
+                    spec.setAiAddressCleanupPrompt(value(row, "aiAddressCleanupPrompt"));
                     record.setSpec(spec);
 
                     var status = record.getStatus() == null ? new SystemSetting.SystemSettingStatus() : record.getStatus();
@@ -1347,6 +1360,19 @@ public class QslImportExportJobService {
                         spec == null ? "" : boolToText(spec.getOfflineAutoNotifyOnCardReceived()),
                         spec == null ? "" : integerToText(spec.getCardRecordSequence()),
                         spec == null ? "" : integerToText(spec.getReceiveRecordSequence()),
+                        spec == null ? "" : boolToText(spec.getAiEnabled()),
+                        spec == null ? "" : nullToEmpty(spec.getAiProvider()),
+                        spec == null ? "" : nullToEmpty(spec.getAiBaseUrl()),
+                        spec == null ? "" : nullToEmpty(spec.getAiModel()),
+                        spec == null ? "" : nullToEmpty(spec.getAiSecretName()),
+                        spec == null ? "" : doubleToText(spec.getAiTemperature()),
+                        spec == null ? "" : integerToText(spec.getAiTimeoutSeconds()),
+                        spec == null ? "" : integerToText(spec.getAiMaxInputCharacters()),
+                        spec == null ? "" : boolToText(spec.getAiOnlineImportParseEnabled()),
+                        spec == null ? "" : boolToText(spec.getAiAddressCleanupEnabled()),
+                        spec == null ? "" : nullToEmpty(spec.getAiSystemPrompt()),
+                        spec == null ? "" : nullToEmpty(spec.getAiOnlineImportPrompt()),
+                        spec == null ? "" : nullToEmpty(spec.getAiAddressCleanupPrompt()),
                         status == null ? "" : nullToEmpty(status.getLastModifiedBy()),
                         status == null ? "" : nullToEmpty(status.getLastModifiedAt())
                     );
@@ -1370,6 +1396,19 @@ public class QslImportExportJobService {
                     "offlineAutoNotifyOnCardReceived",
                     "cardRecordSequence",
                     "receiveRecordSequence",
+                    "aiEnabled",
+                    "aiProvider",
+                    "aiBaseUrl",
+                    "aiModel",
+                    "aiSecretName",
+                    "aiTemperature",
+                    "aiTimeoutSeconds",
+                    "aiMaxInputCharacters",
+                    "aiOnlineImportParseEnabled",
+                    "aiAddressCleanupEnabled",
+                    "aiSystemPrompt",
+                    "aiOnlineImportPrompt",
+                    "aiAddressCleanupPrompt",
                     "lastModifiedBy",
                     "lastModifiedAt"
                 ), rows));
@@ -1739,7 +1778,22 @@ public class QslImportExportJobService {
         }
     }
 
+    private Double parseDouble(String value) {
+        if (isBlank(value)) {
+            return 0D;
+        }
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("数字格式不合法：" + value);
+        }
+    }
+
     private String integerToText(Integer value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private String doubleToText(Double value) {
         return value == null ? "" : value.toString();
     }
 

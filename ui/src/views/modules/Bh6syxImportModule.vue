@@ -3,7 +3,7 @@ import { Toast, VButton, VCard, VEmpty, VTag } from '@halo-dev/components'
 import * as XLSX from 'xlsx'
 import { computed, onMounted, ref } from 'vue'
 import {
-  importBh6syxCards,
+  importOnlineCards,
   type Bh6syxImportResult,
   type Bh6syxImportRowResult,
   type Bh6syxImportRowPayload,
@@ -294,7 +294,7 @@ const submitImport = async () => {
   importing.value = true
   importResult.value = null
   try {
-    const result = await importBh6syxCards({
+    const result = await importOnlineCards({
       defaultCardVersion: defaultCardVersion.value,
       source: 'BH6SYX卡片广场',
       rows: selectedRows.value.map((row) => ({

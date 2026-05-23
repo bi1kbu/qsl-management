@@ -3,11 +3,12 @@ import { Toast, VButton, VCard, VEmpty, VTabItem, VTabs, VTag } from '@halo-dev/
 import { computed, onMounted, ref, watch } from 'vue'
 import {
   importOnlineCards,
+  parseOnlineImportByAi,
   type Bh6syxImportResult,
   type Bh6syxImportRowPayload,
   type Bh6syxImportRowResult,
 } from '../../api/qsl-console-api'
-import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
+import { getExtensionOrNull, listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslDataTable from '../../components/QslDataTable.vue'
 import Bh6syxImportModule from './Bh6syxImportModule.vue'
 
@@ -19,6 +20,11 @@ interface StationCardSpec {
 
 interface CardRecordSpec {
   cardVersion?: string
+}
+
+interface SystemSettingSpec {
+  aiEnabled?: boolean
+  aiOnlineImportParseEnabled?: boolean
 }
 
 interface StationCardOption {
@@ -47,6 +53,7 @@ const stationCardOptions = ref<StationCardOption[]>([])
 const defaultCardVersion = ref('')
 const manualRows = ref<ManualImportRow[]>([])
 const importResult = ref<Bh6syxImportResult | null>(null)
+const aiOnlineImportParseEnabled = ref(false)
 
 const manualTextPlaceholder = `收件人：
 电话：
@@ -114,6 +121,40 @@ const splitCardVersions = (value: string): string[] => {
 }
 
 const currentManualText = (): string => (activeTab.value === 'batch' ? batchText.value : singleText.value)
+
+const buildManualRow = (
+  row: Partial<Bh6syxImportRowPayload>,
+  index: number,
+): ManualImportRow => {
+  const callSign = normalizeCallSign(row.callSign || row.recipientName || '')
+  const nextRow: ManualImportRow = {
+    sourceRowNumber: index + 1,
+    included: true,
+    callSign,
+    status: row.status || '待双方寄出',
+    recipientName: (row.recipientName || callSign).trim(),
+    telephone: (row.telephone || '').trim(),
+    address: (row.address || '').trim(),
+    postalCode: (row.postalCode || '').trim(),
+    email: (row.email || '').trim(),
+    cardVersion: (row.cardVersion || defaultCardVersion.value).trim(),
+    validationMessage: '',
+  }
+  return {
+    ...nextRow,
+    validationMessage: buildValidationMessage(nextRow),
+  }
+}
+
+const loadAiImportConfig = async () => {
+  const extension = await getExtensionOrNull<SystemSettingSpec>(
+    'system-settings',
+    'qsl-system-setting-default',
+  )
+  aiOnlineImportParseEnabled.value = Boolean(
+    extension?.spec?.aiEnabled && extension.spec.aiOnlineImportParseEnabled,
+  )
+}
 
 const loadStationCards = async () => {
   const [extensions, cardRecords] = await Promise.all([
@@ -279,41 +320,48 @@ const parseManualImportText = (text: string, limitToSingle: boolean): ManualImpo
   }
 
   const effectiveRecords = limitToSingle ? records.slice(0, 1) : records
-  return effectiveRecords.map((record, index) => {
-    const callSign = normalizeCallSign(record.callSign || record.recipientName || '')
-    const cardVersion = (record.cardVersion || defaultCardVersion.value).trim()
-    const row: ManualImportRow = {
-      sourceRowNumber: index + 1,
-      included: true,
-      callSign,
-      status: '待双方寄出',
-      recipientName: (record.recipientName || callSign).trim(),
-      telephone: (record.telephone || '').trim(),
-      address: (record.address || '').trim(),
-      postalCode: (record.postalCode || '').trim(),
-      email: (record.email || '').trim(),
-      cardVersion,
-      validationMessage: '',
-    }
-    return {
-      ...row,
-      validationMessage: buildValidationMessage(row),
-    }
-  })
+  return effectiveRecords.map((record, index) => buildManualRow(record, index))
 }
 
-const parseManualText = () => {
+const parseManualTextByLocalFallback = (fallbackReason = '') => {
+  const rows = parseManualImportText(currentManualText(), activeTab.value !== 'batch')
+  manualRows.value = rows
+  const sourceText = fallbackReason ? `AI解析失败，已使用本地解析：${fallbackReason}` : '本地解析完成'
+  feedback.value = rows.length ? `${sourceText}，共 ${rows.length} 条。` : '未解析到可导入记录。'
+  if (rows.length) {
+    Toast.success('导入文本解析完成。')
+  } else {
+    Toast.error(feedback.value)
+  }
+}
+
+const parseManualText = async () => {
   parsing.value = true
   importResult.value = null
   try {
-    const rows = parseManualImportText(currentManualText(), activeTab.value !== 'batch')
-    manualRows.value = rows
-    feedback.value = rows.length ? `解析完成：共 ${rows.length} 条。` : '未解析到可导入记录。'
-    if (rows.length) {
-      Toast.success('导入文本解析完成。')
-    } else {
-      Toast.error(feedback.value)
+    const sourceText = currentManualText()
+    if (aiOnlineImportParseEnabled.value) {
+      try {
+        const result = await parseOnlineImportByAi({
+          text: sourceText,
+          defaultCardVersion: defaultCardVersion.value,
+          limitToSingle: activeTab.value !== 'batch',
+        })
+        const rows = result.rows.map((row, index) => buildManualRow(row, index))
+        if (rows.length) {
+          manualRows.value = rows
+          feedback.value = result.message || `AI解析完成：共 ${rows.length} 条。`
+          Toast.success('导入文本 AI 解析完成。')
+          return
+        }
+        parseManualTextByLocalFallback('AI未返回可导入记录')
+        return
+      } catch (error) {
+        parseManualTextByLocalFallback(error instanceof Error ? error.message : '未知错误')
+        return
+      }
     }
+    parseManualTextByLocalFallback()
   } catch (error) {
     feedback.value = error instanceof Error ? error.message : '解析文本失败。'
     Toast.error(feedback.value)
@@ -337,7 +385,7 @@ const applyDefaultCardVersion = () => {
 
 const submitManualImport = async () => {
   if (!manualRows.value.length) {
-    parseManualText()
+    await parseManualText()
   }
   if (!selectedRows.value.length) {
     feedback.value = '请先解析并勾选需要导入的记录。'
@@ -384,8 +432,8 @@ const resetManualState = () => {
 }
 
 onMounted(() => {
-  loadStationCards().catch((error) => {
-    feedback.value = error instanceof Error ? error.message : '读取本台卡片失败。'
+  Promise.all([loadStationCards(), loadAiImportConfig()]).catch((error) => {
+    feedback.value = error instanceof Error ? error.message : '读取导入配置失败。'
   })
 })
 

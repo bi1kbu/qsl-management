@@ -10,6 +10,11 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
+import {
+  applyAiAddressNormalizations,
+  previewAiAddressNormalizations,
+  type AiAddressNormalizationRow,
+} from '../../api/qsl-console-api'
 import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
 import QslDataTable from '../../components/QslDataTable.vue'
 import { buildAddressResourceName } from '../../utils/resource-name'
@@ -100,6 +105,10 @@ interface PendingBindingItem {
   matchedAddressId: string
 }
 
+interface AiAddressPreviewItem extends AiAddressNormalizationRow {
+  included: boolean
+}
+
 const form = reactive({
   callSign: '',
   name: '',
@@ -118,10 +127,15 @@ const loading = ref(false)
 const submitting = ref(false)
 const reindexing = ref(false)
 const editingId = ref('')
-const activeFunctionTab = ref<'basic' | 'list'>('basic')
+const activeFunctionTab = ref<'basic' | 'list' | 'ai'>('basic')
+const aiPreviewing = ref(false)
+const aiApplying = ref(false)
 
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
+const aiKeywordInput = ref('')
+const aiSelectedAddressIds = ref<string[]>([])
+const aiPreviewRows = ref<AiAddressPreviewItem[]>([])
 const pendingKeywordInput = ref('')
 const pendingBureauExpandMap = reactive<Record<string, boolean>>({})
 const pendingBureauKeywordMap = reactive<Record<string, string>>({})
@@ -151,6 +165,28 @@ const pendingBindingColumns = [
   { key: 'cardIdsText', label: '涉及卡片', sortable: true },
   { key: 'matchedAddressId', label: '建议地址编号', sortable: true },
 ]
+const aiAddressColumns = [
+  { key: 'selected', label: '选择', sortable: false },
+  { key: 'id', label: '地址编号', sortable: false },
+  { key: 'callSign', label: '呼号', sortable: false },
+  { key: 'name', label: '姓名', sortable: false },
+  { key: 'telephone', label: '电话', sortable: false },
+  { key: 'postalCode', label: '邮编', sortable: false },
+  { key: 'address', label: '地址', sortable: false },
+  { key: 'email', label: '邮箱', sortable: false },
+]
+const aiPreviewColumns = [
+  { key: 'included', label: '应用', sortable: false },
+  { key: 'addressEntryName', label: '地址编号', sortable: false },
+  { key: 'callSign', label: '呼号', sortable: false },
+  { key: 'normalizedRecipientName', label: '姓名', sortable: false },
+  { key: 'normalizedTelephone', label: '电话', sortable: false },
+  { key: 'normalizedPostalCode', label: '邮编', sortable: false },
+  { key: 'normalizedAddress', label: '整理后地址', sortable: false },
+  { key: 'normalizedEmail', label: '邮箱', sortable: false },
+  { key: 'confidence', label: '置信度', sortable: false },
+  { key: 'message', label: '说明', sortable: false },
+]
 
 const resourcePlural = 'address-book-entries'
 const resourceKind = 'AddressBookEntry'
@@ -161,6 +197,8 @@ const cardRecordKind = 'CardRecord'
 const toAddressItem = (row: Record<string, unknown>): AddressItem => row as unknown as AddressItem
 const toPendingBindingItem = (row: Record<string, unknown>): PendingBindingItem =>
   row as unknown as PendingBindingItem
+const toAiPreviewItem = (row: Record<string, unknown>): AiAddressPreviewItem =>
+  row as unknown as AiAddressPreviewItem
 
 const normalizeCallSign = (value: string): string => {
   return value.trim().toUpperCase()
@@ -258,6 +296,38 @@ const filteredPendingBindings = computed(() => {
   })
 })
 
+const filteredAiRows = computed(() => {
+  const keyword = aiKeywordInput.value.trim().toUpperCase()
+  if (!keyword) {
+    return rows.value
+  }
+  return rows.value.filter((item) => {
+    return (
+      item.id.toUpperCase().includes(keyword) ||
+      item.callSign.toUpperCase().includes(keyword) ||
+      item.name.toUpperCase().includes(keyword) ||
+      item.telephone.toUpperCase().includes(keyword) ||
+      item.postalCode.toUpperCase().includes(keyword) ||
+      item.address.toUpperCase().includes(keyword) ||
+      item.email.toUpperCase().includes(keyword)
+    )
+  })
+})
+
+const selectedAiAddressRows = computed(() => {
+  const selectedIds = new Set(aiSelectedAddressIds.value)
+  return rows.value.filter((item) => selectedIds.has(item.id))
+})
+
+const selectedAiPreviewRows = computed(() => aiPreviewRows.value.filter((item) => item.included))
+
+const aiFilteredRowsAllSelected = computed(() => {
+  return (
+    filteredAiRows.value.length > 0 &&
+    filteredAiRows.value.every((item) => aiSelectedAddressIds.value.includes(item.id))
+  )
+})
+
 const sortedRows = computed(() => {
   return [...filteredRows.value].sort((left, right) => {
     const result =
@@ -299,6 +369,32 @@ const togglePendingSort = (key: string) => {
     pendingSortKey.value = nextKey
     pendingSortDirection.value = 'asc'
   }
+}
+
+const toggleAiAddressRow = (id: string, checked: boolean) => {
+  const current = new Set(aiSelectedAddressIds.value)
+  if (checked) {
+    current.add(id)
+  } else {
+    current.delete(id)
+  }
+  aiSelectedAddressIds.value = Array.from(current)
+}
+
+const toggleAllAiAddressRows = (checked: boolean) => {
+  const current = new Set(aiSelectedAddressIds.value)
+  filteredAiRows.value.forEach((item) => {
+    if (checked) {
+      current.add(item.id)
+    } else {
+      current.delete(item.id)
+    }
+  })
+  aiSelectedAddressIds.value = Array.from(current)
+}
+
+const getCheckboxChecked = (event: Event): boolean => {
+  return event.target instanceof HTMLInputElement ? event.target.checked : false
 }
 
 const totalPages = computed(() => {
@@ -506,6 +602,11 @@ const loadRows = async (options: { silent?: boolean } = {}) => {
     const nextRows = addressExtensions.map((extension) => toRow(extension))
     bureauRows.value = bureauExtensions.map((extension) => toBureauRow(extension))
     rows.value = nextRows
+    const activeAddressIds = new Set(nextRows.map((item) => item.id))
+    aiSelectedAddressIds.value = aiSelectedAddressIds.value.filter((id) => activeAddressIds.has(id))
+    aiPreviewRows.value = aiPreviewRows.value.filter((item) =>
+      activeAddressIds.has(item.addressEntryName),
+    )
     pendingBindings.value = buildPendingBindings(cardExtensions, nextRows)
     syncPendingBindingState(pendingBindings.value)
     if (!options.silent) {
@@ -515,6 +616,65 @@ const loadRows = async (options: { silent?: boolean } = {}) => {
     feedback.value = `加载地址记录失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     loading.value = false
+  }
+}
+
+const previewAiAddresses = async () => {
+  if (!selectedAiAddressRows.value.length) {
+    feedback.value = '请先勾选需要整理的地址记录。'
+    return
+  }
+
+  aiPreviewing.value = true
+  aiPreviewRows.value = []
+  try {
+    const result = await previewAiAddressNormalizations({
+      rows: selectedAiAddressRows.value.map((item) => ({
+        addressEntryName: item.id,
+        callSign: item.callSign,
+        recipientName: item.name,
+        telephone: item.telephone,
+        postalCode: item.postalCode,
+        address: item.address,
+        email: item.email,
+        addressRemarks: item.remarks,
+      })),
+    })
+    aiPreviewRows.value = result.rows.map((item) => ({
+      ...item,
+      included: item.changed,
+    }))
+    feedback.value = `AI整理预览完成：共 ${result.totalCount} 条，建议变更 ${result.changedCount} 条。`
+  } catch (error) {
+    feedback.value = `AI整理预览失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    aiPreviewing.value = false
+  }
+}
+
+const applySelectedAiAddresses = async () => {
+  if (!selectedAiPreviewRows.value.length) {
+    feedback.value = '请先勾选需要应用的 AI 整理结果。'
+    return
+  }
+
+  aiApplying.value = true
+  try {
+    const result = await applyAiAddressNormalizations({
+      rows: selectedAiPreviewRows.value.map(({ included, ...item }) => item),
+    })
+    await appendQslAuditLog({
+      action: '应用AI地址整理',
+      resourceType: 'address-book-entry',
+      resourceName: `count=${result.successCount}`,
+      detail: `提交 ${result.totalCount} 条，成功 ${result.successCount} 条，跳过 ${result.skippedCount} 条，失败 ${result.failedCount} 条。`,
+    })
+    await loadRows({ silent: true })
+    feedback.value = `AI整理结果已应用：成功 ${result.successCount} 条，跳过 ${result.skippedCount} 条，失败 ${result.failedCount} 条。`
+  } catch (error) {
+    feedback.value = `应用AI整理结果失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    aiApplying.value = false
   }
 }
 
@@ -937,6 +1097,9 @@ onMounted(() => {
             <VTabItem id="list" label="地址列表">
               <div class="qsl-tab-panel-placeholder" />
             </VTabItem>
+            <VTabItem id="ai" label="AI地址整理">
+              <div class="qsl-tab-panel-placeholder" />
+            </VTabItem>
           </VTabs>
         </div>
       </template>
@@ -1015,7 +1178,7 @@ onMounted(() => {
         </div>
       </template>
 
-      <template v-else>
+      <template v-else-if="activeFunctionTab === 'list'">
         <div class="qsl-form-inline qsl-list-toolbar">
           <div class="qsl-input-shell qsl-list-toolbar__search">
             <input
@@ -1079,6 +1242,97 @@ onMounted(() => {
             </div>
           </template>
         </QslDataTable>
+      </template>
+
+      <template v-else>
+        <div class="qsl-form-inline qsl-list-toolbar">
+          <label class="qsl-checkbox">
+            <input
+              type="checkbox"
+              :checked="aiFilteredRowsAllSelected"
+              :disabled="loading || aiPreviewing || aiApplying || filteredAiRows.length === 0"
+              @change="toggleAllAiAddressRows(getCheckboxChecked($event))"
+            />
+            <span>全选当前筛选结果</span>
+          </label>
+          <div class="qsl-input-shell qsl-list-toolbar__search">
+            <input
+              v-model.trim="aiKeywordInput"
+              type="text"
+              placeholder="按呼号、地址编号、姓名或地址筛选"
+            />
+          </div>
+          <VButton
+            size="sm"
+            type="secondary"
+            :loading="aiPreviewing"
+            :disabled="loading || aiApplying || selectedAiAddressRows.length === 0"
+            @click="previewAiAddresses"
+          >
+            AI整理预览
+          </VButton>
+          <VButton size="sm" :disabled="loading || aiPreviewing || aiApplying" @click="loadRows">
+            刷新
+          </VButton>
+          <span class="qsl-muted">已选 {{ selectedAiAddressRows.length }} 条</span>
+        </div>
+
+        <QslDataTable
+          :rows="filteredAiRows"
+          :columns="aiAddressColumns"
+          row-key-field="id"
+          empty-text="暂无可整理的地址记录。"
+          :loading="loading"
+        >
+          <template #cell-selected="{ row }">
+            <input
+              type="checkbox"
+              :checked="aiSelectedAddressIds.includes(toAddressItem(row).id)"
+              :disabled="aiPreviewing || aiApplying"
+              @change="toggleAiAddressRow(toAddressItem(row).id, getCheckboxChecked($event))"
+            />
+          </template>
+        </QslDataTable>
+
+        <div v-if="aiPreviewRows.length" class="qsl-ai-preview-panel">
+          <div class="qsl-form-inline qsl-list-toolbar">
+            <strong>AI整理结果</strong>
+            <span class="qsl-muted">已勾选 {{ selectedAiPreviewRows.length }} 条可应用结果</span>
+            <VButton
+              size="sm"
+              type="primary"
+              :loading="aiApplying"
+              :disabled="aiPreviewing || selectedAiPreviewRows.length === 0"
+              @click="applySelectedAiAddresses"
+            >
+              应用选中结果
+            </VButton>
+          </div>
+
+          <QslDataTable
+            :rows="aiPreviewRows"
+            :columns="aiPreviewColumns"
+            row-key-field="addressEntryName"
+            empty-text="暂无 AI 整理结果。"
+          >
+            <template #cell-included="{ row }">
+              <input
+                v-model="toAiPreviewItem(row).included"
+                type="checkbox"
+                :disabled="aiApplying"
+              />
+            </template>
+            <template #cell-confidence="{ row }">
+              {{ Math.round((toAiPreviewItem(row).confidence || 0) * 100) }}%
+            </template>
+            <template #cell-normalizedAddress="{ row }">
+              <span class="qsl-pre-line">{{ toAiPreviewItem(row).normalizedAddress || '-' }}</span>
+            </template>
+            <template #cell-message="{ row }">
+              {{ toAiPreviewItem(row).message || (toAiPreviewItem(row).changed ? '建议更新' : '无变化') }}
+            </template>
+          </QslDataTable>
+        </div>
       </template>
     </VCard>
 
@@ -1212,5 +1466,13 @@ onMounted(() => {
 
 .qsl-pending-actions__select-shell {
   min-width: 280px;
+}
+
+.qsl-ai-preview-panel {
+  margin-top: 16px;
+}
+
+.qsl-pre-line {
+  white-space: pre-line;
 }
 </style>

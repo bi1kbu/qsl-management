@@ -1672,6 +1672,19 @@ public class QslConsoleActionService {
         spec.setOfflineAutoNotifyOnCardReceived(Boolean.FALSE);
         spec.setCardRecordSequence(CARD_SEQUENCE_START);
         spec.setReceiveRecordSequence(RECEIVE_SEQUENCE_START);
+        spec.setAiEnabled(Boolean.FALSE);
+        spec.setAiProvider("openai-compatible");
+        spec.setAiBaseUrl("https://api.openai.com/v1");
+        spec.setAiModel("");
+        spec.setAiSecretName("qsl-ai-openai-api-key");
+        spec.setAiTemperature(0.2D);
+        spec.setAiTimeoutSeconds(30);
+        spec.setAiMaxInputCharacters(30000);
+        spec.setAiOnlineImportParseEnabled(Boolean.FALSE);
+        spec.setAiAddressCleanupEnabled(Boolean.FALSE);
+        spec.setAiSystemPrompt(QslAiPromptDefaults.SYSTEM_PROMPT);
+        spec.setAiOnlineImportPrompt(QslAiPromptDefaults.ONLINE_IMPORT_PROMPT);
+        spec.setAiAddressCleanupPrompt(QslAiPromptDefaults.ADDRESS_CLEANUP_PROMPT);
         return spec;
     }
 

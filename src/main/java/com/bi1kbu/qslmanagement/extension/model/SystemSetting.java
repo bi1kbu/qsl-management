@@ -34,6 +34,19 @@ public class SystemSetting extends QslBaseExtension<SystemSetting.SystemSettingS
         private Boolean offlineAutoNotifyOnCardReceived;
         private Integer cardRecordSequence;
         private Integer receiveRecordSequence;
+        private Boolean aiEnabled;
+        private String aiProvider;
+        private String aiBaseUrl;
+        private String aiModel;
+        private String aiSecretName;
+        private Double aiTemperature;
+        private Integer aiTimeoutSeconds;
+        private Integer aiMaxInputCharacters;
+        private Boolean aiOnlineImportParseEnabled;
+        private Boolean aiAddressCleanupEnabled;
+        private String aiSystemPrompt;
+        private String aiOnlineImportPrompt;
+        private String aiAddressCleanupPrompt;
     }
 
     @Data

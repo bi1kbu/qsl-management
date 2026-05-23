@@ -44,6 +44,15 @@ const parseInteger = (value: string): number => {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+const parseNumber = (value: string): number => {
+  const normalized = value.trim()
+  if (!normalized) {
+    return 0
+  }
+  const parsed = Number.parseFloat(normalized)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 const parseList = (value: string): string[] => {
   return value
     .replace(/[，、；;]/g, ',')
@@ -617,6 +626,19 @@ const datasetConfigs: DatasetConfig[] = [
       'offlineAutoNotifyOnCardReceived',
       'cardRecordSequence',
       'receiveRecordSequence',
+      'aiEnabled',
+      'aiProvider',
+      'aiBaseUrl',
+      'aiModel',
+      'aiSecretName',
+      'aiTemperature',
+      'aiTimeoutSeconds',
+      'aiMaxInputCharacters',
+      'aiOnlineImportParseEnabled',
+      'aiAddressCleanupEnabled',
+      'aiSystemPrompt',
+      'aiOnlineImportPrompt',
+      'aiAddressCleanupPrompt',
       'lastModifiedBy',
       'lastModifiedAt',
     ],
@@ -641,6 +663,19 @@ const datasetConfigs: DatasetConfig[] = [
       offlineAutoNotifyOnCardReceived: String(Boolean(item.spec?.offlineAutoNotifyOnCardReceived)),
       cardRecordSequence: String(item.spec?.cardRecordSequence ?? ''),
       receiveRecordSequence: String(item.spec?.receiveRecordSequence ?? ''),
+      aiEnabled: String(Boolean(item.spec?.aiEnabled)),
+      aiProvider: String(item.spec?.aiProvider ?? ''),
+      aiBaseUrl: String(item.spec?.aiBaseUrl ?? ''),
+      aiModel: String(item.spec?.aiModel ?? ''),
+      aiSecretName: String(item.spec?.aiSecretName ?? ''),
+      aiTemperature: String(item.spec?.aiTemperature ?? ''),
+      aiTimeoutSeconds: String(item.spec?.aiTimeoutSeconds ?? ''),
+      aiMaxInputCharacters: String(item.spec?.aiMaxInputCharacters ?? ''),
+      aiOnlineImportParseEnabled: String(Boolean(item.spec?.aiOnlineImportParseEnabled)),
+      aiAddressCleanupEnabled: String(Boolean(item.spec?.aiAddressCleanupEnabled)),
+      aiSystemPrompt: String(item.spec?.aiSystemPrompt ?? ''),
+      aiOnlineImportPrompt: String(item.spec?.aiOnlineImportPrompt ?? ''),
+      aiAddressCleanupPrompt: String(item.spec?.aiAddressCleanupPrompt ?? ''),
       lastModifiedBy: String(item.status?.lastModifiedBy ?? ''),
       lastModifiedAt: String(item.status?.lastModifiedAt ?? ''),
     }),
@@ -664,6 +699,19 @@ const datasetConfigs: DatasetConfig[] = [
         offlineAutoNotifyOnCardReceived: parseBoolean(row.offlineAutoNotifyOnCardReceived ?? ''),
         cardRecordSequence: parseInteger(row.cardRecordSequence ?? ''),
         receiveRecordSequence: parseInteger(row.receiveRecordSequence ?? ''),
+        aiEnabled: parseBoolean(row.aiEnabled ?? ''),
+        aiProvider: row.aiProvider ?? '',
+        aiBaseUrl: row.aiBaseUrl ?? '',
+        aiModel: row.aiModel ?? '',
+        aiSecretName: row.aiSecretName ?? '',
+        aiTemperature: parseNumber(row.aiTemperature ?? ''),
+        aiTimeoutSeconds: parseInteger(row.aiTimeoutSeconds ?? ''),
+        aiMaxInputCharacters: parseInteger(row.aiMaxInputCharacters ?? ''),
+        aiOnlineImportParseEnabled: parseBoolean(row.aiOnlineImportParseEnabled ?? ''),
+        aiAddressCleanupEnabled: parseBoolean(row.aiAddressCleanupEnabled ?? ''),
+        aiSystemPrompt: row.aiSystemPrompt ?? '',
+        aiOnlineImportPrompt: row.aiOnlineImportPrompt ?? '',
+        aiAddressCleanupPrompt: row.aiAddressCleanupPrompt ?? '',
       },
       status: {
         lastModifiedBy: row.lastModifiedBy ?? '',

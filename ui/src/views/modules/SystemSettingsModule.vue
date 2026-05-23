@@ -1,9 +1,34 @@
 <script setup lang="ts">
-import { VButton, VCard, VSwitch } from '@halo-dev/components'
+import { VButton, VCard, VSwitch, VTabItem, VTabs } from '@halo-dev/components'
 import { onMounted, reactive, ref } from 'vue'
 import { upsertSingleton, type QslExtension, getExtensionOrNull } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import { sendTestNotificationMail, type NotificationMailTestScene } from '../../api/qsl-console-api'
+import {
+  sendTestNotificationMail,
+  testAiConfig,
+  type AiRuntimeConfig,
+  type NotificationMailTestScene,
+} from '../../api/qsl-console-api'
+
+const DEFAULT_AI_SYSTEM_PROMPT = `你是 QSL 管理系统的数据清洗助手。只输出符合要求的 JSON，不输出解释。
+必须遵守当前请求提供的 JSON Schema，不得改变返回结构、字段名称、字段类型和枚举值。`
+
+const DEFAULT_AI_ONLINE_IMPORT_PROMPT = `请从以下线上换卡导入文本中解析一条或多条记录。要求：
+1. 识别呼号、收件人、电话、邮箱、地址、邮编、卡片版本。
+2. 地址整理为“省 市 区 详细地址”的单行格式。
+3. status 只能为“待双方寄出”或“对方已寄出，待我签收”，无法判断时使用“待双方寄出”。
+4. 未写卡片版本时使用默认卡片版本：“{defaultCardVersion}”。
+5. 必须使用系统指定的 JSON Schema 返回，顶层字段为 rows。
+模式：{mode}
+文本：
+{text}`
+
+const DEFAULT_AI_ADDRESS_CLEANUP_PROMPT = `请整理以下收件地址。要求：
+1. 每条地址整理为“省 市 区 详细地址”的单行格式，缺失区县时保留可判断的省市和详细地址。
+2. 不要编造姓名、电话、邮编、邮箱，不要修改呼号。
+3. 必须使用系统指定的 JSON Schema 返回，顶层字段为 items。
+输入：
+{rows}`
 
 const systemSettingsForm = reactive({
   guestQueryPerMinute: 30,
@@ -18,12 +43,28 @@ const systemSettingsForm = reactive({
   offlineAutoNotifyOnCardReceived: false,
   cardRecordSequence: 1000,
   receiveRecordSequence: 0,
+  aiEnabled: false,
+  aiAddressCleanupEnabled: false,
+  aiOnlineImportParseEnabled: false,
+  aiProvider: 'openai-compatible',
+  aiBaseUrl: '',
+  aiModel: '',
+  aiSecretName: 'qsl-ai-openai-api-key',
+  aiTemperature: 0.2,
+  aiTimeoutSeconds: 30,
+  aiMaxInputCharacters: 30000,
+  aiSystemPrompt: DEFAULT_AI_SYSTEM_PROMPT,
+  aiOnlineImportPrompt: DEFAULT_AI_ONLINE_IMPORT_PROMPT,
+  aiAddressCleanupPrompt: DEFAULT_AI_ADDRESS_CLEANUP_PROMPT,
 })
 
 const feedback = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const sendingTestScene = ref<NotificationMailTestScene | ''>('')
+const activeSettingsTab = ref<'basic' | 'ai'>('basic')
+const aiApiKeyInput = ref('')
+const testingAiConfig = ref(false)
 
 interface SystemSettingSpec {
   guestQueryPerMinute: number
@@ -42,6 +83,19 @@ interface SystemSettingSpec {
   offlineAutoNotifyOnCardReceived: boolean
   cardRecordSequence: number
   receiveRecordSequence: number
+  aiEnabled?: boolean
+  aiAddressCleanupEnabled?: boolean
+  aiOnlineImportParseEnabled?: boolean
+  aiProvider?: string
+  aiBaseUrl?: string
+  aiModel?: string
+  aiSecretName?: string
+  aiTemperature?: number
+  aiTimeoutSeconds?: number
+  aiMaxInputCharacters?: number
+  aiSystemPrompt?: string
+  aiOnlineImportPrompt?: string
+  aiAddressCleanupPrompt?: string
 }
 
 const resourceName = 'qsl-system-setting-default'
@@ -78,6 +132,23 @@ const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
     extension.spec?.offlineAutoNotifyOnCardReceived ?? legacyReceived
   systemSettingsForm.cardRecordSequence = extension.spec?.cardRecordSequence ?? 1000
   systemSettingsForm.receiveRecordSequence = extension.spec?.receiveRecordSequence ?? 0
+  systemSettingsForm.aiEnabled = extension.spec?.aiEnabled ?? false
+  systemSettingsForm.aiAddressCleanupEnabled =
+    extension.spec?.aiAddressCleanupEnabled ?? false
+  systemSettingsForm.aiOnlineImportParseEnabled = extension.spec?.aiOnlineImportParseEnabled ?? false
+  systemSettingsForm.aiProvider = extension.spec?.aiProvider ?? 'openai-compatible'
+  systemSettingsForm.aiBaseUrl = extension.spec?.aiBaseUrl ?? ''
+  systemSettingsForm.aiModel = extension.spec?.aiModel ?? ''
+  systemSettingsForm.aiSecretName = extension.spec?.aiSecretName ?? 'qsl-ai-openai-api-key'
+  systemSettingsForm.aiTemperature = extension.spec?.aiTemperature ?? 0.2
+  systemSettingsForm.aiTimeoutSeconds = extension.spec?.aiTimeoutSeconds ?? 30
+  systemSettingsForm.aiMaxInputCharacters = extension.spec?.aiMaxInputCharacters ?? 30000
+  systemSettingsForm.aiSystemPrompt =
+    extension.spec?.aiSystemPrompt?.trim() || DEFAULT_AI_SYSTEM_PROMPT
+  systemSettingsForm.aiOnlineImportPrompt =
+    extension.spec?.aiOnlineImportPrompt?.trim() || DEFAULT_AI_ONLINE_IMPORT_PROMPT
+  systemSettingsForm.aiAddressCleanupPrompt =
+    extension.spec?.aiAddressCleanupPrompt?.trim() || DEFAULT_AI_ADDRESS_CLEANUP_PROMPT
 }
 
 const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
@@ -98,6 +169,43 @@ const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
     offlineAutoNotifyOnCardReceived: false,
     cardRecordSequence: 1000,
     receiveRecordSequence: 0,
+    aiEnabled: false,
+    aiAddressCleanupEnabled: false,
+    aiOnlineImportParseEnabled: false,
+    aiProvider: 'openai-compatible',
+    aiBaseUrl: '',
+    aiModel: '',
+    aiSecretName: 'qsl-ai-openai-api-key',
+    aiTemperature: 0.2,
+    aiTimeoutSeconds: 30,
+    aiMaxInputCharacters: 30000,
+    aiSystemPrompt: DEFAULT_AI_SYSTEM_PROMPT,
+    aiOnlineImportPrompt: DEFAULT_AI_ONLINE_IMPORT_PROMPT,
+    aiAddressCleanupPrompt: DEFAULT_AI_ADDRESS_CLEANUP_PROMPT,
+  }
+}
+
+const resetAiSystemPrompt = () => {
+  systemSettingsForm.aiSystemPrompt = DEFAULT_AI_SYSTEM_PROMPT
+}
+
+const resetAiOnlineImportPrompt = () => {
+  systemSettingsForm.aiOnlineImportPrompt = DEFAULT_AI_ONLINE_IMPORT_PROMPT
+}
+
+const resetAiAddressCleanupPrompt = () => {
+  systemSettingsForm.aiAddressCleanupPrompt = DEFAULT_AI_ADDRESS_CLEANUP_PROMPT
+}
+
+const buildAiRuntimeConfig = (): AiRuntimeConfig => {
+  return {
+    enabled: systemSettingsForm.aiEnabled,
+    provider: systemSettingsForm.aiProvider.trim() || 'openai-compatible',
+    baseUrl: systemSettingsForm.aiBaseUrl.trim(),
+    model: systemSettingsForm.aiModel.trim(),
+    secretName: systemSettingsForm.aiSecretName.trim() || 'qsl-ai-openai-api-key',
+    temperature: systemSettingsForm.aiTemperature,
+    timeoutSeconds: systemSettingsForm.aiTimeoutSeconds,
   }
 }
 
@@ -146,6 +254,44 @@ const saveSystemSettings = async () => {
     return
   }
 
+  if (
+    !Number.isFinite(systemSettingsForm.aiTemperature) ||
+    systemSettingsForm.aiTemperature < 0 ||
+    systemSettingsForm.aiTemperature > 2
+  ) {
+    feedback.value = 'AI 温度必须在 0 到 2 之间。'
+    activeSettingsTab.value = 'ai'
+    return
+  }
+
+  if (
+    !Number.isInteger(systemSettingsForm.aiTimeoutSeconds) ||
+    systemSettingsForm.aiTimeoutSeconds < 5
+  ) {
+    feedback.value = 'AI 超时时间必须为不少于 5 秒的整数。'
+    activeSettingsTab.value = 'ai'
+    return
+  }
+
+  if (
+    !Number.isInteger(systemSettingsForm.aiMaxInputCharacters) ||
+    systemSettingsForm.aiMaxInputCharacters < 1000
+  ) {
+    feedback.value = 'AI 最大输入字符数必须为不少于 1000 的整数。'
+    activeSettingsTab.value = 'ai'
+    return
+  }
+
+  if (
+    systemSettingsForm.aiSystemPrompt.length > 8000 ||
+    systemSettingsForm.aiOnlineImportPrompt.length > 8000 ||
+    systemSettingsForm.aiAddressCleanupPrompt.length > 8000
+  ) {
+    feedback.value = 'AI 提示词单项最多 8000 个字符。'
+    activeSettingsTab.value = 'ai'
+    return
+  }
+
   saving.value = true
   try {
     await upsertSingleton<SystemSettingSpec>({
@@ -169,19 +315,63 @@ const saveSystemSettings = async () => {
         offlineAutoNotifyOnCardReceived: systemSettingsForm.offlineAutoNotifyOnCardReceived,
         cardRecordSequence: systemSettingsForm.cardRecordSequence,
         receiveRecordSequence: systemSettingsForm.receiveRecordSequence,
+        aiEnabled: systemSettingsForm.aiEnabled,
+        aiAddressCleanupEnabled: systemSettingsForm.aiAddressCleanupEnabled,
+        aiOnlineImportParseEnabled: systemSettingsForm.aiOnlineImportParseEnabled,
+        aiProvider: systemSettingsForm.aiProvider.trim() || 'openai-compatible',
+        aiBaseUrl: systemSettingsForm.aiBaseUrl.trim(),
+        aiModel: systemSettingsForm.aiModel.trim(),
+        aiSecretName: systemSettingsForm.aiSecretName.trim() || 'qsl-ai-openai-api-key',
+        aiTemperature: systemSettingsForm.aiTemperature,
+        aiTimeoutSeconds: systemSettingsForm.aiTimeoutSeconds,
+        aiMaxInputCharacters: systemSettingsForm.aiMaxInputCharacters,
+        aiSystemPrompt: systemSettingsForm.aiSystemPrompt.trim() || DEFAULT_AI_SYSTEM_PROMPT,
+        aiOnlineImportPrompt:
+          systemSettingsForm.aiOnlineImportPrompt.trim() || DEFAULT_AI_ONLINE_IMPORT_PROMPT,
+        aiAddressCleanupPrompt:
+          systemSettingsForm.aiAddressCleanupPrompt.trim() || DEFAULT_AI_ADDRESS_CLEANUP_PROMPT,
       },
     })
     await appendQslAuditLog({
       action: '更新系统参数',
       resourceType: 'system-setting',
       resourceName,
-      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，换卡审核=${systemSettingsForm.requiresExchangeReview ? '是' : '否'}，邮件通知策略已按通联、线上换卡、线下换卡分别保存。`,
+      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，换卡审核=${systemSettingsForm.requiresExchangeReview ? '是' : '否'}，邮件通知策略已按通联、线上换卡、线下换卡分别保存，AI功能=${systemSettingsForm.aiEnabled ? '启用' : '停用'}。`,
     })
     feedback.value = '系统参数已保存。'
   } catch (error) {
     feedback.value = `保存系统参数失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     saving.value = false
+  }
+}
+
+const testAndSaveAiKey = async () => {
+  const config = buildAiRuntimeConfig()
+  if (!config.baseUrl || !config.model) {
+    feedback.value = '请先填写 AI 接口地址和模型名称。'
+    activeSettingsTab.value = 'ai'
+    return
+  }
+  if (!aiApiKeyInput.value.trim()) {
+    feedback.value = '请输入 API Key 后再测试并写入。'
+    activeSettingsTab.value = 'ai'
+    return
+  }
+
+  testingAiConfig.value = true
+  try {
+    const result = await testAiConfig({
+      config,
+      apiKey: aiApiKeyInput.value.trim(),
+      saveApiKey: true,
+    })
+    aiApiKeyInput.value = ''
+    feedback.value = result.message || (result.success ? 'AI 配置测试通过，API Key 已提交写入。' : 'AI 配置测试未通过。')
+  } catch (error) {
+    feedback.value = `AI 配置测试失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    testingAiConfig.value = false
   }
 }
 
@@ -202,9 +392,19 @@ onMounted(loadSystemSettings)
 
 <template>
   <div class="qsl-block">
-    <VCard title="系统参数">
+    <VCard title="系统配置">
       <div class="qsl-form">
-        <section class="qsl-setting-section">
+        <VTabs v-model:active-id="activeSettingsTab">
+          <VTabItem id="basic" label="基础配置">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+          <VTabItem id="ai" label="AI配置">
+            <div class="qsl-tab-panel-placeholder" />
+          </VTabItem>
+        </VTabs>
+
+        <template v-if="activeSettingsTab === 'basic'">
+          <section class="qsl-setting-section">
           <header class="qsl-setting-section__header">
             <h3>基础参数</h3>
             <p>控制系统访问频率与换卡审核策略。</p>
@@ -379,7 +579,221 @@ onMounted(loadSystemSettings)
             <h4>线下换卡业务</h4>
             <p class="qsl-muted">线下换卡收卡与送达确认默认不发送邮件。</p>
           </div>
-        </section>
+          </section>
+        </template>
+
+        <template v-else>
+          <section class="qsl-setting-section">
+            <header class="qsl-setting-section__header">
+              <h3>AI服务</h3>
+              <p>保存非敏感配置与功能开关，API Key 仅提交写入，不从后端读取回填。</p>
+            </header>
+
+            <div class="qsl-switch-row">
+              <div>
+                <p class="qsl-switch-row__title">启用AI功能</p>
+                <p class="qsl-switch-row__desc">关闭后，前端优先使用本地解析与人工处理流程。</p>
+              </div>
+              <VSwitch v-model="systemSettingsForm.aiEnabled" />
+            </div>
+
+            <div class="qsl-form-grid qsl-form-grid--two qsl-ai-config-grid">
+              <label class="qsl-field">
+                <span class="qsl-field__label">服务提供方（Provider）</span>
+                <div class="qsl-input-shell">
+                  <select v-model="systemSettingsForm.aiProvider">
+                    <option value="openai-compatible">OpenAI兼容接口</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="dashscope">通义千问</option>
+                    <option value="deepseek">DeepSeek</option>
+                    <option value="custom">自定义</option>
+                  </select>
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">模型名称（Model）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    v-model.trim="systemSettingsForm.aiModel"
+                    type="text"
+                    placeholder="例如 gpt-4.1-mini"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">接口地址（Base_URL）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    v-model.trim="systemSettingsForm.aiBaseUrl"
+                    type="text"
+                    placeholder="例如 https://api.openai.com/v1"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">Secret名称（Secret_Name）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    v-model.trim="systemSettingsForm.aiSecretName"
+                    type="text"
+                    placeholder="qsl-ai-openai-api-key"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">温度（Temperature）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    v-model.number="systemSettingsForm.aiTemperature"
+                    type="number"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">超时时间（Timeout_Seconds）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    v-model.number="systemSettingsForm.aiTimeoutSeconds"
+                    type="number"
+                    min="5"
+                    step="1"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">最大输入字符数（Max_Input_Characters）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    v-model.number="systemSettingsForm.aiMaxInputCharacters"
+                    type="number"
+                    min="1000"
+                    step="1000"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">API Key（密钥，仅写入）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    v-model.trim="aiApiKeyInput"
+                    type="password"
+                    autocomplete="new-password"
+                    placeholder="输入后点击测试并写入，保存配置不会回显密钥"
+                  />
+                </div>
+              </label>
+            </div>
+
+            <div class="qsl-actions qsl-actions--tight">
+              <VButton
+                type="secondary"
+                :loading="testingAiConfig"
+                :disabled="loading || saving || testingAiConfig"
+                @click="testAndSaveAiKey"
+              >
+                测试并写入API Key
+              </VButton>
+            </div>
+          </section>
+
+          <section class="qsl-setting-section">
+            <header class="qsl-setting-section__header">
+              <h3>AI业务开关</h3>
+              <p>控制具体业务是否优先调用 AI，失败时仍保留现有处理方式。</p>
+            </header>
+
+            <div class="qsl-switch-row">
+              <div>
+                <p class="qsl-switch-row__title">地址整理优先使用AI</p>
+                <p class="qsl-switch-row__desc">用于地址管理中的批量地址规范化预览与应用。</p>
+              </div>
+              <VSwitch v-model="systemSettingsForm.aiAddressCleanupEnabled" />
+            </div>
+
+            <div class="qsl-switch-row">
+              <div>
+                <p class="qsl-switch-row__title">线上换卡导入优先使用AI解析</p>
+                <p class="qsl-switch-row__desc">解析失败或未启用时自动回退到本地文本解析。</p>
+              </div>
+              <VSwitch v-model="systemSettingsForm.aiOnlineImportParseEnabled" />
+            </div>
+          </section>
+
+          <section class="qsl-setting-section">
+            <header class="qsl-setting-section__header">
+              <h3>AI提示词</h3>
+              <p>以下内容会作为 AI 调用的完整提示词；保存前请确认占位符仍保留。</p>
+            </header>
+
+            <div class="qsl-prompt-warning">
+              自定义时必须使用系统指定的返回结构：线上换卡导入顶层字段为 rows，地址整理顶层字段为 items；不得修改字段名、字段类型和状态枚举值。线上换卡导入提示词需保留 {defaultCardVersion}、{mode}、{text}，地址整理提示词需保留 {rows}。
+            </div>
+
+            <div class="qsl-field qsl-field--full qsl-prompt-field">
+              <div class="qsl-prompt-field__header">
+                <span class="qsl-field__label">全局系统提示词（System_Prompt）</span>
+                <VButton size="sm" type="secondary" @click="resetAiSystemPrompt">重置</VButton>
+              </div>
+              <div class="qsl-input-shell qsl-input-shell--textarea">
+                <textarea
+                  id="ai-system-prompt"
+                  v-model="systemSettingsForm.aiSystemPrompt"
+                  name="aiSystemPrompt"
+                  rows="5"
+                  maxlength="8000"
+                  placeholder="输入所有 AI 功能通用的系统提示词"
+                />
+              </div>
+              <small class="qsl-field__tip">作为 OpenAI 兼容接口 messages 中的 system 内容。</small>
+            </div>
+
+            <div class="qsl-field qsl-field--full qsl-prompt-field">
+              <div class="qsl-prompt-field__header">
+                <span class="qsl-field__label">线上换卡导入提示词（Online_Import_Prompt）</span>
+                <VButton size="sm" type="secondary" @click="resetAiOnlineImportPrompt">重置</VButton>
+              </div>
+              <div class="qsl-input-shell qsl-input-shell--textarea">
+                <textarea
+                  id="ai-online-import-prompt"
+                  v-model="systemSettingsForm.aiOnlineImportPrompt"
+                  name="aiOnlineImportPrompt"
+                  rows="10"
+                  maxlength="8000"
+                  placeholder="输入线上换卡导入解析的完整提示词"
+                />
+              </div>
+              <small class="qsl-field__tip">只影响单条导入、批量导入等线上换卡文本解析；必须保留文本输入占位符。</small>
+            </div>
+
+            <div class="qsl-field qsl-field--full qsl-prompt-field">
+              <div class="qsl-prompt-field__header">
+                <span class="qsl-field__label">地址整理提示词（Address_Cleanup_Prompt）</span>
+                <VButton size="sm" type="secondary" @click="resetAiAddressCleanupPrompt">重置</VButton>
+              </div>
+              <div class="qsl-input-shell qsl-input-shell--textarea">
+                <textarea
+                  id="ai-address-cleanup-prompt"
+                  v-model="systemSettingsForm.aiAddressCleanupPrompt"
+                  name="aiAddressCleanupPrompt"
+                  rows="8"
+                  maxlength="8000"
+                  placeholder="输入地址管理 AI 地址整理的完整提示词"
+                />
+              </div>
+              <small class="qsl-field__tip">只影响地址管理中的 AI 地址整理预览；必须保留地址列表占位符。</small>
+            </div>
+          </section>
+        </template>
 
         <div class="qsl-actions">
           <VButton type="secondary" :disabled="loading || saving" @click="saveSystemSettings"
@@ -396,6 +810,10 @@ onMounted(loadSystemSettings)
 :deep(.qsl-mail-action:not(:disabled)) {
   color: #ff0e0e !important;
   font-weight: 600;
+}
+
+.qsl-tab-panel-placeholder {
+  display: none;
 }
 
 .qsl-setting-section {
@@ -448,5 +866,31 @@ onMounted(loadSystemSettings)
   color: #111827;
   font-size: 13px;
   line-height: 20px;
+}
+
+.qsl-ai-config-grid {
+  margin-top: 12px;
+}
+
+.qsl-prompt-warning {
+  margin-bottom: 12px;
+  border: 1px solid #facc15;
+  border-radius: 8px;
+  background: #fefce8;
+  color: #854d0e;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.qsl-prompt-field + .qsl-prompt-field {
+  margin-top: 12px;
+}
+
+.qsl-prompt-field__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 </style>

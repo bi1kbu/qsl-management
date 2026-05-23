@@ -41,7 +41,7 @@ export const qslMenuModules: QslMenuModule[] = [
   },
   {
     key: 'system-settings',
-    title: '系统参数',
+    title: '系统配置',
     group: '配置',
     priority: 10,
     viewPermission: toViewPermission('system-settings'),
@@ -166,7 +166,7 @@ export const qslMenuModules: QslMenuModule[] = [
       toViewPermission('online-bh6syx-import'),
       toEditPermission('card-record'),
       addressBureauEditPermission,
-      toEditPermission('system-settings'),
+      toViewPermission('system-settings'),
     ],
   },
   {

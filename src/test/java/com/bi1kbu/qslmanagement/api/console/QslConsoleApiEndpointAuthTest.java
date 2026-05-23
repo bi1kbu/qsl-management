@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.anyString;
 
 import com.bi1kbu.qslmanagement.api.OverviewSummary;
+import com.bi1kbu.qslmanagement.api.QslAiService;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
@@ -24,6 +25,7 @@ class QslConsoleApiEndpointAuthTest {
     private final QslImportExportJobService importExportJobService = mock(QslImportExportJobService.class);
     private final QslLegacyMigrationService legacyMigrationService = mock(QslLegacyMigrationService.class);
     private final QslNotificationMailService notificationMailService = mock(QslNotificationMailService.class);
+    private final QslAiService aiService = mock(QslAiService.class);
 
     @Test
     void shouldRejectReportSummaryWhenUnauthenticated() {
@@ -133,6 +135,34 @@ class QslConsoleApiEndpointAuthTest {
     }
 
     @Test
+    void shouldRejectAiConfigWhenUnauthenticated() {
+        unauthorizedPost("/ai-config-tests", "{}");
+    }
+
+    @Test
+    void shouldRejectAiAddressCleanupWhenUnauthenticated() {
+        unauthorizedPost("/ai-address-normalizations/preview", """
+            {
+              "rows": []
+            }
+            """);
+        unauthorizedPost("/ai-address-normalizations/apply", """
+            {
+              "rows": []
+            }
+            """);
+    }
+
+    @Test
+    void shouldRejectAiOnlineImportParseWhenUnauthenticated() {
+        unauthorizedPost("/ai-online-import-parses", """
+            {
+              "text": "BI1KBU 对方已寄出"
+            }
+            """);
+    }
+
+    @Test
     void shouldRejectGetImportJobWhenUnauthenticated() {
         unauthorizedGet("/imports/jobs/import-job-1");
     }
@@ -228,7 +258,8 @@ class QslConsoleApiEndpointAuthTest {
             actionService,
             importExportJobService,
             legacyMigrationService,
-            notificationMailService
+            notificationMailService,
+            aiService
         );
         return WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
     }
