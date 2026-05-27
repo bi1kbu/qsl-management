@@ -227,6 +227,8 @@ class PrinterWindow(QMainWindow):
         fields = self.preset_data.get("fields", [])
         for field in fields:
             key = field.get("key", "")
+            if str(field.get("fixed_text", "")).strip():
+                continue
             label = field.get("label_zh", key)
             widget = QLineEdit(self.input_group)
             self.input_form.addRow(label, widget)

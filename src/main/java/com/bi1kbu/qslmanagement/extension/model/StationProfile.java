@@ -20,9 +20,11 @@ public class StationProfile extends QslBaseExtension<StationProfile.StationProfi
     public static class StationProfileSpec {
         private String myCallSign;
         private String myName;
+        private String myNameEn;
         private String myTelephone;
         private String myPostalCode;
         private String myAddress;
+        private String myAddressEn;
         private String myEmail;
         private String stationRemarks;
     }
@@ -33,4 +35,3 @@ public class StationProfile extends QslBaseExtension<StationProfile.StationProfi
         private String lastModifiedAt;
     }
 }
-

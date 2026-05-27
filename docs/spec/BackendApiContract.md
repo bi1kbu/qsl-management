@@ -99,6 +99,7 @@ API 版本：`v1alpha1`
 | POST | `/receipt-confirms/{cardRecordName}/confirm` | 控制台确认对方已签收我方发出的卡片，写入 `CardRecord.spec.receiptConfirmed/publicReceiptRemarks`，不创建 `ReceiveRecord`，不分配收卡编号 | `mail-receive-confirm:edit` |
 | POST | `/mail-receive-confirms/{cardRecordName}/received-date` | 修改卡片收卡日期，并同步更新关联收卡记录日期 | `mail-receive-confirm:edit` |
 | POST | `/mail-receive-confirms/{cardRecordName}/received-record-code/migrate` | 将指定收卡记录从源卡片关联迁移到目标卡片关联 | `mail-receive-confirm:edit` |
+| POST | `/receive-records/{receivedRecordCode}/link-outbound-card` | 将未关联发卡记录的收卡记录人工关联到匹配的正式发卡卡片，并刷新目标卡片已收状态 | `card-query:edit` |
 | POST | `/card-mutations/{cardRecordName}/resend` | 卡片重发：清理制卡、打包、发信及相关邮件状态，刷新流程状态，保留收卡事实 | `card-mutation:edit` |
 | POST | `/card-mutations/{cardRecordName}/mark-error` | 发卡异常：将卡片类型标记为 `原类型（ERROR）`，可追加异常备注 | `card-mutation:edit` |
 | POST | `/card-mutations/{cardRecordName}/mark-resend` | 标记重发：解除发卡异常，将卡片类型还原为原类型；前端随后调用卡片重发接口清理状态 | `card-mutation:edit` |
@@ -112,7 +113,7 @@ API 版本：`v1alpha1`
 
 ### 6.3 AI 能力
 
-AI 能力仅在控制台登录态下可用，不提供公开接口。AI API Key 写入 Halo `Secret`，`SystemSetting.spec` 只保存供应商、接口地址、模型、超时、功能开关、完整提示词模板等非敏感配置；前端不回显 API Key。自定义提示词不允许改变服务端指定的 JSON Schema 返回结构；服务端在调用 OpenAI 兼容接口时仍通过 `response_format=json_schema` 约束返回。AI 调用可能将姓名、电话、邮箱、邮编和通信地址发送到配置的第三方模型服务，因此功能默认关闭。
+AI 能力仅在控制台登录态下可用，不提供公开接口。AI API Key 写入 Halo `Secret`，`SystemSetting.spec` 只保存供应商、接口地址、模型、超时、并发上限、功能开关、完整提示词模板等非敏感配置；前端不回显 API Key。自定义提示词不允许改变服务端指定的 JSON Schema 返回结构；服务端在调用 OpenAI 兼容接口时仍通过 `response_format=json_schema` 约束返回，并按 `aiMaxConcurrentRequests` 控制第三方 AI 调用并发，429 限流错误会短延迟重试。AI 调用可能将姓名、电话、邮箱、邮编和通信地址发送到配置的第三方模型服务，因此功能默认关闭。
 
 | 方法 | 路径 | 说明 | 权限 |
 | --- | --- | --- | --- |
@@ -120,6 +121,10 @@ AI 能力仅在控制台登录态下可用，不提供公开接口。AI API Key 
 | POST | `/ai-address-normalizations/preview` | 对选中的 `AddressBookEntry` 地址做 AI 规范化预览，不落库 | `address-bureau:edit` |
 | POST | `/ai-address-normalizations/apply` | 应用选中的 AI 地址整理结果，仅更新 `AddressBookEntry.spec.address` | `address-bureau:edit` |
 | POST | `/ai-online-import-parses` | 将线上换卡单条/批量导入文本解析为导入预览行，不直接创建卡片 | `online-bh6syx-import:edit` |
+| POST | `/qrz-credential-tests` | 测试并保存 QRZ.COM / QRZ.CN 非敏感配置；密码和自动刷新 Cookie 仅写入 Halo `Secret` | `system-settings:edit` |
+| POST | `/qrz-address-lookups/preview` | 按呼号从 QRZ.COM 官方 XML 或 QRZ.CN 查询页面获取特征并调用 AI 解析，返回地址预览，不落库 | `address-bureau:edit` |
+
+QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名称与 XML Base URL；QRZ.CN 地址获取使用可配置查询 URL 模板。服务端只允许访问 QRZ.COM / QRZ.CN 官方域名，凭据测试先用临时配置完成远程校验，通过后才写入系统参数与 Secret。QRZ.CN 查询优先用用户名和密码登录获取 Cookie，再用 Cookie 抓取查询页面。服务端识别 QRZ.CN `/call/` 页面时，会先按配置 URL 原样请求，再按站内表单提交呼号，兼容 `q` 与 `callsign` 字段；由于 QRZ.CN 旧站存在概率性返回呼号搜索页的问题，服务端会对每次请求结果校验目标呼号并重试，无有效目标呼号资料时明确返回错误，不把空搜索页交给 AI 解析。有效页面会在交给 AI 前抽取页面主体、呼号附近内容和图片文件名线索，降低无关导航、图片化字段和旧页面编码对解析的影响。两类查询均默认关闭，查询结果只用于地址管理页面预览，必须由用户手动确认填入地址表单并再次保存后才写入 `AddressBookEntry`。QRZ 密码、Cookie 与 AI API Key 不进入导入导出数据包。
 
 ### 6.4 导入导出
 

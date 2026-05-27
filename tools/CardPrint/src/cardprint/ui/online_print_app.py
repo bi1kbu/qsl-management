@@ -85,6 +85,8 @@ def _load_preset_meta(path: str) -> dict[str, Any]:
     for item in raw.get("fields", []):
         if not isinstance(item, dict):
             continue
+        if str(item.get("fixed_text", "")).strip():
+            continue
         key = str(item.get("key", "")).strip()
         if key:
             field_keys.append(key)

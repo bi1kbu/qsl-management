@@ -4,10 +4,13 @@ import { onMounted, reactive, ref } from 'vue'
 import { upsertSingleton, type QslExtension, getExtensionOrNull } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
+  getConsoleApiErrorMessage,
   sendTestNotificationMail,
   testAiConfig,
+  testQrzCredential,
   type AiRuntimeConfig,
   type NotificationMailTestScene,
+  type QrzProvider,
 } from '../../api/qsl-console-api'
 
 const DEFAULT_AI_SYSTEM_PROMPT = `你是 QSL 管理系统的数据清洗助手。只输出符合要求的 JSON，不输出解释。
@@ -29,6 +32,17 @@ const DEFAULT_AI_ADDRESS_CLEANUP_PROMPT = `请整理以下收件地址。要求�
 3. 必须使用系统指定的 JSON Schema 返回，顶层字段为 items。
 输入：
 {rows}`
+
+const DEFAULT_AI_CALLBOOK_ADDRESS_PROMPT = `请从以下呼号查询页面或官方接口返回内容中解析通信地址资料。要求：
+1. 只提取输入内容中明确存在的信息，不要编造姓名、电话、邮箱、邮编或地址。
+2. 地址整理为“省 市 区 详细地址”或原始国家/地区可识别的单行通信地址。
+3. callSign 使用输入呼号的大写形式。
+4. confidence 使用 0 到 1 的数字表示解析可信度。
+5. 必须使用系统指定的 JSON Schema 返回，不得输出解释。
+来源：{provider}
+呼号：{callSign}
+内容：
+{features}`
 
 const systemSettingsForm = reactive({
   guestQueryPerMinute: 30,
@@ -52,10 +66,21 @@ const systemSettingsForm = reactive({
   aiSecretName: 'qsl-ai-openai-api-key',
   aiTemperature: 0.2,
   aiTimeoutSeconds: 30,
+  aiMaxConcurrentRequests: 1,
   aiMaxInputCharacters: 30000,
   aiSystemPrompt: DEFAULT_AI_SYSTEM_PROMPT,
   aiOnlineImportPrompt: DEFAULT_AI_ONLINE_IMPORT_PROMPT,
   aiAddressCleanupPrompt: DEFAULT_AI_ADDRESS_CLEANUP_PROMPT,
+  aiCallbookAddressPrompt: DEFAULT_AI_CALLBOOK_ADDRESS_PROMPT,
+  qrzComEnabled: false,
+  qrzComUsername: '',
+  qrzComSecretName: 'qsl-qrz-com-credential',
+  qrzComXmlBaseUrl: 'https://xmldata.qrz.com/xml/current/',
+  qrzCnEnabled: false,
+  qrzCnUsername: '',
+  qrzCnSecretName: 'qsl-qrz-cn-credential',
+  qrzCnLookupUrlTemplate: 'https://www.qrz.cn/call/{callSign}',
+  qrzTimeoutSeconds: 30,
 })
 
 const feedback = ref('')
@@ -65,6 +90,12 @@ const sendingTestScene = ref<NotificationMailTestScene | ''>('')
 const activeSettingsTab = ref<'basic' | 'ai'>('basic')
 const aiApiKeyInput = ref('')
 const testingAiConfig = ref(false)
+const qrzComPasswordInput = ref('')
+const qrzCnPasswordInput = ref('')
+const qrzCnCookieInput = ref('')
+const qrzComTestCallSign = ref('')
+const qrzCnTestCallSign = ref('')
+const testingQrzProvider = ref<QrzProvider | ''>('')
 
 interface SystemSettingSpec {
   guestQueryPerMinute: number
@@ -92,10 +123,21 @@ interface SystemSettingSpec {
   aiSecretName?: string
   aiTemperature?: number
   aiTimeoutSeconds?: number
+  aiMaxConcurrentRequests?: number
   aiMaxInputCharacters?: number
   aiSystemPrompt?: string
   aiOnlineImportPrompt?: string
   aiAddressCleanupPrompt?: string
+  aiCallbookAddressPrompt?: string
+  qrzComEnabled?: boolean
+  qrzComUsername?: string
+  qrzComSecretName?: string
+  qrzComXmlBaseUrl?: string
+  qrzCnEnabled?: boolean
+  qrzCnUsername?: string
+  qrzCnSecretName?: string
+  qrzCnLookupUrlTemplate?: string
+  qrzTimeoutSeconds?: number
 }
 
 const resourceName = 'qsl-system-setting-default'
@@ -142,6 +184,7 @@ const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
   systemSettingsForm.aiSecretName = extension.spec?.aiSecretName ?? 'qsl-ai-openai-api-key'
   systemSettingsForm.aiTemperature = extension.spec?.aiTemperature ?? 0.2
   systemSettingsForm.aiTimeoutSeconds = extension.spec?.aiTimeoutSeconds ?? 30
+  systemSettingsForm.aiMaxConcurrentRequests = extension.spec?.aiMaxConcurrentRequests ?? 1
   systemSettingsForm.aiMaxInputCharacters = extension.spec?.aiMaxInputCharacters ?? 30000
   systemSettingsForm.aiSystemPrompt =
     extension.spec?.aiSystemPrompt?.trim() || DEFAULT_AI_SYSTEM_PROMPT
@@ -149,6 +192,21 @@ const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
     extension.spec?.aiOnlineImportPrompt?.trim() || DEFAULT_AI_ONLINE_IMPORT_PROMPT
   systemSettingsForm.aiAddressCleanupPrompt =
     extension.spec?.aiAddressCleanupPrompt?.trim() || DEFAULT_AI_ADDRESS_CLEANUP_PROMPT
+  systemSettingsForm.aiCallbookAddressPrompt =
+    extension.spec?.aiCallbookAddressPrompt?.trim() || DEFAULT_AI_CALLBOOK_ADDRESS_PROMPT
+  systemSettingsForm.qrzComEnabled = extension.spec?.qrzComEnabled ?? false
+  systemSettingsForm.qrzComUsername = extension.spec?.qrzComUsername ?? ''
+  systemSettingsForm.qrzComSecretName =
+    extension.spec?.qrzComSecretName ?? 'qsl-qrz-com-credential'
+  systemSettingsForm.qrzComXmlBaseUrl =
+    extension.spec?.qrzComXmlBaseUrl ?? 'https://xmldata.qrz.com/xml/current/'
+  systemSettingsForm.qrzCnEnabled = extension.spec?.qrzCnEnabled ?? false
+  systemSettingsForm.qrzCnUsername = extension.spec?.qrzCnUsername ?? ''
+  systemSettingsForm.qrzCnSecretName =
+    extension.spec?.qrzCnSecretName ?? 'qsl-qrz-cn-credential'
+  systemSettingsForm.qrzCnLookupUrlTemplate =
+    extension.spec?.qrzCnLookupUrlTemplate ?? 'https://www.qrz.cn/call/{callSign}'
+  systemSettingsForm.qrzTimeoutSeconds = extension.spec?.qrzTimeoutSeconds ?? 30
 }
 
 const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
@@ -178,10 +236,21 @@ const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
     aiSecretName: 'qsl-ai-openai-api-key',
     aiTemperature: 0.2,
     aiTimeoutSeconds: 30,
+    aiMaxConcurrentRequests: 1,
     aiMaxInputCharacters: 30000,
     aiSystemPrompt: DEFAULT_AI_SYSTEM_PROMPT,
     aiOnlineImportPrompt: DEFAULT_AI_ONLINE_IMPORT_PROMPT,
     aiAddressCleanupPrompt: DEFAULT_AI_ADDRESS_CLEANUP_PROMPT,
+    aiCallbookAddressPrompt: DEFAULT_AI_CALLBOOK_ADDRESS_PROMPT,
+    qrzComEnabled: false,
+    qrzComUsername: '',
+    qrzComSecretName: 'qsl-qrz-com-credential',
+    qrzComXmlBaseUrl: 'https://xmldata.qrz.com/xml/current/',
+    qrzCnEnabled: false,
+    qrzCnUsername: '',
+    qrzCnSecretName: 'qsl-qrz-cn-credential',
+    qrzCnLookupUrlTemplate: 'https://www.qrz.cn/call/{callSign}',
+    qrzTimeoutSeconds: 30,
   }
 }
 
@@ -197,6 +266,10 @@ const resetAiAddressCleanupPrompt = () => {
   systemSettingsForm.aiAddressCleanupPrompt = DEFAULT_AI_ADDRESS_CLEANUP_PROMPT
 }
 
+const resetAiCallbookAddressPrompt = () => {
+  systemSettingsForm.aiCallbookAddressPrompt = DEFAULT_AI_CALLBOOK_ADDRESS_PROMPT
+}
+
 const buildAiRuntimeConfig = (): AiRuntimeConfig => {
   return {
     enabled: systemSettingsForm.aiEnabled,
@@ -206,6 +279,7 @@ const buildAiRuntimeConfig = (): AiRuntimeConfig => {
     secretName: systemSettingsForm.aiSecretName.trim() || 'qsl-ai-openai-api-key',
     temperature: systemSettingsForm.aiTemperature,
     timeoutSeconds: systemSettingsForm.aiTimeoutSeconds,
+    maxConcurrentRequests: systemSettingsForm.aiMaxConcurrentRequests,
   }
 }
 
@@ -274,6 +348,16 @@ const saveSystemSettings = async () => {
   }
 
   if (
+    !Number.isInteger(systemSettingsForm.aiMaxConcurrentRequests) ||
+    systemSettingsForm.aiMaxConcurrentRequests < 1 ||
+    systemSettingsForm.aiMaxConcurrentRequests > 10
+  ) {
+    feedback.value = 'AI 并发请求数必须为 1 到 10 之间的整数。'
+    activeSettingsTab.value = 'ai'
+    return
+  }
+
+  if (
     !Number.isInteger(systemSettingsForm.aiMaxInputCharacters) ||
     systemSettingsForm.aiMaxInputCharacters < 1000
   ) {
@@ -285,9 +369,19 @@ const saveSystemSettings = async () => {
   if (
     systemSettingsForm.aiSystemPrompt.length > 8000 ||
     systemSettingsForm.aiOnlineImportPrompt.length > 8000 ||
-    systemSettingsForm.aiAddressCleanupPrompt.length > 8000
+    systemSettingsForm.aiAddressCleanupPrompt.length > 8000 ||
+    systemSettingsForm.aiCallbookAddressPrompt.length > 8000
   ) {
     feedback.value = 'AI 提示词单项最多 8000 个字符。'
+    activeSettingsTab.value = 'ai'
+    return
+  }
+
+  if (
+    !Number.isInteger(systemSettingsForm.qrzTimeoutSeconds) ||
+    systemSettingsForm.qrzTimeoutSeconds < 5
+  ) {
+    feedback.value = 'QRZ 查询超时时间必须为不少于 5 秒的整数。'
     activeSettingsTab.value = 'ai'
     return
   }
@@ -324,12 +418,29 @@ const saveSystemSettings = async () => {
         aiSecretName: systemSettingsForm.aiSecretName.trim() || 'qsl-ai-openai-api-key',
         aiTemperature: systemSettingsForm.aiTemperature,
         aiTimeoutSeconds: systemSettingsForm.aiTimeoutSeconds,
+        aiMaxConcurrentRequests: systemSettingsForm.aiMaxConcurrentRequests,
         aiMaxInputCharacters: systemSettingsForm.aiMaxInputCharacters,
         aiSystemPrompt: systemSettingsForm.aiSystemPrompt.trim() || DEFAULT_AI_SYSTEM_PROMPT,
         aiOnlineImportPrompt:
           systemSettingsForm.aiOnlineImportPrompt.trim() || DEFAULT_AI_ONLINE_IMPORT_PROMPT,
         aiAddressCleanupPrompt:
           systemSettingsForm.aiAddressCleanupPrompt.trim() || DEFAULT_AI_ADDRESS_CLEANUP_PROMPT,
+        aiCallbookAddressPrompt:
+          systemSettingsForm.aiCallbookAddressPrompt.trim() || DEFAULT_AI_CALLBOOK_ADDRESS_PROMPT,
+        qrzComEnabled: systemSettingsForm.qrzComEnabled,
+        qrzComUsername: systemSettingsForm.qrzComUsername.trim(),
+        qrzComSecretName:
+          systemSettingsForm.qrzComSecretName.trim() || 'qsl-qrz-com-credential',
+        qrzComXmlBaseUrl:
+          systemSettingsForm.qrzComXmlBaseUrl.trim() || 'https://xmldata.qrz.com/xml/current/',
+        qrzCnEnabled: systemSettingsForm.qrzCnEnabled,
+        qrzCnUsername: systemSettingsForm.qrzCnUsername.trim(),
+        qrzCnSecretName:
+          systemSettingsForm.qrzCnSecretName.trim() || 'qsl-qrz-cn-credential',
+        qrzCnLookupUrlTemplate:
+          systemSettingsForm.qrzCnLookupUrlTemplate.trim() ||
+          'https://www.qrz.cn/call/{callSign}',
+        qrzTimeoutSeconds: systemSettingsForm.qrzTimeoutSeconds,
       },
     })
     await appendQslAuditLog({
@@ -369,9 +480,56 @@ const testAndSaveAiKey = async () => {
     aiApiKeyInput.value = ''
     feedback.value = result.message || (result.success ? 'AI 配置测试通过，API Key 已提交写入。' : 'AI 配置测试未通过。')
   } catch (error) {
-    feedback.value = `AI 配置测试失败：${error instanceof Error ? error.message : '未知错误'}`
+    feedback.value = `AI 配置测试失败：${getConsoleApiErrorMessage(error)}`
   } finally {
     testingAiConfig.value = false
+  }
+}
+
+const testAndSaveQrzCredential = async (provider: QrzProvider) => {
+  const isQrzCom = provider === 'QRZ_COM'
+  if (isQrzCom && !systemSettingsForm.qrzComUsername.trim()) {
+    feedback.value = '请先填写 QRZ.COM 用户名。'
+    activeSettingsTab.value = 'ai'
+    return
+  }
+  if (!isQrzCom && !systemSettingsForm.qrzCnLookupUrlTemplate.trim()) {
+    feedback.value = '请先填写 QRZ.CN 查询地址模板。'
+    activeSettingsTab.value = 'ai'
+    return
+  }
+
+  testingQrzProvider.value = provider
+  try {
+    const result = await testQrzCredential({
+      provider,
+      enabled: isQrzCom ? systemSettingsForm.qrzComEnabled : systemSettingsForm.qrzCnEnabled,
+      username: isQrzCom
+        ? systemSettingsForm.qrzComUsername.trim()
+        : systemSettingsForm.qrzCnUsername.trim(),
+      password: isQrzCom ? qrzComPasswordInput.value.trim() : qrzCnPasswordInput.value.trim(),
+      cookie: isQrzCom ? '' : qrzCnCookieInput.value.trim(),
+      secretName: isQrzCom
+        ? systemSettingsForm.qrzComSecretName.trim() || 'qsl-qrz-com-credential'
+        : systemSettingsForm.qrzCnSecretName.trim() || 'qsl-qrz-cn-credential',
+      baseUrl: systemSettingsForm.qrzComXmlBaseUrl.trim() || 'https://xmldata.qrz.com/xml/current/',
+      lookupUrlTemplate:
+        systemSettingsForm.qrzCnLookupUrlTemplate.trim() || 'https://www.qrz.cn/call/{callSign}',
+      timeoutSeconds: systemSettingsForm.qrzTimeoutSeconds,
+      saveCredential: true,
+      testCallSign: isQrzCom ? qrzComTestCallSign.value.trim() : qrzCnTestCallSign.value.trim(),
+    })
+    if (isQrzCom) {
+      qrzComPasswordInput.value = ''
+    } else {
+      qrzCnPasswordInput.value = ''
+      qrzCnCookieInput.value = ''
+    }
+    feedback.value = result.message || 'QRZ 配置已提交。'
+  } catch (error) {
+    feedback.value = `QRZ 配置测试失败：${getConsoleApiErrorMessage(error)}`
+  } finally {
+    testingQrzProvider.value = ''
   }
 }
 
@@ -670,6 +828,21 @@ onMounted(loadSystemSettings)
               </label>
 
               <label class="qsl-field">
+                <span class="qsl-field__label">并发请求数（Max_Concurrent_Requests）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="ai-max-concurrent-requests"
+                    v-model.number="systemSettingsForm.aiMaxConcurrentRequests"
+                    name="aiMaxConcurrentRequests"
+                    type="number"
+                    min="1"
+                    max="10"
+                    step="1"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field">
                 <span class="qsl-field__label">最大输入字符数（Max_Input_Characters）</span>
                 <div class="qsl-input-shell">
                   <input
@@ -708,6 +881,212 @@ onMounted(loadSystemSettings)
 
           <section class="qsl-setting-section">
             <header class="qsl-setting-section__header">
+              <h3>QRZ地址获取</h3>
+              <p>保存查询地址与开关，密码和自动刷新 Cookie 仅写入 Secret，不会在页面回显。</p>
+            </header>
+
+            <div class="qsl-form-grid qsl-form-grid--two qsl-ai-config-grid">
+              <div class="qsl-switch-row qsl-field--full">
+                <div>
+                  <p class="qsl-switch-row__title">启用QRZ.COM地址获取</p>
+                  <p class="qsl-switch-row__desc">使用 QRZ.COM 官方 XML 接口查询呼号资料。</p>
+                </div>
+                <VSwitch v-model="systemSettingsForm.qrzComEnabled" />
+              </div>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">QRZ.COM用户名（Username）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-com-username"
+                    v-model.trim="systemSettingsForm.qrzComUsername"
+                    name="qrzComUsername"
+                    type="text"
+                    placeholder="输入 QRZ.COM 用户名"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">QRZ.COM密码（Password，仅写入）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-com-password"
+                    v-model.trim="qrzComPasswordInput"
+                    name="qrzComPassword"
+                    type="password"
+                    autocomplete="new-password"
+                    placeholder="输入后点击测试并写入"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">QRZ.COM Secret名称（Secret_Name）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-com-secret-name"
+                    v-model.trim="systemSettingsForm.qrzComSecretName"
+                    name="qrzComSecretName"
+                    type="text"
+                    placeholder="qsl-qrz-com-credential"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">QRZ.COM测试呼号（Test_Call_Sign）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-com-test-call-sign"
+                    v-model.trim="qrzComTestCallSign"
+                    name="qrzComTestCallSign"
+                    type="text"
+                    placeholder="可选"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">QRZ.COM XML地址（XML_Base_URL）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-com-xml-base-url"
+                    v-model.trim="systemSettingsForm.qrzComXmlBaseUrl"
+                    name="qrzComXmlBaseUrl"
+                    type="text"
+                    placeholder="https://xmldata.qrz.com/xml/current/"
+                  />
+                </div>
+              </label>
+
+              <div class="qsl-switch-row qsl-field--full">
+                <div>
+                  <p class="qsl-switch-row__title">启用QRZ.CN地址获取</p>
+                  <p class="qsl-switch-row__desc">按查询页面模板抓取页面内容，再交给 AI 解析。</p>
+                </div>
+                <VSwitch v-model="systemSettingsForm.qrzCnEnabled" />
+              </div>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">QRZ.CN用户名（Username）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-cn-username"
+                    v-model.trim="systemSettingsForm.qrzCnUsername"
+                    name="qrzCnUsername"
+                    type="text"
+                    placeholder="输入 QRZ.CN 用户名"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">QRZ.CN密码（Password，仅写入）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-cn-password"
+                    v-model.trim="qrzCnPasswordInput"
+                    name="qrzCnPassword"
+                    type="password"
+                    autocomplete="new-password"
+                    placeholder="输入后点击测试并写入"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">QRZ.CN备用Cookie（Cookie，仅写入）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-cn-cookie"
+                    v-model.trim="qrzCnCookieInput"
+                    name="qrzCnCookie"
+                    type="password"
+                    autocomplete="new-password"
+                    placeholder="输入后点击测试并写入"
+                  />
+                </div>
+                <small class="qsl-field__tip">优先使用用户名和密码自动登录；备用 Cookie 仅在未填写密码或登录失败时使用。</small>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">QRZ.CN Secret名称（Secret_Name）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-cn-secret-name"
+                    v-model.trim="systemSettingsForm.qrzCnSecretName"
+                    name="qrzCnSecretName"
+                    type="text"
+                    placeholder="qsl-qrz-cn-credential"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">QRZ.CN测试呼号（Test_Call_Sign）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-cn-test-call-sign"
+                    v-model.trim="qrzCnTestCallSign"
+                    name="qrzCnTestCallSign"
+                    type="text"
+                    placeholder="可选"
+                  />
+                </div>
+              </label>
+
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">QRZ.CN查询地址模板（Lookup_URL_Template）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-cn-lookup-url-template"
+                    v-model.trim="systemSettingsForm.qrzCnLookupUrlTemplate"
+                    name="qrzCnLookupUrlTemplate"
+                    type="text"
+                    placeholder="https://www.qrz.cn/call/{callSign}"
+                  />
+                </div>
+                <small class="qsl-field__tip">必须保留 {callSign} 占位符。</small>
+              </label>
+
+              <label class="qsl-field">
+                <span class="qsl-field__label">QRZ超时时间（Timeout_Seconds）</span>
+                <div class="qsl-input-shell">
+                  <input
+                    id="qrz-timeout-seconds"
+                    v-model.number="systemSettingsForm.qrzTimeoutSeconds"
+                    name="qrzTimeoutSeconds"
+                    type="number"
+                    min="5"
+                    step="1"
+                  />
+                </div>
+              </label>
+            </div>
+
+            <div class="qsl-actions qsl-actions--tight">
+              <VButton
+                type="secondary"
+                :loading="testingQrzProvider === 'QRZ_COM'"
+                :disabled="loading || saving || testingQrzProvider !== ''"
+                @click="testAndSaveQrzCredential('QRZ_COM')"
+              >
+                测试并写入QRZ.COM凭据
+              </VButton>
+              <VButton
+                type="secondary"
+                :loading="testingQrzProvider === 'QRZ_CN'"
+                :disabled="loading || saving || testingQrzProvider !== ''"
+                @click="testAndSaveQrzCredential('QRZ_CN')"
+              >
+                测试并写入QRZ.CN凭据
+              </VButton>
+            </div>
+          </section>
+
+          <section class="qsl-setting-section">
+            <header class="qsl-setting-section__header">
               <h3>AI业务开关</h3>
               <p>控制具体业务是否优先调用 AI，失败时仍保留现有处理方式。</p>
             </header>
@@ -736,7 +1115,7 @@ onMounted(loadSystemSettings)
             </header>
 
             <div class="qsl-prompt-warning">
-              自定义时必须使用系统指定的返回结构：线上换卡导入顶层字段为 rows，地址整理顶层字段为 items；不得修改字段名、字段类型和状态枚举值。线上换卡导入提示词需保留 {defaultCardVersion}、{mode}、{text}，地址整理提示词需保留 {rows}。
+              自定义时必须使用系统指定的返回结构：线上换卡导入顶层字段为 rows，地址整理顶层字段为 items，呼号地址获取需返回 callSign、recipientName、telephone、postalCode、address、email、confidence、message；不得修改字段名、字段类型和状态枚举值。线上换卡导入提示词需保留 {defaultCardVersion}、{mode}、{text}，地址整理提示词需保留 {rows}，呼号地址获取提示词需保留 {provider}、{callSign}、{features}。
             </div>
 
             <div class="qsl-field qsl-field--full qsl-prompt-field">
@@ -791,6 +1170,24 @@ onMounted(loadSystemSettings)
                 />
               </div>
               <small class="qsl-field__tip">只影响地址管理中的 AI 地址整理预览；必须保留地址列表占位符。</small>
+            </div>
+
+            <div class="qsl-field qsl-field--full qsl-prompt-field">
+              <div class="qsl-prompt-field__header">
+                <span class="qsl-field__label">呼号地址获取提示词（Callbook_Address_Prompt）</span>
+                <VButton size="sm" type="secondary" @click="resetAiCallbookAddressPrompt">重置</VButton>
+              </div>
+              <div class="qsl-input-shell qsl-input-shell--textarea">
+                <textarea
+                  id="ai-callbook-address-prompt"
+                  v-model="systemSettingsForm.aiCallbookAddressPrompt"
+                  name="aiCallbookAddressPrompt"
+                  rows="9"
+                  maxlength="8000"
+                  placeholder="输入 QRZ.COM / QRZ.CN 地址解析的完整提示词"
+                />
+              </div>
+              <small class="qsl-field__tip">只影响地址管理中从 QRZ.COM / QRZ.CN 获取地址后的 AI 解析；必须保留来源、呼号和内容占位符。</small>
             </div>
           </section>
         </template>

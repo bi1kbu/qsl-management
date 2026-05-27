@@ -33,6 +33,7 @@ class FieldEditor(QWidget):
         "text_align",
         "distribute_align",
         "max_len",
+        "fixed_text",
     ]
     X_COL = COLUMNS.index("x_mm")
     Y_COL = COLUMNS.index("y_mm")
@@ -58,6 +59,7 @@ class FieldEditor(QWidget):
         "左右对齐",
         "分散对齐",
         "最大长度",
+        "固定文本",
     ]
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -126,6 +128,7 @@ class FieldEditor(QWidget):
             "left",
             "false",
             "0",
+            "",
         ]
         for col, value in enumerate(defaults):
             self._set_cell_text(row, col, value)
@@ -397,6 +400,7 @@ class FieldEditor(QWidget):
                     "text_align": self._normalize_align_text(values["text_align"]),
                     "distribute_align": str(values["distribute_align"]).lower() == "true",
                     "max_len": int(values["max_len"] or 0),
+                    "fixed_text": values["fixed_text"],
                 }
             )
         return fields

@@ -58,6 +58,15 @@ class QslConsoleApiEndpointAuthTest {
     }
 
     @Test
+    void shouldRejectReceiveRecordOutboundLinkWhenUnauthenticated() {
+        unauthorizedPost("/receive-records/R0001-20260502/link-outbound-card", """
+            {
+              "targetCardRecordName": "C1001"
+            }
+            """);
+    }
+
+    @Test
     void shouldRejectCardResendWhenUnauthenticated() {
         unauthorizedPost("/card-mutations/C1001/resend", "{}");
     }
@@ -158,6 +167,22 @@ class QslConsoleApiEndpointAuthTest {
         unauthorizedPost("/ai-online-import-parses", """
             {
               "text": "BI1KBU 对方已寄出"
+            }
+            """);
+    }
+
+    @Test
+    void shouldRejectQrzApisWhenUnauthenticated() {
+        unauthorizedPost("/qrz-credential-tests", """
+            {
+              "provider": "QRZ_COM",
+              "enabled": true
+            }
+            """);
+        unauthorizedPost("/qrz-address-lookups/preview", """
+            {
+              "provider": "QRZ_COM",
+              "callSign": "BI1KBU"
             }
             """);
     }

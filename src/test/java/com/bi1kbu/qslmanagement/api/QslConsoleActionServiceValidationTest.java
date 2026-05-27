@@ -339,6 +339,52 @@ class QslConsoleActionServiceValidationTest {
     }
 
     @Test
+    void shouldLinkUnmatchedReceiveRecordToOutboundCardRecord() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            mock(QslNotificationMailService.class)
+        );
+        var target = createCardRecord("C1002", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", false);
+        var receiveRecord = createReceiveRecord("R0001-20260506", "");
+        receiveRecord.getSpec().setMatchStatus("未匹配");
+        receiveRecord.getSpec().setMatchReason("");
+
+        when(client.fetch(eq(ReceiveRecord.class), eq("R0001-20260506"))).thenReturn(Mono.just(receiveRecord));
+        when(client.fetch(eq(CardRecord.class), eq("C1002"))).thenReturn(Mono.just(target));
+        when(client.listAll(eq(ReceiveRecord.class), any(), any())).thenReturn(Flux.just(receiveRecord));
+        when(client.update(any(ReceiveRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.linkReceiveRecordToOutboundCard(
+            "R0001-20260506",
+            new QslConsoleActionService.ReceiveRecordOutboundLinkCommand("C1002"),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("R0001-20260506", result.receivedRecordCode());
+        assertEquals("C1002", result.targetCardRecordName());
+        assertEquals("C1002", receiveRecord.getSpec().getOutboundCardNames());
+        assertEquals("已匹配", receiveRecord.getSpec().getMatchStatus());
+        assertEquals("人工关联发卡记录", receiveRecord.getSpec().getMatchReason());
+        assertEquals(Boolean.TRUE, target.getSpec().getCardReceived());
+        assertEquals("2026-05-06 10:00:00", target.getSpec().getReceivedAt());
+        assertEquals("已收卡片", target.getStatus().getFlowStatus());
+        verify(auditService).appendAuditLog(
+            eq("人工关联收卡记录"),
+            eq("receive-record"),
+            eq("R0001-20260506"),
+            any(),
+            eq("admin"),
+            eq("127.0.0.1")
+        );
+    }
+
+    @Test
     void shouldResetSendStatesAndKeepReceiveFactsWhenResendingCard() {
         var client = mock(ReactiveExtensionClient.class);
         var auditService = mock(QslAuditService.class);

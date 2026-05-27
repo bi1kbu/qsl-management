@@ -51,6 +51,14 @@ def test_no_wrap_width_keeps_single_line() -> None:
     assert len(items) == 1
 
 
+def test_fixed_text_overrides_row_value() -> None:
+    preset = _build_preset(print_width_mm=0.0)
+    preset.fields[0].fixed_text = "固定辅助说明"
+    items = build_layout_items(preset, {"name": "行数据"})
+    assert len(items) == 1
+    assert items[0].text == "固定辅助说明"
+
+
 def test_cjk_wrap_uses_fullwidth_estimation() -> None:
     preset = _build_preset(print_width_mm=89.0, print_height_mm=12.6)
     text = "测试内容" * 20

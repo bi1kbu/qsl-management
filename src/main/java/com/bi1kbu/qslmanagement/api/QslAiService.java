@@ -17,16 +17,18 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletionException;
+import java.util.regex.Pattern;
+import javax.net.ssl.SSLException;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.extension.Secret;
 
-@Service
 public class QslAiService {
 
     private static final ListOptions EMPTY_OPTIONS = ListOptions.builder().build();
@@ -39,11 +41,19 @@ public class QslAiService {
     private static final int MAX_ADDRESS_LENGTH = 500;
     private static final int MAX_PROMPT_LENGTH = 8_000;
     private static final Set<String> ONLINE_IMPORT_ALLOWED_STATUSES = Set.of("对方已寄出，待我签收", "待双方寄出");
+    private static final Pattern POSTAL_CODE_PATTERN = Pattern.compile("(?:邮编|邮政编码)\\s*[:：]?\\s*([0-9]{6})");
+    private static final Pattern TELEPHONE_PATTERN = Pattern.compile("(?:电话|手机号|手机)\\s*[:：]?\\s*([0-9][0-9\\-\\s]{5,20}[0-9])");
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(
+        "(?:邮箱|电子邮件|E-mail|Email)\\s*[:：]?\\s*([A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,})",
+        Pattern.CASE_INSENSITIVE
+    );
 
     private final ReactiveExtensionClient client;
     private final QslAuditService auditService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final Object aiConcurrencyMonitor = new Object();
+    private int activeAiRequestCount = 0;
 
     public QslAiService(ReactiveExtensionClient client, QslAuditService auditService) {
         this.client = client;
@@ -63,7 +73,7 @@ public class QslAiService {
     ) {
         var payload = command == null
             ? new AiConfigurationCommand(
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
             )
             : command;
         return fetchOrCreateSystemSetting()
@@ -78,6 +88,7 @@ public class QslAiService {
                 spec.setAiSecretName(defaultIfBlank(payload.secretName(), DEFAULT_SECRET_NAME));
                 spec.setAiTemperature(normalizeTemperature(payload.temperature()));
                 spec.setAiTimeoutSeconds(normalizeTimeout(payload.timeoutSeconds()));
+                spec.setAiMaxConcurrentRequests(normalizeMaxConcurrentRequests(payload.maxConcurrentRequests()));
                 spec.setAiMaxInputCharacters(normalizeMaxInputCharacters(payload.maxInputCharacters()));
                 spec.setAiOnlineImportParseEnabled(payload.onlineImportParseEnabled() == null
                     ? Boolean.FALSE
@@ -93,6 +104,10 @@ public class QslAiService {
                 spec.setAiAddressCleanupPrompt(normalizePrompt(
                     payload.addressCleanupPrompt(),
                     QslAiPromptDefaults.ADDRESS_CLEANUP_PROMPT
+                ));
+                spec.setAiCallbookAddressPrompt(normalizePrompt(
+                    payload.callbookAddressPrompt(),
+                    QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT
                 ));
                 systemSetting.setSpec(spec);
                 return client.update(systemSetting)
@@ -235,7 +250,73 @@ public class QslAiService {
                         true
                     ));
             })
-            .map(json -> parseOnlineImportRows(json, normalize(command.defaultCardVersion())));
+            .map(json -> parseOnlineImportRows(json, normalize(command.defaultCardVersion())))
+            .map(result -> completeSingleOnlineImportFromRawText(result, rawText));
+    }
+
+    public Mono<CallbookAddressParseResult> parseCallbookAddressFeatures(CallbookAddressParseCommand command) {
+        var provider = normalize(command == null ? "" : command.provider());
+        var callSign = QslApiSupport.normalizeCallSign(command == null ? "" : command.callSign());
+        var features = normalize(command == null ? "" : command.features());
+        if (callSign.isBlank()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "呼号不能为空"));
+        }
+        if (features.isBlank()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "待解析内容不能为空"));
+        }
+        return loadEffectiveAiConfig(false, false)
+            .flatMap(config -> loadApiKey(config.secretName())
+                .flatMap(apiKey -> callOpenAiJson(
+                    config,
+                    apiKey,
+                    buildCallbookAddressPrompt(provider, callSign, features, config.callbookAddressPrompt()),
+                    callbookAddressSchema(),
+                    true
+                )))
+            .map(json -> parseCallbookAddress(callSign, provider, json));
+    }
+
+    private CallbookAddressParseResult parseCallbookAddress(String fallbackCallSign, String provider, JsonNode json) {
+        var address = nodeText(json, "address", "addr", "qth", "地址", "通信地址", "收件地址", "中文地址", "英文地址");
+        if (address.length() > MAX_ADDRESS_LENGTH) {
+            address = address.substring(0, MAX_ADDRESS_LENGTH);
+        }
+        var confidence = nodeConfidence(json, "confidence", "置信度", "可信度");
+        confidence = Math.max(0, Math.min(confidence, 1));
+        return new CallbookAddressParseResult(
+            defaultIfBlank(nodeText(json, "callSign", "callsign", "call_sign", "呼号"), fallbackCallSign)
+                .toUpperCase(Locale.ROOT),
+            provider,
+            nodeText(json, "recipientName", "recipient", "name", "fullName", "recipient_name", "姓名", "收件人"),
+            nodeText(json, "telephone", "phone", "mobile", "tel", "phoneNumber", "mobilePhone", "电话", "手机", "手机号"),
+            nodeText(json, "postalCode", "postal_code", "zip", "zip_code", "zipcode", "postCode", "postcode", "邮编", "邮政编码"),
+            address,
+            nodeText(json, "email", "mail", "邮箱", "电子邮件"),
+            confidence,
+            nodeText(json, "message", "note", "reason", "说明", "备注", "来源")
+        );
+    }
+
+    private double nodeConfidence(JsonNode node, String... fieldNames) {
+        var text = nodeText(node, fieldNames);
+        if (text.isBlank()) {
+            return 0;
+        }
+        try {
+            return Double.parseDouble(text);
+        } catch (NumberFormatException ignored) {
+            var normalized = text.trim().toLowerCase(Locale.ROOT);
+            if (normalized.equals("high") || normalized.equals("高") || normalized.equals("较高")) {
+                return 0.9;
+            }
+            if (normalized.equals("medium") || normalized.equals("中") || normalized.equals("一般")) {
+                return 0.6;
+            }
+            if (normalized.equals("low") || normalized.equals("低") || normalized.equals("较低")) {
+                return 0.3;
+            }
+            return 0;
+        }
     }
 
     private Mono<AddressNormalizationApplyItemResult> applySingleAddress(AddressNormalizationApplyItem item) {
@@ -279,12 +360,14 @@ public class QslAiService {
         spec.setAiSecretName(DEFAULT_SECRET_NAME);
         spec.setAiTemperature(0.2);
         spec.setAiTimeoutSeconds(30);
+        spec.setAiMaxConcurrentRequests(1);
         spec.setAiMaxInputCharacters(MAX_IMPORT_TEXT_LENGTH);
         spec.setAiOnlineImportParseEnabled(Boolean.FALSE);
         spec.setAiAddressCleanupEnabled(Boolean.FALSE);
         spec.setAiSystemPrompt(QslAiPromptDefaults.SYSTEM_PROMPT);
         spec.setAiOnlineImportPrompt(QslAiPromptDefaults.ONLINE_IMPORT_PROMPT);
         spec.setAiAddressCleanupPrompt(QslAiPromptDefaults.ADDRESS_CLEANUP_PROMPT);
+        spec.setAiCallbookAddressPrompt(QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT);
         systemSetting.setSpec(spec);
         return systemSetting;
     }
@@ -303,12 +386,14 @@ public class QslAiService {
                 secretName,
                 normalizeTemperature(spec.getAiTemperature()),
                 normalizeTimeout(spec.getAiTimeoutSeconds()),
+                normalizeMaxConcurrentRequests(spec.getAiMaxConcurrentRequests()),
                 normalizeMaxInputCharacters(spec.getAiMaxInputCharacters()),
                 Boolean.TRUE.equals(spec.getAiOnlineImportParseEnabled()),
                 Boolean.TRUE.equals(spec.getAiAddressCleanupEnabled()),
                 normalizePrompt(spec.getAiSystemPrompt(), QslAiPromptDefaults.SYSTEM_PROMPT),
                 normalizePrompt(spec.getAiOnlineImportPrompt(), QslAiPromptDefaults.ONLINE_IMPORT_PROMPT),
                 normalizePrompt(spec.getAiAddressCleanupPrompt(), QslAiPromptDefaults.ADDRESS_CLEANUP_PROMPT),
+                normalizePrompt(spec.getAiCallbookAddressPrompt(), QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT),
                 hasApiKey
             ));
     }
@@ -349,6 +434,9 @@ public class QslAiService {
                 var timeoutSeconds = override != null && override.timeoutSeconds() != null
                     ? override.timeoutSeconds()
                     : spec.getAiTimeoutSeconds();
+                var maxConcurrentRequests = override != null && override.maxConcurrentRequests() != null
+                    ? override.maxConcurrentRequests()
+                    : spec.getAiMaxConcurrentRequests();
                 var maxInputCharacters = spec.getAiMaxInputCharacters();
                 var systemPrompt = normalizePrompt(spec.getAiSystemPrompt(), QslAiPromptDefaults.SYSTEM_PROMPT);
                 var onlineImportPrompt = normalizePrompt(
@@ -358,6 +446,10 @@ public class QslAiService {
                 var addressCleanupPrompt = normalizePrompt(
                     spec.getAiAddressCleanupPrompt(),
                     QslAiPromptDefaults.ADDRESS_CLEANUP_PROMPT
+                );
+                var callbookAddressPrompt = normalizePrompt(
+                    spec.getAiCallbookAddressPrompt(),
+                    QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT
                 );
                 var enabled = Boolean.TRUE.equals(spec.getAiEnabled());
                 var onlineImportParseEnabled = Boolean.TRUE.equals(spec.getAiOnlineImportParseEnabled());
@@ -369,10 +461,12 @@ public class QslAiService {
                     defaultIfBlank(secretName, DEFAULT_SECRET_NAME),
                     normalizeTemperature(temperature),
                     normalizeTimeout(timeoutSeconds),
+                    normalizeMaxConcurrentRequests(maxConcurrentRequests),
                     normalizeMaxInputCharacters(maxInputCharacters),
                     systemPrompt,
                     onlineImportPrompt,
                     addressCleanupPrompt,
+                    callbookAddressPrompt,
                     enabled,
                     onlineImportParseEnabled,
                     addressCleanupEnabled,
@@ -412,15 +506,16 @@ public class QslAiService {
             .flatMap(secret -> {
                 secret.setType(Secret.SECRET_TYPE_OPAQUE);
                 secret.setStringData(Map.of(SECRET_API_KEY, apiKey));
-                return client.update(secret).then();
+                return client.update(secret).thenReturn(true);
             })
             .switchIfEmpty(Mono.defer(() -> {
                 var secret = new Secret();
                 secret.setMetadata(QslApiSupport.createMetadata(safeSecretName));
                 secret.setType(Secret.SECRET_TYPE_OPAQUE);
                 secret.setStringData(Map.of(SECRET_API_KEY, apiKey));
-                return client.create(secret).then();
-            }));
+                return client.create(secret).thenReturn(true);
+            }))
+            .then();
     }
 
     private Mono<JsonNode> callOpenAiJson(
@@ -433,10 +528,51 @@ public class QslAiService {
         if (config.model().isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY, "QSL-422-0001", "AI 模型不能为空"));
         }
-        return sendOpenAiRequest(config, apiKey, prompt, schema, true)
-            .onErrorResume(error -> allowJsonObjectFallback
-                ? sendOpenAiRequest(config, apiKey, prompt, schema, false)
+        return sendOpenAiRequestWithRateLimitRetry(config, apiKey, prompt, schema, true, 0)
+            .onErrorResume(error -> allowJsonObjectFallback && shouldRetryWithJsonObject(error)
+                ? sendOpenAiRequestWithRateLimitRetry(config, apiKey, prompt, schema, false, 0)
                 : Mono.error(error));
+    }
+
+    private Mono<JsonNode> sendOpenAiRequestWithRateLimitRetry(
+        AiRuntimeConfig config,
+        String apiKey,
+        String prompt,
+        Map<String, Object> schema,
+        boolean strictSchema,
+        int attempt
+    ) {
+        return Mono.delay(Duration.ofMillis(attempt == 0 ? 0 : 2_000L * attempt))
+            .then(acquireAiRequestPermit(config))
+            .then(sendOpenAiRequest(config, apiKey, prompt, schema, strictSchema)
+                .doFinally(ignored -> releaseAiRequestPermit()))
+            .onErrorResume(error -> shouldRetryAfterRateLimit(error) && attempt < 3
+                ? sendOpenAiRequestWithRateLimitRetry(config, apiKey, prompt, schema, strictSchema, attempt + 1)
+                : Mono.error(error));
+    }
+
+    private Mono<Void> acquireAiRequestPermit(AiRuntimeConfig config) {
+        return Mono.fromRunnable(() -> {
+            var maxConcurrentRequests = normalizeMaxConcurrentRequests(config.maxConcurrentRequests());
+            synchronized (aiConcurrencyMonitor) {
+                while (activeAiRequestCount >= maxConcurrentRequests) {
+                    try {
+                        aiConcurrencyMonitor.wait();
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                        throw new QslApiException(HttpStatus.BAD_GATEWAY, "QSL-502-0001", "AI 并发等待被中断");
+                    }
+                }
+                activeAiRequestCount++;
+            }
+        }).subscribeOn(Schedulers.boundedElastic()).then();
+    }
+
+    private void releaseAiRequestPermit() {
+        synchronized (aiConcurrencyMonitor) {
+            activeAiRequestCount = Math.max(0, activeAiRequestCount - 1);
+            aiConcurrencyMonitor.notifyAll();
+        }
     }
 
     private Mono<JsonNode> sendOpenAiRequest(
@@ -480,10 +616,48 @@ public class QslAiService {
                             "QSL-502-0001", "AI 接口调用失败：" + response.statusCode()));
                     }
                     return Mono.just(parseOpenAiContent(response.body()));
-                });
+                })
+                .onErrorResume(error -> error instanceof QslApiException
+                    ? Mono.error(error)
+                    : Mono.error(aiRemoteRequestException(error)));
         } catch (Exception error) {
             return Mono.error(new QslApiException(HttpStatus.BAD_GATEWAY, "QSL-502-0001", "AI 请求构造失败"));
         }
+    }
+
+    private boolean shouldRetryWithJsonObject(Throwable error) {
+        return error instanceof QslApiException qslApiException
+            && qslApiException.getMessage() != null
+            && (qslApiException.getMessage().contains("AI 接口调用失败：400")
+                || qslApiException.getMessage().contains("AI 接口调用失败：422"));
+    }
+
+    private boolean shouldRetryAfterRateLimit(Throwable error) {
+        return error instanceof QslApiException qslApiException
+            && qslApiException.getMessage() != null
+            && qslApiException.getMessage().contains("AI 接口调用失败：429");
+    }
+
+    private QslApiException aiRemoteRequestException(Throwable error) {
+        var cause = unwrap(error);
+        if (cause instanceof java.net.http.HttpTimeoutException) {
+            return new QslApiException(HttpStatus.BAD_GATEWAY, "QSL-502-0001",
+                "AI 接口请求超时，请检查模型、接口地址或提高超时时间");
+        }
+        if (cause instanceof SSLException) {
+            return new QslApiException(HttpStatus.BAD_GATEWAY, "QSL-502-0001",
+                "AI 接口 TLS 握手失败，请检查接口地址或代理配置");
+        }
+        var message = normalize(cause.getMessage());
+        return new QslApiException(HttpStatus.BAD_GATEWAY, "QSL-502-0001",
+            "AI 接口请求失败" + (message.isBlank() ? "" : "：" + message));
+    }
+
+    private Throwable unwrap(Throwable error) {
+        if (error instanceof CompletionException && error.getCause() != null) {
+            return unwrap(error.getCause());
+        }
+        return error;
     }
 
     private JsonNode parseOpenAiContent(String responseBody) {
@@ -493,10 +667,55 @@ public class QslAiService {
             if (content.isBlank()) {
                 throw new IllegalArgumentException("AI 响应为空");
             }
-            return objectMapper.readTree(content);
+            try {
+                return objectMapper.readTree(content);
+            } catch (Exception ignored) {
+                return objectMapper.readTree(extractJsonObject(content));
+            }
         } catch (Exception error) {
             throw new QslApiException(HttpStatus.BAD_GATEWAY, "QSL-502-0002", "AI 响应不是有效 JSON");
         }
+    }
+
+    private String extractJsonObject(String content) {
+        var normalized = normalize(content)
+            .replaceFirst("(?is)^```(?:json)?\\s*", "")
+            .replaceFirst("(?is)\\s*```$", "")
+            .trim();
+        var start = normalized.indexOf('{');
+        if (start < 0) {
+            throw new IllegalArgumentException("AI 响应缺少 JSON 对象");
+        }
+        var depth = 0;
+        var inString = false;
+        var escaping = false;
+        for (var index = start; index < normalized.length(); index++) {
+            var current = normalized.charAt(index);
+            if (escaping) {
+                escaping = false;
+                continue;
+            }
+            if (current == '\\' && inString) {
+                escaping = true;
+                continue;
+            }
+            if (current == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (inString) {
+                continue;
+            }
+            if (current == '{') {
+                depth++;
+            } else if (current == '}') {
+                depth--;
+                if (depth == 0) {
+                    return normalized.substring(start, index + 1);
+                }
+            }
+        }
+        throw new IllegalArgumentException("AI 响应 JSON 对象不完整");
     }
 
     private AddressNormalizationPreviewResult parseAddressPreview(List<AddressNormalizationInput> inputs, JsonNode json) {
@@ -550,26 +769,69 @@ public class QslAiService {
         }
         var index = 1;
         for (var item : items) {
-            var callSign = QslApiSupport.normalizeCallSign(item.path("callSign").asText(""));
+            var callSign = QslApiSupport.normalizeCallSign(nodeText(item, "callSign", "callsign", "call_sign"));
             if (callSign.isBlank()) {
                 throw new QslApiException(HttpStatus.BAD_GATEWAY, "QSL-502-0002", "AI 导入解析结果缺少呼号");
             }
-            var status = defaultIfBlank(item.path("status").asText(""), "待双方寄出");
+            var status = defaultIfBlank(nodeText(item, "status"), "待双方寄出");
             if (!ONLINE_IMPORT_ALLOWED_STATUSES.contains(status)) {
                 throw new QslApiException(HttpStatus.BAD_GATEWAY, "QSL-502-0002", "AI 导入解析结果包含不支持的状态");
             }
             rows.add(new OnlineImportParsedRow(
                 callSign,
                 status,
-                normalize(item.path("recipientName").asText("")),
-                normalize(item.path("telephone").asText("")),
-                normalize(item.path("address").asText("")),
-                normalize(item.path("postalCode").asText("")),
-                normalize(item.path("email").asText("")),
-                defaultIfBlank(item.path("cardVersion").asText(""), defaultCardVersion)
+                nodeText(item, "recipientName", "recipient", "name", "fullName", "recipient_name"),
+                nodeText(item, "telephone", "phone", "mobile", "tel", "phoneNumber", "mobilePhone"),
+                nodeText(item, "address", "addr", "qth"),
+                nodeText(item, "postalCode", "postal_code", "zip", "zip_code", "zipcode", "postCode", "postcode"),
+                nodeText(item, "email", "mail"),
+                defaultIfBlank(nodeText(item, "cardVersion", "card_version", "card_version_name", "version"),
+                    defaultCardVersion)
             ));
         }
         return new OnlineImportParseResult(rows, rows.isEmpty() ? "未解析到导入记录" : "AI解析完成：" + rows.size() + " 条");
+    }
+
+    private OnlineImportParseResult completeSingleOnlineImportFromRawText(
+        OnlineImportParseResult result,
+        String rawText
+    ) {
+        if (result == null || result.rows() == null || result.rows().size() != 1) {
+            return result;
+        }
+        var row = result.rows().get(0);
+        var completed = new OnlineImportParsedRow(
+            row.callSign(),
+            row.status(),
+            row.recipientName(),
+            defaultIfBlank(row.telephone(), firstGroup(TELEPHONE_PATTERN, rawText)),
+            row.address(),
+            defaultIfBlank(row.postalCode(), firstGroup(POSTAL_CODE_PATTERN, rawText)),
+            defaultIfBlank(row.email(), firstGroup(EMAIL_PATTERN, rawText)),
+            row.cardVersion()
+        );
+        return new OnlineImportParseResult(List.of(completed), result.message());
+    }
+
+    private String firstGroup(Pattern pattern, String text) {
+        var matcher = pattern.matcher(normalize(text));
+        return matcher.find() ? normalize(matcher.group(1)) : "";
+    }
+
+    private String nodeText(JsonNode node, String... fieldNames) {
+        if (node == null || fieldNames == null) {
+            return "";
+        }
+        for (var fieldName : fieldNames) {
+            var value = node.path(fieldName);
+            if (!value.isMissingNode() && !value.isNull()) {
+                var text = normalize(value.asText(""));
+                if (!text.isBlank() && !"null".equalsIgnoreCase(text)) {
+                    return text;
+                }
+            }
+        }
+        return "";
     }
 
     private String buildAddressPrompt(List<AddressNormalizationInput> rows, String promptTemplate) {
@@ -594,6 +856,19 @@ public class QslAiService {
             .replace("{mode}", mode)
             .replace("{text}", rawText);
         return prompt.contains(rawText) ? prompt : prompt + "\n文本：\n" + rawText;
+    }
+
+    private String buildCallbookAddressPrompt(
+        String provider,
+        String callSign,
+        String features,
+        String promptTemplate
+    ) {
+        var prompt = normalizePrompt(promptTemplate, QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT)
+            .replace("{provider}", provider)
+            .replace("{callSign}", callSign)
+            .replace("{features}", features);
+        return prompt.contains(features) ? prompt : prompt + "\n内容：\n" + features;
     }
 
     private Map<String, Object> addressSchema() {
@@ -647,6 +922,27 @@ public class QslAiService {
         );
     }
 
+    private Map<String, Object> callbookAddressSchema() {
+        return Map.of(
+            "type", "object",
+            "additionalProperties", false,
+            "required", List.of(
+                "callSign", "recipientName", "telephone", "postalCode", "address", "email", "confidence",
+                "message"
+            ),
+            "properties", Map.of(
+                "callSign", Map.of("type", "string"),
+                "recipientName", Map.of("type", "string"),
+                "telephone", Map.of("type", "string"),
+                "postalCode", Map.of("type", "string"),
+                "address", Map.of("type", "string"),
+                "email", Map.of("type", "string"),
+                "confidence", Map.of("type", "number"),
+                "message", Map.of("type", "string")
+            )
+        );
+    }
+
     private Map<String, Object> testSchema() {
         return Map.of(
             "type", "object",
@@ -672,6 +968,13 @@ public class QslAiService {
             return 30;
         }
         return Math.min(timeoutSeconds, 120);
+    }
+
+    private int normalizeMaxConcurrentRequests(Integer maxConcurrentRequests) {
+        if (maxConcurrentRequests == null || maxConcurrentRequests < 1) {
+            return 1;
+        }
+        return Math.min(maxConcurrentRequests, 10);
     }
 
     private double normalizeTemperature(Double temperature) {
@@ -734,12 +1037,14 @@ public class QslAiService {
         String apiKey,
         Double temperature,
         Integer timeoutSeconds,
+        Integer maxConcurrentRequests,
         Integer maxInputCharacters,
         Boolean onlineImportParseEnabled,
         Boolean addressCleanupEnabled,
         String systemPrompt,
         String onlineImportPrompt,
-        String addressCleanupPrompt
+        String addressCleanupPrompt,
+        String callbookAddressPrompt
     ) {
     }
 
@@ -751,12 +1056,14 @@ public class QslAiService {
         String secretName,
         Double temperature,
         Integer timeoutSeconds,
+        Integer maxConcurrentRequests,
         Integer maxInputCharacters,
         Boolean onlineImportParseEnabled,
         Boolean addressCleanupEnabled,
         String systemPrompt,
         String onlineImportPrompt,
         String addressCleanupPrompt,
+        String callbookAddressPrompt,
         Boolean hasApiKey
     ) {
     }
@@ -768,6 +1075,7 @@ public class QslAiService {
         String secretName,
         Double temperature,
         Integer timeoutSeconds,
+        Integer maxConcurrentRequests,
         String apiKey,
         Boolean saveApiKey
     ) {
@@ -873,6 +1181,22 @@ public class QslAiService {
     ) {
     }
 
+    public record CallbookAddressParseCommand(String provider, String callSign, String features) {
+    }
+
+    public record CallbookAddressParseResult(
+        String callSign,
+        String provider,
+        String recipientName,
+        String telephone,
+        String postalCode,
+        String address,
+        String email,
+        double confidence,
+        String message
+    ) {
+    }
+
     private record AiRuntimeConfig(
         String provider,
         String baseUrl,
@@ -880,10 +1204,12 @@ public class QslAiService {
         String secretName,
         double temperature,
         int timeoutSeconds,
+        int maxConcurrentRequests,
         int maxInputCharacters,
         String systemPrompt,
         String onlineImportPrompt,
         String addressCleanupPrompt,
+        String callbookAddressPrompt,
         boolean enabled,
         boolean onlineImportParseEnabled,
         boolean addressCleanupEnabled,
@@ -897,10 +1223,12 @@ public class QslAiService {
                 secretName,
                 temperature,
                 timeoutSeconds,
+                maxConcurrentRequests,
                 maxInputCharacters,
                 systemPrompt,
                 onlineImportPrompt,
                 addressCleanupPrompt,
+                callbookAddressPrompt,
                 enabled,
                 onlineImportParseEnabled,
                 addressCleanupEnabled,

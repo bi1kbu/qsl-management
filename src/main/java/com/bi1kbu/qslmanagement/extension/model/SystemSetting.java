@@ -41,12 +41,23 @@ public class SystemSetting extends QslBaseExtension<SystemSetting.SystemSettingS
         private String aiSecretName;
         private Double aiTemperature;
         private Integer aiTimeoutSeconds;
+        private Integer aiMaxConcurrentRequests;
         private Integer aiMaxInputCharacters;
         private Boolean aiOnlineImportParseEnabled;
         private Boolean aiAddressCleanupEnabled;
         private String aiSystemPrompt;
         private String aiOnlineImportPrompt;
         private String aiAddressCleanupPrompt;
+        private String aiCallbookAddressPrompt;
+        private Boolean qrzComEnabled;
+        private String qrzComUsername;
+        private String qrzComSecretName;
+        private String qrzComXmlBaseUrl;
+        private Boolean qrzCnEnabled;
+        private String qrzCnUsername;
+        private String qrzCnSecretName;
+        private String qrzCnLookupUrlTemplate;
+        private Integer qrzTimeoutSeconds;
     }
 
     @Data

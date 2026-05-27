@@ -521,6 +521,66 @@ public class QslConsoleActionService {
             ).thenReturn(result));
     }
 
+    public Mono<ReceiveRecordOutboundLinkResult> linkReceiveRecordToOutboundCard(String receivedRecordCode,
+        ReceiveRecordOutboundLinkCommand command, String operator, String clientIp) {
+        var normalizedReceivedRecordCode = normalizeReceivedRecordName(receivedRecordCode);
+        if (!isFormalReceivedRecordCode(normalizedReceivedRecordCode)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST,
+                "QSL-400-0001", "收卡编号格式必须为 R0001-20260506"));
+        }
+        var targetCardRecordName = normalizeCardRecordName(command.targetCardRecordName());
+        if (!isFormalCardRecordName(targetCardRecordName)) {
+            return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "QSL-422-0001", "目标卡片必须是正式卡片编号"));
+        }
+
+        return Mono.zip(
+                fetchOr404(ReceiveRecord.class, normalizedReceivedRecordCode),
+                fetchOr404(CardRecord.class, targetCardRecordName)
+            )
+            .flatMap(tuple -> {
+                var receiveRecord = tuple.getT1();
+                var targetCardRecord = tuple.getT2();
+                var receiveSpec = receiveRecord.getSpec() == null
+                    ? new ReceiveRecord.ReceiveRecordSpec()
+                    : receiveRecord.getSpec();
+                if (!matchCardRecord(
+                    targetCardRecord,
+                    QslApiSupport.normalizeCallSign(receiveSpec.getCallSign()),
+                    QslApiSupport.normalizeCardType(receiveSpec.getCardType()),
+                    receiveBusinessTypeToSceneType(receiveSpec.getBusinessType(), receiveSpec.getCardType())
+                )) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "目标卡片与收卡记录不匹配"));
+                }
+                var outboundCardNames = outboundCardNameSet(receiveSpec.getOutboundCardNames());
+                if (outboundCardNames.contains(targetCardRecordName)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "收卡记录已关联目标卡片"));
+                }
+                outboundCardNames.add(targetCardRecordName);
+                receiveSpec.setOutboundCardNames(String.join(", ", outboundCardNames));
+                receiveSpec.setMatchStatus("已匹配");
+                receiveSpec.setMatchReason("人工关联发卡记录");
+                receiveRecord.setSpec(receiveSpec);
+                return client.update(receiveRecord)
+                    .then(refreshCardReceiveState(targetCardRecordName))
+                    .thenReturn(new ReceiveRecordOutboundLinkResult(
+                        normalizedReceivedRecordCode,
+                        targetCardRecordName,
+                        "已关联发卡记录"
+                    ));
+            })
+            .flatMap(result -> qslAuditService.appendAuditLog(
+                "人工关联收卡记录",
+                "receive-record",
+                result.receivedRecordCode(),
+                "目标卡片：" + result.targetCardRecordName(),
+                safeOperator(operator),
+                clientIp
+            ).thenReturn(result));
+    }
+
     public Mono<Bh6syxImportResult> importBh6syxCards(Bh6syxImportCommand command, String operator, String clientIp) {
         var rows = command == null || command.rows() == null ? List.<Bh6syxImportRow>of() : command.rows();
         if (rows.isEmpty()) {
@@ -1562,6 +1622,17 @@ public class QslConsoleActionService {
         };
     }
 
+    private String receiveBusinessTypeToSceneType(String businessType, String cardType) {
+        var normalized = businessType == null ? "" : businessType.trim().toUpperCase();
+        return switch (normalized) {
+            case "QSO" -> "QSO";
+            case "SWL" -> "SWL";
+            case "ONLINE_EYEBALL" -> "ONLINE_EYEBALL";
+            case "OFFLINE_EYEBALL" -> "EYEBALL";
+            default -> resolveSceneTypeByCardType(cardType);
+        };
+    }
+
     private String normalizeReceivedDate(String receivedDate) {
         if (receivedDate == null || receivedDate.isBlank()) {
             throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "收卡日期不能为空");
@@ -1679,12 +1750,23 @@ public class QslConsoleActionService {
         spec.setAiSecretName("qsl-ai-openai-api-key");
         spec.setAiTemperature(0.2D);
         spec.setAiTimeoutSeconds(30);
+        spec.setAiMaxConcurrentRequests(1);
         spec.setAiMaxInputCharacters(30000);
         spec.setAiOnlineImportParseEnabled(Boolean.FALSE);
         spec.setAiAddressCleanupEnabled(Boolean.FALSE);
         spec.setAiSystemPrompt(QslAiPromptDefaults.SYSTEM_PROMPT);
         spec.setAiOnlineImportPrompt(QslAiPromptDefaults.ONLINE_IMPORT_PROMPT);
         spec.setAiAddressCleanupPrompt(QslAiPromptDefaults.ADDRESS_CLEANUP_PROMPT);
+        spec.setAiCallbookAddressPrompt(QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT);
+        spec.setQrzComEnabled(Boolean.FALSE);
+        spec.setQrzComUsername("");
+        spec.setQrzComSecretName("qsl-qrz-com-credential");
+        spec.setQrzComXmlBaseUrl("https://xmldata.qrz.com/xml/current/");
+        spec.setQrzCnEnabled(Boolean.FALSE);
+        spec.setQrzCnUsername("");
+        spec.setQrzCnSecretName("qsl-qrz-cn-credential");
+        spec.setQrzCnLookupUrlTemplate("https://www.qrz.cn/call/{callSign}");
+        spec.setQrzTimeoutSeconds(30);
         return spec;
     }
 
@@ -1769,6 +1851,18 @@ public class QslConsoleActionService {
         String sourceCardRecordName,
         String targetCardRecordName,
         String receivedRecordCode,
+        String message
+    ) {
+    }
+
+    public record ReceiveRecordOutboundLinkCommand(
+        String targetCardRecordName
+    ) {
+    }
+
+    public record ReceiveRecordOutboundLinkResult(
+        String receivedRecordCode,
+        String targetCardRecordName,
         String message
     ) {
     }

@@ -7,9 +7,11 @@ import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 const stationProfileForm = reactive({
   myCallSign: '',
   myName: '',
+  myNameEn: '',
   myTelephone: '',
   myPostalCode: '',
   myAddress: '',
+  myAddressEn: '',
   myEmail: '',
   stationRemarks: '',
 })
@@ -21,9 +23,11 @@ const saving = ref(false)
 interface StationProfileSpec {
   myCallSign: string
   myName: string
+  myNameEn: string
   myTelephone: string
   myPostalCode: string
   myAddress: string
+  myAddressEn: string
   myEmail: string
   stationRemarks: string
 }
@@ -41,9 +45,11 @@ const nowText = (): string => {
 const fillForm = (extension: QslExtension<StationProfileSpec>) => {
   stationProfileForm.myCallSign = extension.spec?.myCallSign ?? ''
   stationProfileForm.myName = extension.spec?.myName ?? ''
+  stationProfileForm.myNameEn = extension.spec?.myNameEn ?? ''
   stationProfileForm.myTelephone = extension.spec?.myTelephone ?? ''
   stationProfileForm.myPostalCode = extension.spec?.myPostalCode ?? ''
   stationProfileForm.myAddress = extension.spec?.myAddress ?? ''
+  stationProfileForm.myAddressEn = extension.spec?.myAddressEn ?? ''
   stationProfileForm.myEmail = extension.spec?.myEmail ?? ''
   stationProfileForm.stationRemarks = extension.spec?.stationRemarks ?? ''
 }
@@ -52,9 +58,11 @@ const createDefaultProfileSpec = (): StationProfileSpec => {
   return {
     myCallSign: '',
     myName: '',
+    myNameEn: '',
     myTelephone: '',
     myPostalCode: '',
     myAddress: '',
+    myAddressEn: '',
     myEmail: '',
     stationRemarks: '',
   }
@@ -111,9 +119,11 @@ const saveStationProfile = async () => {
       spec: {
         myCallSign: stationProfileForm.myCallSign.trim().toUpperCase(),
         myName: stationProfileForm.myName.trim(),
+        myNameEn: stationProfileForm.myNameEn.trim(),
         myTelephone: stationProfileForm.myTelephone.trim(),
         myPostalCode: stationProfileForm.myPostalCode.trim(),
         myAddress: stationProfileForm.myAddress.trim(),
+        myAddressEn: stationProfileForm.myAddressEn.trim(),
         myEmail: stationProfileForm.myEmail.trim(),
         stationRemarks: stationProfileForm.stationRemarks.trim(),
       },
@@ -138,9 +148,9 @@ onMounted(loadStationProfile)
 <template>
   <div class="qsl-block">
     <VCard title="通信地址">
-      <div class="qsl-form-grid">
+      <div class="qsl-station-profile-form">
         <label class="qsl-field">
-          <span class="qsl-field__label">本台呼号（My_Call_Sign）</span>
+          <span class="qsl-field__label">呼号（My_Call_Sign）</span>
           <div class="qsl-input-shell">
             <input
               v-model.trim="stationProfileForm.myCallSign"
@@ -150,58 +160,86 @@ onMounted(loadStationProfile)
           </div>
         </label>
 
-        <label class="qsl-field">
-          <span class="qsl-field__label">姓名（My_Name）</span>
-          <div class="qsl-input-shell">
-            <input v-model.trim="stationProfileForm.myName" type="text" placeholder="请输入姓名" />
-          </div>
-        </label>
+        <div class="qsl-station-profile-form__row qsl-station-profile-form__row--two">
+          <label class="qsl-field">
+            <span class="qsl-field__label">姓名（My_Name）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="stationProfileForm.myName" type="text" placeholder="请输入姓名" />
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">英文姓名（My_Name_en）</span>
+            <div class="qsl-input-shell">
+              <input
+                v-model.trim="stationProfileForm.myNameEn"
+                type="text"
+                placeholder="请输入英文姓名"
+              />
+            </div>
+          </label>
+        </div>
+
+        <div class="qsl-station-profile-form__row qsl-station-profile-form__row--two">
+          <label class="qsl-field">
+            <span class="qsl-field__label">收件地址（My_Address）</span>
+            <div class="qsl-input-shell">
+              <input
+                v-model.trim="stationProfileForm.myAddress"
+                type="text"
+                placeholder="请输入详细收件地址"
+              />
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">英文收件地址（My_Address_en）</span>
+            <div class="qsl-input-shell">
+              <input
+                v-model.trim="stationProfileForm.myAddressEn"
+                type="text"
+                placeholder="请输入英文收件地址"
+              />
+            </div>
+          </label>
+        </div>
+
+        <div class="qsl-station-profile-form__row qsl-station-profile-form__row--three">
+          <label class="qsl-field">
+            <span class="qsl-field__label">邮编（My_Postal_Code）</span>
+            <div class="qsl-input-shell">
+              <input
+                v-model.trim="stationProfileForm.myPostalCode"
+                type="text"
+                placeholder="请输入邮政编码"
+              />
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">电话（My_Telephone）</span>
+            <div class="qsl-input-shell">
+              <input
+                v-model.trim="stationProfileForm.myTelephone"
+                type="text"
+                placeholder="请输入联系电话"
+              />
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">电子邮件（My_E-mail）</span>
+            <div class="qsl-input-shell">
+              <input
+                v-model.trim="stationProfileForm.myEmail"
+                type="email"
+                placeholder="请输入电子邮箱"
+              />
+            </div>
+          </label>
+        </div>
 
         <label class="qsl-field">
-          <span class="qsl-field__label">电话（My_Telephone）</span>
-          <div class="qsl-input-shell">
-            <input
-              v-model.trim="stationProfileForm.myTelephone"
-              type="text"
-              placeholder="请输入联系电话"
-            />
-          </div>
-        </label>
-
-        <label class="qsl-field">
-          <span class="qsl-field__label">邮编（My_Postal_Code）</span>
-          <div class="qsl-input-shell">
-            <input
-              v-model.trim="stationProfileForm.myPostalCode"
-              type="text"
-              placeholder="请输入邮政编码"
-            />
-          </div>
-        </label>
-
-        <label class="qsl-field qsl-field--full">
-          <span class="qsl-field__label">收件地址（My_Address）</span>
-          <div class="qsl-input-shell">
-            <input
-              v-model.trim="stationProfileForm.myAddress"
-              type="text"
-              placeholder="请输入详细收件地址"
-            />
-          </div>
-        </label>
-
-        <label class="qsl-field">
-          <span class="qsl-field__label">电子邮件（My_E-mail）</span>
-          <div class="qsl-input-shell">
-            <input
-              v-model.trim="stationProfileForm.myEmail"
-              type="email"
-              placeholder="请输入电子邮箱"
-            />
-          </div>
-        </label>
-
-        <label class="qsl-field qsl-field--full">
           <span class="qsl-field__label">备注（Station_Remarks）</span>
           <div class="qsl-input-shell qsl-input-shell--textarea">
             <textarea
@@ -222,3 +260,30 @@ onMounted(loadStationProfile)
     </VCard>
   </div>
 </template>
+
+<style scoped>
+.qsl-station-profile-form {
+  display: grid;
+  gap: 12px;
+}
+
+.qsl-station-profile-form__row {
+  display: grid;
+  gap: 12px;
+}
+
+.qsl-station-profile-form__row--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.qsl-station-profile-form__row--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 768px) {
+  .qsl-station-profile-form__row--two,
+  .qsl-station-profile-form__row--three {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

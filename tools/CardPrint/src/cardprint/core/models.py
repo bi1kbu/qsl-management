@@ -106,6 +106,7 @@ class FieldDefinition:
     text_align: str = "left"
     distribute_align: bool = False
     max_len: int = 0
+    fixed_text: str = ""
 
     def __post_init__(self) -> None:
         if not self.key:
@@ -324,6 +325,7 @@ class Preset:
                     text_align=_to_text_align(item.get("text_align", "left")),
                     distribute_align=_to_bool(item.get("distribute_align", False)),
                     max_len=_to_int(item.get("max_len", 0), field_name="max_len", key=key_name, default=0),
+                    fixed_text=str(item.get("fixed_text", "")),
                 )
             )
 

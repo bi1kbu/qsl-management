@@ -1,11 +1,15 @@
 package com.bi1kbu.qslmanagement;
 
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
+import com.bi1kbu.qslmanagement.api.QslAiService;
 import com.bi1kbu.qslmanagement.api.QslAiPromptDefaults;
+import com.bi1kbu.qslmanagement.api.QslAuditService;
+import com.bi1kbu.qslmanagement.api.QslQrzAddressLookupService;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.ReactiveExtensionClient;
@@ -24,6 +28,20 @@ public class QslManagementPlugin extends BasePlugin {
     public QslManagementPlugin(PluginContext pluginContext, ReactiveExtensionClient client) {
         super(pluginContext);
         this.client = client;
+    }
+
+    @Bean
+    public QslAiService qslAiService(ReactiveExtensionClient client, QslAuditService auditService) {
+        return new QslAiService(client, auditService);
+    }
+
+    @Bean
+    public QslQrzAddressLookupService qslQrzAddressLookupService(
+        ReactiveExtensionClient client,
+        QslAuditService auditService,
+        QslAiService aiService
+    ) {
+        return new QslQrzAddressLookupService(client, auditService, aiService);
     }
 
     @Override
@@ -76,12 +94,23 @@ public class QslManagementPlugin extends BasePlugin {
                 spec.setAiSecretName("qsl-ai-openai-api-key");
                 spec.setAiTemperature(0.2D);
                 spec.setAiTimeoutSeconds(30);
+                spec.setAiMaxConcurrentRequests(1);
                 spec.setAiMaxInputCharacters(30000);
                 spec.setAiOnlineImportParseEnabled(Boolean.FALSE);
                 spec.setAiAddressCleanupEnabled(Boolean.FALSE);
                 spec.setAiSystemPrompt(QslAiPromptDefaults.SYSTEM_PROMPT);
                 spec.setAiOnlineImportPrompt(QslAiPromptDefaults.ONLINE_IMPORT_PROMPT);
                 spec.setAiAddressCleanupPrompt(QslAiPromptDefaults.ADDRESS_CLEANUP_PROMPT);
+                spec.setAiCallbookAddressPrompt(QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT);
+                spec.setQrzComEnabled(Boolean.FALSE);
+                spec.setQrzComUsername("");
+                spec.setQrzComSecretName("qsl-qrz-com-credential");
+                spec.setQrzComXmlBaseUrl("https://xmldata.qrz.com/xml/current/");
+                spec.setQrzCnEnabled(Boolean.FALSE);
+                spec.setQrzCnUsername("");
+                spec.setQrzCnSecretName("qsl-qrz-cn-credential");
+                spec.setQrzCnLookupUrlTemplate("https://www.qrz.cn/call/{callSign}");
+                spec.setQrzTimeoutSeconds(30);
                 systemSetting.setSpec(spec);
                 return client.create(systemSetting)
                     .then()
@@ -98,9 +127,11 @@ public class QslManagementPlugin extends BasePlugin {
                 var spec = new StationProfile.StationProfileSpec();
                 spec.setMyCallSign("");
                 spec.setMyName("");
+                spec.setMyNameEn("");
                 spec.setMyTelephone("");
                 spec.setMyPostalCode("");
                 spec.setMyAddress("");
+                spec.setMyAddressEn("");
                 spec.setMyEmail("");
                 spec.setStationRemarks("");
                 stationProfile.setSpec(spec);

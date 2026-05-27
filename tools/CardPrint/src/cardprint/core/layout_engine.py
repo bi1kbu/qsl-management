@@ -70,7 +70,7 @@ def validate_deadzone(paper: Paper, deadzone: Deadzone) -> list[str]:
 
 
 def _format_field_text(field: FieldDefinition, row: dict[str, Any]) -> str:
-    value = row.get(field.key, "")
+    value = field.fixed_text if field.fixed_text else row.get(field.key, "")
     text = "" if value is None else str(value)
     if field.max_len > 0:
         text = text[: field.max_len]

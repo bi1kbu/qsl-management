@@ -7,13 +7,13 @@ import static org.springframework.web.reactive.function.server.RouterFunctions.r
 import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslApiResponses;
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
-import com.bi1kbu.qslmanagement.api.QslAuditService;
 import com.bi1kbu.qslmanagement.api.QslAiService;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
+import com.bi1kbu.qslmanagement.api.QslQrzAddressLookupService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +28,6 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
-import run.halo.app.extension.ReactiveExtensionClient;
 
 @Component
 public class QslConsoleApiEndpoint implements CustomEndpoint {
@@ -39,6 +38,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private final QslLegacyMigrationService legacyMigrationService;
     private final QslNotificationMailService notificationMailService;
     private final QslAiService aiService;
+    private final QslQrzAddressLookupService qrzAddressLookupService;
 
     @Autowired
     public QslConsoleApiEndpoint(
@@ -47,17 +47,16 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         QslImportExportJobService importExportJobService,
         QslLegacyMigrationService legacyMigrationService,
         QslNotificationMailService notificationMailService,
-        ReactiveExtensionClient client,
-        QslAuditService auditService
+        QslAiService aiService,
+        QslQrzAddressLookupService qrzAddressLookupService
     ) {
-        this(
-            overviewService,
-            actionService,
-            importExportJobService,
-            legacyMigrationService,
-            notificationMailService,
-            new QslAiService(client, auditService)
-        );
+        this.overviewService = overviewService;
+        this.actionService = actionService;
+        this.importExportJobService = importExportJobService;
+        this.legacyMigrationService = legacyMigrationService;
+        this.notificationMailService = notificationMailService;
+        this.aiService = aiService;
+        this.qrzAddressLookupService = qrzAddressLookupService;
     }
 
     QslConsoleApiEndpoint(
@@ -68,12 +67,15 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         QslNotificationMailService notificationMailService,
         QslAiService aiService
     ) {
-        this.overviewService = overviewService;
-        this.actionService = actionService;
-        this.importExportJobService = importExportJobService;
-        this.legacyMigrationService = legacyMigrationService;
-        this.notificationMailService = notificationMailService;
-        this.aiService = aiService;
+        this(
+            overviewService,
+            actionService,
+            importExportJobService,
+            legacyMigrationService,
+            notificationMailService,
+            aiService,
+            null
+        );
     }
 
     @Override
@@ -85,6 +87,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/mail-receive-confirms/{cardRecordName}/received-date"), this::updateMailReceiveDate)
             .andRoute(POST("/mail-receive-confirms/{cardRecordName}/received-record-code/migrate"),
                 this::migrateReceivedRecordCode)
+            .andRoute(POST("/receive-records/{receivedRecordCode}/link-outbound-card"),
+                this::linkReceiveRecordToOutboundCard)
             .andRoute(POST("/card-mutations/{cardRecordName}/resend"), this::resendCard)
             .andRoute(POST("/card-mutations/{cardRecordName}/mark-error"), this::markCardIssueError)
             .andRoute(POST("/card-mutations/{cardRecordName}/mark-resend"), this::markCardAsResend)
@@ -96,6 +100,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/ai-address-normalizations/preview"), this::previewAiAddressNormalizations)
             .andRoute(POST("/ai-address-normalizations/apply"), this::applyAiAddressNormalizations)
             .andRoute(POST("/ai-online-import-parses"), this::parseAiOnlineImport)
+            .andRoute(POST("/qrz-credential-tests"), this::testQrzCredential)
+            .andRoute(POST("/qrz-address-lookups/preview"), this::previewQrzAddressLookup)
             .andRoute(POST("/notification-mails/send"), this::sendNotificationMail)
             .andRoute(POST("/notification-mails/batch-send"), this::batchSendNotificationMail)
             .andRoute(POST("/notification-mails/test"), this::sendTestNotificationMail)
@@ -202,6 +208,23 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                     cardRecordName,
                     new QslConsoleActionService.ReceivedRecordCodeMigrateCommand(
                         payload.receivedRecordCode(),
+                        payload.targetCardRecordName()
+                    ),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> linkReceiveRecordToOutboundCard(ServerRequest request) {
+        var receivedRecordCode = request.pathVariable("receivedRecordCode");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(ReceiveRecordOutboundLinkRequest.class)
+                .defaultIfEmpty(new ReceiveRecordOutboundLinkRequest(""))
+                .flatMap(payload -> actionService.linkReceiveRecordToOutboundCard(
+                    receivedRecordCode,
+                    new QslConsoleActionService.ReceiveRecordOutboundLinkCommand(
                         payload.targetCardRecordName()
                     ),
                     authenticatedOperator.name(),
@@ -333,7 +356,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         return ensureAuthenticated(request)
             .flatMap(authenticatedOperator -> request.bodyToMono(AiConfigTestRequest.class)
                 .defaultIfEmpty(new AiConfigTestRequest(
-                    new AiRuntimeConfigRequest(Boolean.FALSE, "", "", "", "", null, null),
+                    new AiRuntimeConfigRequest(Boolean.FALSE, "", "", "", "", null, null, null),
                     "",
                     Boolean.FALSE
                 ))
@@ -345,6 +368,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                         payload.config() == null ? "" : payload.config().secretName(),
                         payload.config() == null ? null : payload.config().temperature(),
                         payload.config() == null ? null : payload.config().timeoutSeconds(),
+                        payload.config() == null ? null : payload.config().maxConcurrentRequests(),
                         payload.apiKey(),
                         payload.saveApiKey()
                     ),
@@ -394,6 +418,47 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                             : (payload.limitToSingle() ? "single" : "batch"),
                         payload.text(),
                         payload.defaultCardVersion()
+                    )
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> testQrzCredential(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(QrzCredentialTestRequest.class)
+                .defaultIfEmpty(new QrzCredentialTestRequest(
+                    "", Boolean.FALSE, "", "", "", "", "", "", null, Boolean.FALSE, ""
+                ))
+                .flatMap(payload -> qrzAddressLookupService.testAndSaveCredential(
+                    new QslQrzAddressLookupService.QrzCredentialCommand(
+                        payload.provider(),
+                        payload.enabled(),
+                        payload.username(),
+                        payload.password(),
+                        payload.cookie(),
+                        payload.secretName(),
+                        payload.baseUrl(),
+                        payload.lookupUrlTemplate(),
+                        payload.timeoutSeconds(),
+                        payload.saveCredential(),
+                        payload.testCallSign()
+                    ),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> previewQrzAddressLookup(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(ignored -> request.bodyToMono(QrzAddressLookupRequest.class)
+                .defaultIfEmpty(new QrzAddressLookupRequest("", ""))
+                .flatMap(payload -> qrzAddressLookupService.lookupAddress(
+                    new QslQrzAddressLookupService.QrzAddressLookupCommand(
+                        payload.provider(),
+                        payload.callSign()
                     )
                 )))
             .flatMap(QslApiResponses::ok)
@@ -622,6 +687,9 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private record ReceivedRecordCodeMigrateRequest(String receivedRecordCode, String targetCardRecordName) {
     }
 
+    private record ReceiveRecordOutboundLinkRequest(String targetCardRecordName) {
+    }
+
     private record CardIssueErrorRequest(String remarks) {
     }
 
@@ -661,7 +729,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         String model,
         String secretName,
         Double temperature,
-        Integer timeoutSeconds
+        Integer timeoutSeconds,
+        Integer maxConcurrentRequests
     ) {
     }
 
@@ -672,6 +741,24 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     }
 
     private record OnlineImportParseRequest(String text, String defaultCardVersion, Boolean limitToSingle) {
+    }
+
+    private record QrzCredentialTestRequest(
+        String provider,
+        Boolean enabled,
+        String username,
+        String password,
+        String cookie,
+        String secretName,
+        String baseUrl,
+        String lookupUrlTemplate,
+        Integer timeoutSeconds,
+        Boolean saveCredential,
+        String testCallSign
+    ) {
+    }
+
+    private record QrzAddressLookupRequest(String provider, String callSign) {
     }
 
     private record ImportJobRequest(

@@ -19,7 +19,8 @@ def build_preview_scene(preset: Preset, row: dict[str, Any]) -> dict[str, Any]:
             "print_height_mm": float(field.print_height_mm),
             "font_size_pt": int(field.font_size_pt),
             "distribute_align": bool(field.distribute_align),
-            "sample_text": str(row.get(field.key, "")),
+            "sample_text": str(field.fixed_text if field.fixed_text else row.get(field.key, "")),
+            "fixed_text": field.fixed_text,
         }
         for field in preset.fields
     ]

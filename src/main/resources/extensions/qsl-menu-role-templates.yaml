@@ -65,7 +65,7 @@ rules:
     resources: [ "secrets" ]
     verbs: [ "get", "list", "create", "update", "patch" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
-    resources: [ "notification-mails", "ai-config-tests" ]
+    resources: [ "notification-mails", "ai-config-tests", "qrz-credential-tests" ]
     verbs: [ "create" ]
 ---
 apiVersion: v1alpha1
@@ -424,8 +424,11 @@ metadata:
     rbac.authorization.halo.run/dependencies: '["qsl-management-card-query-view"]'
 rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
-    resources: [ "card-records" ]
+    resources: [ "card-records", "receive-records" ]
     verbs: [ "get", "list" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
+    resources: [ "receive-records" ]
+    verbs: [ "create" ]
 ---
 apiVersion: v1alpha1
 kind: Role
@@ -497,7 +500,7 @@ rules:
     resources: [ "address-book-entries", "bureau-entries" ]
     verbs: [ "create", "update", "patch", "delete" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
-    resources: [ "ai-address-normalizations" ]
+    resources: [ "ai-address-normalizations", "qrz-address-lookups" ]
     verbs: [ "create" ]
 ---
 apiVersion: v1alpha1

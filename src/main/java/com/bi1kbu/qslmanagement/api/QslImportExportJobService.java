@@ -655,12 +655,23 @@ public class QslImportExportJobService {
                     spec.setAiSecretName(value(row, "aiSecretName"));
                     spec.setAiTemperature(parseDouble(value(row, "aiTemperature")));
                     spec.setAiTimeoutSeconds(parseInteger(value(row, "aiTimeoutSeconds")));
+                    spec.setAiMaxConcurrentRequests(parseInteger(value(row, "aiMaxConcurrentRequests")));
                     spec.setAiMaxInputCharacters(parseInteger(value(row, "aiMaxInputCharacters")));
                     spec.setAiOnlineImportParseEnabled(parseBoolean(value(row, "aiOnlineImportParseEnabled")));
                     spec.setAiAddressCleanupEnabled(parseBoolean(value(row, "aiAddressCleanupEnabled")));
                     spec.setAiSystemPrompt(value(row, "aiSystemPrompt"));
                     spec.setAiOnlineImportPrompt(value(row, "aiOnlineImportPrompt"));
                     spec.setAiAddressCleanupPrompt(value(row, "aiAddressCleanupPrompt"));
+                    spec.setAiCallbookAddressPrompt(value(row, "aiCallbookAddressPrompt"));
+                    spec.setQrzComEnabled(parseBoolean(value(row, "qrzComEnabled")));
+                    spec.setQrzComUsername(value(row, "qrzComUsername"));
+                    spec.setQrzComSecretName(value(row, "qrzComSecretName"));
+                    spec.setQrzComXmlBaseUrl(value(row, "qrzComXmlBaseUrl"));
+                    spec.setQrzCnEnabled(parseBoolean(value(row, "qrzCnEnabled")));
+                    spec.setQrzCnUsername(value(row, "qrzCnUsername"));
+                    spec.setQrzCnSecretName(value(row, "qrzCnSecretName"));
+                    spec.setQrzCnLookupUrlTemplate(value(row, "qrzCnLookupUrlTemplate"));
+                    spec.setQrzTimeoutSeconds(parseInteger(value(row, "qrzTimeoutSeconds")));
                     record.setSpec(spec);
 
                     var status = record.getStatus() == null ? new SystemSetting.SystemSettingStatus() : record.getStatus();
@@ -675,9 +686,11 @@ public class QslImportExportJobService {
                     var spec = record.getSpec() == null ? new StationProfile.StationProfileSpec() : record.getSpec();
                     spec.setMyCallSign(value(row, "myCallSign"));
                     spec.setMyName(value(row, "myName"));
+                    spec.setMyNameEn(value(row, "myNameEn"));
                     spec.setMyTelephone(value(row, "myTelephone"));
                     spec.setMyPostalCode(value(row, "myPostalCode"));
                     spec.setMyAddress(value(row, "myAddress"));
+                    spec.setMyAddressEn(value(row, "myAddressEn"));
                     spec.setMyEmail(value(row, "myEmail"));
                     spec.setStationRemarks(value(row, "stationRemarks"));
                     record.setSpec(spec);
@@ -1367,12 +1380,23 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getAiSecretName()),
                         spec == null ? "" : doubleToText(spec.getAiTemperature()),
                         spec == null ? "" : integerToText(spec.getAiTimeoutSeconds()),
+                        spec == null ? "" : integerToText(spec.getAiMaxConcurrentRequests()),
                         spec == null ? "" : integerToText(spec.getAiMaxInputCharacters()),
                         spec == null ? "" : boolToText(spec.getAiOnlineImportParseEnabled()),
                         spec == null ? "" : boolToText(spec.getAiAddressCleanupEnabled()),
                         spec == null ? "" : nullToEmpty(spec.getAiSystemPrompt()),
                         spec == null ? "" : nullToEmpty(spec.getAiOnlineImportPrompt()),
                         spec == null ? "" : nullToEmpty(spec.getAiAddressCleanupPrompt()),
+                        spec == null ? "" : nullToEmpty(spec.getAiCallbookAddressPrompt()),
+                        spec == null ? "" : boolToText(spec.getQrzComEnabled()),
+                        spec == null ? "" : nullToEmpty(spec.getQrzComUsername()),
+                        spec == null ? "" : nullToEmpty(spec.getQrzComSecretName()),
+                        spec == null ? "" : nullToEmpty(spec.getQrzComXmlBaseUrl()),
+                        spec == null ? "" : boolToText(spec.getQrzCnEnabled()),
+                        spec == null ? "" : nullToEmpty(spec.getQrzCnUsername()),
+                        spec == null ? "" : nullToEmpty(spec.getQrzCnSecretName()),
+                        spec == null ? "" : nullToEmpty(spec.getQrzCnLookupUrlTemplate()),
+                        spec == null ? "" : integerToText(spec.getQrzTimeoutSeconds()),
                         status == null ? "" : nullToEmpty(status.getLastModifiedBy()),
                         status == null ? "" : nullToEmpty(status.getLastModifiedAt())
                     );
@@ -1403,12 +1427,23 @@ public class QslImportExportJobService {
                     "aiSecretName",
                     "aiTemperature",
                     "aiTimeoutSeconds",
+                    "aiMaxConcurrentRequests",
                     "aiMaxInputCharacters",
                     "aiOnlineImportParseEnabled",
                     "aiAddressCleanupEnabled",
                     "aiSystemPrompt",
                     "aiOnlineImportPrompt",
                     "aiAddressCleanupPrompt",
+                    "aiCallbookAddressPrompt",
+                    "qrzComEnabled",
+                    "qrzComUsername",
+                    "qrzComSecretName",
+                    "qrzComXmlBaseUrl",
+                    "qrzCnEnabled",
+                    "qrzCnUsername",
+                    "qrzCnSecretName",
+                    "qrzCnLookupUrlTemplate",
+                    "qrzTimeoutSeconds",
                     "lastModifiedBy",
                     "lastModifiedAt"
                 ), rows));
@@ -1420,9 +1455,11 @@ public class QslImportExportJobService {
                         record.getMetadata().getName(),
                         spec == null ? "" : nullToEmpty(spec.getMyCallSign()),
                         spec == null ? "" : nullToEmpty(spec.getMyName()),
+                        spec == null ? "" : nullToEmpty(spec.getMyNameEn()),
                         spec == null ? "" : nullToEmpty(spec.getMyTelephone()),
                         spec == null ? "" : nullToEmpty(spec.getMyPostalCode()),
                         spec == null ? "" : nullToEmpty(spec.getMyAddress()),
+                        spec == null ? "" : nullToEmpty(spec.getMyAddressEn()),
                         spec == null ? "" : nullToEmpty(spec.getMyEmail()),
                         spec == null ? "" : nullToEmpty(spec.getStationRemarks()),
                         status == null ? "" : nullToEmpty(status.getLastModifiedBy()),
@@ -1434,9 +1471,11 @@ public class QslImportExportJobService {
                     "id",
                     "myCallSign",
                     "myName",
+                    "myNameEn",
                     "myTelephone",
                     "myPostalCode",
                     "myAddress",
+                    "myAddressEn",
                     "myEmail",
                     "stationRemarks",
                     "lastModifiedBy",

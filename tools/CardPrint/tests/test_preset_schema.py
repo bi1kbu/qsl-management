@@ -80,3 +80,17 @@ def test_field_value_string_types_are_normalized(tmp_path: Path) -> None:
     assert field.bold is True
     assert field.italic is False
     assert field.max_len == 30
+
+
+def test_fixed_text_field_round_trip(tmp_path: Path) -> None:
+    data = sample_preset_dict()
+    data["fields"][0]["fixed_text"] = "固定辅助说明"
+    file_path = tmp_path / "preset.json"
+    file_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    loaded = load_preset(file_path)
+    assert loaded.fields[0].fixed_text == "固定辅助说明"
+
+    save_preset(file_path, loaded)
+    saved = json.loads(file_path.read_text(encoding="utf-8"))
+    assert saved["fields"][0]["fixed_text"] == "固定辅助说明"

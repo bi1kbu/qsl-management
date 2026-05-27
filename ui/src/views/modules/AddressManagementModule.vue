@@ -12,8 +12,12 @@ import {
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
   applyAiAddressNormalizations,
+  getConsoleApiErrorMessage,
+  previewQrzAddressLookup,
   previewAiAddressNormalizations,
   type AiAddressNormalizationRow,
+  type QrzAddressLookupResult,
+  type QrzProvider,
 } from '../../api/qsl-console-api'
 import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
 import QslDataTable from '../../components/QslDataTable.vue'
@@ -127,9 +131,14 @@ const loading = ref(false)
 const submitting = ref(false)
 const reindexing = ref(false)
 const editingId = ref('')
-const activeFunctionTab = ref<'basic' | 'list' | 'ai'>('basic')
+const activeFunctionTab = ref<'basic' | 'list' | 'ai' | 'qrzCom' | 'qrzCn'>('basic')
 const aiPreviewing = ref(false)
 const aiApplying = ref(false)
+const qrzComCallSignInput = ref('')
+const qrzCnCallSignInput = ref('')
+const qrzLookingUpProvider = ref<QrzProvider | ''>('')
+const qrzPreviewResult = ref<QrzAddressLookupResult | null>(null)
+const qrzFeedback = ref('')
 
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
@@ -723,6 +732,48 @@ const usePendingCallSign = (item: PendingBindingItem) => {
   feedback.value = `已填入呼号：${item.callSign}`
 }
 
+const lookupQrzAddress = async (provider: QrzProvider) => {
+  const callSign = normalizeCallSign(
+    provider === 'QRZ_COM' ? qrzComCallSignInput.value || form.callSign : qrzCnCallSignInput.value || form.callSign,
+  )
+  if (!callSign) {
+    qrzFeedback.value = '请先输入需要查询的呼号。'
+    return
+  }
+
+  qrzLookingUpProvider.value = provider
+  qrzPreviewResult.value = null
+  qrzFeedback.value = '正在获取地址资料...'
+  try {
+    qrzPreviewResult.value = await previewQrzAddressLookup({
+      provider,
+      callSign,
+    })
+    qrzFeedback.value = `已获取 ${provider === 'QRZ_COM' ? 'QRZ.COM' : 'QRZ.CN'} 地址预览，请确认后填入地址表单。`
+  } catch (error) {
+    qrzFeedback.value = `获取地址失败：${getConsoleApiErrorMessage(error)}`
+  } finally {
+    qrzLookingUpProvider.value = ''
+  }
+}
+
+const fillAddressFromQrzPreview = () => {
+  if (!qrzPreviewResult.value) {
+    qrzFeedback.value = '没有可填入的 QRZ 地址预览。'
+    return
+  }
+  const result = qrzPreviewResult.value
+  form.callSign = result.callSign || form.callSign
+  form.name = result.recipientName || form.name
+  form.telephone = result.telephone || form.telephone
+  form.postalCode = result.postalCode || form.postalCode
+  form.address = result.address || form.address
+  form.email = result.email || form.email
+  activeFunctionTab.value = 'basic'
+  feedback.value = '已填入地址表单，请人工核对后保存。'
+  qrzFeedback.value = ''
+}
+
 const bindAddressForCallSign = async (
   callSign: string,
   addressEntryName: string,
@@ -1100,6 +1151,12 @@ onMounted(() => {
             <VTabItem id="ai" label="AI地址整理">
               <div class="qsl-tab-panel-placeholder" />
             </VTabItem>
+            <VTabItem id="qrzCom" label="从QRZ.COM获取地址">
+              <div class="qsl-tab-panel-placeholder" />
+            </VTabItem>
+            <VTabItem id="qrzCn" label="从QRZ.CN获取地址">
+              <div class="qsl-tab-panel-placeholder" />
+            </VTabItem>
           </VTabs>
         </div>
       </template>
@@ -1244,7 +1301,7 @@ onMounted(() => {
         </QslDataTable>
       </template>
 
-      <template v-else>
+      <template v-else-if="activeFunctionTab === 'ai'">
         <div class="qsl-form-inline qsl-list-toolbar">
           <label class="qsl-checkbox">
             <input
@@ -1332,6 +1389,80 @@ onMounted(() => {
               {{ toAiPreviewItem(row).message || (toAiPreviewItem(row).changed ? '建议更新' : '无变化') }}
             </template>
           </QslDataTable>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="qsl-qrz-panel">
+          <div class="qsl-form-inline qsl-list-toolbar">
+            <div class="qsl-input-shell qsl-list-toolbar__search">
+              <input
+                v-if="activeFunctionTab === 'qrzCom'"
+                v-model.trim="qrzComCallSignInput"
+                type="text"
+                name="qrzComLookupCallSign"
+                placeholder="输入呼号，留空则使用基础表单呼号"
+              />
+              <input
+                v-else
+                v-model.trim="qrzCnCallSignInput"
+                type="text"
+                name="qrzCnLookupCallSign"
+                placeholder="输入呼号，留空则使用基础表单呼号"
+              />
+            </div>
+            <VButton
+              type="secondary"
+              :loading="
+                qrzLookingUpProvider === (activeFunctionTab === 'qrzCom' ? 'QRZ_COM' : 'QRZ_CN')
+              "
+              :disabled="qrzLookingUpProvider !== ''"
+              @click="lookupQrzAddress(activeFunctionTab === 'qrzCom' ? 'QRZ_COM' : 'QRZ_CN')"
+            >
+              获取地址
+            </VButton>
+          </div>
+          <p v-if="qrzFeedback" class="qsl-feedback">{{ qrzFeedback }}</p>
+
+          <div v-if="qrzPreviewResult" class="qsl-qrz-preview">
+            <div class="qsl-qrz-preview__header">
+              <div>
+                <strong>{{ qrzPreviewResult.callSign }}</strong>
+                <span class="qsl-muted">
+                  {{ qrzPreviewResult.provider === 'QRZ_COM' ? 'QRZ.COM' : 'QRZ.CN' }}
+                  置信度 {{ Math.round(qrzPreviewResult.confidence * 100) }}%
+                </span>
+              </div>
+              <VButton type="primary" @click="fillAddressFromQrzPreview">填入地址表单</VButton>
+            </div>
+            <dl class="qsl-qrz-preview__grid">
+              <div>
+                <dt>姓名（Name）</dt>
+                <dd>{{ qrzPreviewResult.recipientName || '-' }}</dd>
+              </div>
+              <div>
+                <dt>电话（Telephone）</dt>
+                <dd>{{ qrzPreviewResult.telephone || '-' }}</dd>
+              </div>
+              <div>
+                <dt>邮编（Postal_Code）</dt>
+                <dd>{{ qrzPreviewResult.postalCode || '-' }}</dd>
+              </div>
+              <div>
+                <dt>邮箱（E-mail）</dt>
+                <dd>{{ qrzPreviewResult.email || '-' }}</dd>
+              </div>
+              <div class="qsl-qrz-preview__full">
+                <dt>地址（Address）</dt>
+                <dd>{{ qrzPreviewResult.address || '-' }}</dd>
+              </div>
+              <div class="qsl-qrz-preview__full">
+                <dt>说明（Message）</dt>
+                <dd>{{ qrzPreviewResult.message || '-' }}</dd>
+              </div>
+            </dl>
+          </div>
+          <p v-else class="qsl-muted">查询结果会先显示为预览，确认后可填入基础表单，再手动保存。</p>
         </div>
       </template>
     </VCard>
@@ -1470,6 +1601,58 @@ onMounted(() => {
 
 .qsl-ai-preview-panel {
   margin-top: 16px;
+}
+
+.qsl-qrz-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qsl-qrz-preview {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 12px;
+}
+
+.qsl-qrz-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.qsl-qrz-preview__header > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.qsl-qrz-preview__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+}
+
+.qsl-qrz-preview__grid dt {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.qsl-qrz-preview__grid dd {
+  margin: 2px 0 0;
+  color: #111827;
+  line-height: 20px;
+  word-break: break-word;
+}
+
+.qsl-qrz-preview__full {
+  grid-column: 1 / -1;
 }
 
 .qsl-pre-line {

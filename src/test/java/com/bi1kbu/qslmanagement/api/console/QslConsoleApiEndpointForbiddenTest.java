@@ -12,6 +12,7 @@ import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
+import com.bi1kbu.qslmanagement.api.QslQrzAddressLookupService;
 import com.bi1kbu.qslmanagement.api.ReportSummary;
 import java.security.Principal;
 import java.util.List;
@@ -30,6 +31,7 @@ class QslConsoleApiEndpointForbiddenTest {
     private final QslLegacyMigrationService legacyMigrationService = mock(QslLegacyMigrationService.class);
     private final QslNotificationMailService notificationMailService = mock(QslNotificationMailService.class);
     private final QslAiService aiService = mock(QslAiService.class);
+    private final QslQrzAddressLookupService qrzAddressLookupService = mock(QslQrzAddressLookupService.class);
 
     @Test
     void shouldRejectReportSummaryWhenAuthorizedButForbidden() {
@@ -108,6 +110,71 @@ class QslConsoleApiEndpointForbiddenTest {
             .jsonPath("$.message").isEqualTo("无权限");
     }
 
+    @Test
+    void shouldRejectReceiveRecordOutboundLinkWhenAuthorizedButForbidden() {
+        when(actionService.linkReceiveRecordToOutboundCard(anyString(), any(), anyString(), anyString()))
+            .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));
+        var client = buildAuthenticatedClient();
+
+        client.post()
+            .uri("/receive-records/R0001-20260502/link-outbound-card")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue("""
+                {
+                  "targetCardRecordName": "C1001"
+                }
+                """)
+            .exchange()
+            .expectStatus().isForbidden()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-403-0001")
+            .jsonPath("$.message").isEqualTo("无权限");
+    }
+
+    @Test
+    void shouldRejectQrzCredentialTestWhenAuthorizedButForbidden() {
+        when(qrzAddressLookupService.testAndSaveCredential(any(), anyString(), anyString()))
+            .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));
+        var client = buildAuthenticatedClient();
+
+        client.post()
+            .uri("/qrz-credential-tests")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue("""
+                {
+                  "provider": "QRZ_COM",
+                  "enabled": true
+                }
+                """)
+            .exchange()
+            .expectStatus().isForbidden()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-403-0001")
+            .jsonPath("$.message").isEqualTo("无权限");
+    }
+
+    @Test
+    void shouldRejectQrzAddressLookupWhenAuthorizedButForbidden() {
+        when(qrzAddressLookupService.lookupAddress(any()))
+            .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));
+        var client = buildAuthenticatedClient();
+
+        client.post()
+            .uri("/qrz-address-lookups/preview")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue("""
+                {
+                  "provider": "QRZ_COM",
+                  "callSign": "BI1KBU"
+                }
+                """)
+            .exchange()
+            .expectStatus().isForbidden()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-403-0001")
+            .jsonPath("$.message").isEqualTo("无权限");
+    }
+
     private WebTestClient buildAuthenticatedClient() {
         var endpoint = new QslConsoleApiEndpoint(
             overviewService,
@@ -115,7 +182,8 @@ class QslConsoleApiEndpointForbiddenTest {
             importExportJobService,
             legacyMigrationService,
             notificationMailService,
-            aiService
+            aiService,
+            qrzAddressLookupService
         );
         var principal = (Principal) () -> "operator";
         return WebTestClient.bindToRouterFunction(endpoint.endpoint())

@@ -1,4 +1,5 @@
 import { axiosInstance } from '@halo-dev/api-client'
+import { isAxiosError } from 'axios'
 
 const consoleApiBase = '/apis/console.api.qsl-management.bi1kbu.com/v1alpha1'
 
@@ -6,6 +7,19 @@ interface ApiResult<T> {
   code: string
   message: string
   data: T
+}
+
+export const getConsoleApiErrorMessage = (error: unknown): string => {
+  if (isAxiosError(error)) {
+    const data = error.response?.data as unknown
+    if (data && typeof data === 'object') {
+      const message = (data as { message?: unknown }).message
+      if (typeof message === 'string' && message.trim()) {
+        return message.trim()
+      }
+    }
+  }
+  return error instanceof Error && error.message ? error.message : '未知错误'
 }
 
 export interface MailReceiveConfirmPayload {
@@ -26,6 +40,28 @@ export interface MailReceiveConfirmResult {
   message: string
   handledAt: string
   receivedRecordCode: string
+}
+
+export interface ReceiveRecordOutboundLinkPayload {
+  targetCardRecordName: string
+}
+
+export interface ReceiveRecordOutboundLinkResult {
+  receivedRecordCode: string
+  targetCardRecordName: string
+  message: string
+}
+
+export interface ReceivedRecordCodeMigratePayload {
+  receivedRecordCode: string
+  targetCardRecordName: string
+}
+
+export interface ReceivedRecordCodeMigrateResult {
+  sourceCardRecordName: string
+  targetCardRecordName: string
+  receivedRecordCode: string
+  message: string
 }
 
 export interface ReceiptConfirmPayload {
@@ -254,6 +290,7 @@ export interface AiRuntimeConfig {
   secretName: string
   temperature: number
   timeoutSeconds: number
+  maxConcurrentRequests: number
 }
 
 export interface AiConfigTestPayload {
@@ -338,6 +375,47 @@ export interface AiOnlineImportParseResult {
   message: string
 }
 
+export type QrzProvider = 'QRZ_COM' | 'QRZ_CN'
+
+export interface QrzCredentialTestPayload {
+  provider: QrzProvider
+  enabled: boolean
+  username: string
+  password?: string
+  cookie?: string
+  secretName: string
+  baseUrl?: string
+  lookupUrlTemplate?: string
+  timeoutSeconds: number
+  saveCredential: boolean
+  testCallSign?: string
+}
+
+export interface QrzCredentialTestResult {
+  success: boolean
+  provider: QrzProvider
+  message: string
+  testedAt: string
+}
+
+export interface QrzAddressLookupPayload {
+  provider: QrzProvider
+  callSign: string
+}
+
+export interface QrzAddressLookupResult {
+  callSign: string
+  provider: QrzProvider
+  recipientName: string
+  telephone: string
+  postalCode: string
+  address: string
+  email: string
+  confidence: number
+  message: string
+  lookedUpAt: string
+}
+
 export async function confirmMailSend(cardRecordName: string): Promise<void> {
   await axiosInstance.post(
     `${consoleApiBase}/mail-send-confirms/${encodeURIComponent(cardRecordName)}/confirm`,
@@ -397,6 +475,28 @@ export async function updateMailReceiveDate(
   const response = await axiosInstance.post<ApiResult<MailReceiveConfirmResult>>(
     `${consoleApiBase}/mail-receive-confirms/${encodeURIComponent(cardRecordName)}/received-date`,
     { receivedDate },
+  )
+  return response.data.data
+}
+
+export async function linkReceiveRecordToOutboundCard(
+  receivedRecordCode: string,
+  payload: ReceiveRecordOutboundLinkPayload,
+): Promise<ReceiveRecordOutboundLinkResult> {
+  const response = await axiosInstance.post<ApiResult<ReceiveRecordOutboundLinkResult>>(
+    `${consoleApiBase}/receive-records/${encodeURIComponent(receivedRecordCode)}/link-outbound-card`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function migrateReceivedRecordCode(
+  sourceCardRecordName: string,
+  payload: ReceivedRecordCodeMigratePayload,
+): Promise<ReceivedRecordCodeMigrateResult> {
+  const response = await axiosInstance.post<ApiResult<ReceivedRecordCodeMigrateResult>>(
+    `${consoleApiBase}/mail-receive-confirms/${encodeURIComponent(sourceCardRecordName)}/received-record-code/migrate`,
+    payload,
   )
   return response.data.data
 }
@@ -495,6 +595,26 @@ export async function parseOnlineImportByAi(
 ): Promise<AiOnlineImportParseResult> {
   const response = await axiosInstance.post<ApiResult<AiOnlineImportParseResult>>(
     `${consoleApiBase}/ai-online-import-parses`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function testQrzCredential(
+  payload: QrzCredentialTestPayload,
+): Promise<QrzCredentialTestResult> {
+  const response = await axiosInstance.post<ApiResult<QrzCredentialTestResult>>(
+    `${consoleApiBase}/qrz-credential-tests`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function previewQrzAddressLookup(
+  payload: QrzAddressLookupPayload,
+): Promise<QrzAddressLookupResult> {
+  const response = await axiosInstance.post<ApiResult<QrzAddressLookupResult>>(
+    `${consoleApiBase}/qrz-address-lookups/preview`,
     payload,
   )
   return response.data.data
