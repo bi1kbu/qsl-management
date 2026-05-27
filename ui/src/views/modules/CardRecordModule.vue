@@ -303,6 +303,8 @@ const NO_CARD_SEQUENCE_START = 0
 const NO_CARD_NAME_PATTERN = /^NC(\d+)$/i
 const DEFAULT_ONLINE_EXCHANGE_CARD_REMARKS =
   '期待与您空中相遇。\nLooking forward to meeting you on the air.'
+const DEFAULT_QSO_CARD_REMARKS =
+  '通联愉快，期待空中常见。\nNice QSO，Hope to catch you on the air often.'
 
 const selectedQso = computed(() => {
   if (!form.qsoRecordName.trim()) {
@@ -789,9 +791,14 @@ const allocateNoCardResourceName = (): string => {
 }
 
 const resolveDefaultCardRemarks = (cardType: CardType = form.cardType): string => {
-  return resolveSceneTypeByCardType(cardType) === 'ONLINE_EYEBALL'
-    ? DEFAULT_ONLINE_EXCHANGE_CARD_REMARKS
-    : ''
+  const sceneType = resolveSceneTypeByCardType(cardType)
+  if (sceneType === 'ONLINE_EYEBALL') {
+    return DEFAULT_ONLINE_EXCHANGE_CARD_REMARKS
+  }
+  if (sceneType === 'QSO' || sceneType === 'SWL') {
+    return DEFAULT_QSO_CARD_REMARKS
+  }
+  return ''
 }
 
 const allocateCardResourceName = async (): Promise<string> => {

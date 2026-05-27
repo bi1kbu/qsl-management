@@ -1,6 +1,7 @@
 package com.bi1kbu.qslmanagement.api;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -11,6 +12,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.ReactiveExtensionClient;
@@ -44,6 +47,114 @@ class QslQrzAddressLookupServiceTest {
         assertTrue(result.postalCode().equals("850000"));
         assertTrue(result.email().equals("bg0jj@foxmail.com"));
         assertTrue(result.confidence() >= 0.9);
+    }
+
+    @Test
+    void shouldNotTreatQrzComStateOnlyXmlAsCompleteAddress() {
+        var service = new QslQrzAddressLookupService(
+            mock(ReactiveExtensionClient.class),
+            mock(QslAuditService.class),
+            mock(QslAiService.class)
+        );
+        var xml = """
+            <QRZDatabase>
+              <Callsign>
+                <call>BG0JJ</call>
+                <name_fmt>BG0JJ BG0JJ</name_fmt>
+                <state>Xizang Autonomous Region</state>
+                <country>China</country>
+              </Callsign>
+            </QRZDatabase>
+            """;
+
+        var result = service.parseQrzComAddressResult("BG0JJ", xml);
+
+        assertEquals("Xizang Autonomous Region", result.address());
+        assertFalse(service.hasDetailedQrzComStructuredAddressData(xml, result));
+    }
+
+    @Test
+    void shouldExtractQrzComProfileChineseBiographyContent() {
+        var service = new QslQrzAddressLookupService(
+            mock(ReactiveExtensionClient.class),
+            mock(QslAuditService.class),
+            mock(QslAiService.class)
+        );
+        var html = """
+            <html>
+              <head><title>BG0JJ - QRZ.COM</title></head>
+              <body>
+                <div class="summary">P.O. Box 01-888, Liuwu New District, Lhasa City</div>
+                <div id="biography">
+                  <p>我的地址（My address）</p>
+                  <p>姓名： BG0JJ</p>
+                  <p>西藏自治区拉萨市柳梧新区01-888邮政信箱</p>
+                  <p>邮政编码：850000</p>
+                  <p>email:bg0jj@foxmail.com</p>
+                </div>
+              </body>
+            </html>
+            """;
+
+        var feature = service.compactQrzComHtmlFeature("BG0JJ", html);
+
+        assertTrue(feature.contains("来源：QRZ.COM 资料页预处理"));
+        assertTrue(feature.contains("西藏自治区拉萨市柳梧新区01-888邮政信箱"), feature);
+        assertTrue(feature.contains("850000"));
+        assertTrue(feature.contains("bg0jj@foxmail.com"));
+    }
+
+    @Test
+    void shouldDecodeQrzComBase64BiographyContent() {
+        var service = new QslQrzAddressLookupService(
+            mock(ReactiveExtensionClient.class),
+            mock(QslAuditService.class),
+            mock(QslAiService.class)
+        );
+        var biography = """
+            <p>我的地址（My address）</p>
+            <p>姓名： BG0JJ</p>
+            <p>西藏自治区拉萨市柳梧新区01-888邮政信箱</p>
+            <p>邮政编码：850000</p>
+            <p>email:bg0jj@foxmail.com</p>
+            """;
+        var encoded = Base64.getEncoder().encodeToString(biography.getBytes(StandardCharsets.UTF_8));
+        var html = """
+            <html>
+              <body>
+                <script>jQuery('#biodata').html(Base64.decode("%s"));</script>
+                <noscript>JavaScript is required to view user biographies.</noscript>
+              </body>
+            </html>
+            """.formatted(encoded);
+
+        assertTrue(html.contains("Base64.decode("), html);
+        var decodedTexts = service.extractBase64DecodedHtmlTexts(html);
+        assertTrue(decodedTexts.toString().contains("西藏自治区拉萨市柳梧新区01-888邮政信箱"), decodedTexts.toString());
+        var feature = service.compactQrzComHtmlFeature("BG0JJ", html);
+
+        assertTrue(feature.contains("西藏自治区拉萨市柳梧新区01-888邮政信箱"), feature);
+        assertTrue(feature.contains("850000"));
+        assertTrue(feature.contains("bg0jj@foxmail.com"));
+        assertFalse(feature.contains("JavaScript is required"));
+        assertTrue(service.hasUsefulQrzComProfileFeature(feature));
+    }
+
+    @Test
+    void shouldRejectUnavailableQrzComBiographyFeature() {
+        var service = new QslQrzAddressLookupService(
+            mock(ReactiveExtensionClient.class),
+            mock(QslAuditService.class),
+            mock(QslAiService.class)
+        );
+        var feature = """
+            来源：QRZ.COM 资料页预处理
+            呼号：BG0JJ
+            主体文本：
+            JavaScript is required to view user biographies.
+            """;
+
+        assertFalse(service.hasUsefulQrzComProfileFeature(feature));
     }
 
     @Test

@@ -105,10 +105,7 @@ public class QslAiService {
                     payload.addressCleanupPrompt(),
                     QslAiPromptDefaults.ADDRESS_CLEANUP_PROMPT
                 ));
-                spec.setAiCallbookAddressPrompt(normalizePrompt(
-                    payload.callbookAddressPrompt(),
-                    QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT
-                ));
+                spec.setAiCallbookAddressPrompt(normalizeCallbookAddressPrompt(payload.callbookAddressPrompt()));
                 systemSetting.setSpec(spec);
                 return client.update(systemSetting)
                     .flatMap(updated -> {
@@ -393,7 +390,7 @@ public class QslAiService {
                 normalizePrompt(spec.getAiSystemPrompt(), QslAiPromptDefaults.SYSTEM_PROMPT),
                 normalizePrompt(spec.getAiOnlineImportPrompt(), QslAiPromptDefaults.ONLINE_IMPORT_PROMPT),
                 normalizePrompt(spec.getAiAddressCleanupPrompt(), QslAiPromptDefaults.ADDRESS_CLEANUP_PROMPT),
-                normalizePrompt(spec.getAiCallbookAddressPrompt(), QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT),
+                normalizeCallbookAddressPrompt(spec.getAiCallbookAddressPrompt()),
                 hasApiKey
             ));
     }
@@ -447,10 +444,7 @@ public class QslAiService {
                     spec.getAiAddressCleanupPrompt(),
                     QslAiPromptDefaults.ADDRESS_CLEANUP_PROMPT
                 );
-                var callbookAddressPrompt = normalizePrompt(
-                    spec.getAiCallbookAddressPrompt(),
-                    QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT
-                );
+                var callbookAddressPrompt = normalizeCallbookAddressPrompt(spec.getAiCallbookAddressPrompt());
                 var enabled = Boolean.TRUE.equals(spec.getAiEnabled());
                 var onlineImportParseEnabled = Boolean.TRUE.equals(spec.getAiOnlineImportParseEnabled());
                 var addressCleanupEnabled = Boolean.TRUE.equals(spec.getAiAddressCleanupEnabled());
@@ -864,7 +858,7 @@ public class QslAiService {
         String features,
         String promptTemplate
     ) {
-        var prompt = normalizePrompt(promptTemplate, QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT)
+        var prompt = normalizeCallbookAddressPrompt(promptTemplate)
             .replace("{provider}", provider)
             .replace("{callSign}", callSign)
             .replace("{features}", features);
@@ -1000,6 +994,19 @@ public class QslAiService {
             return normalized;
         }
         return normalized.substring(0, MAX_PROMPT_LENGTH);
+    }
+
+    private String normalizeCallbookAddressPrompt(String value) {
+        var normalized = normalizePrompt(value, QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT);
+        if (samePrompt(normalized, QslAiPromptDefaults.LEGACY_CALLBOOK_ADDRESS_PROMPT)) {
+            return QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT;
+        }
+        return normalized;
+    }
+
+    private boolean samePrompt(String left, String right) {
+        return normalize(left).replaceAll("\\s+", "")
+            .equals(normalize(right).replaceAll("\\s+", ""));
     }
 
     private String decodeSecretData(byte[] data) {

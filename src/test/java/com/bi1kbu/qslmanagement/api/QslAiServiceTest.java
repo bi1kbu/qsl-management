@@ -253,4 +253,15 @@ class QslAiServiceTest {
         assertEquals("北京朝阳区工体东路8号 康堡花园 B座3单元501室", result.address());
         assertEquals(0.9, result.confidence());
     }
+
+    @Test
+    void shouldUpgradeLegacyCallbookAddressPromptAtRuntime() throws Exception {
+        var service = new QslAiService(mock(ReactiveExtensionClient.class), mock(QslAuditService.class));
+        Method method = QslAiService.class.getDeclaredMethod("normalizeCallbookAddressPrompt", String.class);
+        method.setAccessible(true);
+
+        var prompt = (String) method.invoke(service, QslAiPromptDefaults.LEGACY_CALLBOOK_ADDRESS_PROMPT);
+
+        assertEquals(QslAiPromptDefaults.CALLBOOK_ADDRESS_PROMPT, prompt);
+    }
 }

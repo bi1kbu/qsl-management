@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
+import {
+  createExtension,
+  getExtensionOrNull,
+  listExtensions,
+  qslApiVersion,
+  upsertSingleton,
+  type QslExtension,
+} from '../../api/qsl-extension-api'
+import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslDataTable from '../../components/QslDataTable.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
+import { resolveCardFlowStatus } from '../../utils/qsl-card-state'
 import {
   applySortDirection,
   compareCallSign,
@@ -12,6 +21,7 @@ import {
 } from '../../utils/qsl-table-sort'
 
 interface QsoRecordSpec {
+  sceneType: 'QSO' | 'SWL'
   date: string
   time: string
   timezone: string
@@ -32,6 +42,7 @@ interface QsoRecordSpec {
 
 interface QsoQueryItem {
   id: string
+  sceneType: 'QSO' | 'SWL'
   callSign: string
   date: string
   time: string
@@ -50,9 +61,68 @@ interface QsoQueryItem {
   remarks: string
 }
 
+type CardType = 'QSO' | 'SWL' | 'EYEBALL'
+type SceneType = 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
+
+interface CardRecordSpec {
+  callSign: string
+  cardType: CardType
+  sceneType: SceneType
+  cardVersion: string
+  qsoRecordName: string
+  offlineActivityName: string
+  addressEntryName: string
+  cardDate: string
+  cardTime: string
+  businessRemarks: string
+  createdRemarks: string
+  sentRemarks: string
+  receivedRemarks: string
+  publicReceiptRemarks: string
+  cardRemarks: string
+  cardSent: boolean
+  cardIssued: boolean
+  envelopePrinted: boolean
+  cardReceived: boolean
+  receiptConfirmed: boolean
+  cardIssuedAt: string
+  sentAt: string
+  receivedAt: string
+  createdMailStatus: string
+  createdMailSentAt: string
+  createdMailLastError: string
+  sentMailStatus: string
+  sentMailSentAt: string
+  sentMailLastError: string
+  receivedMailStatus: string
+  receivedMailSentAt: string
+  receivedMailLastError: string
+  mailTargetEmail: string
+}
+
+interface CardRecordStatus {
+  flowStatus: string
+}
+
+interface StationCardSpec {
+  cardVersion: string
+  remarks: string
+  sortOrder?: number
+  availableInventory?: number
+}
+
+interface SystemSettingSpec {
+  autoNotifyOnCardCreated?: boolean
+  qsoAutoNotifyOnCardCreated?: boolean
+  onlineAutoNotifyOnCardCreated?: boolean
+  cardRecordSequence: number
+}
+
 const rows = ref<QsoQueryItem[]>([])
+const cardRecords = ref<Array<QslExtension<CardRecordSpec, CardRecordStatus>>>([])
 const loading = ref(false)
 const feedback = ref('')
+const creatingCardRecordId = ref('')
 
 const filters = reactive({
   keyword: '',
@@ -80,6 +150,14 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
 const resourcePlural = 'qso-records'
+const cardRecordPlural = 'card-records'
+const cardRecordKind = 'CardRecord'
+const stationCardPlural = 'station-cards'
+const systemSettingPlural = 'system-settings'
+const systemSettingName = 'qsl-system-setting-default'
+const CARD_SEQUENCE_START = 1000
+const DEFAULT_QSO_CARD_REMARKS =
+  '通联愉快，期待空中常见。\nNice QSO，Hope to catch you on the air often.'
 const qsoColumns = [
   { key: 'id', label: 'QSO_ID', sortable: true },
   { key: 'callSign', label: '对方呼号', sortable: true },
@@ -91,10 +169,153 @@ const qsoColumns = [
 
 const normalize = (value: string) => value.trim().toUpperCase()
 const toQsoItem = (row: Record<string, unknown>): QsoQueryItem => row as unknown as QsoQueryItem
+const normalizeQsoSceneType = (value?: string): 'QSO' | 'SWL' => {
+  return value?.trim().toUpperCase() === 'SWL' ? 'SWL' : 'QSO'
+}
+
+const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
+  return {
+    autoNotifyOnCardCreated: false,
+    qsoAutoNotifyOnCardCreated: false,
+    onlineAutoNotifyOnCardCreated: false,
+    cardRecordSequence: CARD_SEQUENCE_START,
+  }
+}
+
+const splitCardVersions = (value: string): string[] => {
+  return value
+    .split(/[、,，\n\r]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+const normalizeCardVersions = (values: string[]): string[] => {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const trimmed = value.trim()
+    const key = trimmed.toUpperCase()
+    if (!trimmed || seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    result.push(trimmed)
+  }
+  return result
+}
+
+const extractCardSequence = (resourceName: string): number => {
+  const matched = resourceName
+    .trim()
+    .toUpperCase()
+    .match(/^C(\d+)$/)
+  if (!matched) {
+    return -1
+  }
+  const numericPart = Number.parseInt(matched[1] ?? '', 10)
+  return Number.isNaN(numericPart) ? -1 : numericPart
+}
+
+const getMaxCardSequence = (
+  extensions: Array<QslExtension<CardRecordSpec, CardRecordStatus>>,
+): number => {
+  return extensions.reduce((max, extension) => {
+    return Math.max(max, extractCardSequence(extension.metadata.name))
+  }, CARD_SEQUENCE_START)
+}
+
+const allocateCardResourceName = async (
+  extensions: Array<QslExtension<CardRecordSpec, CardRecordStatus>>,
+): Promise<string> => {
+  const currentExtension = await getExtensionOrNull<SystemSettingSpec>(
+    systemSettingPlural,
+    systemSettingName,
+  )
+  const baseSpec = {
+    ...createDefaultSystemSettingSpec(),
+    ...(currentExtension?.spec ?? {}),
+  }
+  const currentSequence = Number.isInteger(baseSpec.cardRecordSequence)
+    ? baseSpec.cardRecordSequence
+    : CARD_SEQUENCE_START
+  const nextSequence = Math.max(currentSequence, getMaxCardSequence(extensions)) + 1
+
+  await upsertSingleton<SystemSettingSpec>({
+    plural: systemSettingPlural,
+    kind: 'SystemSetting',
+    name: systemSettingName,
+    spec: {
+      ...baseSpec,
+      cardRecordSequence: nextSequence,
+    },
+  })
+
+  return `C${nextSequence}`
+}
+
+const resolveFirstAvailableCardVersion = (
+  stationCardExtensions: Array<QslExtension<StationCardSpec>>,
+  cardRecordExtensions: Array<QslExtension<CardRecordSpec, CardRecordStatus>>,
+): string => {
+  const usedCounter: Record<string, number> = {}
+  for (const extension of cardRecordExtensions) {
+    const versions = normalizeCardVersions(splitCardVersions(extension.spec?.cardVersion ?? ''))
+    for (const version of versions) {
+      const key = version.toUpperCase()
+      usedCounter[key] = (usedCounter[key] ?? 0) + 1
+    }
+  }
+
+  const ordered = [...stationCardExtensions].sort((a, b) => {
+    const aOrder = Number(a.spec?.sortOrder ?? Number.MAX_SAFE_INTEGER)
+    const bOrder = Number(b.spec?.sortOrder ?? Number.MAX_SAFE_INTEGER)
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder
+    }
+    const aCreated = a.metadata.creationTimestamp ?? ''
+    const bCreated = b.metadata.creationTimestamp ?? ''
+    return aCreated.localeCompare(bCreated)
+  })
+
+  const seen = new Set<string>()
+  for (const extension of ordered) {
+    const version = extension.spec?.cardVersion?.trim() ?? ''
+    const key = version.toUpperCase()
+    if (!version || seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+
+    const availableInventoryRaw = extension.spec?.availableInventory
+    const hasConfiguredInventory =
+      availableInventoryRaw !== undefined && availableInventoryRaw !== null
+    const availableInventory = Number(availableInventoryRaw ?? 0)
+    const safeInventory =
+      Number.isFinite(availableInventory) && availableInventory > 0
+        ? Math.floor(availableInventory)
+        : 0
+    const usedCount = usedCounter[key] ?? 0
+    if (hasConfiguredInventory && safeInventory - usedCount <= 0) {
+      continue
+    }
+    return version
+  }
+
+  return ''
+}
+
+const isQsoRecordConsumed = (qsoRecordName: string): boolean => {
+  const normalizedName = qsoRecordName.trim()
+  if (!normalizedName) {
+    return false
+  }
+  return cardRecords.value.some((item) => item.spec?.qsoRecordName?.trim() === normalizedName)
+}
 
 const toRow = (extension: QslExtension<QsoRecordSpec>): QsoQueryItem => {
   return {
     id: extension.metadata.name,
+    sceneType: normalizeQsoSceneType(extension.spec?.sceneType),
     callSign: extension.spec?.callSign ?? '',
     date: extension.spec?.date ?? '',
     time: extension.spec?.time ?? '',
@@ -117,13 +338,108 @@ const toRow = (extension: QslExtension<QsoRecordSpec>): QsoQueryItem => {
 const loadRows = async () => {
   loading.value = true
   try {
-    const extensions = await listExtensions<QsoRecordSpec>(resourcePlural)
+    const [extensions, cardRecordExtensions] = await Promise.all([
+      listExtensions<QsoRecordSpec>(resourcePlural),
+      listExtensions<CardRecordSpec, CardRecordStatus>(cardRecordPlural),
+    ])
     rows.value = extensions.map((extension) => toRow(extension))
+    cardRecords.value = cardRecordExtensions
     feedback.value = ''
   } catch (error) {
     feedback.value = `加载通联记录失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     loading.value = false
+  }
+}
+
+const createCardRecordForQso = async (item: QsoQueryItem) => {
+  const normalizedCallSign = item.callSign.trim().toUpperCase()
+  if (!normalizedCallSign) {
+    feedback.value = `通联记录 ${item.id} 未填写呼号，无法创建卡片。`
+    return
+  }
+
+  creatingCardRecordId.value = item.id
+  try {
+    const [latestCardRecords, stationCardExtensions] = await Promise.all([
+      listExtensions<CardRecordSpec, CardRecordStatus>(cardRecordPlural),
+      listExtensions<StationCardSpec>(stationCardPlural),
+    ])
+    cardRecords.value = latestCardRecords
+
+    if (latestCardRecords.some((record) => record.spec?.qsoRecordName?.trim() === item.id)) {
+      feedback.value = `通联记录 ${item.id} 已创建过卡片或已标记不创建卡片。`
+      return
+    }
+
+    const cardVersion = resolveFirstAvailableCardVersion(stationCardExtensions, latestCardRecords)
+    if (!cardVersion) {
+      feedback.value = '没有找到仍有库存的卡片版本，请先在本台设备中配置卡片版本库存。'
+      return
+    }
+
+    const nextCardResourceName = await allocateCardResourceName(latestCardRecords)
+    const nextSpec: CardRecordSpec = {
+      callSign: normalizedCallSign,
+      cardType: item.sceneType,
+      sceneType: item.sceneType,
+      cardVersion,
+      qsoRecordName: item.id,
+      offlineActivityName: '',
+      addressEntryName: '',
+      cardDate: item.date,
+      cardTime: item.time,
+      businessRemarks: '',
+      createdRemarks: '',
+      sentRemarks: '',
+      receivedRemarks: '',
+      publicReceiptRemarks: '',
+      cardRemarks: DEFAULT_QSO_CARD_REMARKS,
+      cardSent: false,
+      cardIssued: false,
+      envelopePrinted: false,
+      cardReceived: false,
+      receiptConfirmed: false,
+      cardIssuedAt: '',
+      sentAt: '',
+      receivedAt: '',
+      createdMailStatus: '',
+      createdMailSentAt: '',
+      createdMailLastError: '',
+      sentMailStatus: '',
+      sentMailSentAt: '',
+      sentMailLastError: '',
+      receivedMailStatus: '',
+      receivedMailSentAt: '',
+      receivedMailLastError: '',
+      mailTargetEmail: '',
+    }
+
+    const createdRecord = await createExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, {
+      apiVersion: qslApiVersion,
+      kind: cardRecordKind,
+      metadata: {
+        name: nextCardResourceName,
+      },
+      spec: nextSpec,
+      status: {
+        flowStatus: resolveCardFlowStatus(nextSpec),
+      },
+    })
+
+    await appendQslAuditLog({
+      action: '通联日志一键创建卡片',
+      resourceType: 'card-record',
+      resourceName: createdRecord.metadata.name,
+      detail: `${normalizedCallSign} ${item.sceneType}，关联记录=${item.id}，版本=${cardVersion}`,
+    })
+
+    cardRecords.value = [...latestCardRecords, createdRecord]
+    feedback.value = `已为通联记录 ${item.id} 创建卡片：${createdRecord.metadata.name}，版本 ${cardVersion}。`
+  } catch (error) {
+    feedback.value = `创建卡片失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    creatingCardRecordId.value = ''
   }
 }
 
@@ -138,6 +454,7 @@ const filteredRows = computed(() => {
       !keyword ||
       [
         item.id,
+        item.sceneType,
         item.callSign,
         item.date,
         item.time,
@@ -422,6 +739,7 @@ onMounted(loadRows)
         :sort-direction="sortDirection"
         :loading="loading"
         clickable-rows
+        show-actions
         :expanded-row-key="expandedId"
         show-pagination
         :total="sortedRows.length"
@@ -439,9 +757,24 @@ onMounted(loadRows)
         <template #cell-datetime="{ row }">
           {{ toQsoItem(row).date }} {{ toQsoItem(row).time }} {{ toQsoItem(row).timezone }}
         </template>
+        <template #row-actions="{ row }">
+          <VButton
+            size="xs"
+            type="secondary"
+            :disabled="
+              loading ||
+              creatingCardRecordId === toQsoItem(row).id ||
+              isQsoRecordConsumed(toQsoItem(row).id)
+            "
+            @click.stop="createCardRecordForQso(toQsoItem(row))"
+          >
+            {{ isQsoRecordConsumed(toQsoItem(row).id) ? '已创建' : '创建卡片' }}
+          </VButton>
+        </template>
         <template #detail="{ row }">
           <div class="qsl-detail-grid">
             <p><strong>QSO_ID：</strong>{{ toQsoItem(row).id }}</p>
+            <p><strong>类型：</strong>{{ toQsoItem(row).sceneType }}</p>
             <p><strong>对方呼号：</strong>{{ toQsoItem(row).callSign || '-' }}</p>
             <p><strong>日期：</strong>{{ toQsoItem(row).date || '-' }}</p>
             <p><strong>时间：</strong>{{ toQsoItem(row).time || '-' }}</p>

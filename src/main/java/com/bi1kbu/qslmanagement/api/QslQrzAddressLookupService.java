@@ -51,7 +51,7 @@ public class QslQrzAddressLookupService {
     private static final Pattern TITLE_PATTERN = Pattern.compile("(?is)<title[^>]*>(.*?)</title>");
     private static final Pattern BODY_PATTERN = Pattern.compile("(?is)<body[^>]*>(.*?)</body>");
     private static final Pattern MAIN_BLOCK_PATTERN = Pattern.compile(
-        "(?is)<(main|article|section|div)[^>]*(id|class)\\s*=\\s*['\"][^'\"]*(content|main|profile|callsign|user|info|detail|card)[^'\"]*['\"][^>]*>(.*?)</\\1>"
+        "(?is)<(main|article|section|div)[^>]*(id|class)\\s*=\\s*['\"][^'\"]*(content|main|profile|callsign|user|info|detail|card|bio|biography)[^'\"]*['\"][^>]*>(.*?)</\\1>"
     );
     private static final Pattern IMG_PATTERN = Pattern.compile("(?is)<img\\b([^>]*)>");
     private static final Pattern ATTR_PATTERN = Pattern.compile("(?is)(alt|title|src)\\s*=\\s*['\"]([^'\"]+)['\"]");
@@ -169,14 +169,22 @@ public class QslQrzAddressLookupService {
                     return fetchQrzComXml(callSign, spec, null)
                         .flatMap(xml -> {
                             var parsed = parseQrzComAddressResult(callSign, xml);
-                            if (hasQrzComStructuredAddressData(parsed)) {
-                                return Mono.just(parsed);
-                            }
-                            var feature = compactQrzComXmlFeature(callSign, xml);
-                            return aiService.parseCallbookAddressFeatures(
-                                    new QslAiService.CallbookAddressParseCommand(provider, callSign, feature)
-                                )
-                                .map(aiParsed -> toLookupResult(aiParsed, provider));
+                            return fetchQrzComProfileHtml(callSign, spec)
+                                .map(html -> compactQrzComHtmlFeature(callSign, html))
+                                .flatMap(profileFeature -> {
+                                    if (hasUsefulQrzComProfileFeature(profileFeature)) {
+                                        return aiService.parseCallbookAddressFeatures(
+                                                new QslAiService.CallbookAddressParseCommand(
+                                                    provider,
+                                                    callSign,
+                                                    compactQrzComCombinedFeature(callSign, xml, profileFeature)
+                                                )
+                                            )
+                                            .map(aiParsed -> toLookupResult(aiParsed, provider));
+                                    }
+                                    return resolveQrzComXmlFallback(callSign, xml, parsed, provider);
+                                })
+                                .onErrorResume(error -> resolveQrzComXmlFallback(callSign, xml, parsed, provider));
                         });
                 }
                 return fetchFeature(provider, callSign, spec)
@@ -235,6 +243,26 @@ public class QslQrzAddressLookupService {
                 return qrzComSessionKey(spec, username, password)
                     .flatMap(sessionKey -> qrzComLookupXml(spec, sessionKey, callSign));
             });
+    }
+
+    private Mono<QrzAddressLookupResult> resolveQrzComXmlFallback(
+        String callSign,
+        String xml,
+        QrzAddressLookupResult parsed,
+        String provider
+    ) {
+        if (hasDetailedQrzComStructuredAddressData(xml, parsed)) {
+            return Mono.just(parsed);
+        }
+        return aiService.parseCallbookAddressFeatures(
+                new QslAiService.CallbookAddressParseCommand(provider, callSign, compactQrzComXmlFeature(callSign, xml))
+            )
+            .map(aiParsed -> toLookupResult(aiParsed, provider));
+    }
+
+    private Mono<String> fetchQrzComProfileHtml(String callSign, SystemSetting.SystemSettingSpec spec) {
+        var url = "https://www.qrz.com/db/" + urlEncode(callSign);
+        return sendTextRequest(url, "", timeoutSeconds(spec));
     }
 
     private Mono<String> qrzComSessionKey(SystemSetting.SystemSettingSpec spec, String username, String password) {
@@ -761,10 +789,14 @@ public class QslQrzAddressLookupService {
             || normalized.contains("中國");
     }
 
-    private boolean hasQrzComStructuredAddressData(QrzAddressLookupResult result) {
-        return !normalize(result.email()).isBlank()
-            || !normalize(result.postalCode()).isBlank()
-            || normalize(result.address()).length() >= 10;
+    boolean hasDetailedQrzComStructuredAddressData(String xml, QrzAddressLookupResult result) {
+        var addr1 = xmlText(xml, "addr1");
+        if (!addr1.isBlank()) {
+            return true;
+        }
+        var address = normalize(result.address());
+        var hasPostalOrEmail = !normalize(result.email()).isBlank() || !normalize(result.postalCode()).isBlank();
+        return hasPostalOrEmail && isLikelyDetailedAddress(address);
     }
 
     private boolean hasDetailedQrzComAddress(String xml, String address, String postalCode, String email) {
@@ -772,6 +804,63 @@ public class QslQrzAddressLookupService {
             || !postalCode.isBlank()
             || !email.isBlank()
             || normalize(address).length() >= 10;
+    }
+
+    private boolean isLikelyDetailedAddress(String address) {
+        var normalized = normalize(address);
+        if (normalized.isBlank()) {
+            return false;
+        }
+        var upper = normalized.toUpperCase(Locale.ROOT);
+        if (upper.equals("CHINA") || upper.equals("XIZANG AUTONOMOUS REGION")) {
+            return false;
+        }
+        return normalized.matches(".*\\d.*")
+            || normalized.contains("路")
+            || normalized.contains("街")
+            || normalized.contains("号")
+            || normalized.contains("信箱")
+            || normalized.contains("P.O.")
+            || normalized.toLowerCase(Locale.ROOT).contains("box");
+    }
+
+    boolean hasUsefulQrzComProfileFeature(String feature) {
+        var normalized = normalize(feature);
+        if (normalized.isBlank()) {
+            return false;
+        }
+        var body = normalized;
+        var bodyMarker = normalized.indexOf("主体文本：");
+        if (bodyMarker >= 0) {
+            body = normalize(normalized.substring(bodyMarker + "主体文本：".length()));
+        }
+        if (body.isBlank()) {
+            return false;
+        }
+        var upperBody = body.toUpperCase(Locale.ROOT);
+        var hasOnlyUnavailableMessage =
+            (upperBody.contains("JAVASCRIPT IS REQUIRED TO VIEW USER BIOGRAPHIES")
+                || upperBody.contains("LOGIN REQUIRED"))
+                && !hasAddressSignal(body);
+        return !hasOnlyUnavailableMessage && (hasAddressSignal(body) || body.length() >= 80);
+    }
+
+    private boolean hasAddressSignal(String value) {
+        var normalized = normalize(value);
+        var lower = normalized.toLowerCase(Locale.ROOT);
+        return normalized.contains("地址")
+            || normalized.contains("邮编")
+            || normalized.contains("邮政编码")
+            || normalized.contains("信箱")
+            || normalized.contains("省")
+            || normalized.contains("市")
+            || normalized.contains("区")
+            || normalized.contains("@")
+            || lower.contains("email")
+            || lower.contains("address")
+            || lower.contains("zip")
+            || lower.contains("p.o.")
+            || lower.contains("box");
     }
 
     private QrzAddressLookupResult toLookupResult(QslAiService.CallbookAddressParseResult parsed, String provider) {
@@ -809,11 +898,96 @@ public class QslQrzAddressLookupService {
         }
         var mainBlocks = extractMainBlocks(body);
         var callSignBlock = extractCallSignBlock(body, callSign);
+        var decodedBiography = String.join("\n", extractBase64DecodedHtmlTexts(safeHtml));
         var subjectHtml = !mainBlocks.isBlank() ? mainBlocks : (callSignBlock.isBlank() ? body : callSignBlock);
+        if (!decodedBiography.isBlank()) {
+            subjectHtml = subjectHtml + "\n" + decodedBiography;
+        }
         var text = limit(stripHtml(subjectHtml), MAX_QRZ_CN_TEXT_LENGTH);
         var imageTokens = extractImageTokens(subjectHtml);
         var feature = new StringBuilder();
         feature.append("来源：QRZ.CN 查询页面预处理\n");
+        feature.append("呼号：").append(callSign).append("\n");
+        if (!title.isBlank()) {
+            feature.append("标题：").append(title).append("\n");
+        }
+        if (!imageTokens.isEmpty()) {
+            feature.append("图片文字线索：").append(String.join("；", imageTokens)).append("\n");
+        }
+        feature.append("主体文本：\n").append(text);
+        return limit(feature.toString(), MAX_FEATURE_LENGTH);
+    }
+
+    List<String> extractBase64DecodedHtmlTexts(String html) {
+        var texts = new ArrayList<String>();
+        var normalizedHtml = normalize(html);
+        var lowerHtml = normalizedHtml.toLowerCase(Locale.ROOT);
+        var searchFrom = 0;
+        while (texts.size() < 10) {
+            var markerIndex = lowerHtml.indexOf("base64.decode(", searchFrom);
+            if (markerIndex < 0) {
+                break;
+            }
+            var quoteStart = firstQuoteIndex(normalizedHtml, markerIndex + "base64.decode(".length());
+            if (quoteStart < 0) {
+                searchFrom = markerIndex + 1;
+                continue;
+            }
+            var quote = normalizedHtml.charAt(quoteStart);
+            var quoteEnd = normalizedHtml.indexOf(quote, quoteStart + 1);
+            if (quoteEnd < 0) {
+                searchFrom = quoteStart + 1;
+                continue;
+            }
+            var encoded = normalize(normalizedHtml.substring(quoteStart + 1, quoteEnd));
+            if (encoded.isBlank()) {
+                searchFrom = quoteEnd + 1;
+                continue;
+            }
+            try {
+                var decoded = new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);
+                var text = stripHtml(decoded);
+                if (!text.isBlank()) {
+                    texts.add(text);
+                }
+            } catch (IllegalArgumentException ignored) {
+                // 不是有效 Base64 内容时跳过，保留其他可解析正文。
+            }
+            searchFrom = quoteEnd + 1;
+        }
+        return texts;
+    }
+
+    private int firstQuoteIndex(String value, int start) {
+        var single = value.indexOf('\'', start);
+        var doubleQuote = value.indexOf('"', start);
+        if (single < 0) {
+            return doubleQuote;
+        }
+        if (doubleQuote < 0) {
+            return single;
+        }
+        return Math.min(single, doubleQuote);
+    }
+
+    String compactQrzComHtmlFeature(String callSign, String html) {
+        var safeHtml = normalize(html);
+        var title = stripHtml(firstMatch(TITLE_PATTERN, safeHtml, 1));
+        var body = firstMatch(BODY_PATTERN, safeHtml, 1);
+        if (body.isBlank()) {
+            body = safeHtml;
+        }
+        var mainBlocks = extractMainBlocks(body);
+        var callSignBlock = extractCallSignBlock(body, callSign);
+        var decodedBiography = String.join("\n", extractBase64DecodedHtmlTexts(safeHtml));
+        var subjectHtml = !mainBlocks.isBlank() ? mainBlocks : (callSignBlock.isBlank() ? body : callSignBlock);
+        if (!decodedBiography.isBlank()) {
+            subjectHtml = decodedBiography;
+        }
+        var text = limit(stripHtml(subjectHtml), MAX_QRZ_CN_TEXT_LENGTH);
+        var imageTokens = extractImageTokens(subjectHtml);
+        var feature = new StringBuilder();
+        feature.append("来源：QRZ.COM 资料页预处理\n");
         feature.append("呼号：").append(callSign).append("\n");
         if (!title.isBlank()) {
             feature.append("标题：").append(title).append("\n");
@@ -987,6 +1161,22 @@ public class QslQrzAddressLookupService {
         return feature.length() <= MAX_FEATURE_LENGTH ? feature : feature.substring(0, MAX_FEATURE_LENGTH);
     }
 
+    private String compactQrzComCombinedFeature(String callSign, String xml, String profileFeature) {
+        var feature = """
+            来源：QRZ.COM 官方 XML 与资料页合并预处理
+
+            【资料页正文】
+            %s
+
+            【官方 XML】
+            %s
+            """.formatted(
+            profileFeature,
+            compactQrzComXmlFeature(callSign, xml)
+        ).trim();
+        return feature.length() <= MAX_FEATURE_LENGTH ? feature : feature.substring(0, MAX_FEATURE_LENGTH);
+    }
+
     private boolean isQrzCnCallSearchUrl(String url) {
         var normalized = normalize(url).toLowerCase();
         return normalized.contains("qrz.cn/call");
@@ -1101,7 +1291,7 @@ public class QslQrzAddressLookupService {
     String normalizeQrzComBaseUrl(String value) {
         var baseUrl = defaultIfBlank(value, DEFAULT_QRZ_COM_BASE_URL);
         var uri = requireAllowedQrzRequestUrl(baseUrl);
-        if (!isQrzComHost(uri.getHost()) || uri.getQuery() != null || uri.getFragment() != null) {
+        if (!isQrzComXmlHost(uri.getHost()) || uri.getQuery() != null || uri.getFragment() != null) {
             throw new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                 "QSL-422-0001", "QRZ.COM XML地址必须是 xmldata.qrz.com 的 HTTP/HTTPS 基础地址");
         }
@@ -1150,6 +1340,13 @@ public class QslQrzAddressLookupService {
     }
 
     private boolean isQrzComHost(String host) {
+        var normalizedHost = normalize(host).toLowerCase(Locale.ROOT);
+        return isQrzComXmlHost(normalizedHost)
+            || "qrz.com".equals(normalizedHost)
+            || "www.qrz.com".equals(normalizedHost);
+    }
+
+    private boolean isQrzComXmlHost(String host) {
         return "xmldata.qrz.com".equals(normalize(host).toLowerCase(Locale.ROOT));
     }
 
