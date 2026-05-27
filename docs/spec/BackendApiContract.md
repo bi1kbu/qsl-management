@@ -124,7 +124,7 @@ AI 能力仅在控制台登录态下可用，不提供公开接口。AI API Key 
 | POST | `/qrz-credential-tests` | 测试并保存 QRZ.COM / QRZ.CN 非敏感配置；密码和自动刷新 Cookie 仅写入 Halo `Secret` | `system-settings:edit` |
 | POST | `/qrz-address-lookups/preview` | 按呼号从 QRZ.COM 官方 XML 或 QRZ.CN 查询页面获取特征并调用 AI 解析，返回地址预览，不落库 | `address-bureau:edit` |
 
-QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名称与 XML Base URL；QRZ.CN 地址获取使用可配置查询 URL 模板。服务端只允许访问 QRZ.COM / QRZ.CN 官方域名，凭据测试先用临时配置完成远程校验，通过后才写入系统参数与 Secret。QRZ.CN 查询优先用用户名和密码登录获取 Cookie，再用 Cookie 抓取查询页面。服务端识别 QRZ.CN `/call/` 页面时，会先按配置 URL 原样请求，再按站内表单提交呼号，兼容 `q` 与 `callsign` 字段；由于 QRZ.CN 旧站存在概率性返回呼号搜索页的问题，服务端会对每次请求结果校验目标呼号并重试，无有效目标呼号资料时明确返回错误，不把空搜索页交给 AI 解析。有效页面会在交给 AI 前抽取页面主体、呼号附近内容和图片文件名线索，降低无关导航、图片化字段和旧页面编码对解析的影响。两类查询均默认关闭，查询结果只用于地址管理页面预览，必须由用户手动确认填入地址表单并再次保存后才写入 `AddressBookEntry`。QRZ 密码、Cookie 与 AI API Key 不进入导入导出数据包。
+QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名称与 XML Base URL；QRZ.COM XML 中的 `call/name_fmt/fname/name/addr1/addr2/state/country/zip/email` 等字段优先由服务端结构化解析，结构化字段足够时不调用 AI，避免 AI 漏掉邮箱、邮编或详细地址；字段不足时才将预处理后的 XML 特征交给 AI 兜底。QRZ.CN 地址获取使用可配置查询 URL 模板。服务端只允许访问 QRZ.COM / QRZ.CN 官方域名，凭据测试先用临时配置完成远程校验，通过后才写入系统参数与 Secret。QRZ.CN 查询优先用用户名和密码登录获取 Cookie，再用 Cookie 抓取查询页面。服务端识别 QRZ.CN `/call/` 页面时，会先按配置 URL 原样请求，再按站内表单提交呼号，兼容 `q` 与 `callsign` 字段；由于 QRZ.CN 旧站存在概率性返回呼号搜索页的问题，服务端会对每次请求结果校验目标呼号并重试；若页面已明确提示“呼号没有在数据库中/添加该呼号信息”，立即返回呼号资料不存在，不再重试或调用 AI；无有效目标呼号资料时明确返回错误，不把空搜索页交给 AI 解析。有效页面会在交给 AI 前抽取页面主体、呼号附近内容和图片文件名线索，降低无关导航、图片化字段和旧页面编码对解析的影响。两类查询均默认关闭，查询结果只用于地址管理页面预览，必须由用户手动确认填入地址表单并再次保存后才写入 `AddressBookEntry`。QRZ 密码、Cookie 与 AI API Key 不进入导入导出数据包。
 
 ### 6.4 导入导出
 
@@ -408,4 +408,5 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 7. 线上换卡业务的“导入数据”菜单包含单条导入、批量导入、BH6SYX卡片广场导入。服务端直接创建线上换卡卡片记录，不创建 `ExchangeRequest`；普通文本导入写入“手工文本导入”来源，BH6SYX导入写入“BH6SYX卡片广场”来源。
 8. 2.0.0 起新增 `ReceiveRecord` 与 `OfflineExchangeCard`，收卡事实与线下换卡活动卡开始从 `CardRecord` 中解耦。
 9. 审计卡片记录查询和收卡记录查询按业务场景 tab 展示；卡片记录查询聚合 `CardRecord`，收卡记录查询聚合 `ReceiveRecord`，收卡编号以 `ReceiveRecord.metadata.name` 为准。
+
 

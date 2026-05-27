@@ -165,23 +165,26 @@ public class QslQrzAddressLookupService {
                     return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "QSL-422-0001", "QRZ.CN 查询未启用"));
                 }
-                return fetchFeature(provider, callSign, spec);
-            })
-            .flatMap(feature -> aiService.parseCallbookAddressFeatures(
-                new QslAiService.CallbookAddressParseCommand(provider, callSign, feature)
-            ))
-            .map(parsed -> new QrzAddressLookupResult(
-                parsed.callSign(),
-                provider,
-                parsed.recipientName(),
-                parsed.telephone(),
-                parsed.postalCode(),
-                parsed.address(),
-                parsed.email(),
-                parsed.confidence(),
-                parsed.message(),
-                QslApiSupport.nowText()
-            ));
+                if (QRZ_COM.equals(provider)) {
+                    return fetchQrzComXml(callSign, spec, null)
+                        .flatMap(xml -> {
+                            var parsed = parseQrzComAddressResult(callSign, xml);
+                            if (hasQrzComStructuredAddressData(parsed)) {
+                                return Mono.just(parsed);
+                            }
+                            var feature = compactQrzComXmlFeature(callSign, xml);
+                            return aiService.parseCallbookAddressFeatures(
+                                    new QslAiService.CallbookAddressParseCommand(provider, callSign, feature)
+                                )
+                                .map(aiParsed -> toLookupResult(aiParsed, provider));
+                        });
+                }
+                return fetchFeature(provider, callSign, spec)
+                    .flatMap(feature -> aiService.parseCallbookAddressFeatures(
+                        new QslAiService.CallbookAddressParseCommand(provider, callSign, feature)
+                    ))
+                    .map(parsed -> toLookupResult(parsed, provider));
+            });
     }
 
     private Mono<String> fetchFeature(String provider, String callSign, SystemSetting.SystemSettingSpec spec) {
@@ -205,6 +208,15 @@ public class QslQrzAddressLookupService {
         SystemSetting.SystemSettingSpec spec,
         CredentialSecret credentialOverride
     ) {
+        return fetchQrzComXml(callSign, spec, credentialOverride)
+            .map(xml -> compactQrzComXmlFeature(callSign, xml));
+    }
+
+    private Mono<String> fetchQrzComXml(
+        String callSign,
+        SystemSetting.SystemSettingSpec spec,
+        CredentialSecret credentialOverride
+    ) {
         var username = normalize(spec.getQrzComUsername());
         if (username.isBlank()) {
             return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
@@ -222,8 +234,7 @@ public class QslQrzAddressLookupService {
                 }
                 return qrzComSessionKey(spec, username, password)
                     .flatMap(sessionKey -> qrzComLookupXml(spec, sessionKey, callSign));
-            })
-            .map(xml -> compactFeature("QRZ.COM 官方 XML", callSign, xml));
+            });
     }
 
     private Mono<String> qrzComSessionKey(SystemSetting.SystemSettingSpec spec, String username, String password) {
@@ -363,8 +374,21 @@ public class QslQrzAddressLookupService {
         int attempt
     ) {
         return Flux.fromIterable(candidates)
-            .concatMap(candidate -> candidate.get().onErrorResume(error -> Mono.empty()))
-            .filter(html -> isUsefulQrzCnHtml(html, callSign))
+            .concatMap(candidate -> candidate.get()
+                .flatMap(html -> {
+                    if (isQrzCnNoDataHtml(html, callSign)) {
+                        return Mono.error(new QslApiException(HttpStatus.NOT_FOUND, "QSL-404-0001",
+                            "QRZ.CN 未查询到该呼号资料"));
+                    }
+                    return isUsefulQrzCnHtml(html, callSign) ? Mono.just(html) : Mono.empty();
+                })
+                .onErrorResume(error -> {
+                    if (error instanceof QslApiException qslError
+                        && qslError.getStatus() == HttpStatus.NOT_FOUND) {
+                        return Mono.error(error);
+                    }
+                    return Mono.empty();
+                }))
             .next()
             .switchIfEmpty(Mono.defer(() -> {
                 if (attempt >= MAX_QRZ_CN_FETCH_ATTEMPTS) {
@@ -668,6 +692,103 @@ public class QslQrzAddressLookupService {
         }
     }
 
+    QrzAddressLookupResult parseQrzComAddressResult(String fallbackCallSign, String xml) {
+        var callSign = defaultIfBlank(xmlText(xml, "call"), fallbackCallSign).toUpperCase(Locale.ROOT);
+        var recipientName = qrzComRecipientName(callSign, xml);
+        var postalCode = xmlText(xml, "zip");
+        var address = qrzComAddress(xml);
+        var email = xmlText(xml, "email");
+        var confidence = hasDetailedQrzComAddress(xml, address, postalCode, email) ? 0.98 : 0.7;
+        return new QrzAddressLookupResult(
+            callSign,
+            QRZ_COM,
+            recipientName,
+            "",
+            postalCode,
+            address,
+            email,
+            confidence,
+            "QRZ.COM 官方 XML字段解析",
+            QslApiSupport.nowText()
+        );
+    }
+
+    private String qrzComRecipientName(String callSign, String xml) {
+        var nameFmt = xmlText(xml, "name_fmt");
+        if (!nameFmt.isBlank()) {
+            return nameFmt;
+        }
+        var fname = xmlText(xml, "fname");
+        var name = xmlText(xml, "name");
+        var mergedName = normalize((fname + " " + name).trim());
+        return mergedName.isBlank() ? callSign : mergedName;
+    }
+
+    private String qrzComAddress(String xml) {
+        var addr1 = xmlText(xml, "addr1");
+        var addr2 = xmlText(xml, "addr2");
+        var state = xmlText(xml, "state");
+        var country = xmlText(xml, "country");
+        var parts = new ArrayList<String>();
+        appendQrzComAddressPart(parts, addr1);
+        appendQrzComAddressPart(parts, addr2);
+        appendQrzComAddressPart(parts, state);
+        if (!isChinaCountry(country) || parts.isEmpty()) {
+            appendQrzComAddressPart(parts, country);
+        }
+        return normalize(String.join(" ", parts));
+    }
+
+    private void appendQrzComAddressPart(List<String> parts, String value) {
+        var normalized = normalize(value);
+        if (normalized.isBlank()) {
+            return;
+        }
+        for (var existing : parts) {
+            if (existing.contains(normalized) || normalized.contains(existing)) {
+                return;
+            }
+        }
+        parts.add(normalized);
+    }
+
+    private boolean isChinaCountry(String country) {
+        var normalized = normalize(country).toUpperCase(Locale.ROOT);
+        return normalized.equals("CHINA")
+            || normalized.equals("CN")
+            || normalized.equals("PRC")
+            || normalized.contains("中国")
+            || normalized.contains("中國");
+    }
+
+    private boolean hasQrzComStructuredAddressData(QrzAddressLookupResult result) {
+        return !normalize(result.email()).isBlank()
+            || !normalize(result.postalCode()).isBlank()
+            || normalize(result.address()).length() >= 10;
+    }
+
+    private boolean hasDetailedQrzComAddress(String xml, String address, String postalCode, String email) {
+        return !xmlText(xml, "addr1").isBlank()
+            || !postalCode.isBlank()
+            || !email.isBlank()
+            || normalize(address).length() >= 10;
+    }
+
+    private QrzAddressLookupResult toLookupResult(QslAiService.CallbookAddressParseResult parsed, String provider) {
+        return new QrzAddressLookupResult(
+            parsed.callSign(),
+            provider,
+            parsed.recipientName(),
+            parsed.telephone(),
+            parsed.postalCode(),
+            parsed.address(),
+            parsed.email(),
+            parsed.confidence(),
+            parsed.message(),
+            QslApiSupport.nowText()
+        );
+    }
+
     private String stripHtml(String html) {
         return normalize(html)
             .replaceAll("(?is)<script[^>]*>.*?</script>", " ")
@@ -744,10 +865,21 @@ public class QslQrzAddressLookupService {
         return !text.isBlank()
             && (normalizedCallSign.isBlank() || text.contains(normalizedCallSign))
             && !text.contains("请登录")
-            && !text.contains("没有在我们的数据库中")
-            && !text.contains("如果你知道,请点这里添加该呼号信息")
-            && !text.contains("如果你知道，请点这里添加该呼号信息")
+            && !isQrzCnNoDataHtml(html, callSign)
             && !text.contains("LOGIN");
+    }
+
+    boolean isQrzCnNoDataHtml(String html, String callSign) {
+        var text = stripHtml(html)
+            .replace("，", ",")
+            .replace("。", ".")
+            .replaceAll("\\s+", "");
+        var normalizedCallSign = normalize(callSign).toUpperCase();
+        var upperText = text.toUpperCase();
+        return !upperText.isBlank()
+            && (normalizedCallSign.isBlank() || upperText.contains(normalizedCallSign))
+            && upperText.contains("没有在我们的数据库中")
+            && (upperText.contains("请点这里添加该呼号信息") || upperText.contains("添加该呼号信息"));
     }
 
     boolean isQrzCnLoggedInPage(String html) {
@@ -833,8 +965,25 @@ public class QslQrzAddressLookupService {
         return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength);
     }
 
-    private String compactFeature(String source, String callSign, String content) {
-        var feature = "来源：" + source + "\n呼号：" + callSign + "\n内容：\n" + normalize(content);
+    private String compactQrzComXmlFeature(String callSign, String xml) {
+        var parsed = parseQrzComAddressResult(callSign, xml);
+        var feature = """
+            来源：QRZ.COM 官方 XML 预处理
+            呼号：%s
+            姓名：%s
+            邮编：%s
+            邮箱：%s
+            地址：%s
+            原始XML：
+            %s
+            """.formatted(
+            parsed.callSign(),
+            parsed.recipientName(),
+            parsed.postalCode(),
+            parsed.email(),
+            parsed.address(),
+            normalize(xml)
+        ).trim();
         return feature.length() <= MAX_FEATURE_LENGTH ? feature : feature.substring(0, MAX_FEATURE_LENGTH);
     }
 

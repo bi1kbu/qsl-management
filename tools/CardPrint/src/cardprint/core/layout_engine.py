@@ -35,6 +35,7 @@ class LayoutItem:
     italic: bool
     text_align: str
     distribute_align: bool
+    digit_raise_ratio: float = 0.0
     line_index: int = 0
     line_count: int = 1
     anchor_x_mm: float = 0.0
@@ -238,6 +239,7 @@ def build_layout_items(preset: Preset, row: dict[str, Any]) -> list[LayoutItem]:
                     italic=field.italic,
                     text_align=field.text_align,
                     distribute_align=field.distribute_align,
+                    digit_raise_ratio=float(field.digit_raise_ratio),
                     line_index=0,
                     line_count=1,
                     anchor_x_mm=float(field.x_mm),
@@ -276,6 +278,7 @@ def build_layout_items(preset: Preset, row: dict[str, Any]) -> list[LayoutItem]:
                     italic=field.italic,
                     text_align=field.text_align,
                     distribute_align=field.distribute_align,
+                    digit_raise_ratio=float(field.digit_raise_ratio),
                     line_index=idx,
                     line_count=total_lines,
                     anchor_x_mm=float(field.x_mm),

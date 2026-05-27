@@ -106,6 +106,7 @@ class FieldDefinition:
     text_align: str = "left"
     distribute_align: bool = False
     max_len: int = 0
+    digit_raise_ratio: float = 0.0
     fixed_text: str = ""
 
     def __post_init__(self) -> None:
@@ -144,6 +145,12 @@ class FieldDefinition:
                 code="INVALID_TEXT_ALIGN",
                 message="text_align 仅支持 left/right。",
                 details={"key": self.key, "text_align": self.text_align},
+            )
+        if self.digit_raise_ratio < 0 or self.digit_raise_ratio > 1:
+            raise CardPrintError(
+                code="INVALID_DIGIT_RAISE_RATIO",
+                message="digit_raise_ratio 必须在 0 到 1 之间。",
+                details={"key": self.key, "digit_raise_ratio": self.digit_raise_ratio},
             )
 
 
@@ -325,6 +332,11 @@ class Preset:
                     text_align=_to_text_align(item.get("text_align", "left")),
                     distribute_align=_to_bool(item.get("distribute_align", False)),
                     max_len=_to_int(item.get("max_len", 0), field_name="max_len", key=key_name, default=0),
+                    digit_raise_ratio=_to_float(
+                        item.get("digit_raise_ratio", 0),
+                        field_name="digit_raise_ratio",
+                        key=key_name,
+                    ),
                     fixed_text=str(item.get("fixed_text", "")),
                 )
             )

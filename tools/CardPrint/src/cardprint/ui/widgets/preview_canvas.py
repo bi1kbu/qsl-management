@@ -48,6 +48,26 @@ class PreviewCanvas(QWidget):
             return self._pt_to_mm(font_size_pt) * 3.0
         return max(4.0, len(text) * self._pt_to_mm(font_size_pt) * 0.55)
 
+    def _draw_preview_text(
+        self,
+        painter: QPainter,
+        x: float,
+        y: float,
+        text: str,
+        font_size_pt: float,
+        digit_raise_ratio: float,
+        scale: float,
+    ) -> None:
+        digit_raise_px = self._pt_to_mm(font_size_pt) * scale * max(0.0, digit_raise_ratio)
+        if digit_raise_px <= 0 or not any(ch.isdigit() for ch in text):
+            painter.drawText(QPointF(x, y), text)
+            return
+        cursor_x = x
+        metrics = painter.fontMetrics()
+        for ch in text:
+            painter.drawText(QPointF(cursor_x, y - digit_raise_px if ch.isdigit() else y), ch)
+            cursor_x += float(metrics.horizontalAdvance(ch))
+
     def _to_px(self, mm_x: float, mm_y: float) -> tuple[float, float]:
         return self._page_left + (mm_x * self._scale), self._page_top + (mm_y * self._scale)
 
@@ -203,7 +223,17 @@ class PreviewCanvas(QWidget):
             else:
                 display_text = text
             painter.drawEllipse(QPointF(x, y), 2, 2)
-            painter.drawText(QPointF(x + 4, y - 3), display_text)
+            digit_raise_ratio = float(item.get("digit_raise_ratio", 0.0) or 0.0)
+            font_size_pt = float(item.get("font_size_pt", 11) or 11)
+            self._draw_preview_text(
+                painter,
+                x + 4,
+                y - 3,
+                display_text,
+                font_size_pt,
+                digit_raise_ratio,
+                scale,
+            )
 
     def _draw_field_boxes(self, painter: QPainter, page_left: float, page_top: float, scale: float) -> None:
         self._field_geometries = []

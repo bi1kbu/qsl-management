@@ -59,6 +59,14 @@ def test_fixed_text_overrides_row_value() -> None:
     assert items[0].text == "固定辅助说明"
 
 
+def test_digit_raise_ratio_is_carried_to_layout_item() -> None:
+    preset = _build_preset(print_width_mm=0.0)
+    preset.fields[0].digit_raise_ratio = 0.5
+    items = build_layout_items(preset, {"name": "BI1KBU"})
+    assert len(items) == 1
+    assert items[0].digit_raise_ratio == 0.5
+
+
 def test_cjk_wrap_uses_fullwidth_estimation() -> None:
     preset = _build_preset(print_width_mm=89.0, print_height_mm=12.6)
     text = "测试内容" * 20

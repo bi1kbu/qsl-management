@@ -30,13 +30,27 @@ public final class QslAiPromptDefaults {
 
     public static final String CALLBOOK_ADDRESS_PROMPT = """
         请从以下呼号查询页面或官方接口返回内容中解析通信地址资料。要求：
-        1. 只提取输入内容中明确存在的信息，不要编造姓名、电话、邮箱、邮编或地址。
-        2. 地址整理为“省 市 区 详细地址”或原始国家/地区可识别的单行通信地址。
-        3. callSign 使用输入呼号的大写形式。
-        4. confidence 使用 0 到 1 的数字表示解析可信度。
-        5. 必须使用系统指定的 JSON Schema 返回，不得输出解释。
-        6. 返回字段名必须固定为英文：callSign、recipientName、telephone、postalCode、address、email、confidence、message。
-        7. 不得使用“呼号、姓名、电话、邮编、地址、邮箱、置信度、说明”等中文字段名。
+        1. 必须只输出一个 JSON 对象，不得输出解释、Markdown 或额外文字。
+        2. 返回字段名必须固定为英文，且必须包含全部字段：callSign、recipientName、telephone、postalCode、address、email、confidence、message。
+        3. 字段含义：
+           - callSign：输入呼号的大写形式。
+           - recipientName：收件人姓名；没有姓名但有呼号时使用呼号。
+           - telephone：电话或手机；没有则为空字符串。
+           - postalCode：邮编或 ZIP；没有则为空字符串。
+           - address：通信地址，必须是单行字符串。
+           - email：邮箱；没有则为空字符串。
+           - confidence：0 到 1 的数字，表示解析可信度。
+           - message：简短说明数据来源、缺失项或不确定项。
+        4. 只提取输入内容中明确存在的信息，不要编造姓名、电话、邮箱、邮编或地址。
+        5. 地址整理规则：中文地址优先整理为“省 市 区 详细地址”；国外地址保留原始国家/地区可识别的单行通信地址。
+        6. 如果来源是 QRZ.COM 官方 XML，字段优先级如下：
+           - callSign 取 call。
+           - recipientName 优先取 name_fmt，其次取 fname + name；都没有时取输入呼号。
+           - postalCode 取 zip。
+           - email 取 email。
+           - address 必须优先包含最详细地址字段 addr1；再按需要补充 addr2、state、country。若 addr1 已经是完整中文地址，不要退化为只返回 country、state 或 addr2。
+        7. 如果来源是 QRZ.CN 页面预处理，图片文字线索中的文件名、alt、title 可视为页面明确存在的信息；但仍不得编造。
+        8. 不得使用“呼号、姓名、电话、邮编、地址、邮箱、置信度、说明”等中文字段名。
         来源：{provider}
         呼号：{callSign}
         内容：

@@ -33,6 +33,7 @@ class FieldEditor(QWidget):
         "text_align",
         "distribute_align",
         "max_len",
+        "digit_raise_ratio",
         "fixed_text",
     ]
     X_COL = COLUMNS.index("x_mm")
@@ -59,6 +60,7 @@ class FieldEditor(QWidget):
         "左右对齐",
         "分散对齐",
         "最大长度",
+        "数字上移比例",
         "固定文本",
     ]
 
@@ -127,6 +129,7 @@ class FieldEditor(QWidget):
             "false",
             "left",
             "false",
+            "0",
             "0",
             "",
         ]
@@ -400,6 +403,7 @@ class FieldEditor(QWidget):
                     "text_align": self._normalize_align_text(values["text_align"]),
                     "distribute_align": str(values["distribute_align"]).lower() == "true",
                     "max_len": int(values["max_len"] or 0),
+                    "digit_raise_ratio": float(values["digit_raise_ratio"] or 0),
                     "fixed_text": values["fixed_text"],
                 }
             )

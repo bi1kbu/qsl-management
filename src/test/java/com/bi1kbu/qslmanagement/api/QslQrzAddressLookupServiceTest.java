@@ -18,6 +18,35 @@ import run.halo.app.extension.ReactiveExtensionClient;
 class QslQrzAddressLookupServiceTest {
 
     @Test
+    void shouldParseQrzComOfficialXmlFieldsBeforeAi() {
+        var service = new QslQrzAddressLookupService(
+            mock(ReactiveExtensionClient.class),
+            mock(QslAuditService.class),
+            mock(QslAiService.class)
+        );
+        var xml = """
+            <QRZDatabase>
+              <Callsign>
+                <call>BG0JJ</call>
+                <addr1>西藏自治区拉萨市柳梧新区01-888邮政信箱</addr1>
+                <addr2>西藏自治区</addr2>
+                <country>China</country>
+                <zip>850000</zip>
+                <email>bg0jj@foxmail.com</email>
+              </Callsign>
+            </QRZDatabase>
+            """;
+
+        var result = service.parseQrzComAddressResult("BG0JJ", xml);
+
+        assertTrue(result.recipientName().equals("BG0JJ"));
+        assertTrue(result.address().equals("西藏自治区拉萨市柳梧新区01-888邮政信箱"));
+        assertTrue(result.postalCode().equals("850000"));
+        assertTrue(result.email().equals("bg0jj@foxmail.com"));
+        assertTrue(result.confidence() >= 0.9);
+    }
+
+    @Test
     void shouldExtractQrzCnMainContentAndImageFileNameTokens() {
         var service = new QslQrzAddressLookupService(
             mock(ReactiveExtensionClient.class),
@@ -122,6 +151,27 @@ class QslQrzAddressLookupServiceTest {
             """;
 
         assertFalse(service.isUsefulQrzCnHtml(html, "BG2GWS"));
+        assertTrue(service.isQrzCnNoDataHtml(html, "BG2GWS"));
+    }
+
+    @Test
+    void shouldDetectQrzCnOfficialNoDataSentence() {
+        var service = new QslQrzAddressLookupService(
+            mock(ReactiveExtensionClient.class),
+            mock(QslAuditService.class),
+            mock(QslAiService.class)
+        );
+        var html = """
+            <html>
+              <body>
+                <p>非常遗憾，呼号 BA1ZZZ 没有在我们的数据库中。
+                如果你知道,请点这里添加该呼号信息。</p>
+              </body>
+            </html>
+            """;
+
+        assertTrue(service.isQrzCnNoDataHtml(html, "BA1ZZZ"));
+        assertFalse(service.isUsefulQrzCnHtml(html, "BA1ZZZ"));
     }
 
     @Test

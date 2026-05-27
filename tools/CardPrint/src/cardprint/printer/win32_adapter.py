@@ -177,6 +177,35 @@ class Win32PrinterAdapter:
                 return True
         return False
 
+    @staticmethod
+    def _text_width_px(dc: Any, text: str, item: LayoutItem, dpi_x: int) -> int:
+        try:
+            text_w_px, _ = dc.GetTextExtent(text)
+            return int(text_w_px)
+        except Exception:
+            return int(max(1, len(text)) * pt_to_pixels(item.font_size_pt, dpi_x) * 0.55)
+
+    def _draw_text_with_digit_raise(
+        self,
+        dc: Any,
+        px: int,
+        py: int,
+        text: str,
+        item: LayoutItem,
+        dpi_x: int,
+        dpi_y: int,
+    ) -> None:
+        digit_raise_ratio = float(getattr(item, "digit_raise_ratio", 0.0) or 0.0)
+        digit_raise_px = int(round(pt_to_pixels(item.font_size_pt, dpi_y) * digit_raise_ratio))
+        if digit_raise_px <= 0 or not any(ch.isdigit() for ch in text):
+            dc.TextOut(px, py, text)
+            return
+
+        cursor_x = int(px)
+        for ch in text:
+            dc.TextOut(cursor_x, py - digit_raise_px if ch.isdigit() else py, ch)
+            cursor_x += self._text_width_px(dc, ch, item, dpi_x)
+
     def _draw_text(
         self,
         dc: Any,
@@ -195,10 +224,7 @@ class Win32PrinterAdapter:
         width_px = mm_to_dots(float(item.print_width_mm), dpi_x) if float(item.print_width_mm) > 0 else 0
 
         if align_mode == "right" and width_px > 0 and text:
-            try:
-                text_w_px, _ = dc.GetTextExtent(text)
-            except Exception:
-                text_w_px = int(max(1, len(text)) * pt_to_pixels(item.font_size_pt, dpi_x) * 0.55)
+            text_w_px = self._text_width_px(dc, text, item, dpi_x)
             px = max(px, px + width_px - int(text_w_px))
 
         # 文本背景改为透明，避免驱动在 OPAQUE 模式下对字符框做底色填充，
@@ -213,20 +239,22 @@ class Win32PrinterAdapter:
             or width_px <= 0
             or len(text) <= 1
         ):
-            dc.TextOut(px, py, text)
+            self._draw_text_with_digit_raise(dc, px, py, text, item, dpi_x, dpi_y)
             return
 
         units = [self._char_display_units(ch) for ch in text]
         total_units = sum(units)
         if total_units <= 1:
-            dc.TextOut(px, py, text)
+            self._draw_text_with_digit_raise(dc, px, py, text, item, dpi_x, dpi_y)
             return
 
+        digit_raise_ratio = float(getattr(item, "digit_raise_ratio", 0.0) or 0.0)
+        digit_raise_px = int(round(pt_to_pixels(item.font_size_pt, dpi_y) * digit_raise_ratio))
         step_px = width_px / float(total_units - 1)
         cursor_units = 0.0
         for index, ch in enumerate(text):
             char_x = int(round(px + cursor_units * step_px))
-            dc.TextOut(char_x, py, ch)
+            dc.TextOut(char_x, py - digit_raise_px if digit_raise_px > 0 and ch.isdigit() else py, ch)
             cursor_units += float(units[index])
 
     def _draw_qrcode(
