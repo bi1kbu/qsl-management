@@ -108,7 +108,7 @@ Halo 官方资料核验日期：2026-05-19
 
 通联业务包含通联日志、创建卡片、制卡签发、发信确认、送达确认。
 
-1. 通联日志支持 `QSO/SWL` 场景切换，字段落在 `QsoRecord.spec`。
+1. 通联日志支持 `QSO/SWL` 场景切换，字段落在 `QsoRecord.spec`。通联日志提供 `ADIF格式导出` 功能页签，导出范围优先使用已勾选记录，未勾选时导出当前筛选结果；导出内容使用 ADIF 文本格式，`UTC+8` 记录会转换为 UTC 后写入 `QSO_DATE` 与 `TIME_ON`，并尽量从频率推导 `BAND`。导出页支持 `MY_SIG` 下拉与 `MY_SIG_INFO` 输入，且 `OPERATOR` 仅允许导出呼号，不再回退为姓名。
 2. 创建卡片必须关联 QSO/SWL 记录，候选列表排除已写入 `CardRecord.spec.qsoRecordName` 的记录；若选择“不创建卡片”，写入不占用 `C{序号}` 的占位 `CardRecord`，该记录后续不再出现在候选列表中。卡片记录清单支持编辑与删除；编辑占位记录并保存时会重新分配正式卡片编号。通联业务创建卡片默认 `CardRecord.spec.cardRemarks` 为“通联愉快，期待空中常见。\nNice QSO，Hope to catch you on the air often.”。
 3. 通联日志清单支持对单条 QSO 一键创建卡片，默认使用排序最靠前且仍有库存的卡片版本，写入空业务备注与通联业务默认卡片备注；已正式创建卡片或已标记“不创建卡片”的通联记录不允许再次一键创建。
 4. 制卡签发只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，不显示“不创建卡片”的无编号占位记录；确认制卡更新 `CardRecord.spec.cardIssued/cardIssuedAt`，信封打印或打包状态使用 `envelopePrinted`。

@@ -87,6 +87,7 @@ interface EquipmentCatalogSpec {
 }
 
 interface StationProfileSpec {
+  myCallSign: string
   myName: string
 }
 
@@ -152,7 +153,7 @@ const feedback = ref('')
 const timerId = ref<number | null>(null)
 const loading = ref(false)
 const saving = ref(false)
-const activeFunctionTab = ref<'basic' | 'batch'>('basic')
+const activeFunctionTab = ref<'basic' | 'batch' | 'adif'>('basic')
 const syncHistoryQuery = ref(false)
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
@@ -166,9 +167,12 @@ const pageSizeOptions: number[] = [20, 30, 50, 100]
 const batchEditField = ref('')
 const batchEditValue = ref('')
 const stationProfileMyName = ref('')
+const stationProfileCallSign = ref('')
 const deletingResourceName = ref('')
 const historySortKey = ref<QsoHistorySortKey>('resourceName')
 const historySortDirection = ref<QslSortDirection>('asc')
+const adifMySig = ref('')
+const adifMySigInfo = ref('')
 
 const availableSceneTypes = computed<SceneType[]>(() => {
   const deduplicated = Array.from(new Set(props.sceneTypes.map((item) => normalizeSceneType(item))))
@@ -195,6 +199,15 @@ const equipmentCatalogPlural = 'equipment-catalog-entries'
 const equipmentCatalogKind = 'EquipmentCatalogEntry'
 const stationProfilePlural = 'station-profiles'
 const stationProfileName = 'qsl-station-profile-default'
+const adifMySigStorageKey = 'qsl:qso-record:adif-my-sig'
+const adifMySigInfoStorageKey = 'qsl:qso-record:adif-my-sig-info'
+
+const adifMySigOptions = [
+  { value: '', label: '不导出' },
+  { value: 'POTA', label: 'POTA' },
+  { value: 'SOTA', label: 'SOTA' },
+  { value: 'WWFF', label: 'WWFF' },
+]
 
 const myRigOptions = computed(() => {
   return stationEquipments.value
@@ -588,6 +601,7 @@ const loadStationProfile = async () => {
     stationProfilePlural,
     stationProfileName,
   )
+  stationProfileCallSign.value = extension?.spec?.myCallSign?.trim() ?? ''
   stationProfileMyName.value = extension?.spec?.myName?.trim() ?? ''
 }
 
@@ -737,6 +751,185 @@ const toggleAllFilteredHistorySelection = () => {
   filteredHistory.value.forEach((item) => merged.add(item.resourceName))
   selectedHistoryNames.value = Array.from(merged)
 }
+
+const adifExportRecords = computed(() => {
+  if (!selectedHistoryNames.value.length) {
+    return sortedFilteredHistory.value
+  }
+  const selectedNameSet = new Set(selectedHistoryNames.value)
+  return sortedFilteredHistory.value.filter((item) => selectedNameSet.has(item.resourceName))
+})
+
+const toAdifDateTime = (item: QsoRecordItem): { date: string; time: string } => {
+  const dateMatched = item.date.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const time = toStorageTime(item.time).padEnd(4, '0')
+  if (!dateMatched || !/^\d{4}$/.test(time)) {
+    return {
+      date: item.date.replace(/-/g, ''),
+      time: time ? `${time}00` : '',
+    }
+  }
+
+  const year = Number.parseInt(dateMatched[1] ?? '', 10)
+  const month = Number.parseInt(dateMatched[2] ?? '', 10) - 1
+  const day = Number.parseInt(dateMatched[3] ?? '', 10)
+  const hour = Number.parseInt(time.slice(0, 2), 10)
+  const minute = Number.parseInt(time.slice(2, 4), 10)
+  const timestamp =
+    item.timezone === 'UTC+8'
+      ? Date.UTC(year, month, day, hour - 8, minute, 0)
+      : Date.UTC(year, month, day, hour, minute, 0)
+  const utcDate = new Date(timestamp)
+  const yyyy = String(utcDate.getUTCFullYear())
+  const mm = String(utcDate.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(utcDate.getUTCDate()).padStart(2, '0')
+  const hh = String(utcDate.getUTCHours()).padStart(2, '0')
+  const min = String(utcDate.getUTCMinutes()).padStart(2, '0')
+  return {
+    date: `${yyyy}${mm}${dd}`,
+    time: `${hh}${min}00`,
+  }
+}
+
+const resolveAdifBand = (freq: string): string => {
+  const mhz = Number.parseFloat(freq.trim())
+  if (!Number.isFinite(mhz)) {
+    return ''
+  }
+  const bands: Array<{ min: number; max: number; band: string }> = [
+    { min: 1.8, max: 2.0, band: '160M' },
+    { min: 3.5, max: 4.0, band: '80M' },
+    { min: 5.0, max: 5.5, band: '60M' },
+    { min: 7.0, max: 7.3, band: '40M' },
+    { min: 10.1, max: 10.15, band: '30M' },
+    { min: 14.0, max: 14.35, band: '20M' },
+    { min: 18.068, max: 18.168, band: '17M' },
+    { min: 21.0, max: 21.45, band: '15M' },
+    { min: 24.89, max: 24.99, band: '12M' },
+    { min: 28.0, max: 29.7, band: '10M' },
+    { min: 50.0, max: 54.0, band: '6M' },
+    { min: 144.0, max: 148.0, band: '2M' },
+    { min: 430.0, max: 440.0, band: '70CM' },
+    { min: 1240.0, max: 1300.0, band: '23CM' },
+  ]
+  return bands.find((item) => mhz >= item.min && mhz <= item.max)?.band ?? ''
+}
+
+const normalizeAdifMode = (mode: string): string => {
+  return mode.trim().toUpperCase().replace(/\s+/g, '')
+}
+
+const adifField = (name: string, value?: string): string => {
+  const normalizedValue = (value ?? '').trim()
+  if (!normalizedValue) {
+    return ''
+  }
+  return `<${name.toUpperCase()}:${Array.from(normalizedValue).length}>${normalizedValue}`
+}
+
+const normalizeAdifCallSign = (value?: string): string => {
+  const normalizedValue = (value ?? '').trim().toUpperCase()
+  if (
+    !normalizedValue ||
+    !/^[A-Z0-9/]+$/.test(normalizedValue) ||
+    !/[A-Z]/.test(normalizedValue) ||
+    !/\d/.test(normalizedValue)
+  ) {
+    return ''
+  }
+  return normalizedValue
+}
+
+const buildAdifRecord = (item: QsoRecordItem): string => {
+  const dateTime = toAdifDateTime(item)
+  const stationCallSign = stationProfileCallSign.value.trim().toUpperCase()
+  const operatorCallSign =
+    normalizeAdifCallSign(item.operator) || normalizeAdifCallSign(stationCallSign)
+  const fields = [
+    adifField('APP_QSLMS_RECORD_ID', item.resourceName),
+    adifField('CALL', item.callSign.toUpperCase()),
+    adifField('QSO_DATE', dateTime.date),
+    adifField('TIME_ON', dateTime.time),
+    adifField('MODE', normalizeAdifMode(item.mode)),
+    adifField('FREQ', item.freq),
+    adifField('BAND', resolveAdifBand(item.freq)),
+    adifField('RST_SENT', item.rstSent),
+    adifField('RST_RCVD', item.rstRcvd),
+    adifField('QTH', item.qth),
+    adifField('COMMENT', item.remarks),
+    adifField('MY_RIG', item.myRig),
+    adifField('MY_ANTENNA', item.myRigAnt),
+    adifField('TX_PWR', item.myRigPwr),
+    adifField('OPERATOR', operatorCallSign),
+    adifField('STATION_CALLSIGN', stationCallSign),
+    adifField('MY_SIG', adifMySig.value),
+    adifField('MY_SIG_INFO', adifMySig.value ? adifMySigInfo.value : ''),
+    adifField('SWL', item.sceneType === 'SWL' ? 'Y' : ''),
+  ].filter(Boolean)
+
+  return `${fields.join(' ')} <EOR>`
+}
+
+const buildAdifContent = (items: QsoRecordItem[]): string => {
+  const now = new Date().toISOString()
+  const header = [
+    adifField('ADIF_VER', '3.1.7'),
+    adifField('PROGRAMID', 'QSL Management System'),
+    adifField('CREATED_TIMESTAMP', now.replace(/\D/g, '').slice(0, 14)),
+    '<EOH>',
+  ].join('\r\n')
+  return `${header}\r\n${items.map((item) => buildAdifRecord(item)).join('\r\n')}\r\n`
+}
+
+const downloadTextFile = (fileName: string, content: string) => {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+const exportAdifRecords = () => {
+  const items = adifExportRecords.value
+  if (!items.length) {
+    feedback.value = '没有可导出的通联记录。'
+    return
+  }
+  const timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)
+  downloadTextFile(`qso-records-${timestamp}.adi`, buildAdifContent(items))
+  feedback.value = ''
+  Toast.success(`已导出 ${items.length} 条 ADIF 记录。`)
+}
+
+const loadAdifExportSettings = () => {
+  try {
+    adifMySig.value = window.localStorage.getItem(adifMySigStorageKey) ?? ''
+    adifMySigInfo.value = window.localStorage.getItem(adifMySigInfoStorageKey) ?? ''
+  } catch {
+    adifMySig.value = ''
+    adifMySigInfo.value = ''
+  }
+}
+
+watch(adifMySig, (value) => {
+  try {
+    window.localStorage.setItem(adifMySigStorageKey, value)
+  } catch {
+    // 浏览器禁用 localStorage 时仅保留当前页面内的导出设置。
+  }
+})
+
+watch(adifMySigInfo, (value) => {
+  try {
+    window.localStorage.setItem(adifMySigInfoStorageKey, value)
+  } catch {
+    // 浏览器禁用 localStorage 时仅保留当前页面内的导出设置。
+  }
+})
 
 const applyHistoryBatchEdit = async () => {
   if (!selectedHistoryNames.value.length) {
@@ -996,6 +1189,7 @@ onBeforeUnmount(() => {
 })
 
 onMounted(() => {
+  loadAdifExportSettings()
   loadPageData()
 })
 </script>
@@ -1010,6 +1204,9 @@ onMounted(() => {
               <div class="qsl-tab-panel-placeholder" />
             </VTabItem>
             <VTabItem id="batch" label="批量编辑">
+              <div class="qsl-tab-panel-placeholder" />
+            </VTabItem>
+            <VTabItem id="adif" label="ADIF格式导出">
               <div class="qsl-tab-panel-placeholder" />
             </VTabItem>
           </VTabs>
@@ -1241,7 +1438,7 @@ onMounted(() => {
         </div>
       </template>
 
-      <template v-else>
+      <template v-else-if="activeFunctionTab === 'batch'">
         <div class="qsl-actions">
           <VButton
             size="sm"
@@ -1273,6 +1470,57 @@ onMounted(() => {
           @confirm="applyHistoryBatchEdit"
         />
         <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
+      </template>
+
+      <template v-else-if="activeFunctionTab === 'adif'">
+        <div class="qsl-record-section">
+          <p class="qsl-record-section__title">ADIF格式导出</p>
+          <div class="qsl-form-grid qsl-form-grid--adif">
+            <label class="qsl-field">
+              <span class="qsl-field__label">MY_SIG（专项活动标识）</span>
+              <div class="qsl-input-shell">
+                <select v-model="adifMySig">
+                  <option v-for="item in adifMySigOptions" :key="item.value" :value="item.value">
+                    {{ item.label }}
+                  </option>
+                </select>
+              </div>
+            </label>
+            <label class="qsl-field qsl-field--full">
+              <span class="qsl-field__label">MY_SIG_INFO（专项活动信息）</span>
+              <div class="qsl-input-shell">
+                <input
+                  v-model.trim="adifMySigInfo"
+                  type="text"
+                  placeholder="例如：CN-0001 / US-1234"
+                  :disabled="!adifMySig"
+                />
+              </div>
+            </label>
+          </div>
+          <div class="qsl-adif-summary">
+            <p>导出范围：{{ selectedHistoryCount ? '已勾选记录' : '当前筛选结果' }}</p>
+            <p>待导出数量：{{ adifExportRecords.length }}</p>
+            <p>OPERATOR：仅导出呼号，不再使用姓名</p>
+          </div>
+          <div class="qsl-actions">
+            <VButton
+              type="secondary"
+              :disabled="loading || !adifExportRecords.length"
+              @click="exportAdifRecords"
+            >
+              导出ADIF文件
+            </VButton>
+            <VButton
+              size="sm"
+              :disabled="!selectedHistoryCount"
+              @click="clearHistorySelection"
+            >
+              清空选择
+            </VButton>
+            <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
+          </div>
+        </div>
       </template>
     </VCard>
 
@@ -1425,6 +1673,17 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 600;
   line-height: 20px;
+}
+
+.qsl-adif-summary {
+  margin-bottom: 12px;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.qsl-adif-summary p {
+  margin: 0;
 }
 
 </style>
