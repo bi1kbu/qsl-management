@@ -11,6 +11,10 @@ import {
 import { getExtensionOrNull, listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslDataTable from '../../components/QslDataTable.vue'
 import Bh6syxImportModule from './Bh6syxImportModule.vue'
+import {
+  BUILTIN_NO_SEND_CARD_VERSION,
+  isBuiltinNoSendCardVersion,
+} from '../../utils/qsl-card-version'
 
 interface StationCardSpec {
   cardVersion: string
@@ -99,6 +103,10 @@ const toManualRow = (row: Record<string, unknown>): ManualImportRow =>
 const toImportRowResult = (row: Record<string, unknown>): Bh6syxImportRowResult =>
   row as unknown as Bh6syxImportRowResult
 
+const formatRemainingInventory = (option: StationCardOption): string => {
+  return isBuiltinNoSendCardVersion(option.value) ? '无限' : String(option.remainingInventory)
+}
+
 const selectedRows = computed(() => manualRows.value.filter((row) => row.included))
 const invalidSelectedRows = computed(() =>
   selectedRows.value.filter((row) => row.validationMessage.trim().length > 0),
@@ -164,9 +172,19 @@ const loadStationCards = async () => {
   const usedCounter: Record<string, number> = {}
   for (const cardRecord of cardRecords) {
     for (const version of splitCardVersions(cardRecord.spec?.cardVersion ?? '')) {
+      if (isBuiltinNoSendCardVersion(version)) {
+        continue
+      }
       const key = version.toUpperCase()
       usedCounter[key] = (usedCounter[key] ?? 0) + 1
     }
+  }
+  const builtinOption: StationCardOption = {
+    value: BUILTIN_NO_SEND_CARD_VERSION,
+    label: BUILTIN_NO_SEND_CARD_VERSION,
+    sortOrder: Number.MAX_SAFE_INTEGER,
+    availableInventory: Number.MAX_SAFE_INTEGER,
+    remainingInventory: Number.MAX_SAFE_INTEGER,
   }
   stationCardOptions.value = extensions
     .map((extension: QslExtension<StationCardSpec>) => {
@@ -190,10 +208,17 @@ const loadStationCards = async () => {
       (left, right) =>
         left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, 'zh-CN'),
     )
+  if (!stationCardOptions.value.some((item) => item.value === BUILTIN_NO_SEND_CARD_VERSION)) {
+    stationCardOptions.value.push(builtinOption)
+  }
   if (!defaultCardVersion.value && stationCardOptions.value.length) {
+    const defaultOptions = stationCardOptions.value.filter(
+      (item) => !isBuiltinNoSendCardVersion(item.value),
+    )
+    const selectableDefaultOptions = defaultOptions.length ? defaultOptions : stationCardOptions.value
     defaultCardVersion.value =
-      stationCardOptions.value.find((item) => item.remainingInventory > 0)?.value ??
-      stationCardOptions.value[0].value
+      selectableDefaultOptions.find((item) => item.remainingInventory > 0)?.value ??
+      selectableDefaultOptions[0].value
   }
 }
 
@@ -476,7 +501,7 @@ watch(activeTab, () => {
                   :key="option.value"
                   :value="option.value"
                 >
-                  {{ option.label }}（剩余 {{ option.remainingInventory }}）
+                  {{ option.label }}（剩余 {{ formatRemainingInventory(option) }}）
                 </option>
               </select>
             </label>
@@ -522,7 +547,7 @@ watch(activeTab, () => {
                   :key="option.value"
                   :value="option.value"
                 >
-                  {{ option.label }}（剩余 {{ option.remainingInventory }}）
+                  {{ option.label }}（剩余 {{ formatRemainingInventory(option) }}）
                 </option>
               </select>
             </label>

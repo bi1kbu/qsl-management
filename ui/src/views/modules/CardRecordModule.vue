@@ -27,6 +27,10 @@ import {
   compareText,
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
+import {
+  BUILTIN_NO_SEND_CARD_VERSION,
+  isBuiltinNoSendCardVersion,
+} from '../../utils/qsl-card-version'
 import { resolveCardFlowStatus } from '../../utils/qsl-card-state'
 
 interface CardRecordSpec {
@@ -88,6 +92,7 @@ interface CardRecordItem {
 }
 
 interface QsoRecordSpec {
+  sceneType: 'QSO' | 'SWL'
   date: string
   time: string
   timezone: 'UTC' | 'UTC+8'
@@ -98,6 +103,7 @@ interface QsoRecordSpec {
 
 interface QsoRecordItem {
   id: string
+  sceneType: 'QSO' | 'SWL'
   callSign: string
   date: string
   time: string
@@ -107,6 +113,7 @@ interface QsoRecordItem {
 }
 const qsoSelectorColumns = [
   { key: 'id', label: 'QSO_ID', sortable: false },
+  { key: 'sceneType', label: '类型', sortable: false },
   { key: 'callSign', label: '呼号', sortable: false },
   { key: 'datetime', label: '日期时间', sortable: false },
   { key: 'freq', label: '频率', sortable: false },
@@ -279,6 +286,7 @@ const batchEditField = ref('')
 const batchEditValue = ref('')
 const historySortKey = ref<CardHistorySortKey>('resourceName')
 const historySortDirection = ref<QslSortDirection>('asc')
+const creatingQsoRecordId = ref('')
 let realtimeTimer: ReturnType<typeof setInterval> | null = null
 
 const historyColumns = [
@@ -370,8 +378,12 @@ const shouldLoadOfflineActivities = computed(() => {
 const showQsoTab = computed(() => availableCardTypes.value.includes('QSO'))
 const showSwlTab = computed(() => availableCardTypes.value.includes('SWL'))
 const showEyeballTab = computed(() => availableCardTypes.value.includes('EYEBALL'))
+const isCommQsoBusiness = computed(() => showQsoTab.value && showSwlTab.value && !showEyeballTab.value)
 const cardVersionSelectOptions = computed(() => {
   const options = [...cardVersionOptions.value]
+  if (!options.includes(BUILTIN_NO_SEND_CARD_VERSION)) {
+    options.push(BUILTIN_NO_SEND_CARD_VERSION)
+  }
   const currentValue = form.cardVersion.trim()
   if (currentValue && !options.includes(currentValue)) {
     options.unshift(currentValue)
@@ -392,6 +404,9 @@ const selectedCardVersionHasConfiguredInventory = computed(() => {
   }
   return Boolean(cardVersionInventoryConfiguredMap.value[key])
 })
+const selectedCardVersionIsBuiltinNoSend = computed(() =>
+  isBuiltinNoSendCardVersion(form.cardVersion),
+)
 const batchEditFields = computed(() => {
   const fields = [
     {
@@ -407,8 +422,8 @@ const batchEditFields = computed(() => {
     {
       value: 'cardVersion',
       label: '卡片版本',
-      inputType: cardVersionOptions.value.length > 0 ? 'select' : 'text',
-      options: cardVersionOptions.value.map((item) => ({ label: item, value: item })),
+      inputType: cardVersionSelectOptions.value.length > 0 ? 'select' : 'text',
+      options: cardVersionSelectOptions.value.map((item) => ({ label: item, value: item })),
       placeholder: '请输入卡片版本',
     },
     { value: 'cardDate', label: '卡片日期', inputType: 'date' },
@@ -466,9 +481,14 @@ const isQsoRecordConsumed = (qsoRecordName: string, excludedResourceName = ''): 
   })
 }
 
+const currentQsoSceneType = computed<'QSO' | 'SWL'>(() => {
+  return activeFunctionTab.value === 'SWL' ? 'SWL' : 'QSO'
+})
+
 const filteredQsoRecords = computed(() => {
   const keyword = qsoFilter.value.trim().toUpperCase()
   return qsoRecords.value
+    .filter((item) => item.sceneType === currentQsoSceneType.value)
     .filter((item) => !isQsoRecordConsumed(item.id, editingResourceName.value))
     .filter((item) => {
       return (
@@ -478,6 +498,22 @@ const filteredQsoRecords = computed(() => {
       )
     })
     .slice(0, 50)
+})
+
+const pendingCreateQsoRecords = computed(() => {
+  const keyword = historyKeyword.value.trim().toUpperCase()
+  return qsoRecords.value
+    .filter((item) => item.sceneType === currentQsoSceneType.value)
+    .filter((item) => !isQsoRecordConsumed(item.id))
+    .filter((item) => {
+      return (
+        !keyword ||
+        item.callSign.toUpperCase().includes(keyword) ||
+        item.id.toUpperCase().includes(keyword) ||
+        item.freq.toUpperCase().includes(keyword) ||
+        item.mode.toUpperCase().includes(keyword)
+      )
+    })
 })
 
 const filteredRecords = computed(() => {
@@ -501,6 +537,15 @@ const filteredRecords = computed(() => {
   })
 })
 
+const historyRecords = computed(() => {
+  if (!isCommQsoBusiness.value) {
+    return filteredRecords.value
+  }
+  return filteredRecords.value.filter(
+    (item) => !item.spec.cardIssued && !isNoCardPlaceholder(item),
+  )
+})
+
 const compareHistoryRows = (
   left: CardRecordItem,
   right: CardRecordItem,
@@ -513,7 +558,7 @@ const compareHistoryRows = (
 }
 
 const sortedFilteredRecords = computed(() => {
-  return [...filteredRecords.value].sort((left, right) => {
+  return [...historyRecords.value].sort((left, right) => {
     return applySortDirection(
       compareHistoryRows(left, right, historySortKey.value),
       historySortDirection.value,
@@ -552,22 +597,27 @@ const editingCardRecord = computed(
   () => records.value.find((item) => item.resourceName === editingResourceName.value) ?? null,
 )
 const allFilteredSelected = computed(() => {
-  if (!filteredRecords.value.length) {
+  if (!historyRecords.value.length) {
     return false
   }
-  return filteredRecords.value.every((item) =>
+  return historyRecords.value.every((item) =>
     selectedHistoryNames.value.includes(item.resourceName),
   )
 })
 const totalPages = computed(() => {
-  if (!filteredRecords.value.length) {
+  const total = isCommQsoBusiness.value ? pendingCreateQsoRecords.value.length : historyRecords.value.length
+  if (!total) {
     return 1
   }
-  return Math.ceil(filteredRecords.value.length / pageSize.value)
+  return Math.ceil(total / pageSize.value)
 })
 const pagedFilteredRecords = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return sortedFilteredRecords.value.slice(start, start + pageSize.value)
+})
+const pagedPendingCreateQsoRecords = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return pendingCreateQsoRecords.value.slice(start, start + pageSize.value)
 })
 
 watch(
@@ -594,7 +644,7 @@ watch(records, () => {
   }
 })
 
-watch(filteredRecords, () => {
+watch([historyRecords, pendingCreateQsoRecords, isCommQsoBusiness], () => {
   if (currentPage.value > totalPages.value) {
     currentPage.value = totalPages.value
   }
@@ -923,8 +973,10 @@ const toRecordItem = (
 }
 
 const toQsoRecordItem = (extension: QslExtension<QsoRecordSpec>): QsoRecordItem => {
+  const sceneType = extension.spec?.sceneType?.trim().toUpperCase() === 'SWL' ? 'SWL' : 'QSO'
   return {
     id: extension.metadata.name,
+    sceneType,
     callSign: extension.spec?.callSign ?? '',
     date: extension.spec?.date ?? '',
     time: extension.spec?.time ?? '',
@@ -1054,6 +1106,9 @@ const loadCardVersions = async () => {
   for (const extension of cardRecordExtensions) {
     const versions = normalizeCardVersions(splitCardVersions(extension.spec?.cardVersion ?? ''))
     for (const version of versions) {
+      if (isBuiltinNoSendCardVersion(version)) {
+        continue
+      }
       const key = version.toUpperCase()
       usedCounter[key] = (usedCounter[key] ?? 0) + 1
     }
@@ -1073,7 +1128,7 @@ const loadCardVersions = async () => {
   const seen = new Set<string>()
   const nextRemainingMap: Record<string, number> = {}
   const nextConfiguredMap: Record<string, boolean> = {}
-  cardVersionOptions.value = ordered
+  const nextOptions = ordered
     .map((extension) => {
       const version = extension.spec?.cardVersion?.trim() ?? ''
       const key = version.toUpperCase()
@@ -1114,6 +1169,7 @@ const loadCardVersions = async () => {
       return true
     })
     .map((item) => item.version)
+  cardVersionOptions.value = nextOptions
   cardVersionRemainingMap.value = nextRemainingMap
   cardVersionInventoryConfiguredMap.value = nextConfiguredMap
 
@@ -1358,6 +1414,117 @@ const markQsoAsNoCard = async (item: QsoRecordItem) => {
   }
 }
 
+const createCardRecordFromQso = async (item: QsoRecordItem) => {
+  const normalizedCallSign = item.callSign.trim().toUpperCase()
+  if (!normalizedCallSign) {
+    feedback.value = `待创建记录 ${item.id} 未填写呼号，无法创建卡片。`
+    return
+  }
+
+  creatingQsoRecordId.value = item.id
+  saving.value = true
+  try {
+    const latestCardRecordExtensions = await listExtensions<CardRecordSpec, CardRecordStatus>(
+      resourcePlural,
+    )
+    records.value = latestCardRecordExtensions
+      .map((extension) => toRecordItem(extension))
+      .filter((record) => {
+        const sceneType = normalizeSceneType(record.spec.sceneType, record.spec.cardType)
+        return normalizedSceneTypes.value.includes(sceneType)
+      })
+
+    if (isQsoRecordConsumed(item.id)) {
+      feedback.value = `待创建记录 ${item.id} 已创建过卡片或已标记不创建卡片。`
+      return
+    }
+
+    await loadCardVersions()
+    const cardVersion = cardVersionOptions.value[0] ?? ''
+    if (!cardVersion) {
+      feedback.value = '没有找到仍有库存的卡片版本，请先在“本台卡片”中配置卡片版本库存。'
+      return
+    }
+
+    const nextCardResourceName = await allocateCardResourceName()
+    const nextSpec: CardRecordSpec = {
+      callSign: normalizedCallSign,
+      cardType: item.sceneType,
+      sceneType: item.sceneType,
+      cardVersion,
+      qsoRecordName: item.id,
+      offlineActivityName: '',
+      addressEntryName: '',
+      cardDate: item.date,
+      cardTime: item.time,
+      businessRemarks: '',
+      createdRemarks: '',
+      sentRemarks: '',
+      receivedRemarks: '',
+      publicReceiptRemarks: '',
+      cardRemarks: DEFAULT_QSO_CARD_REMARKS,
+      cardSent: false,
+      cardIssued: false,
+      envelopePrinted: false,
+      cardReceived: false,
+      receiptConfirmed: false,
+      cardIssuedAt: '',
+      sentAt: '',
+      receivedAt: '',
+      createdMailStatus: '',
+      createdMailSentAt: '',
+      createdMailLastError: '',
+      sentMailStatus: '',
+      sentMailSentAt: '',
+      sentMailLastError: '',
+      receivedMailStatus: '',
+      receivedMailSentAt: '',
+      receivedMailLastError: '',
+      mailTargetEmail: '',
+    }
+
+    const createdRecord = await createExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: nextCardResourceName,
+      },
+      spec: nextSpec,
+      status: {
+        flowStatus: resolveCardFlowStatus(nextSpec),
+      },
+    })
+
+    await appendQslAuditLog({
+      action: '通联业务待创建记录一键创建卡片',
+      resourceType: 'card-record',
+      resourceName: createdRecord.metadata.name,
+      detail: `${normalizedCallSign} ${item.sceneType}，关联记录=${item.id}，版本=${cardVersion}`,
+    })
+
+    await loadCardRecords({ silent: true })
+    if (shouldAutoSendCreatedMail(createdRecord.spec?.sceneType, createdRecord.spec?.cardType)) {
+      try {
+        await sendNotificationMail({
+          cardRecordName: createdRecord.metadata.name,
+          scene: 'created',
+          source: '通联业务待创建记录-自动触发',
+        })
+      } catch {
+        // 自动邮件发送失败由后端状态与审计记录体现，这里不覆盖主流程结果。
+      }
+      await loadCardRecords({ silent: true })
+    }
+    await loadCardVersions()
+    feedback.value = `已创建卡片：${createdRecord.metadata.name}（关联记录 ${item.id}，版本 ${cardVersion}）。`
+  } catch (error) {
+    feedback.value = `创建卡片失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    creatingQsoRecordId.value = ''
+    saving.value = false
+  }
+}
+
 watch(
   () => form.cardType,
   (cardType) => {
@@ -1442,7 +1609,7 @@ const clearHistorySelection = () => {
 
 const toggleAllFilteredHistorySelection = () => {
   if (allFilteredSelected.value) {
-    const filteredNameSet = new Set(filteredRecords.value.map((item) => item.resourceName))
+    const filteredNameSet = new Set(historyRecords.value.map((item) => item.resourceName))
     selectedHistoryNames.value = selectedHistoryNames.value.filter(
       (name) => !filteredNameSet.has(name),
     )
@@ -1450,7 +1617,7 @@ const toggleAllFilteredHistorySelection = () => {
   }
 
   const merged = new Set(selectedHistoryNames.value)
-  filteredRecords.value.forEach((item) => merged.add(item.resourceName))
+  historyRecords.value.forEach((item) => merged.add(item.resourceName))
   selectedHistoryNames.value = Array.from(merged)
 }
 
@@ -1584,16 +1751,16 @@ const createOfflineBatchCards = async () => {
     feedback.value = '请先选择关联活动。'
     return
   }
-  if (!selectedCardVersionHasConfiguredInventory.value) {
+  if (!selectedCardVersionIsBuiltinNoSend.value && !selectedCardVersionHasConfiguredInventory.value) {
     feedback.value = `版本 ${cardVersion} 未配置可用库存，无法执行批量创建。`
     return
   }
   const remaining = selectedCardVersionRemaining.value
-  if (remaining <= 0) {
+  if (!selectedCardVersionIsBuiltinNoSend.value && remaining <= 0) {
     feedback.value = `版本 ${cardVersion} 已无库存余量，无法创建。`
     return
   }
-  if (quantity > remaining) {
+  if (!selectedCardVersionIsBuiltinNoSend.value && quantity > remaining) {
     feedback.value = `批量创建数量超出库存余量：当前余量 ${remaining}，请求创建 ${quantity}。`
     return
   }
@@ -2003,13 +2170,16 @@ onBeforeUnmount(() => {
               </select>
             </div>
             <small class="qsl-field__tip" v-if="!cardVersionOptions.length"
-              >暂无可用卡片版本，请先到“本台卡片”中配置。</small
+              >暂无可用卡片版本，请先到“本台卡片”中配置，或选择系统内置“不发卡”。</small
             >
             <small
               class="qsl-field__tip"
               v-if="isOfflineExchangeScene && selectedCardVersionHasConfiguredInventory"
             >
               当前版本库存余量：{{ selectedCardVersionRemaining }}
+            </small>
+            <small class="qsl-field__tip" v-else-if="selectedCardVersionIsBuiltinNoSend">
+              当前版本为系统内置“不发卡”，不占用库存。
             </small>
           </label>
 
@@ -2205,10 +2375,26 @@ onBeforeUnmount(() => {
 
     <VCard>
       <QslBusinessRecordHeader
+        v-if="isCommQsoBusiness"
+        title="待创建记录"
+        :keyword="historyKeywordInput"
+        :all-selected="false"
+        :has-rows="pendingCreateQsoRecords.length > 0"
+        :sync-enabled="syncHistoryQuery"
+        :show-select="false"
+        :show-reset="true"
+        placeholder="按呼号筛选"
+        @update:keyword="(value) => (historyKeywordInput = value)"
+        @search="applyHistorySearch"
+        @update:sync-enabled="(value) => (syncHistoryQuery = value)"
+      />
+
+      <QslBusinessRecordHeader
+        v-else
         title="卡片记录清单"
         :keyword="historyKeywordInput"
         :all-selected="allFilteredSelected"
-        :has-rows="filteredRecords.length > 0"
+        :has-rows="historyRecords.length > 0"
         :sync-enabled="syncHistoryQuery"
         placeholder="按呼号筛选"
         @update:keyword="(value) => (historyKeywordInput = value)"
@@ -2231,7 +2417,45 @@ onBeforeUnmount(() => {
         </label>
       </div>
 
+      <QslDataTable
+        v-if="isCommQsoBusiness"
+        :rows="pagedPendingCreateQsoRecords"
+        :columns="qsoSelectorColumns"
+        row-key-field="id"
+        empty-text="暂无待创建记录。"
+        :loading="loading"
+        show-actions
+        show-pagination
+        :total="pendingCreateQsoRecords.length"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        :page-size-options="pageSizeOptions"
+        @update:current-page="(value) => (currentPage = value)"
+        @update:page-size="(value) => (pageSize = value)"
+      >
+        <template #cell-datetime="{ row }">
+          {{ asQsoRecordItemRow(row).date }} {{ asQsoRecordItemRow(row).time }}
+          {{ asQsoRecordItemRow(row).timezone }}
+        </template>
+        <template #row-actions="{ row }">
+          <VButton
+            size="xs"
+            type="secondary"
+            :disabled="
+              saving ||
+              loading ||
+              creatingQsoRecordId === asQsoRecordItemRow(row).id ||
+              !asQsoRecordItemRow(row).callSign.trim()
+            "
+            @click="createCardRecordFromQso(asQsoRecordItemRow(row))"
+          >
+            {{ creatingQsoRecordId === asQsoRecordItemRow(row).id ? '创建中' : '创建卡片' }}
+          </VButton>
+        </template>
+      </QslDataTable>
+
       <QslExpandableHistoryTable
+        v-else
         title="卡片记录清单"
         :rows="pagedFilteredRecords"
         :columns="historyColumns"
@@ -2330,7 +2554,8 @@ onBeforeUnmount(() => {
         </template>
       </QslExpandableHistoryTable>
       <QslPaginationBar
-        :total="filteredRecords.length"
+        v-if="!isCommQsoBusiness"
+        :total="historyRecords.length"
         :current-page="currentPage"
         :page-size="pageSize"
         :page-size-options="pageSizeOptions"

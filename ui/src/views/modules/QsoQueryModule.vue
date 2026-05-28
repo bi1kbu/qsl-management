@@ -12,6 +12,7 @@ import {
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslDataTable from '../../components/QslDataTable.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
+import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
 import { resolveCardFlowStatus } from '../../utils/qsl-card-state'
 import {
   applySortDirection,
@@ -261,6 +262,9 @@ const resolveFirstAvailableCardVersion = (
   for (const extension of cardRecordExtensions) {
     const versions = normalizeCardVersions(splitCardVersions(extension.spec?.cardVersion ?? ''))
     for (const version of versions) {
+      if (isBuiltinNoSendCardVersion(version)) {
+        continue
+      }
       const key = version.toUpperCase()
       usedCounter[key] = (usedCounter[key] ?? 0) + 1
     }

@@ -72,6 +72,8 @@ public class QslImportExportJobService {
     private static final Pattern QSO_RESOURCE_PATTERN = Pattern.compile("^QSO(\\d+)$");
     private static final Pattern CARD_RESOURCE_PATTERN = Pattern.compile("^C(\\d+)$");
     private static final Pattern BURO_RESOURCE_PATTERN = Pattern.compile("^BURO-(\\d+)$");
+    private static final Pattern LEAKED_STATION_CARD_RECORD_PATTERN =
+        Pattern.compile("^(QSL-)?STATION-CARD-.+$");
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
@@ -762,6 +764,10 @@ public class QslImportExportJobService {
                     var row = rows.get(index);
                     var rowNo = index + 2;
                     var resourceName = resolveRowResourceName(row, idPrefix, occupiedNames);
+                    if ("card-record".equals(dataset) && isLeakedStationCardRecordName(resourceName)) {
+                        occupiedNames.add(resourceName);
+                        return Mono.just(ImportRowResult.skipped());
+                    }
                     occupiedNames.add(resourceName);
                     var existed = existingMap.get(resourceName);
                     if (existed != null && STRATEGY_SKIP.equals(strategy)) {
@@ -873,6 +879,11 @@ public class QslImportExportJobService {
         return !isBlank(resourceName) && CARD_RESOURCE_PATTERN.matcher(resourceName.trim().toUpperCase(Locale.ROOT)).matches();
     }
 
+    private boolean isLeakedStationCardRecordName(String resourceName) {
+        return !isBlank(resourceName)
+            && LEAKED_STATION_CARD_RECORD_PATTERN.matcher(resourceName.trim().toUpperCase(Locale.ROOT)).matches();
+    }
+
     private String normalizeResourceName(String resourceName) {
         return nullToEmpty(resourceName).trim().toUpperCase(Locale.ROOT);
     }
@@ -975,7 +986,11 @@ public class QslImportExportJobService {
     private Mono<Long> countDataset(String dataset) {
         return switch (dataset) {
             case "qso-record" -> client.countBy(QsoRecord.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
-            case "card-record" -> client.countBy(CardRecord.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+            case "card-record" -> client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .filter(record -> record.getMetadata() != null)
+                .filter(record -> !isLeakedStationCardRecordName(record.getMetadata().getName()))
+                .count()
+                .defaultIfEmpty(0L);
             case "receive-record" -> client.countBy(ReceiveRecord.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "exchange-request-review" -> client.countBy(ExchangeRequest.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "offline-activity" -> client.countBy(OfflineActivity.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
@@ -1054,6 +1069,8 @@ public class QslImportExportJobService {
                 .map(tuple -> {
                     var linkedReceiveStates = buildLinkedReceiveStates(tuple.getT2());
                     return tuple.getT1().stream()
+                        .filter(record -> record.getMetadata() != null)
+                        .filter(record -> !isLeakedStationCardRecordName(record.getMetadata().getName()))
                         .map(record -> {
                             var spec = record.getSpec();
                             var linkedReceivedAt = linkedReceiveStates.get(

@@ -28,6 +28,7 @@ import {
   compareText,
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
+import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
 
 interface CardRecordSpec {
   callSign: string
@@ -139,12 +140,14 @@ const props = withDefaults(
     defaultSceneType?: SceneType
     defaultCardType?: CardRecordSpec['cardType']
     hideReceivedMailActions?: boolean
+    showReceivedRecordMigration?: boolean
   }>(),
   {
     sceneTypes: () => ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL'],
     defaultSceneType: 'QSO',
     defaultCardType: 'QSO',
     hideReceivedMailActions: false,
+    showReceivedRecordMigration: false,
   },
 )
 
@@ -428,6 +431,10 @@ const singleEditTarget = computed(() => {
   return results.value.find((item) => item.resourceName === editingResourceName.value) ?? null
 })
 const showReceivedMailActions = computed(() => !props.hideReceivedMailActions)
+const showReceivedRecordMigration = computed(() => props.showReceivedRecordMigration)
+const migrationExpandedRowKey = computed(() =>
+  showReceivedRecordMigration.value && isBatchTab.value ? migrationSourceName.value : '',
+)
 const receivedRecordColumns = computed(() => {
   const columns = [
     { key: 'receiveRecordCode', label: '收卡编号', sortable: true },
@@ -1122,6 +1129,7 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
         ),
       )
       .filter((item) => isFormalCardRecordName(item.resourceName))
+      .filter((item) => !isBuiltinNoSendCardVersion(item.spec.cardVersion))
       .filter(
         (item) =>
           item.callSign.trim() ||
@@ -1929,7 +1937,7 @@ onMounted(() => {
         :sort-direction="receiveSortDirection"
         :loading="loadingResults"
         show-actions
-        :expanded-row-key="isBatchTab ? migrationSourceName : ''"
+        :expanded-row-key="migrationExpandedRowKey"
         show-pagination
         :total="activeHistoryResults.length"
         :current-page="currentPage"
@@ -1984,6 +1992,7 @@ onMounted(() => {
               {{ editingResourceName === asReceiveResultRow(row).resourceName ? '正在编辑' : '编辑' }}
             </VButton>
             <VButton
+              v-if="showReceivedRecordMigration"
               size="xs"
               type="secondary"
               :disabled="
@@ -2073,7 +2082,11 @@ onMounted(() => {
         </template>
         <template #detail="{ row }">
           <div
-            v-if="isBatchTab && migrationSourceName === asReceiveResultRow(row).resourceName"
+            v-if="
+              showReceivedRecordMigration &&
+              isBatchTab &&
+              migrationSourceName === asReceiveResultRow(row).resourceName
+            "
             class="qsl-migration-panel"
           >
             <div class="qsl-migration-panel__summary">

@@ -23,6 +23,7 @@ import {
   compareText,
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
+import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
 import { resolveMonotonicCardFlowStatus } from '../../utils/qsl-card-state'
 
 interface CardRecordSpec {
@@ -521,10 +522,11 @@ const loadRows = async (options: { silent?: boolean } = {}) => {
         ),
       )
       .filter((row) => isFormalCardRecordName(row.resourceName))
-    if (!options.silent && extensions.length) {
+      .filter((row) => !isBuiltinNoSendCardVersion(row.spec.cardVersion))
+    if (!options.silent && rows.value.length) {
       feedback.value = ''
     }
-    if (!options.silent && !extensions.length) {
+    if (!options.silent && !rows.value.length) {
       feedback.value = '暂无可确认发信的卡片记录。'
     }
   } catch (error) {

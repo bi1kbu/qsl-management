@@ -17,6 +17,7 @@ import {
   compareText,
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
+import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
 import { maxCardFlowStatus } from '../../utils/qsl-card-state'
 
 interface CardRecordSpec {
@@ -836,6 +837,7 @@ const loadSourceData = async () => {
         ),
       )
       .filter((item) => isFormalCardRecord(item))
+      .filter((item) => !isBuiltinNoSendCardVersion(item.spec.cardVersion))
     addressRows.value = addresses.map((item) => toAddressRow(item))
     bureauRows.value = bureaus.map((item) => toBureauRow(item))
     qsoRows.value = qsos.map((item) => toQsoRow(item))

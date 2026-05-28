@@ -107,17 +107,20 @@ class QslOverviewServiceTest {
         var receivedLinked = createCardRecord("C1004", "EYEBALL", "EYEBALL", "BI1ABC", false, false, false);
         var signed = createCardRecord("C1005", "EYEBALL", "EYEBALL", "BI1DEF", false, true, false);
         var received = createCardRecord("C1006", "QSO", "QSO", "BI1GHI", false, false, true);
+        var noSend = createCardRecord("C1007", "QSO", "QSO", "BI1JKL", false, false, false);
+        noSend.getSpec().setCardVersion("不发卡");
 
         when(client.countBy(eq(QsoRecord.class), any())).thenReturn(Mono.just(0L));
         when(client.listAll(eq(CardRecord.class), any(), any()))
-            .thenReturn(Flux.just(pendingOffline, pendingQso, onlineUnsent, receivedLinked, signed, received));
+            .thenReturn(Flux.just(pendingOffline, pendingQso, onlineUnsent, receivedLinked, signed, received, noSend));
         when(client.listAll(eq(ReceiveRecord.class), any(), any()))
             .thenReturn(Flux.just(createReceiveRecord("R0001-20260519", "C1004")));
 
         var summary = service.calculateSummary().block();
 
-        assertEquals(6L, summary.cardTotal());
+        assertEquals(7L, summary.cardTotal());
         assertEquals(2L, summary.pendingSendTotal());
+        assertEquals(1L, summary.sentTotal());
         assertEquals(1L, summary.deliverySignedTotal());
         assertEquals(1L, summary.receivedTotal());
     }

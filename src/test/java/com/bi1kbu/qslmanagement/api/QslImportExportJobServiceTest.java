@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
+import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ImportExportJob;
 import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.OfflineExchangeCard;
@@ -217,6 +218,62 @@ class QslImportExportJobServiceTest {
         assertEquals(0L, result.failedCount());
         Mockito.verify(client, Mockito.never()).create(any(OfflineExchangeCard.class));
         Mockito.verify(client, Mockito.never()).update(any(OfflineExchangeCard.class));
+    }
+
+    @Test
+    void shouldSkipStationCardPlaceholderRowsWhenImportingCardRecord() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+        var service = new QslImportExportJobService(client, auditService);
+
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty());
+
+        var result = service.precheckImport(
+            new QslImportExportJobService.ExecuteImportJobCommand(
+                "csv",
+                "overwrite",
+                "card-record.csv",
+                List.of(new QslImportExportJobService.ImportDatasetPayload(
+                    "card-record",
+                    List.of(Map.of(
+                        "id", "qsl-station-card-202603",
+                        "cardVersion", "202603",
+                        "remarks", "本台卡片版本"
+                    ))
+                ))
+            )
+        ).block();
+
+        assertNotNull(result);
+        assertEquals("card-record", result.dataset());
+        assertEquals(1L, result.totalCount());
+        assertEquals(0L, result.successCount());
+        assertEquals(1L, result.skippedCount());
+        assertEquals(0L, result.failedCount());
+        Mockito.verify(client, Mockito.never()).create(any(CardRecord.class));
+        Mockito.verify(client, Mockito.never()).update(any(CardRecord.class));
+    }
+
+    @Test
+    void shouldExcludeStationCardPlaceholderRowsWhenExportingCardRecord() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var auditService = Mockito.mock(QslAuditService.class);
+        var service = new QslImportExportJobService(client, auditService);
+
+        var job = buildExportJob("export-job-card", "card-record", "csv");
+        var formalCard = buildCardRecord("C1001", "BI1KBU");
+        var leakedStationCard = buildCardRecord("qsl-station-card-202603", "");
+
+        when(client.fetch(eq(ImportExportJob.class), eq("export-job-card"))).thenReturn(Mono.just(job));
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(formalCard, leakedStationCard));
+        when(client.listAll(eq(ReceiveRecord.class), any(), any())).thenReturn(Flux.empty());
+
+        var payload = service.buildExportDownload("export-job-card").block();
+
+        assertNotNull(payload);
+        var csv = new String(payload.content(), StandardCharsets.UTF_8);
+        assertEquals(true, csv.contains("C1001,BI1KBU"));
+        assertEquals(false, csv.contains("qsl-station-card-202603"));
     }
 
     @Test
@@ -475,5 +532,17 @@ class QslImportExportJobServiceTest {
         row.put("time", "1200");
         row.put("timezone", "UTC");
         return row;
+    }
+
+    private CardRecord buildCardRecord(String name, String callSign) {
+        var cardRecord = new CardRecord();
+        cardRecord.setMetadata(QslApiSupport.createMetadata(name));
+        var spec = new CardRecord.CardRecordSpec();
+        spec.setCallSign(callSign);
+        spec.setCardType("QSO");
+        spec.setSceneType("QSO");
+        spec.setCardVersion("202603");
+        cardRecord.setSpec(spec);
+        return cardRecord;
     }
 }

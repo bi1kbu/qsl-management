@@ -25,6 +25,7 @@ import run.halo.app.extension.ReactiveExtensionClient;
 @Service
 public class QslOverviewService {
 
+    private static final String BUILTIN_NO_SEND_CARD_VERSION = "不发卡";
     private static final ListOptions EMPTY_OPTIONS = ListOptions.builder().build();
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Order.desc("metadata.creationTimestamp"));
 
@@ -79,8 +80,7 @@ public class QslOverviewService {
             .filter(cardRecord -> includeInPendingSendStatistics(cardRecord, linkedOutboundCardNames))
             .count();
         long deliverySignedTotal = filteredCardRecords.stream()
-            .filter(cardRecord -> cardRecord.getSpec() != null)
-            .filter(cardRecord -> Boolean.TRUE.equals(cardRecord.getSpec().getReceiptConfirmed()))
+            .filter(this::includeInDeliverySignedStatistics)
             .count();
         long receivedTotal = receivedTotal(filteredCardRecords, receiveRecords);
         return new OverviewSummary(
@@ -130,6 +130,9 @@ public class QslOverviewService {
             return false;
         }
         var spec = cardRecord.getSpec();
+        if (isBuiltinNoSendCardVersion(spec.getCardVersion())) {
+            return false;
+        }
         var sceneType = defaultString(spec.getSceneType()).trim().toUpperCase(Locale.ROOT);
         var resourceName = defaultString(cardRecord.getMetadata().getName()).trim().toUpperCase(Locale.ROOT);
         return !"ONLINE_EYEBALL".equals(sceneType)
@@ -144,6 +147,9 @@ public class QslOverviewService {
             return false;
         }
         var spec = cardRecord.getSpec();
+        if (isBuiltinNoSendCardVersion(spec.getCardVersion())) {
+            return false;
+        }
         var sceneType = defaultString(spec.getSceneType()).trim().toUpperCase(Locale.ROOT);
         var sentAt = defaultString(spec.getSentAt()).trim();
         return Boolean.TRUE.equals(spec.getCardSent())
@@ -153,6 +159,17 @@ public class QslOverviewService {
                 && Boolean.TRUE.equals(spec.getCardIssued())
                 && Boolean.TRUE.equals(spec.getEnvelopePrinted())
                 && "SENT".equalsIgnoreCase(defaultString(spec.getCreatedMailStatus()).trim()));
+    }
+
+    private boolean includeInDeliverySignedStatistics(CardRecord cardRecord) {
+        if (!includeInCardStatistics(cardRecord)) {
+            return false;
+        }
+        var spec = cardRecord.getSpec();
+        if (isBuiltinNoSendCardVersion(spec.getCardVersion())) {
+            return false;
+        }
+        return Boolean.TRUE.equals(spec.getReceiptConfirmed());
     }
 
     private Set<String> linkedOutboundCardNames(List<ReceiveRecord> receiveRecords) {
@@ -297,6 +314,10 @@ public class QslOverviewService {
 
     private String normalizeKey(String value) {
         return defaultString(value).trim().toUpperCase(Locale.ROOT);
+    }
+
+    private boolean isBuiltinNoSendCardVersion(String value) {
+        return BUILTIN_NO_SEND_CARD_VERSION.equals(defaultString(value).trim());
     }
 
     private static class MonthlyCounter {

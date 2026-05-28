@@ -916,13 +916,43 @@ const normalizeMarker = (value: string): string => {
     .replace(/\s+/g, '')
 }
 
+const normalizeDatasetToken = (value: string): string => {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
 export const detectDatasetByMarker = (marker: string): DatasetValue | '' => {
   const normalized = normalizeMarker(marker)
   if (!normalized) {
     return ''
   }
 
-  for (const item of datasetConfigs) {
+  const explicitHeader = normalized.match(/^[^#]*#([a-z0-9-]+)$/)
+  if (explicitHeader?.[1]) {
+    const matchedDataset = datasetConfigs.find((item) => item.value === explicitHeader[1])
+    if (matchedDataset) {
+      return matchedDataset.value
+    }
+  }
+
+  const normalizedToken = normalizeDatasetToken(normalized)
+  const exactDataset = datasetConfigs.find((item) => {
+    const datasetToken = normalizeDatasetToken(item.value)
+    const datasetFileToken = normalizeDatasetToken(`${item.value}.csv`)
+    return (
+      datasetToken === normalizedToken ||
+      datasetFileToken === normalizedToken ||
+      normalizedToken.endsWith(datasetFileToken)
+    )
+  })
+  if (exactDataset) {
+    return exactDataset.value
+  }
+
+  for (const item of [...datasetConfigs].sort((left, right) => {
+    const leftLength = Math.max(...left.keywords.map((keyword) => normalizeMarker(keyword).length))
+    const rightLength = Math.max(...right.keywords.map((keyword) => normalizeMarker(keyword).length))
+    return rightLength - leftLength
+  })) {
     if (item.keywords.some((keyword) => normalized.includes(normalizeMarker(keyword)))) {
       return item.value
     }

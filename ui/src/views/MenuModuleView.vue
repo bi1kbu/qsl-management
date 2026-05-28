@@ -135,6 +135,7 @@ const renderer = computed<ModuleRenderer>(() => {
           sceneTypes: ['QSO', 'SWL'] as SceneType[],
           defaultSceneType: 'QSO' as SceneType,
           defaultCardType: 'QSO',
+          showReceivedRecordMigration: false,
         },
       }
     case 'online-delivery-confirm':
@@ -161,6 +162,7 @@ const renderer = computed<ModuleRenderer>(() => {
           sceneTypes: ['QSO', 'SWL'] as SceneType[],
           defaultSceneType: 'QSO' as SceneType,
           defaultCardType: 'QSO',
+          showReceivedRecordMigration: true,
         },
       }
     case 'receive-online-eyeball':
@@ -170,6 +172,7 @@ const renderer = computed<ModuleRenderer>(() => {
           sceneTypes: ['ONLINE_EYEBALL'] as SceneType[],
           defaultSceneType: 'ONLINE_EYEBALL' as SceneType,
           defaultCardType: 'EYEBALL',
+          showReceivedRecordMigration: true,
         },
       }
     case 'receive-eyeball':
@@ -180,6 +183,7 @@ const renderer = computed<ModuleRenderer>(() => {
           defaultSceneType: 'EYEBALL' as SceneType,
           defaultCardType: 'EYEBALL',
           hideReceivedMailActions: true,
+          showReceivedRecordMigration: true,
         },
       }
     case 'exchange-request-review':

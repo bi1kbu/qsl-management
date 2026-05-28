@@ -12,6 +12,7 @@ import {
   compareText,
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
+import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
 
 interface CardRecordSpec {
   callSign: string
@@ -123,6 +124,7 @@ const loadRows = async () => {
       .filter((item) => normalizedSceneTypes.value.has(item.sceneType))
       .filter((item) => isFormalCardRecordName(item.resourceName))
       .filter((item) => item.callSign.trim())
+      .filter((item) => !isBuiltinNoSendCardVersion(item.cardVersion))
     feedback.value = ''
   } catch (error) {
     feedback.value = `加载签收确认清单失败：${error instanceof Error ? error.message : '未知错误'}`
