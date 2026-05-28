@@ -141,6 +141,7 @@ const props = withDefaults(
     defaultCardType?: CardRecordSpec['cardType']
     hideReceivedMailActions?: boolean
     showReceivedRecordMigration?: boolean
+    hideNoSendCardRecords?: boolean
   }>(),
   {
     sceneTypes: () => ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL'],
@@ -148,6 +149,7 @@ const props = withDefaults(
     defaultCardType: 'QSO',
     hideReceivedMailActions: false,
     showReceivedRecordMigration: false,
+    hideNoSendCardRecords: false,
   },
 )
 
@@ -1129,7 +1131,9 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
         ),
       )
       .filter((item) => isFormalCardRecordName(item.resourceName))
-      .filter((item) => !isBuiltinNoSendCardVersion(item.spec.cardVersion))
+      .filter(
+        (item) => !props.hideNoSendCardRecords || !isBuiltinNoSendCardVersion(item.spec.cardVersion),
+      )
       .filter(
         (item) =>
           item.callSign.trim() ||

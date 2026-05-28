@@ -407,6 +407,12 @@ const selectedCardVersionHasConfiguredInventory = computed(() => {
 const selectedCardVersionIsBuiltinNoSend = computed(() =>
   isBuiltinNoSendCardVersion(form.cardVersion),
 )
+const resolveDefaultCardVersion = (): string => {
+  if (isCommQsoBusiness.value) {
+    return BUILTIN_NO_SEND_CARD_VERSION
+  }
+  return cardVersionOptions.value[0] ?? ''
+}
 const batchEditFields = computed(() => {
   const fields = [
     {
@@ -1173,8 +1179,8 @@ const loadCardVersions = async () => {
   cardVersionRemainingMap.value = nextRemainingMap
   cardVersionInventoryConfiguredMap.value = nextConfiguredMap
 
-  if (!form.cardVersion && cardVersionOptions.value.length > 0) {
-    form.cardVersion = cardVersionOptions.value[0]
+  if (!form.cardVersion) {
+    form.cardVersion = resolveDefaultCardVersion()
   }
   if (!eyeballCardVersionDraft.value && cardVersionOptions.value.length > 0) {
     eyeballCardVersionDraft.value = cardVersionOptions.value[0]
@@ -1226,7 +1232,7 @@ const resetForm = () => {
     activeFunctionTab.value === 'batch' ? resolveDefaultCardType() : activeFunctionTab.value
   form.callSign = ''
   form.cardType = defaultCardType
-  form.cardVersion = cardVersionOptions.value[0] ?? ''
+  form.cardVersion = resolveDefaultCardVersion()
   eyeballCardVersionDraft.value = cardVersionOptions.value[0] ?? ''
   eyeballCardVersions.value = []
   form.qsoRecordName = ''
@@ -1440,9 +1446,9 @@ const createCardRecordFromQso = async (item: QsoRecordItem) => {
     }
 
     await loadCardVersions()
-    const cardVersion = cardVersionOptions.value[0] ?? ''
+    const cardVersion = resolveDefaultCardVersion()
     if (!cardVersion) {
-      feedback.value = '没有找到仍有库存的卡片版本，请先在“本台卡片”中配置卡片版本库存。'
+      feedback.value = '没有找到可用卡片版本，请先在“本台卡片”中配置卡片版本库存，或选择系统内置“不发卡”。'
       return
     }
 

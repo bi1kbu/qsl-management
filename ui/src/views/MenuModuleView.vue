@@ -136,6 +136,7 @@ const renderer = computed<ModuleRenderer>(() => {
           defaultSceneType: 'QSO' as SceneType,
           defaultCardType: 'QSO',
           showReceivedRecordMigration: false,
+          hideNoSendCardRecords: true,
         },
       }
     case 'online-delivery-confirm':
@@ -153,6 +154,7 @@ const renderer = computed<ModuleRenderer>(() => {
           defaultSceneType: 'EYEBALL' as SceneType,
           defaultCardType: 'EYEBALL',
           hideReceivedMailActions: true,
+          hideNoSendCardRecords: true,
         },
       }
     case 'receive-qso':
