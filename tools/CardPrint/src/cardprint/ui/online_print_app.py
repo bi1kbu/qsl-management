@@ -213,14 +213,23 @@ def _build_envelope_recipient_name(source_row: dict[str, Any], mapped_row: dict[
         or str(source_row.get("callSign", "")).strip()
         or str(source_row.get("呼号", "")).strip()
     )
-    name = (
-        str(mapped_row.get("name", "")).strip()
-        or str(address_spec.get("name", "")).strip()
-        or str(bureau_spec.get("bureauName", "")).strip()
-    )
+    name = ""
+    normalized_call_sign = call_sign.casefold()
+    for candidate in (
+        mapped_row.get("name", ""),
+        address_spec.get("name", ""),
+        bureau_spec.get("bureauName", ""),
+    ):
+        candidate_text = str(candidate).strip()
+        if not candidate_text:
+            continue
+        if normalized_call_sign and candidate_text.casefold() == normalized_call_sign:
+            continue
+        name = candidate_text
+        break
     if name:
         if call_sign:
-            return f"{name}（{call_sign}）（收）"
+            return f"{name}({call_sign}) （收）"
         return f"{name}（收）"
     if call_sign:
         return f"{call_sign}（收）"

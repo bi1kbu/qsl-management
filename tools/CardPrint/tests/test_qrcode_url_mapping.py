@@ -216,3 +216,27 @@ def test_address_envelope_page_filters_by_call_sign_or_resource_name() -> None:
 
     page.address_envelope_filter_edit.setText("buro-001")
     assert page._matches_queue_rule(bureau_row) is True
+
+
+def test_envelope_recipient_uses_name_and_call_sign_when_name_exists() -> None:
+    row = {
+        "spec": {"callSign": "BI1KBU"},
+        "addressInfo": {"spec": {"name": "测试台"}},
+    }
+
+    assert app._build_envelope_recipient_name(row, {"name": "测试台"}) == "测试台(BI1KBU) （收）"
+
+
+def test_envelope_recipient_does_not_duplicate_call_sign_when_name_missing() -> None:
+    row = {"spec": {"callSign": "BI1KBU"}}
+
+    assert app._build_envelope_recipient_name(row, {"name": "BI1KBU"}) == "BI1KBU（收）"
+
+
+def test_envelope_recipient_skips_mapped_call_sign_and_uses_address_name() -> None:
+    row = {
+        "spec": {"callSign": "BI1KBU"},
+        "addressInfo": {"spec": {"name": "测试台"}},
+    }
+
+    assert app._build_envelope_recipient_name(row, {"name": "BI1KBU"}) == "测试台(BI1KBU) （收）"
