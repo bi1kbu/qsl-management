@@ -67,6 +67,11 @@ class QslConsoleApiEndpointAuthTest {
     }
 
     @Test
+    void shouldRejectReceiveRecordCreateOnlineCardWhenUnauthenticated() {
+        unauthorizedPost("/receive-records/R0001-20260502/create-online-card", "{}");
+    }
+
+    @Test
     void shouldRejectCardResendWhenUnauthenticated() {
         unauthorizedPost("/card-mutations/C1001/resend", "{}");
     }
@@ -97,6 +102,11 @@ class QslConsoleApiEndpointAuthTest {
               "reason": "审批拒绝"
             }
             """);
+    }
+
+    @Test
+    void shouldRejectExchangeCreateCardWhenUnauthenticated() {
+        unauthorizedPost("/exchange-requests/exchange-request-1/create-card", "{}");
     }
 
     @Test

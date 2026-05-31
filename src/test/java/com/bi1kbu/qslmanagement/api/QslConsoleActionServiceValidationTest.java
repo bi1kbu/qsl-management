@@ -687,35 +687,21 @@ class QslConsoleActionServiceValidationTest {
             auditService,
             notificationMailService
         );
-        var capturedCardRecord = new AtomicReference<CardRecord>();
 
         var exchangeRequest = new ExchangeRequest();
         exchangeRequest.setMetadata(QslApiSupport.createMetadata("exchange-request-1"));
         var spec = new ExchangeRequest.ExchangeRequestSpec();
         spec.setCallSign("BI1KBU");
+        spec.setSceneType("ONLINE_EYEBALL");
         exchangeRequest.setSpec(spec);
         var status = new ExchangeRequest.ExchangeRequestStatus();
         status.setReviewStatus("待审核");
         status.setReviewReason("");
         exchangeRequest.setStatus(status);
 
-        var systemSetting = new SystemSetting();
-        systemSetting.setMetadata(QslApiSupport.createMetadata("qsl-system-setting-default"));
-        var settingSpec = new SystemSetting.SystemSettingSpec();
-        settingSpec.setCardRecordSequence(1000);
-        systemSetting.setSpec(settingSpec);
-
         when(client.fetch(eq(ExchangeRequest.class), eq("exchange-request-1")))
             .thenReturn(Mono.just(exchangeRequest));
-        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
-            .thenReturn(Mono.just(systemSetting));
-        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty());
         when(client.update(any(ExchangeRequest.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-        when(client.create(any(CardRecord.class))).thenAnswer(invocation -> {
-            capturedCardRecord.set(invocation.getArgument(0));
-            return Mono.just(invocation.getArgument(0));
-        });
         when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
         when(notificationMailService.autoSendExchangeReviewIfEnabled(any(), any(), any())).thenReturn(Mono.empty());
 
@@ -729,10 +715,111 @@ class QslConsoleActionServiceValidationTest {
 
         assertEquals("已通过", result.reviewStatus());
         assertEquals("", result.reason());
+        assertEquals("", result.createdCardRecordName());
+        verify(client, org.mockito.Mockito.never()).create(any(CardRecord.class));
+    }
+
+    @Test
+    void shouldCreateCardForApprovedExchangeRequestOnlyWhenExplicitlyTriggered() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            notificationMailService
+        );
+        var capturedCardRecord = new AtomicReference<CardRecord>();
+
+        var exchangeRequest = new ExchangeRequest();
+        exchangeRequest.setMetadata(QslApiSupport.createMetadata("EX0001"));
+        var spec = new ExchangeRequest.ExchangeRequestSpec();
+        spec.setSceneType("ONLINE_EYEBALL");
+        spec.setCallSign("BI1KBU");
+        spec.setCardVersion("默认卡片A");
+        exchangeRequest.setSpec(spec);
+        var status = new ExchangeRequest.ExchangeRequestStatus();
+        status.setReviewStatus("已通过");
+        status.setReviewReason("");
+        exchangeRequest.setStatus(status);
+
+        var systemSetting = new SystemSetting();
+        systemSetting.setMetadata(QslApiSupport.createMetadata("qsl-system-setting-default"));
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setCardRecordSequence(1000);
+        systemSetting.setSpec(settingSpec);
+
+        when(client.fetch(eq(ExchangeRequest.class), eq("EX0001")))
+            .thenReturn(Mono.just(exchangeRequest));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty(), Flux.empty());
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.create(any(CardRecord.class))).thenAnswer(invocation -> {
+            capturedCardRecord.set(invocation.getArgument(0));
+            return Mono.just(invocation.getArgument(0));
+        });
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendIfEnabled(any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.createCardForApprovedExchangeRequest("EX0001", "admin", "127.0.0.1").block();
+
+        assertEquals("EX0001", result.requestName());
+        assertEquals("C1001", result.createdCardRecordName());
+        assertEquals("默认卡片A", capturedCardRecord.get().getSpec().getCardVersion());
+        assertEquals("换卡申请审核通过后手动创建。申请编号：EX0001",
+            capturedCardRecord.get().getSpec().getBusinessRemarks());
         assertEquals(
             "期待与您空中相遇。\nLooking forward to meeting you on the air.",
             capturedCardRecord.get().getSpec().getCardRemarks()
         );
+    }
+
+    @Test
+    void shouldCreateOnlineCardForUnmatchedReceiveRecordAndLinkIt() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            notificationMailService
+        );
+        var capturedCardRecord = new AtomicReference<CardRecord>();
+        var receiveRecord = createReceiveRecord("R0001-20260506", "");
+        receiveRecord.getSpec().setMatchStatus("未匹配");
+        receiveRecord.getSpec().setMatchReason("");
+        var systemSetting = createSystemSetting();
+        systemSetting.getSpec().setCardRecordSequence(1000);
+
+        when(client.fetch(eq(ReceiveRecord.class), eq("R0001-20260506"))).thenReturn(Mono.just(receiveRecord));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default"))).thenReturn(Mono.just(systemSetting));
+        when(client.fetch(eq(CardRecord.class), eq("C1001"))).thenAnswer(invocation ->
+            Mono.just(capturedCardRecord.get()));
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty(), Flux.empty());
+        when(client.listAll(eq(ReceiveRecord.class), any(), any())).thenReturn(Flux.just(receiveRecord));
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(ReceiveRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.create(any(CardRecord.class))).thenAnswer(invocation -> {
+            capturedCardRecord.set(invocation.getArgument(0));
+            return Mono.just(invocation.getArgument(0));
+        });
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendIfEnabled(any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.createOnlineCardForUnmatchedReceiveRecord(
+            "R0001-20260506",
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("R0001-20260506", result.receivedRecordCode());
+        assertEquals("C1001", result.cardRecordName());
+        assertEquals("C1001", receiveRecord.getSpec().getOutboundCardNames());
+        assertEquals("人工匹配", receiveRecord.getSpec().getMatchStatus());
+        assertEquals(Boolean.TRUE, capturedCardRecord.get().getSpec().getCardReceived());
+        assertEquals("已收卡片", capturedCardRecord.get().getStatus().getFlowStatus());
     }
 
     @Test

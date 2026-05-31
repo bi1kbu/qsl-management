@@ -100,11 +100,13 @@ API 版本：`v1alpha1`
 | POST | `/mail-receive-confirms/{cardRecordName}/received-date` | 修改卡片收卡日期，并同步更新关联收卡记录日期 | `mail-receive-confirm:edit` |
 | POST | `/mail-receive-confirms/{cardRecordName}/received-record-code/migrate` | 将指定收卡记录从源卡片关联迁移到目标卡片关联 | `mail-receive-confirm:edit` |
 | POST | `/receive-records/{receivedRecordCode}/link-outbound-card` | 将未关联发卡记录的收卡记录人工关联到匹配的正式发卡卡片，并刷新目标卡片已收状态 | `card-query:edit` |
+| POST | `/receive-records/{receivedRecordCode}/create-online-card` | 为未匹配的线上换卡收卡记录创建正式发卡卡片，并写入 `ReceiveRecord.spec.outboundCardNames/matchStatus` | `mail-receive-confirm:edit` |
 | POST | `/card-mutations/{cardRecordName}/resend` | 卡片重发：清理制卡、打包、发信及相关邮件状态，刷新流程状态，保留收卡事实 | `card-mutation:edit` |
 | POST | `/card-mutations/{cardRecordName}/mark-error` | 发卡异常：将卡片类型标记为 `原类型（ERROR）`，可追加异常备注 | `card-mutation:edit` |
 | POST | `/card-mutations/{cardRecordName}/mark-resend` | 标记重发：解除发卡异常，将卡片类型还原为原类型；前端随后调用卡片重发接口清理状态 | `card-mutation:edit` |
-| POST | `/exchange-requests/{name}/approve` | 换卡申请通过并创建线上换卡卡片 | `exchange-request-review:edit` |
+| POST | `/exchange-requests/{name}/approve` | 换卡申请通过；只更新审核状态，不创建线上换卡卡片 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/reject` | 换卡申请拒绝 | `exchange-request-review:edit` |
+| POST | `/exchange-requests/{name}/create-card` | 已通过的换卡申请显式创建线上换卡卡片；服务端校验状态、场景和呼号并防止重复创建 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/notify` | 发送线上换卡申请审核结果邮件 | `exchange-request-review:edit` |
 | POST | `/online-card-imports` | 导入手工文本解析后的线上换卡数据，直接创建 `ONLINE_EYEBALL` 卡片记录并按需创建/绑定地址簿 | `online-bh6syx-import:edit` |
 | POST | `/notification-mails/send` | 单条发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |

@@ -5,6 +5,7 @@ import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
   batchSendNotificationMail,
   confirmMailReceive,
+  createOnlineCardFromReceiveRecord,
   getConsoleApiErrorMessage,
   migrateReceivedRecordCode,
   sendNotificationMail,
@@ -242,6 +243,7 @@ const batchUpdating = ref(false)
 const batchSendingReceivedMail = ref(false)
 const pendingMailRowName = ref('')
 const pendingReceiveRowName = ref('')
+const creatingOnlineCardReceiveRecordCode = ref('')
 const migrationSourceName = ref('')
 const migrationReceiveRecordCode = ref('')
 const migrationTargetKeyword = ref('')
@@ -439,6 +441,9 @@ const singleEditTarget = computed(() => {
 })
 const showReceivedMailActions = computed(() => !props.hideReceivedMailActions)
 const showReceivedRecordMigration = computed(() => props.showReceivedRecordMigration)
+const showReceivedRecordCreateAction = computed(() =>
+  normalizedSceneTypes.value.includes('ONLINE_EYEBALL'),
+)
 const migrationExpandedRowKey = computed(() =>
   showReceivedRecordMigration.value && isBatchTab.value ? migrationSourceName.value : '',
 )
@@ -477,6 +482,14 @@ const asReceiveResultRow = (row: Record<string, unknown>): ReceiveResult =>
   row as unknown as ReceiveResult
 const asReceivedRecordResultRow = (row: Record<string, unknown>): ReceivedRecordResult =>
   row as unknown as ReceivedRecordResult
+const canCreateOnlineCardFromReceiveRecord = (item: ReceivedRecordResult): boolean => {
+  return (
+    item.businessType === 'ONLINE_EYEBALL' &&
+    item.cardType === 'EYEBALL' &&
+    item.matchStatus === '未匹配' &&
+    !item.outboundCardNames.trim()
+  )
+}
 const batchEditFields = [
   {
     value: 'cardType',
@@ -1558,6 +1571,23 @@ const sendReceivedMailForRow = async (item: ReceiveResult, source = '收信确�
   }
 }
 
+const createOnlineCardForReceivedRecord = async (item: ReceivedRecordResult) => {
+  if (!canCreateOnlineCardFromReceiveRecord(item)) {
+    feedback.value = '只有未匹配的线上换卡收卡记录可以创建卡片。'
+    return
+  }
+  creatingOnlineCardReceiveRecordCode.value = item.receiveRecordCode
+  try {
+    const result = await createOnlineCardFromReceiveRecord(item.receiveRecordCode)
+    await loadResults({ silent: true })
+    feedback.value = `已创建卡片 ${result.cardRecordName} 并关联收卡编号 ${result.receivedRecordCode}。`
+  } catch (error) {
+    feedback.value = `创建卡片失败：${getConsoleApiErrorMessage(error)}`
+  } finally {
+    creatingOnlineCardReceiveRecordCode.value = ''
+  }
+}
+
 const markReceivedMailAsSentForRow = async (item: ReceiveResult) => {
   if (!isCardReceivedForDisplay(item) || item.spec.receivedMailStatus === 'SENT') {
     return
@@ -1901,6 +1931,7 @@ onMounted(() => {
         :sort-key="receiveSortKey"
         :sort-direction="receiveSortDirection"
         :loading="loadingResults"
+        :show-actions="showReceivedRecordCreateAction"
         show-pagination
         :total="sortedReceivedResults.length"
         :current-page="currentPage"
@@ -1912,6 +1943,25 @@ onMounted(() => {
       >
         <template #cell-remarks="{ row }">
           <span class="qsl-pre-line">{{ asReceivedRecordResultRow(row).remarks || '-' }}</span>
+        </template>
+        <template #row-actions="{ row }">
+          <VButton
+            size="xs"
+            type="secondary"
+            :disabled="
+              !canCreateOnlineCardFromReceiveRecord(asReceivedRecordResultRow(row)) ||
+              creatingOnlineCardReceiveRecordCode ===
+                asReceivedRecordResultRow(row).receiveRecordCode ||
+              loadingResults
+            "
+            @click="createOnlineCardForReceivedRecord(asReceivedRecordResultRow(row))"
+          >
+            {{
+              creatingOnlineCardReceiveRecordCode === asReceivedRecordResultRow(row).receiveRecordCode
+                ? '创建中'
+                : '创建卡片'
+            }}
+          </VButton>
         </template>
       </QslDataTable>
       <div class="qsl-actions">

@@ -132,6 +132,40 @@ class QslConsoleApiEndpointForbiddenTest {
     }
 
     @Test
+    void shouldRejectReceiveRecordCreateOnlineCardWhenAuthorizedButForbidden() {
+        when(actionService.createOnlineCardForUnmatchedReceiveRecord(anyString(), anyString(), anyString()))
+            .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));
+        var client = buildAuthenticatedClient();
+
+        client.post()
+            .uri("/receive-records/R0001-20260502/create-online-card")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue("{}")
+            .exchange()
+            .expectStatus().isForbidden()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-403-0001")
+            .jsonPath("$.message").isEqualTo("无权限");
+    }
+
+    @Test
+    void shouldRejectExchangeCreateCardWhenAuthorizedButForbidden() {
+        when(actionService.createCardForApprovedExchangeRequest(anyString(), anyString(), anyString()))
+            .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));
+        var client = buildAuthenticatedClient();
+
+        client.post()
+            .uri("/exchange-requests/EX0001/create-card")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue("{}")
+            .exchange()
+            .expectStatus().isForbidden()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-403-0001")
+            .jsonPath("$.message").isEqualTo("无权限");
+    }
+
+    @Test
     void shouldRejectQrzCredentialTestWhenAuthorizedButForbidden() {
         when(qrzAddressLookupService.testAndSaveCredential(any(), anyString(), anyString()))
             .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));

@@ -52,6 +52,15 @@ export interface ReceiveRecordOutboundLinkResult {
   message: string
 }
 
+export interface ReceiveRecordCardCreateResult {
+  receivedRecordCode: string
+  cardRecordName: string
+  callSign: string
+  matchStatus: string
+  message: string
+  handledAt: string
+}
+
 export interface ReceivedRecordCodeMigratePayload {
   receivedRecordCode: string
   targetCardRecordName: string
@@ -490,6 +499,15 @@ export async function linkReceiveRecordToOutboundCard(
   return response.data.data
 }
 
+export async function createOnlineCardFromReceiveRecord(
+  receivedRecordCode: string,
+): Promise<ReceiveRecordCardCreateResult> {
+  const response = await axiosInstance.post<ApiResult<ReceiveRecordCardCreateResult>>(
+    `${consoleApiBase}/receive-records/${encodeURIComponent(receivedRecordCode)}/create-online-card`,
+  )
+  return response.data.data
+}
+
 export async function migrateReceivedRecordCode(
   sourceCardRecordName: string,
   payload: ReceivedRecordCodeMigratePayload,
@@ -519,6 +537,15 @@ export async function rejectExchangeRequest(
   const response = await axiosInstance.post<ApiResult<ExchangeReviewResult>>(
     `${consoleApiBase}/exchange-requests/${encodeURIComponent(requestName)}/reject`,
     { reason },
+  )
+  return response.data.data
+}
+
+export async function createExchangeRequestCard(
+  requestName: string,
+): Promise<ExchangeReviewResult> {
+  const response = await axiosInstance.post<ApiResult<ExchangeReviewResult>>(
+    `${consoleApiBase}/exchange-requests/${encodeURIComponent(requestName)}/create-card`,
   )
   return response.data.data
 }

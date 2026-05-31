@@ -89,11 +89,14 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                 this::migrateReceivedRecordCode)
             .andRoute(POST("/receive-records/{receivedRecordCode}/link-outbound-card"),
                 this::linkReceiveRecordToOutboundCard)
+            .andRoute(POST("/receive-records/{receivedRecordCode}/create-online-card"),
+                this::createOnlineCardFromReceiveRecord)
             .andRoute(POST("/card-mutations/{cardRecordName}/resend"), this::resendCard)
             .andRoute(POST("/card-mutations/{cardRecordName}/mark-error"), this::markCardIssueError)
             .andRoute(POST("/card-mutations/{cardRecordName}/mark-resend"), this::markCardAsResend)
             .andRoute(POST("/exchange-requests/{name}/approve"), this::approveExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/reject"), this::rejectExchangeRequest)
+            .andRoute(POST("/exchange-requests/{name}/create-card"), this::createExchangeRequestCard)
             .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
             .andRoute(POST("/online-card-imports"), this::importOnlineCards)
             .andRoute(POST("/ai-config-tests"), this::testAiConfig)
@@ -234,6 +237,18 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .onErrorResume(QslApiResponses::handleError);
     }
 
+    private Mono<ServerResponse> createOnlineCardFromReceiveRecord(ServerRequest request) {
+        var receivedRecordCode = request.pathVariable("receivedRecordCode");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> actionService.createOnlineCardForUnmatchedReceiveRecord(
+                receivedRecordCode,
+                authenticatedOperator.name(),
+                authenticatedOperator.clientIp()
+            ))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
     private Mono<ServerResponse> resendCard(ServerRequest request) {
         var cardRecordName = request.pathVariable("cardRecordName");
         return ensureAuthenticated(request)
@@ -301,6 +316,18 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                     authenticatedOperator.name(),
                     authenticatedOperator.clientIp()
                 )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> createExchangeRequestCard(ServerRequest request) {
+        var requestName = request.pathVariable("name");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> actionService.createCardForApprovedExchangeRequest(
+                requestName,
+                authenticatedOperator.name(),
+                authenticatedOperator.clientIp()
+            ))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

@@ -10,6 +10,7 @@ import {
 } from '../../api/qsl-extension-api'
 import {
   approveExchangeRequest,
+  createExchangeRequestCard,
   notifyExchangeRequest,
   rejectExchangeRequest,
 } from '../../api/qsl-console-api'
@@ -78,6 +79,7 @@ interface ExchangeRequestItem {
 const rows = ref<ExchangeRequestItem[]>([])
 const loading = ref(false)
 const pendingId = ref('')
+const creatingCardId = ref('')
 const notifyingId = ref('')
 const feedback = ref('')
 const expandedId = ref('')
@@ -258,6 +260,23 @@ const sendReviewMail = async (row: ExchangeRequestItem) => {
     feedback.value = `发送审核通知失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     notifyingId.value = ''
+  }
+}
+
+const createCard = async (row: ExchangeRequestItem) => {
+  if (row.status !== '已通过') {
+    feedback.value = '只有已通过的换卡申请可以创建卡片。'
+    return
+  }
+  creatingCardId.value = row.id
+  try {
+    const result = await createExchangeRequestCard(row.id)
+    await loadRows()
+    feedback.value = `已为 ${row.callSign} 创建卡片：${result.createdCardRecordName || '-'}。`
+  } catch (error) {
+    feedback.value = `创建卡片失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    creatingCardId.value = ''
   }
 }
 
@@ -560,6 +579,19 @@ onMounted(loadRows)
               @click="sendReviewMail(toExchangeItem(row))"
             >
               发送邮件通知
+            </VButton>
+            <VButton
+              v-if="toExchangeItem(row).status === '已通过'"
+              size="xs"
+              type="secondary"
+              :disabled="
+                creatingCardId === toExchangeItem(row).id ||
+                pendingId === toExchangeItem(row).id ||
+                loading
+              "
+              @click="createCard(toExchangeItem(row))"
+            >
+              {{ creatingCardId === toExchangeItem(row).id ? '创建中' : '创建卡片' }}
             </VButton>
             <VTag
               v-if="toExchangeItem(row).reviewMailStatus"
