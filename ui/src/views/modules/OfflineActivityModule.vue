@@ -13,6 +13,10 @@ import {
 import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
 import QslDataTable from '../../components/QslDataTable.vue'
 import { applySortDirection, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
+import {
+  BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME,
+  isBuiltinDailyOfflineActivity,
+} from '../../utils/offline-activity'
 
 type ActivitySortKey =
   | 'resourceName'
@@ -39,6 +43,7 @@ interface OfflineActivityItem {
   metadataVersion?: number | null
   spec: OfflineActivitySpec
   createdAt: string
+  builtin?: boolean
 }
 
 const resourcePlural = 'offline-activities'
@@ -63,6 +68,19 @@ const form = reactive<OfflineActivitySpec>({
   activityTime: '',
   cardRemarks: '',
 })
+
+const builtinDailyActivity: OfflineActivityItem = {
+  resourceName: BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME,
+  spec: {
+    activityName: BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME,
+    activityLocation: '',
+    activityDate: '',
+    activityTime: '',
+    cardRemarks: '',
+  },
+  createdAt: '',
+  builtin: true,
+}
 
 const rows = ref<OfflineActivityItem[]>([])
 
@@ -244,7 +262,12 @@ const loadRows = async () => {
     const extensions = await listExtensions<OfflineActivitySpec, OfflineActivityStatus>(
       resourcePlural,
     )
-    rows.value = extensions.map((item) => toItem(item))
+    rows.value = [
+      builtinDailyActivity,
+      ...extensions
+        .map((item) => toItem(item))
+        .filter((item) => !isBuiltinDailyOfflineActivity(item.resourceName)),
+    ]
     if (!extensions.length) {
       feedback.value = '暂无线下活动记录。'
     } else if (!isEditing.value) {
@@ -258,6 +281,10 @@ const loadRows = async () => {
 }
 
 const startEdit = (row: OfflineActivityItem) => {
+  if (row.builtin) {
+    feedback.value = '内置活动无需编辑。'
+    return
+  }
   editingName.value = row.resourceName
   form.activityName = row.spec.activityName
   form.activityLocation = row.spec.activityLocation
@@ -274,6 +301,10 @@ const toActivityItem = (row: Record<string, unknown>): OfflineActivityItem => {
 const saveActivity = async () => {
   if (!form.activityName.trim()) {
     feedback.value = '活动名称不能为空。'
+    return
+  }
+  if (isBuiltinDailyOfflineActivity(form.activityName)) {
+    feedback.value = '“日常线下换卡”为系统内置活动，无需重复创建。'
     return
   }
   if (!form.activityDate) {
@@ -356,6 +387,10 @@ const saveActivity = async () => {
 }
 
 const removeActivity = async (row: OfflineActivityItem) => {
+  if (row.builtin) {
+    feedback.value = '内置活动不能删除。'
+    return
+  }
   deletingName.value = row.resourceName
   try {
     await deleteExtension(resourcePlural, row.resourceName)
@@ -473,7 +508,7 @@ onMounted(() => {
             <VButton
               size="xs"
               type="secondary"
-              :disabled="saving || loading"
+              :disabled="saving || loading || toActivityItem(row).builtin"
               @click="startEdit(toActivityItem(row))"
               >编辑</VButton
             >
@@ -481,7 +516,12 @@ onMounted(() => {
               size="xs"
               label="删除"
               danger-level="danger"
-              :disabled="deletingName === toActivityItem(row).resourceName || saving || loading"
+              :disabled="
+                deletingName === toActivityItem(row).resourceName ||
+                saving ||
+                loading ||
+                Boolean(toActivityItem(row).builtin)
+              "
               confirm-enabled
               confirm-title="确认删除线下活动"
               :confirm-message="`确认删除活动“${toActivityItem(row).spec.activityName || toActivityItem(row).resourceName}”吗？`"

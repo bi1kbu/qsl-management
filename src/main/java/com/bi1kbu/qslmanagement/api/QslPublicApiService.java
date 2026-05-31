@@ -306,7 +306,20 @@ public class QslPublicApiService {
                 var displayName = buildOfflineActivityDisplayName(id, name, date);
                 return new PublicOfflineActivityItem(id, name, date, displayName);
             })
-            .collectList();
+            .filter(item -> !QslApiSupport.BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME.equals(item.activityId()))
+            .filter(item -> !QslApiSupport.BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME.equals(item.activityName()))
+            .collectList()
+            .map(items -> {
+                var result = new java.util.ArrayList<PublicOfflineActivityItem>();
+                result.add(new PublicOfflineActivityItem(
+                    QslApiSupport.BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME,
+                    QslApiSupport.BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME,
+                    "",
+                    QslApiSupport.BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME
+                ));
+                result.addAll(items);
+                return result;
+            });
     }
 
     public Mono<PublicOfflineExchangeConfirmResult> confirmOfflineExchange(

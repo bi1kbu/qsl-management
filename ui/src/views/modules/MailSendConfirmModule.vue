@@ -24,6 +24,7 @@ import {
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
 import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
+import { BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME } from '../../utils/offline-activity'
 import { resolveMonotonicCardFlowStatus } from '../../utils/qsl-card-state'
 
 interface CardRecordSpec {
@@ -214,6 +215,9 @@ const editForm = reactive({
 const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
 const offlineActivityPlural = 'offline-activities'
+const builtinDailyOfflineActivity: OfflineActivitySpec = {
+  activityName: BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME,
+}
 
 const filteredRows = computed(() => {
   const pendingRows = rows.value.filter((row) => !row.sent || row.spec.sentMailStatus !== 'SENT')
@@ -543,11 +547,18 @@ const loadOfflineActivities = async () => {
   }
   try {
     const extensions = await listExtensions<OfflineActivitySpec>(offlineActivityPlural)
-    offlineActivities.value = extensions.map((item) => ({
-      activityName: item.spec?.activityName ?? '',
-    }))
+    offlineActivities.value = [
+      builtinDailyOfflineActivity,
+      ...extensions.map((item) => ({
+        activityName: item.spec?.activityName ?? '',
+      })),
+    ].filter(
+      (item, index, array) =>
+        item.activityName.trim() &&
+        array.findIndex((candidate) => candidate.activityName === item.activityName) === index,
+    )
   } catch {
-    offlineActivities.value = []
+    offlineActivities.value = [builtinDailyOfflineActivity]
   }
 }
 

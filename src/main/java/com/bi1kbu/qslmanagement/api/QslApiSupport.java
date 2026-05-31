@@ -10,6 +10,8 @@ import run.halo.app.extension.Metadata;
 
 public final class QslApiSupport {
 
+    public static final String BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME = "日常线下换卡";
+
     private static final DateTimeFormatter LOCAL_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern(
         "yyyy-MM-dd HH:mm:ss"
     );

@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
+import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.StationCard;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
@@ -70,6 +71,31 @@ class QslPublicApiServiceValidationTest {
         var error = assertThrows(QslApiException.class, () -> service.listPublicRecords("!@#", "").block());
         assertEquals("QSL-400-0001", error.getCode());
         assertEquals(400, error.getStatus().value());
+    }
+
+    @Test
+    void shouldListBuiltinDailyOfflineActivity() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var activity = new OfflineActivity();
+        activity.setMetadata(QslApiSupport.createMetadata("202605ACT01"));
+        var spec = new OfflineActivity.OfflineActivitySpec();
+        spec.setActivityName("五月线下换卡");
+        spec.setActivityDate("2026-05-01");
+        activity.setSpec(spec);
+
+        when(client.listAll(eq(OfflineActivity.class), any(), any())).thenReturn(Flux.just(activity));
+
+        var service = new QslPublicApiService(
+            client,
+            Mockito.mock(QslAuditService.class),
+            Mockito.mock(QslConsoleActionService.class)
+        );
+
+        var items = service.listPublicOfflineActivities().block();
+
+        assertEquals(QslApiSupport.BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME, items.get(0).activityId());
+        assertEquals(QslApiSupport.BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME, items.get(0).displayName());
+        assertEquals("202605ACT01", items.get(1).activityId());
     }
 
     @Test

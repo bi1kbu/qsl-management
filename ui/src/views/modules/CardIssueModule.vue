@@ -18,6 +18,7 @@ import {
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
 import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
+import { BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME } from '../../utils/offline-activity'
 import { maxCardFlowStatus } from '../../utils/qsl-card-state'
 
 interface CardRecordSpec {
@@ -332,6 +333,7 @@ const addressBookPlural = 'address-book-entries'
 const bureauPlural = 'bureau-entries'
 const qsoRecordPlural = 'qso-records'
 const offlineActivityPlural = 'offline-activities'
+const builtinDailyOfflineActivityTitle = BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME
 
 const loading = ref(false)
 const issuing = ref(false)
@@ -842,13 +844,16 @@ const loadSourceData = async () => {
     bureauRows.value = bureaus.map((item) => toBureauRow(item))
     qsoRows.value = qsos.map((item) => toQsoRow(item))
     offlineActivities.value = Object.fromEntries(
-      activityExtensions.map((item) => {
+      [
+        [BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME, builtinDailyOfflineActivityTitle] as const,
+        ...activityExtensions.map((item) => {
         const spec = item.spec
         const title = [spec?.activityName ?? '', spec?.activityDate ?? '', spec?.activityTime ?? '']
           .filter((segment) => segment.trim().length > 0)
           .join(' ')
-        return [item.metadata.name, title || item.metadata.name]
+        return [item.metadata.name, title || item.metadata.name] as const
       }),
+      ],
     )
 
     const selectedExists = allAddressRows.value.some((item) => item.id === selectedAddressId.value)

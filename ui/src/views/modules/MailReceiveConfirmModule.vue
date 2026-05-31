@@ -29,6 +29,7 @@ import {
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
 import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
+import { BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME } from '../../utils/offline-activity'
 
 interface CardRecordSpec {
   callSign: string
@@ -270,6 +271,10 @@ const resourcePlural = 'card-records'
 const receiveRecordPlural = 'receive-records'
 const resourceKind = 'CardRecord'
 const offlineActivityPlural = 'offline-activities'
+const builtinDailyOfflineActivity: OfflineActivityOption = {
+  resourceName: BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME,
+  activityName: BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME,
+}
 
 const readRememberedReceivedDate = (): string => {
   try {
@@ -1164,14 +1169,19 @@ const loadOfflineActivities = async () => {
   }
   try {
     const extensions = await listExtensions<OfflineActivitySpec>(offlineActivityPlural)
-    offlineActivities.value = extensions
-      .map((item) => ({
+    offlineActivities.value = [
+      builtinDailyOfflineActivity,
+      ...extensions.map((item) => ({
         resourceName: item.metadata.name,
         activityName: item.spec?.activityName ?? '',
-      }))
-      .filter((item) => item.resourceName.trim())
+      })),
+    ].filter(
+      (item, index, array) =>
+        item.resourceName.trim() &&
+        array.findIndex((candidate) => candidate.resourceName === item.resourceName) === index,
+    )
   } catch {
-    offlineActivities.value = []
+    offlineActivities.value = [builtinDailyOfflineActivity]
   }
 }
 

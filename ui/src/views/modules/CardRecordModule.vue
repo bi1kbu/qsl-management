@@ -32,6 +32,7 @@ import {
   isBuiltinNoSendCardVersion,
 } from '../../utils/qsl-card-version'
 import { resolveCardFlowStatus } from '../../utils/qsl-card-state'
+import { BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME } from '../../utils/offline-activity'
 
 interface CardRecordSpec {
   callSign: string
@@ -305,7 +306,7 @@ const stationCardPlural = 'station-cards'
 const systemSettingPlural = 'system-settings'
 const systemSettingName = 'qsl-system-setting-default'
 const offlineActivityPlural = 'offline-activities'
-const DAILY_OFFLINE_ACTIVITY_NAME = '日常换卡'
+const DAILY_OFFLINE_ACTIVITY_NAME = BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME
 const NO_CARD_PLACEHOLDER_REMARK = '不创建卡片'
 const NO_CARD_SEQUENCE_START = 0
 const NO_CARD_NAME_PATTERN = /^NC(\d+)$/i

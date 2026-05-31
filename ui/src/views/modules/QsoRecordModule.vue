@@ -72,6 +72,14 @@ interface QsoRecordItem {
   remarks: string
 }
 
+interface AdifImportPreviewItem {
+  index: number
+  spec: QsoRecordSpec
+  unsupportedFields: Array<{ name: string; value: string }>
+  valid: boolean
+  message: string
+}
+
 interface StationEquipmentSpec {
   rigName: string
   antennas: string[]
@@ -153,7 +161,7 @@ const feedback = ref('')
 const timerId = ref<number | null>(null)
 const loading = ref(false)
 const saving = ref(false)
-const activeFunctionTab = ref<'basic' | 'batch' | 'adif'>('basic')
+const activeFunctionTab = ref<'basic' | 'batch' | 'adif-import' | 'adif'>('basic')
 const syncHistoryQuery = ref(false)
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
@@ -173,6 +181,9 @@ const historySortKey = ref<QsoHistorySortKey>('resourceName')
 const historySortDirection = ref<QslSortDirection>('asc')
 const adifMySig = ref('')
 const adifMySigInfo = ref('')
+const adifImportText = ref('')
+const adifImportPreview = ref<AdifImportPreviewItem[]>([])
+const adifImporting = ref(false)
 
 const availableSceneTypes = computed<SceneType[]>(() => {
   const deduplicated = Array.from(new Set(props.sceneTypes.map((item) => normalizeSceneType(item))))
@@ -203,7 +214,7 @@ const adifMySigStorageKey = 'qsl:qso-record:adif-my-sig'
 const adifMySigInfoStorageKey = 'qsl:qso-record:adif-my-sig-info'
 
 const adifMySigOptions = [
-  { value: '', label: '不导出' },
+  { value: '', label: '不添加' },
   { value: 'POTA', label: 'POTA' },
   { value: 'SOTA', label: 'SOTA' },
   { value: 'WWFF', label: 'WWFF' },
@@ -827,6 +838,171 @@ const adifField = (name: string, value?: string): string => {
   return `<${name.toUpperCase()}:${Array.from(normalizedValue).length}>${normalizedValue}`
 }
 
+const parseAdifFieldMap = (recordText: string): Record<string, string> => {
+  const fields: Record<string, string> = {}
+  const fieldPattern = /<([A-Za-z0-9_]+):(\d+)(?::[^>]*)?>/g
+  let matched: RegExpExecArray | null
+  while ((matched = fieldPattern.exec(recordText)) !== null) {
+    const name = (matched[1] ?? '').trim().toUpperCase()
+    const length = Number.parseInt(matched[2] ?? '0', 10)
+    if (!name || !Number.isFinite(length) || length < 0) {
+      continue
+    }
+    const valueStart = fieldPattern.lastIndex
+    const valueEnd = valueStart + length
+    fields[name] = recordText.slice(valueStart, valueEnd).trim()
+    fieldPattern.lastIndex = valueEnd
+  }
+  return fields
+}
+
+const parseAdifRecords = (content: string): Array<Record<string, string>> => {
+  const body = content.replace(/^[\s\S]*?<EOH>/i, '')
+  return body
+    .split(/<EOR>/i)
+    .map((item) => parseAdifFieldMap(item))
+    .filter((item) => Object.keys(item).length > 0)
+}
+
+const parseAdifDate = (value?: string): string => {
+  const normalized = (value ?? '').trim()
+  const matched = normalized.match(/^(\d{4})(\d{2})(\d{2})$/)
+  if (!matched) {
+    return ''
+  }
+  return `${matched[1]}-${matched[2]}-${matched[3]}`
+}
+
+const parseAdifTime = (value?: string): string => {
+  const normalized = (value ?? '').trim()
+  const matched = normalized.match(/^(\d{2})(\d{2})(?:\d{2})?$/)
+  if (!matched) {
+    return ''
+  }
+  return `${matched[1]}${matched[2]}`
+}
+
+const resolveAdifStationEquipment = (myRig: string): StationEquipmentSpec | undefined => {
+  const normalizedRig = myRig.trim().toLowerCase()
+  if (normalizedRig) {
+    const matched = stationEquipments.value.find(
+      (item) => item.rigName.trim().toLowerCase() === normalizedRig,
+    )
+    if (matched) {
+      return matched
+    }
+  }
+  return stationEquipments.value[0]
+}
+
+const unsupportedAdifFieldsForRemarks = (
+  fields: Record<string, string>,
+): Array<{ name: string; value: string }> => {
+  const supportedFields = new Set([
+    'APP_QSLMS_RECORD_ID',
+    'CALL',
+    'QSO_DATE',
+    'TIME_ON',
+    'TIME_OFF',
+    'MODE',
+    'SUBMODE',
+    'FREQ',
+    'RST_SENT',
+    'RST_RCVD',
+    'QTH',
+    'COMMENT',
+    'NOTES',
+    'MY_RIG',
+    'MY_ANTENNA',
+    'TX_PWR',
+    'OPERATOR',
+    'STATION_CALLSIGN',
+    'SWL',
+  ])
+  return Object.entries(fields)
+    .filter(([name, value]) => value.trim() && !supportedFields.has(name))
+    .map(([name, value]) => ({ name, value }))
+}
+
+const buildAdifImportRemarks = (
+  fields: Record<string, string>,
+  unsupportedFields: Array<{ name: string; value: string }>,
+): string => {
+  const remarks: string[] = []
+  const comment = fields.COMMENT?.trim()
+  const notes = fields.NOTES?.trim()
+  if (comment) {
+    remarks.push(comment)
+  }
+  if (notes && notes !== comment) {
+    remarks.push(notes)
+  }
+  if (unsupportedFields.length) {
+    remarks.push(
+      [
+        'ADIF扩展字段：',
+        ...unsupportedFields.map((item) => `${item.name}=${item.value}`),
+      ].join('\n'),
+    )
+  }
+  return remarks.join('\n\n')
+}
+
+const toAdifImportPreviewItem = (
+  fields: Record<string, string>,
+  index: number,
+): AdifImportPreviewItem => {
+  const sceneType: SceneType = fields.SWL?.trim().toUpperCase() === 'Y' ? 'SWL' : 'QSO'
+  const callSign = normalizeAdifCallSign(fields.CALL)
+  const date = parseAdifDate(fields.QSO_DATE)
+  const time = parseAdifTime(fields.TIME_ON || fields.TIME_OFF)
+  const mode = (fields.MODE || fields.SUBMODE || '').trim().toUpperCase()
+  const myRig = fields.MY_RIG?.trim() ?? ''
+  const equipment = resolveAdifStationEquipment(myRig)
+  const resolvedMyRig = myRig || equipment?.rigName?.trim() || ''
+  const resolvedMyRigAnt = fields.MY_ANTENNA?.trim() || equipment?.antennas?.[0]?.trim() || ''
+  const resolvedMyRigPwr = fields.TX_PWR?.trim() || equipment?.powers?.[0]?.trim() || ''
+  const unsupportedFields = unsupportedAdifFieldsForRemarks(fields)
+  const spec: QsoRecordSpec = {
+    sceneType,
+    date,
+    time,
+    timezone: 'UTC',
+    freq: fields.FREQ?.trim() ?? '',
+    myRig: resolvedMyRig,
+    myRigMode: mode || equipment?.modes?.[0]?.trim() || '',
+    myRigAnt: resolvedMyRigAnt,
+    myRigPwr: sceneType === 'SWL' ? '' : resolvedMyRigPwr,
+    myQth: '',
+    operator: fields.OPERATOR?.trim() || fields.STATION_CALLSIGN?.trim() || stationProfileCallSign.value,
+    callSign,
+    rig: '',
+    ant: '',
+    pwr: '',
+    qth: fields.QTH?.trim() ?? '',
+    rstSent: sceneType === 'SWL' ? '' : fields.RST_SENT?.trim() || '59',
+    rstRcvd: fields.RST_RCVD?.trim() || '59',
+    remarks: buildAdifImportRemarks(fields, unsupportedFields),
+  }
+  const missing: string[] = []
+  if (!callSign) {
+    missing.push('呼号')
+  }
+  if (!date) {
+    missing.push('日期')
+  }
+  if (!time) {
+    missing.push('时间')
+  }
+  return {
+    index,
+    spec,
+    unsupportedFields,
+    valid: missing.length === 0,
+    message: missing.length ? `缺少或无法识别：${missing.join('、')}` : '可导入',
+  }
+}
+
 const normalizeAdifCallSign = (value?: string): string => {
   const normalizedValue = (value ?? '').trim().toUpperCase()
   if (
@@ -903,6 +1079,77 @@ const exportAdifRecords = () => {
   downloadTextFile(`qso-records-${timestamp}.adi`, buildAdifContent(items))
   feedback.value = ''
   Toast.success(`已导出 ${items.length} 条 ADIF 记录。`)
+}
+
+const parseAdifImportText = () => {
+  const content = adifImportText.value.trim()
+  if (!content) {
+    adifImportPreview.value = []
+    feedback.value = '请先粘贴或上传 ADIF 内容。'
+    return
+  }
+  const parsedRecords = parseAdifRecords(content)
+  adifImportPreview.value = parsedRecords.map((item, index) =>
+    toAdifImportPreviewItem(item, index + 1),
+  )
+  if (!adifImportPreview.value.length) {
+    feedback.value = '未解析到 ADIF 记录，请检查内容是否包含 <EOR>。'
+    return
+  }
+  const validCount = adifImportPreview.value.filter((item) => item.valid).length
+  feedback.value = `已解析 ${adifImportPreview.value.length} 条记录，可导入 ${validCount} 条。`
+}
+
+const handleAdifImportFile = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) {
+    return
+  }
+  adifImportText.value = await file.text()
+  parseAdifImportText()
+  input.value = ''
+}
+
+const importAdifRecords = async () => {
+  const targets = adifImportPreview.value.filter((item) => item.valid)
+  if (!targets.length) {
+    feedback.value = '没有可导入的 ADIF 记录。'
+    return
+  }
+
+  adifImporting.value = true
+  try {
+    const reservedNames = records.value.map((item) => item.resourceName)
+    const createdNames: string[] = []
+    for (const item of targets) {
+      const resourceName = buildQsoResourceName([...reservedNames, ...createdNames])
+      await createExtension<QsoRecordSpec>(resourcePlural, {
+        apiVersion: qslApiVersion,
+        kind: resourceKind,
+        metadata: {
+          name: resourceName,
+        },
+        spec: item.spec,
+      })
+      createdNames.push(resourceName)
+    }
+
+    await appendQslAuditLog({
+      action: '导入ADIF通联记录',
+      resourceType: 'qso-record',
+      resourceName: `ADIF-${createdNames.length}`,
+      detail: `成功导入 ${createdNames.length} 条通联记录`,
+    })
+
+    await loadRecords({ silent: true })
+    feedback.value = ''
+    Toast.success(`已导入 ${createdNames.length} 条 ADIF 记录。`)
+  } catch (error) {
+    feedback.value = `导入 ADIF 记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    adifImporting.value = false
+  }
 }
 
 const loadAdifExportSettings = () => {
@@ -1206,6 +1453,9 @@ onMounted(() => {
             <VTabItem id="batch" label="批量编辑">
               <div class="qsl-tab-panel-placeholder" />
             </VTabItem>
+            <VTabItem id="adif-import" label="ADIF格式导入">
+              <div class="qsl-tab-panel-placeholder" />
+            </VTabItem>
             <VTabItem id="adif" label="ADIF格式导出">
               <div class="qsl-tab-panel-placeholder" />
             </VTabItem>
@@ -1472,6 +1722,81 @@ onMounted(() => {
         <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
       </template>
 
+      <template v-else-if="activeFunctionTab === 'adif-import'">
+        <div class="qsl-record-section">
+          <p class="qsl-record-section__title">ADIF格式导入</p>
+          <div class="qsl-form-grid qsl-form-grid--adif">
+            <label class="qsl-field qsl-field--full">
+              <span class="qsl-field__label">ADIF内容（ADIF_Content）</span>
+              <div class="qsl-input-shell qsl-input-shell--textarea">
+                <textarea
+                  v-model="adifImportText"
+                  rows="10"
+                  placeholder="粘贴 ADIF 内容，或通过下方文件选择导入 .adi/.adif/.txt 文件"
+                />
+              </div>
+            </label>
+            <label class="qsl-field qsl-field--full">
+              <span class="qsl-field__label">ADIF文件（ADIF_File）</span>
+              <div class="qsl-input-shell">
+                <input type="file" accept=".adi,.adif,.txt,text/plain" @change="handleAdifImportFile" />
+              </div>
+            </label>
+          </div>
+          <div class="qsl-actions">
+            <VButton type="secondary" :disabled="loading || adifImporting" @click="parseAdifImportText">
+              解析ADIF内容
+            </VButton>
+            <VButton
+              :disabled="
+                loading ||
+                adifImporting ||
+                !adifImportPreview.some((item) => item.valid)
+              "
+              @click="importAdifRecords"
+            >
+              导入可用记录
+            </VButton>
+            <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
+          </div>
+          <div v-if="adifImportPreview.length" class="qsl-adif-summary">
+            <p>解析记录数：{{ adifImportPreview.length }}</p>
+            <p>可导入数量：{{ adifImportPreview.filter((item) => item.valid).length }}</p>
+            <p>无法落入通联模型的 ADIF 字段会追加到备注。</p>
+          </div>
+          <div v-if="adifImportPreview.length" class="qsl-adif-preview-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>状态</th>
+                  <th>类型</th>
+                  <th>呼号</th>
+                  <th>日期</th>
+                  <th>时间</th>
+                  <th>频率</th>
+                  <th>模式</th>
+                  <th>备注扩展字段</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in adifImportPreview" :key="item.index">
+                  <td>{{ item.index }}</td>
+                  <td>{{ item.message }}</td>
+                  <td>{{ item.spec.sceneType }}</td>
+                  <td>{{ item.spec.callSign || '-' }}</td>
+                  <td>{{ item.spec.date || '-' }}</td>
+                  <td>{{ item.spec.time || '-' }}</td>
+                  <td>{{ item.spec.freq || '-' }}</td>
+                  <td>{{ item.spec.myRigMode || '-' }}</td>
+                  <td>{{ item.unsupportedFields.map((field) => field.name).join('、') || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
       <template v-else-if="activeFunctionTab === 'adif'">
         <div class="qsl-record-section">
           <p class="qsl-record-section__title">ADIF格式导出</p>
@@ -1684,6 +2009,31 @@ onMounted(() => {
 
 .qsl-adif-summary p {
   margin: 0;
+}
+
+.qsl-adif-preview-table {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.qsl-adif-preview-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.qsl-adif-preview-table th,
+.qsl-adif-preview-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.qsl-adif-preview-table th {
+  color: #374151;
+  font-weight: 600;
+  background: #f9fafb;
 }
 
 </style>
