@@ -223,6 +223,7 @@ FIXED_DATASET_MAPPINGS: dict[str, dict[str, Any]] = {
             "type": "coalesce",
             "sources": [
                 "addressInfo.spec.destinationCountry",
+                "bureauInfo.spec.destinationCountry",
                 "spec.destinationCountry",
                 "destinationCountry",
                 "destination_country",

@@ -15,12 +15,19 @@ import QslDataTable from '../../components/QslDataTable.vue'
 import { buildBureauResourceName } from '../../utils/resource-name'
 import { applySortDirection, compareText, type QslSortDirection } from '../../utils/qsl-table-sort'
 
-type BureauSortKey = 'bureauName' | 'telephone' | 'postalCode' | 'address' | 'remarks'
+type BureauSortKey =
+  | 'bureauName'
+  | 'telephone'
+  | 'postalCode'
+  | 'destinationCountry'
+  | 'address'
+  | 'remarks'
 
 interface BureauSpec {
   bureauName: string
   telephone: string
   postalCode: string
+  destinationCountry: string
   address: string
   addressRemarks: string
 }
@@ -31,6 +38,7 @@ interface BureauItem {
   bureauName: string
   telephone: string
   postalCode: string
+  destinationCountry: string
   address: string
   remarks: string
 }
@@ -39,6 +47,7 @@ const form = reactive({
   bureauName: '',
   telephone: '',
   postalCode: '',
+  destinationCountry: '',
   address: '',
   remarks: '',
 })
@@ -60,6 +69,7 @@ const bureauColumns = [
   { key: 'bureauName', label: '名称', sortable: true },
   { key: 'telephone', label: '电话', sortable: true },
   { key: 'postalCode', label: '邮编', sortable: true },
+  { key: 'destinationCountry', label: '去向国', sortable: true },
   { key: 'address', label: '地址', sortable: true },
   { key: 'remarks', label: '备注', sortable: true },
 ]
@@ -73,6 +83,7 @@ const toRow = (extension: QslExtension<BureauSpec>): BureauItem => {
     bureauName: extension.spec?.bureauName ?? '',
     telephone: extension.spec?.telephone ?? '',
     postalCode: extension.spec?.postalCode ?? '',
+    destinationCountry: extension.spec?.destinationCountry ?? '',
     address: extension.spec?.address ?? '',
     remarks: extension.spec?.addressRemarks ?? '',
   }
@@ -95,6 +106,7 @@ const resetForm = () => {
   form.bureauName = ''
   form.telephone = ''
   form.postalCode = ''
+  form.destinationCountry = ''
   form.address = ''
   form.remarks = ''
   editingId.value = ''
@@ -105,6 +117,7 @@ const startEdit = (row: BureauItem) => {
   form.bureauName = row.bureauName
   form.telephone = row.telephone
   form.postalCode = row.postalCode
+  form.destinationCountry = row.destinationCountry
   form.address = row.address
   form.remarks = row.remarks
   feedback.value = `正在编辑卡片局：${row.bureauName}`
@@ -135,6 +148,7 @@ const addBureau = async () => {
         bureauName,
         telephone: form.telephone.trim(),
         postalCode: form.postalCode.trim(),
+        destinationCountry: form.destinationCountry.trim(),
         address: form.address.trim(),
         addressRemarks: form.remarks.trim(),
       },
@@ -191,6 +205,7 @@ const updateBureau = async () => {
         bureauName,
         telephone: form.telephone.trim(),
         postalCode: form.postalCode.trim(),
+        destinationCountry: form.destinationCountry.trim(),
         address: form.address.trim(),
         addressRemarks: form.remarks.trim(),
       },
@@ -309,6 +324,13 @@ onMounted(loadRows)
           <span class="qsl-field__label">邮编（Postal_Code）</span>
           <div class="qsl-input-shell">
             <input v-model.trim="form.postalCode" type="text" placeholder="输入邮编" />
+          </div>
+        </label>
+
+        <label class="qsl-field">
+          <span class="qsl-field__label">去向国（Destination_Country）</span>
+          <div class="qsl-input-shell">
+            <input v-model.trim="form.destinationCountry" type="text" placeholder="输入去向国" />
           </div>
         </label>
 

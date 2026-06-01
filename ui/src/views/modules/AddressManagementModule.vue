@@ -72,6 +72,7 @@ interface BureauSpec {
   bureauName: string
   telephone: string
   postalCode: string
+  destinationCountry: string
   address: string
   addressRemarks: string
 }

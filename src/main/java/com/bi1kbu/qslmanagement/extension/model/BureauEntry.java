@@ -21,6 +21,7 @@ public class BureauEntry extends QslBaseExtension<BureauEntry.BureauSpec, Bureau
         private String bureauName;
         private String telephone;
         private String postalCode;
+        private String destinationCountry;
         private String address;
         private String addressRemarks;
     }
@@ -30,4 +31,3 @@ public class BureauEntry extends QslBaseExtension<BureauEntry.BureauSpec, Bureau
         private String syncStatus;
     }
 }
-

@@ -96,6 +96,7 @@ BUREAU_HEADERS = [
     "bureauName",
     "telephone",
     "postalCode",
+    "destinationCountry",
     "address",
     "addressRemarks",
 ]
@@ -485,6 +486,7 @@ def build_bureau_csv_rows(rows: list[sqlite3.Row]) -> list[list[str]]:
             address,
             telephone,
             postal_code,
+            "",
             address,
             "；".join(remark_parts),
         ])

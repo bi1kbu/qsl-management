@@ -261,7 +261,7 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 }
 ```
 
-`source` 只允许 `手工文本导入` 或 `BH6SYX卡片广场`，两类导入统一提交到 `/online-card-imports`，由 `source` 区分来源。服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。地址管理导入导出字段包含 `destinationCountry`（去向国，非必填），线上换卡导入暂不从来源数据自动填充该字段。线上换卡创建卡片默认写入卡片备注“期待与您空中相遇。\nLooking forward to meeting you on the air.”。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
+`source` 只允许 `手工文本导入` 或 `BH6SYX卡片广场`，两类导入统一提交到 `/online-card-imports`，由 `source` 区分来源。服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。地址管理与卡片局管理导入导出字段均包含 `destinationCountry`（去向国，非必填），线上换卡导入暂不从来源数据自动填充该字段。线上换卡创建卡片默认写入卡片备注“期待与您空中相遇。\nLooking forward to meeting you on the air.”。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
 
 导入预检/导入任务：
 

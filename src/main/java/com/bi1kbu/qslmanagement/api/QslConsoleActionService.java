@@ -1218,6 +1218,7 @@ public class QslConsoleActionService {
                 spec.setBureauName(bureauName);
                 spec.setTelephone("");
                 spec.setPostalCode(postalCode);
+                spec.setDestinationCountry("");
                 spec.setAddress(address);
                 spec.setAddressRemarks("线上换卡申请自动生成");
                 entry.setSpec(spec);

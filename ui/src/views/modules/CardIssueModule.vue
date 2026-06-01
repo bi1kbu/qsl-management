@@ -77,6 +77,7 @@ interface BureauSpec {
   bureauName: string
   telephone: string
   postalCode: string
+  destinationCountry: string
   address: string
   addressRemarks: string
 }
@@ -857,7 +858,7 @@ const toBureauRow = (extension: QslExtension<BureauSpec>): CardIssueAddressRow =
     name: extension.spec?.bureauName ?? '',
     telephone: extension.spec?.telephone ?? '',
     postalCode: extension.spec?.postalCode ?? '',
-    destinationCountry: '',
+    destinationCountry: extension.spec?.destinationCountry ?? '',
     address: extension.spec?.address ?? '',
     email: '',
     remarks: extension.spec?.addressRemarks ?? '',

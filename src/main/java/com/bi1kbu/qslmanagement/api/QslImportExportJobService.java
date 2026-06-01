@@ -607,6 +607,7 @@ public class QslImportExportJobService {
                     spec.setBureauName(value(row, "bureauName"));
                     spec.setTelephone(value(row, "telephone"));
                     spec.setPostalCode(value(row, "postalCode"));
+                    spec.setDestinationCountry(value(row, "destinationCountry"));
                     spec.setAddress(value(row, "address"));
                     spec.setAddressRemarks(value(row, "addressRemarks"));
                     record.setSpec(spec);
@@ -1357,6 +1358,7 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getBureauName()),
                         spec == null ? "" : nullToEmpty(spec.getTelephone()),
                         spec == null ? "" : nullToEmpty(spec.getPostalCode()),
+                        spec == null ? "" : nullToEmpty(spec.getDestinationCountry()),
                         spec == null ? "" : nullToEmpty(spec.getAddress()),
                         spec == null ? "" : nullToEmpty(spec.getAddressRemarks()),
                         status == null ? "" : nullToEmpty(status.getSyncStatus())
@@ -1368,6 +1370,7 @@ public class QslImportExportJobService {
                     "bureauName",
                     "telephone",
                     "postalCode",
+                    "destinationCountry",
                     "address",
                     "addressRemarks",
                     "syncStatus"
