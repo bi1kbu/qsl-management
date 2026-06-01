@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
@@ -49,7 +50,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             client,
             Mockito.mock(QslAuditService.class),
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var first = service.listPublicStationCards().block();
@@ -65,7 +67,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             Mockito.mock(ReactiveExtensionClient.class),
             Mockito.mock(QslAuditService.class),
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var error = assertThrows(QslApiException.class, () -> service.listPublicRecords("!@#", "").block());
@@ -88,7 +91,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             client,
             Mockito.mock(QslAuditService.class),
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var items = service.listPublicOfflineActivities().block();
@@ -103,7 +107,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             Mockito.mock(ReactiveExtensionClient.class),
             Mockito.mock(QslAuditService.class),
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var command = new QslPublicApiService.PublicExchangeSubmitCommand(
@@ -128,7 +133,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             Mockito.mock(ReactiveExtensionClient.class),
             Mockito.mock(QslAuditService.class),
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var command = new QslPublicApiService.PublicExchangeSubmitCommand(
@@ -153,7 +159,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             Mockito.mock(ReactiveExtensionClient.class),
             Mockito.mock(QslAuditService.class),
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var command = new QslPublicApiService.PublicExchangeSubmitCommand(
@@ -190,11 +197,14 @@ class QslPublicApiServiceValidationTest {
             Mockito.any(),
             Mockito.any()
         )).thenReturn(Flux.just(existing));
+        Mockito.when(client.fetch(Mockito.eq(SystemSetting.class), Mockito.anyString()))
+            .thenReturn(Mono.empty());
 
         var service = new QslPublicApiService(
             client,
             Mockito.mock(QslAuditService.class),
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var command = new QslPublicApiService.PublicExchangeSubmitCommand(
@@ -219,6 +229,7 @@ class QslPublicApiServiceValidationTest {
         var client = Mockito.mock(ReactiveExtensionClient.class);
         var auditService = Mockito.mock(QslAuditService.class);
         var consoleActionService = Mockito.mock(QslConsoleActionService.class);
+        var notificationMailService = Mockito.mock(QslNotificationMailService.class);
         var persistedRequest = new AtomicReference<ExchangeRequest>();
 
         var stationCard = new StationCard();
@@ -268,11 +279,14 @@ class QslPublicApiServiceValidationTest {
             });
         when(client.fetch(eq(ExchangeRequest.class), anyString())).thenAnswer(invocation -> Mono.just(persistedRequest.get()));
         when(client.fetch(eq(StationProfile.class), anyString())).thenReturn(Mono.just(stationProfile));
+        when(notificationMailService.autoSendOnlineAutoApprovedRequestIfEnabled(anyString(), eq("系统自动审批"), eq("127.0.0.1")))
+            .thenReturn(Mono.empty());
 
         var service = new QslPublicApiService(
             client,
             auditService,
-            consoleActionService
+            consoleActionService,
+            notificationMailService
         );
 
         var command = new QslPublicApiService.PublicExchangeSubmitCommand(
@@ -301,6 +315,48 @@ class QslPublicApiServiceValidationTest {
             eq("系统自动审批"),
             eq("127.0.0.1")
         );
+        verify(notificationMailService).autoSendOnlineAutoApprovedRequestIfEnabled(
+            eq("EX0008"),
+            eq("系统自动审批"),
+            eq("127.0.0.1")
+        );
+    }
+
+    @Test
+    void shouldRejectExchangeSubmitWhenOnlineExchangeDisabled() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var systemSetting = new SystemSetting();
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setOnlineExchangeRequestPolicy("DISABLED");
+        systemSetting.setSpec(settingSpec);
+
+        when(client.fetch(eq(SystemSetting.class), anyString())).thenReturn(Mono.just(systemSetting));
+
+        var service = new QslPublicApiService(
+            client,
+            Mockito.mock(QslAuditService.class),
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
+        );
+
+        var command = new QslPublicApiService.PublicExchangeSubmitCommand(
+            "BI1KBU",
+            Boolean.FALSE,
+            "",
+            "",
+            "测试台",
+            "010-00000000",
+            "510000",
+            "广东省某市",
+            "测试",
+            "2026春季版"
+        );
+
+        var error = assertThrows(QslApiException.class, () -> service.submitExchangeRequest(command, "127.0.0.1").block());
+
+        assertEquals("QSL-422-0001", error.getCode());
+        assertEquals(422, error.getStatus().value());
+        verify(client, never()).create(any(ExchangeRequest.class));
     }
 
     @Test
@@ -308,7 +364,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             Mockito.mock(ReactiveExtensionClient.class),
             Mockito.mock(QslAuditService.class),
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var tooLongRemarks = "x".repeat(501);
@@ -323,7 +380,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             Mockito.mock(ReactiveExtensionClient.class),
             Mockito.mock(QslAuditService.class),
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var command = new QslPublicApiService.PublicReceiptConfirmCommand("BI1KBU", "", "测试", "");
@@ -364,7 +422,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             client,
             auditService,
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var command = new QslPublicApiService.PublicOfflineExchangeConfirmCommand(
@@ -434,7 +493,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             client,
             auditService,
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         var result = service.confirmOfflineExchange(
@@ -498,7 +558,8 @@ class QslPublicApiServiceValidationTest {
         var service = new QslPublicApiService(
             client,
             auditService,
-            Mockito.mock(QslConsoleActionService.class)
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
         );
 
         service.confirmOfflineExchange(

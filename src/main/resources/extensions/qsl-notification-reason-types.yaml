@@ -111,6 +111,65 @@ spec:
 apiVersion: notification.halo.run/v1alpha1
 kind: ReasonType
 metadata:
+  name: qsl-online-auto-approved-request
+  labels:
+    halo.run/hidden: "true"
+spec:
+  displayName: "QSL 线上换卡自动审批本台通知"
+  description: "当线上换卡申请被系统自动审批通过后触发，用于通知本台邮箱。"
+  properties:
+    - name: stationCallSign
+      type: string
+    - name: stationName
+      type: string
+      optional: true
+    - name: stationEmail
+      type: string
+    - name: callSign
+      type: string
+    - name: targetName
+      type: string
+      optional: true
+    - name: targetTelephone
+      type: string
+      optional: true
+    - name: targetEmail
+      type: string
+      optional: true
+    - name: requestName
+      type: string
+    - name: cardVersion
+      type: string
+      optional: true
+    - name: addressMode
+      type: string
+    - name: bureauName
+      type: string
+      optional: true
+    - name: postalCode
+      type: string
+      optional: true
+    - name: address
+      type: string
+      optional: true
+    - name: remarks
+      type: string
+      optional: true
+    - name: reviewStatus
+      type: string
+    - name: reviewReason
+      type: string
+      optional: true
+    - name: triggerAt
+      type: string
+    - name: dateText
+      type: string
+    - name: operator
+      type: string
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: ReasonType
+metadata:
   name: qsl-card-sent
   labels:
     halo.run/hidden: "true"

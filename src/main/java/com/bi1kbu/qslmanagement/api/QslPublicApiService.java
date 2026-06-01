@@ -43,10 +43,14 @@ public class QslPublicApiService {
     private static final Pattern POSTAL_CODE_PATTERN = Pattern.compile("^[A-Za-z0-9\\-]{0,20}$");
     private static final Pattern EXCHANGE_REQUEST_NAME_PATTERN = Pattern.compile("^EX(\\d{4,})$");
     private static final List<String> ALLOWED_SCENE_TYPES = List.of("QSO", "SWL", "ONLINE_EYEBALL", "EYEBALL");
+    private static final String ONLINE_EXCHANGE_DISABLED = "DISABLED";
+    private static final String ONLINE_EXCHANGE_MANUAL = "MANUAL";
+    private static final String ONLINE_EXCHANGE_AUTO_APPROVE = "AUTO_APPROVE";
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
     private final QslConsoleActionService consoleActionService;
+    private final QslNotificationMailService notificationMailService;
     private final AtomicReference<StationCardCacheEntry> stationCardCache = new AtomicReference<>(
         new StationCardCacheEntry(List.of(), Instant.EPOCH)
     );
@@ -54,11 +58,13 @@ public class QslPublicApiService {
     public QslPublicApiService(
         ReactiveExtensionClient client,
         QslAuditService qslAuditService,
-        QslConsoleActionService consoleActionService
+        QslConsoleActionService consoleActionService,
+        QslNotificationMailService notificationMailService
     ) {
         this.client = client;
         this.qslAuditService = qslAuditService;
         this.consoleActionService = consoleActionService;
+        this.notificationMailService = notificationMailService;
     }
 
     public Mono<PublicQsoQueryResult> listPublicRecords(String callSign, String sceneType) {
@@ -179,9 +185,19 @@ public class QslPublicApiService {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "最多只能选择两张卡片"));
         }
 
-        return ensureNoPendingOnlineExchangeRequest(callSign)
-            .then(Mono.defer(() -> validateSelectedStationCardVersions(cardVersions)))
-            .flatMap(persistedCardVersion -> nextExchangeRequestName().flatMap(resourceName -> {
+        return onlineExchangeRequestPolicy()
+            .flatMap(policy -> {
+                if (ONLINE_EXCHANGE_DISABLED.equals(policy)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "线上换卡页面已关闭"));
+                }
+                return ensureNoPendingOnlineExchangeRequest(callSign)
+                    .then(Mono.defer(() -> validateSelectedStationCardVersions(cardVersions)))
+                    .map(persistedCardVersion -> Map.entry(policy, persistedCardVersion));
+            })
+            .flatMap(policyAndVersion -> nextExchangeRequestName().flatMap(resourceName -> {
+                var policy = policyAndVersion.getKey();
+                var persistedCardVersion = policyAndVersion.getValue();
                 var request = new ExchangeRequest();
                 request.setMetadata(QslApiSupport.createMetadata(resourceName));
 
@@ -215,21 +231,25 @@ public class QslPublicApiService {
                         "匿名用户",
                         clientIp
                     ).thenReturn(created))
-                    .flatMap(created -> requiresExchangeReview()
-                        .flatMap(requiresReview -> {
-                            if (requiresReview) {
-                                return Mono.just(created);
-                            }
-                            return consoleActionService.reviewExchangeRequest(
-                                    created.getMetadata().getName(),
-                                    true,
-                                    "系统自动审批通过",
-                                    "系统自动审批",
-                                    clientIp
-                                )
-                                .then(client.fetch(ExchangeRequest.class, created.getMetadata().getName())
-                                    .defaultIfEmpty(created));
-                        }))
+                    .flatMap(created -> {
+                        if (!ONLINE_EXCHANGE_AUTO_APPROVE.equals(policy)) {
+                            return Mono.just(created);
+                        }
+                        return consoleActionService.reviewExchangeRequest(
+                                created.getMetadata().getName(),
+                                true,
+                                "系统自动审批通过",
+                                "系统自动审批",
+                                clientIp
+                            )
+                            .then(client.fetch(ExchangeRequest.class, created.getMetadata().getName())
+                                .defaultIfEmpty(created))
+                            .flatMap(updated -> notificationMailService.autoSendOnlineAutoApprovedRequestIfEnabled(
+                                updated.getMetadata().getName(),
+                                "系统自动审批",
+                                clientIp
+                            ).thenReturn(updated));
+                    })
                     .flatMap(created -> getPublicStationContact()
                         .map(contact -> new PublicExchangeSubmitResult(
                             created.getMetadata().getName(),
@@ -241,14 +261,27 @@ public class QslPublicApiService {
             }));
     }
 
-    private Mono<Boolean> requiresExchangeReview() {
+    private Mono<String> onlineExchangeRequestPolicy() {
         return client.fetch(SystemSetting.class, SYSTEM_SETTING_NAME)
-            .map(systemSetting -> systemSetting.getSpec() == null
-                || !Boolean.FALSE.equals(systemSetting.getSpec().getRequiresExchangeReview()))
-            .defaultIfEmpty(Boolean.TRUE)
+            .map(systemSetting -> {
+                var spec = systemSetting.getSpec();
+                if (spec == null) {
+                    return ONLINE_EXCHANGE_MANUAL;
+                }
+                var policy = nullToEmpty(spec.getOnlineExchangeRequestPolicy()).trim().toUpperCase(Locale.ROOT);
+                if (ONLINE_EXCHANGE_DISABLED.equals(policy)
+                    || ONLINE_EXCHANGE_MANUAL.equals(policy)
+                    || ONLINE_EXCHANGE_AUTO_APPROVE.equals(policy)) {
+                    return policy;
+                }
+                return Boolean.FALSE.equals(spec.getRequiresExchangeReview())
+                    ? ONLINE_EXCHANGE_AUTO_APPROVE
+                    : ONLINE_EXCHANGE_MANUAL;
+            })
+            .defaultIfEmpty(ONLINE_EXCHANGE_MANUAL)
             .onErrorResume(error -> {
-                log.warn("读取换卡审核开关失败，使用需要审核默认值。message={}", error.getMessage());
-                return Mono.just(Boolean.TRUE);
+                log.warn("读取线上换卡表单处理策略失败，使用手动审核默认值。message={}", error.getMessage());
+                return Mono.just(ONLINE_EXCHANGE_MANUAL);
             });
     }
 

@@ -94,6 +94,61 @@ spec:
 apiVersion: notification.halo.run/v1alpha1
 kind: NotificationTemplate
 metadata:
+  name: template-qsl-online-auto-approved-request
+spec:
+  reasonSelector:
+    reasonType: qsl-online-auto-approved-request
+    language: default
+  template:
+    title: "【QSL】线上换卡申请已自动审批通过：[(${callSign})]"
+    rawBody: |
+      [(${stationCallSign})]：
+          线上换卡申请已由系统自动审批通过，请按后续流程处理。
+
+          申请信息：
+          申请编号：[(${requestName})]
+          申请呼号：[(${callSign})]
+          卡片版本：[(${cardVersion})]
+          地址类型：[(${addressMode})]
+          卡片局：[(${bureauName})]
+          收件人：[(${targetName})]
+          邮编：[(${postalCode})]
+          地址：[(${address})]
+          联系电话：[(${targetTelephone})]
+          电子邮件：[(${targetEmail})]
+          备注：[(${remarks})]
+          审批状态：[(${reviewStatus})]
+          审批说明：[(${reviewReason})]
+          触发时间：[(${triggerAt})]
+
+      QSL 管理系统
+      [(${dateText})]
+    htmlBody: |
+      <div class="notification-content">
+        <p th:text="|${stationCallSign}：|"></p>
+        <p>线上换卡申请已由系统自动审批通过，请按后续流程处理。</p>
+        <p>申请信息：</p>
+        <p th:text="|申请编号：${requestName}|"></p>
+        <p th:text="|申请呼号：${callSign}|"></p>
+        <p th:text="|卡片版本：${cardVersion}|"></p>
+        <p th:text="|地址类型：${addressMode}|"></p>
+        <p th:text="|卡片局：${bureauName}|"></p>
+        <p th:text="|收件人：${targetName}|"></p>
+        <p th:text="|邮编：${postalCode}|"></p>
+        <p th:text="|地址：${address}|"></p>
+        <p th:text="|联系电话：${targetTelephone}|"></p>
+        <p th:text="|电子邮件：${targetEmail}|"></p>
+        <p th:text="|备注：${remarks}|"></p>
+        <p th:text="|审批状态：${reviewStatus}|"></p>
+        <p th:text="|审批说明：${reviewReason}|"></p>
+        <p th:text="|触发时间：${triggerAt}|"></p>
+        <p>QSL 管理系统</p>
+        <p th:text="${dateText}"></p>
+      </div>
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: NotificationTemplate
+metadata:
   name: template-qsl-card-sent
 spec:
   reasonSelector:

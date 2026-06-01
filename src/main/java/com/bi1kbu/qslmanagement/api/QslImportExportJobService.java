@@ -636,10 +636,19 @@ public class QslImportExportJobService {
                     var spec = record.getSpec() == null ? new SystemSetting.SystemSettingSpec() : record.getSpec();
                     spec.setGuestQueryPerMinute(parseInteger(value(row, "guestQueryPerMinute")));
                     spec.setRequiresExchangeReview(parseBoolean(value(row, "requiresExchangeReview")));
+                    spec.setOnlineExchangeRequestPolicy(value(row, "onlineExchangeRequestPolicy"));
+                    spec.setOnlineAutoApprovedRequestMailPolicy(value(row, "onlineAutoApprovedRequestMailPolicy"));
                     spec.setAutoNotifyOnCardCreated(parseBoolean(value(row, "autoNotifyOnCardCreated")));
                     spec.setAutoNotifyOnCardSent(parseBoolean(value(row, "autoNotifyOnCardSent")));
                     spec.setAutoNotifyOnCardReceived(parseBoolean(value(row, "autoNotifyOnCardReceived")));
                     spec.setAutoNotifyOnExchangeReviewed(parseBoolean(value(row, "autoNotifyOnExchangeReviewed")));
+                    spec.setQsoCardCreatedMailPolicy(value(row, "qsoCardCreatedMailPolicy"));
+                    spec.setQsoCardSentMailPolicy(value(row, "qsoCardSentMailPolicy"));
+                    spec.setQsoCardReceivedMailPolicy(value(row, "qsoCardReceivedMailPolicy"));
+                    spec.setOnlineCardCreatedMailPolicy(value(row, "onlineCardCreatedMailPolicy"));
+                    spec.setOnlineCardSentMailPolicy(value(row, "onlineCardSentMailPolicy"));
+                    spec.setOnlineCardReceivedMailPolicy(value(row, "onlineCardReceivedMailPolicy"));
+                    spec.setOnlineExchangeReviewedMailPolicy(value(row, "onlineExchangeReviewedMailPolicy"));
                     spec.setQsoAutoNotifyOnCardCreated(parseBoolean(value(row, "qsoAutoNotifyOnCardCreated")));
                     spec.setQsoAutoNotifyOnCardSent(parseBoolean(value(row, "qsoAutoNotifyOnCardSent")));
                     spec.setQsoAutoNotifyOnCardReceived(parseBoolean(value(row, "qsoAutoNotifyOnCardReceived")));
@@ -1376,10 +1385,19 @@ public class QslImportExportJobService {
                         record.getMetadata().getName(),
                         spec == null ? "" : integerToText(spec.getGuestQueryPerMinute()),
                         spec == null ? "" : boolToText(spec.getRequiresExchangeReview()),
+                        spec == null ? "" : nullToEmpty(spec.getOnlineExchangeRequestPolicy()),
+                        spec == null ? "" : nullToEmpty(spec.getOnlineAutoApprovedRequestMailPolicy()),
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnCardCreated()),
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnCardSent()),
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnCardReceived()),
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnExchangeReviewed()),
+                        spec == null ? "" : nullToEmpty(spec.getQsoCardCreatedMailPolicy()),
+                        spec == null ? "" : nullToEmpty(spec.getQsoCardSentMailPolicy()),
+                        spec == null ? "" : nullToEmpty(spec.getQsoCardReceivedMailPolicy()),
+                        spec == null ? "" : nullToEmpty(spec.getOnlineCardCreatedMailPolicy()),
+                        spec == null ? "" : nullToEmpty(spec.getOnlineCardSentMailPolicy()),
+                        spec == null ? "" : nullToEmpty(spec.getOnlineCardReceivedMailPolicy()),
+                        spec == null ? "" : nullToEmpty(spec.getOnlineExchangeReviewedMailPolicy()),
                         spec == null ? "" : boolToText(spec.getQsoAutoNotifyOnCardCreated()),
                         spec == null ? "" : boolToText(spec.getQsoAutoNotifyOnCardSent()),
                         spec == null ? "" : boolToText(spec.getQsoAutoNotifyOnCardReceived()),
@@ -1423,10 +1441,19 @@ public class QslImportExportJobService {
                     "id",
                     "guestQueryPerMinute",
                     "requiresExchangeReview",
+                    "onlineExchangeRequestPolicy",
+                    "onlineAutoApprovedRequestMailPolicy",
                     "autoNotifyOnCardCreated",
                     "autoNotifyOnCardSent",
                     "autoNotifyOnCardReceived",
                     "autoNotifyOnExchangeReviewed",
+                    "qsoCardCreatedMailPolicy",
+                    "qsoCardSentMailPolicy",
+                    "qsoCardReceivedMailPolicy",
+                    "onlineCardCreatedMailPolicy",
+                    "onlineCardSentMailPolicy",
+                    "onlineCardReceivedMailPolicy",
+                    "onlineExchangeReviewedMailPolicy",
                     "qsoAutoNotifyOnCardCreated",
                     "qsoAutoNotifyOnCardSent",
                     "qsoAutoNotifyOnCardReceived",

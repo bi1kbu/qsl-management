@@ -62,9 +62,42 @@ const DEFAULT_AI_CALLBOOK_ADDRESS_PROMPT = `请从以下呼号查询页面或官
 内容：
 {features}`
 
+type MailSendPolicy = 'AUTO_SKIP' | 'MANUAL' | 'AUTO_SEND'
+type AutoMailPolicy = 'AUTO_SKIP' | 'AUTO_SEND'
+type OnlineExchangeRequestPolicy = 'DISABLED' | 'MANUAL' | 'AUTO_APPROVE'
+
+const mailPolicyOptions: Array<{ value: MailSendPolicy; label: string }> = [
+  { value: 'AUTO_SKIP', label: '自动不发送' },
+  { value: 'MANUAL', label: '手动' },
+  { value: 'AUTO_SEND', label: '自动发送' },
+]
+
+const onlineExchangeRequestPolicyOptions: Array<{
+  value: OnlineExchangeRequestPolicy
+  label: string
+}> = [
+  { value: 'DISABLED', label: '关闭线上换卡' },
+  { value: 'MANUAL', label: '手动' },
+  { value: 'AUTO_APPROVE', label: '自动通过' },
+]
+
+const autoMailPolicyOptions: Array<{ value: AutoMailPolicy; label: string }> = [
+  { value: 'AUTO_SKIP', label: '自动不发送' },
+  { value: 'AUTO_SEND', label: '自动发送' },
+]
+
 const systemSettingsForm = reactive({
   guestQueryPerMinute: 30,
   requiresExchangeReview: true,
+  onlineExchangeRequestPolicy: 'MANUAL' as OnlineExchangeRequestPolicy,
+  onlineAutoApprovedRequestMailPolicy: 'AUTO_SKIP' as AutoMailPolicy,
+  qsoCardCreatedMailPolicy: 'MANUAL' as MailSendPolicy,
+  qsoCardSentMailPolicy: 'MANUAL' as MailSendPolicy,
+  qsoCardReceivedMailPolicy: 'MANUAL' as MailSendPolicy,
+  onlineCardCreatedMailPolicy: 'MANUAL' as MailSendPolicy,
+  onlineCardSentMailPolicy: 'MANUAL' as MailSendPolicy,
+  onlineCardReceivedMailPolicy: 'MANUAL' as MailSendPolicy,
+  onlineExchangeReviewedMailPolicy: 'MANUAL' as MailSendPolicy,
   qsoAutoNotifyOnCardCreated: false,
   qsoAutoNotifyOnCardSent: false,
   qsoAutoNotifyOnCardReceived: false,
@@ -118,10 +151,19 @@ const testingQrzProvider = ref<QrzProvider | ''>('')
 interface SystemSettingSpec {
   guestQueryPerMinute: number
   requiresExchangeReview: boolean
+  onlineExchangeRequestPolicy?: OnlineExchangeRequestPolicy
+  onlineAutoApprovedRequestMailPolicy?: AutoMailPolicy
   autoNotifyOnCardCreated?: boolean
   autoNotifyOnCardSent?: boolean
   autoNotifyOnCardReceived?: boolean
   autoNotifyOnExchangeReviewed?: boolean
+  qsoCardCreatedMailPolicy?: MailSendPolicy
+  qsoCardSentMailPolicy?: MailSendPolicy
+  qsoCardReceivedMailPolicy?: MailSendPolicy
+  onlineCardCreatedMailPolicy?: MailSendPolicy
+  onlineCardSentMailPolicy?: MailSendPolicy
+  onlineCardReceivedMailPolicy?: MailSendPolicy
+  onlineExchangeReviewedMailPolicy?: MailSendPolicy
   qsoAutoNotifyOnCardCreated: boolean
   qsoAutoNotifyOnCardSent: boolean
   qsoAutoNotifyOnCardReceived: boolean
@@ -168,6 +210,54 @@ const nowText = (): string => {
   })
 }
 
+const validMailPolicyValues = new Set<MailSendPolicy>(['AUTO_SKIP', 'MANUAL', 'AUTO_SEND'])
+const validOnlineExchangeRequestPolicyValues = new Set<OnlineExchangeRequestPolicy>([
+  'DISABLED',
+  'MANUAL',
+  'AUTO_APPROVE',
+])
+const validAutoMailPolicyValues = new Set<AutoMailPolicy>(['AUTO_SKIP', 'AUTO_SEND'])
+
+const resolveMailPolicy = (
+  value: MailSendPolicy | undefined,
+  sceneEnabled: boolean | undefined,
+  legacyEnabled: boolean | undefined,
+): MailSendPolicy => {
+  if (value && validMailPolicyValues.has(value)) {
+    return value
+  }
+  return (sceneEnabled ?? legacyEnabled) ? 'AUTO_SEND' : 'MANUAL'
+}
+
+const resolveOnlineExchangeRequestPolicy = (
+  value: OnlineExchangeRequestPolicy | undefined,
+  requiresExchangeReview: boolean | undefined,
+): OnlineExchangeRequestPolicy => {
+  if (value && validOnlineExchangeRequestPolicyValues.has(value)) {
+    return value
+  }
+  return requiresExchangeReview === false ? 'AUTO_APPROVE' : 'MANUAL'
+}
+
+const mailPolicyLabel = (value: MailSendPolicy): string => {
+  return mailPolicyOptions.find((item) => item.value === value)?.label ?? '手动'
+}
+
+const onlineExchangeRequestPolicyLabel = (value: OnlineExchangeRequestPolicy): string => {
+  return onlineExchangeRequestPolicyOptions.find((item) => item.value === value)?.label ?? '手动'
+}
+
+const resolveAutoMailPolicy = (value: AutoMailPolicy | undefined): AutoMailPolicy => {
+  if (value && validAutoMailPolicyValues.has(value)) {
+    return value
+  }
+  return 'AUTO_SKIP'
+}
+
+const autoMailPolicyLabel = (value: AutoMailPolicy): string => {
+  return autoMailPolicyOptions.find((item) => item.value === value)?.label ?? '自动不发送'
+}
+
 const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
   const legacyCreated = Boolean(extension.spec?.autoNotifyOnCardCreated)
   const legacySent = Boolean(extension.spec?.autoNotifyOnCardSent)
@@ -175,6 +265,48 @@ const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
   const legacyReviewed = Boolean(extension.spec?.autoNotifyOnExchangeReviewed)
   systemSettingsForm.guestQueryPerMinute = extension.spec?.guestQueryPerMinute ?? 30
   systemSettingsForm.requiresExchangeReview = extension.spec?.requiresExchangeReview ?? true
+  systemSettingsForm.onlineExchangeRequestPolicy = resolveOnlineExchangeRequestPolicy(
+    extension.spec?.onlineExchangeRequestPolicy,
+    extension.spec?.requiresExchangeReview,
+  )
+  systemSettingsForm.onlineAutoApprovedRequestMailPolicy = resolveAutoMailPolicy(
+    extension.spec?.onlineAutoApprovedRequestMailPolicy,
+  )
+  systemSettingsForm.qsoCardCreatedMailPolicy = resolveMailPolicy(
+    extension.spec?.qsoCardCreatedMailPolicy,
+    extension.spec?.qsoAutoNotifyOnCardCreated,
+    legacyCreated,
+  )
+  systemSettingsForm.qsoCardSentMailPolicy = resolveMailPolicy(
+    extension.spec?.qsoCardSentMailPolicy,
+    extension.spec?.qsoAutoNotifyOnCardSent,
+    legacySent,
+  )
+  systemSettingsForm.qsoCardReceivedMailPolicy = resolveMailPolicy(
+    extension.spec?.qsoCardReceivedMailPolicy,
+    extension.spec?.qsoAutoNotifyOnCardReceived,
+    legacyReceived,
+  )
+  systemSettingsForm.onlineCardCreatedMailPolicy = resolveMailPolicy(
+    extension.spec?.onlineCardCreatedMailPolicy,
+    extension.spec?.onlineAutoNotifyOnCardCreated,
+    legacyCreated,
+  )
+  systemSettingsForm.onlineCardSentMailPolicy = resolveMailPolicy(
+    extension.spec?.onlineCardSentMailPolicy,
+    extension.spec?.onlineAutoNotifyOnCardSent,
+    legacySent,
+  )
+  systemSettingsForm.onlineCardReceivedMailPolicy = resolveMailPolicy(
+    extension.spec?.onlineCardReceivedMailPolicy,
+    extension.spec?.onlineAutoNotifyOnCardReceived,
+    legacyReceived,
+  )
+  systemSettingsForm.onlineExchangeReviewedMailPolicy = resolveMailPolicy(
+    extension.spec?.onlineExchangeReviewedMailPolicy,
+    extension.spec?.onlineAutoNotifyOnExchangeReviewed,
+    legacyReviewed,
+  )
   systemSettingsForm.qsoAutoNotifyOnCardCreated =
     extension.spec?.qsoAutoNotifyOnCardCreated ?? legacyCreated
   systemSettingsForm.qsoAutoNotifyOnCardSent = extension.spec?.qsoAutoNotifyOnCardSent ?? legacySent
@@ -231,10 +363,19 @@ const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
   return {
     guestQueryPerMinute: 30,
     requiresExchangeReview: true,
+    onlineExchangeRequestPolicy: 'MANUAL',
+    onlineAutoApprovedRequestMailPolicy: 'AUTO_SKIP',
     autoNotifyOnCardCreated: false,
     autoNotifyOnCardSent: false,
     autoNotifyOnCardReceived: false,
     autoNotifyOnExchangeReviewed: false,
+    qsoCardCreatedMailPolicy: 'MANUAL',
+    qsoCardSentMailPolicy: 'MANUAL',
+    qsoCardReceivedMailPolicy: 'MANUAL',
+    onlineCardCreatedMailPolicy: 'MANUAL',
+    onlineCardSentMailPolicy: 'MANUAL',
+    onlineCardReceivedMailPolicy: 'MANUAL',
+    onlineExchangeReviewedMailPolicy: 'MANUAL',
     qsoAutoNotifyOnCardCreated: false,
     qsoAutoNotifyOnCardSent: false,
     qsoAutoNotifyOnCardReceived: false,
@@ -406,24 +547,47 @@ const saveSystemSettings = async () => {
 
   saving.value = true
   try {
+    const qsoAutoNotifyOnCardCreated =
+      systemSettingsForm.qsoCardCreatedMailPolicy === 'AUTO_SEND'
+    const qsoAutoNotifyOnCardSent = systemSettingsForm.qsoCardSentMailPolicy === 'AUTO_SEND'
+    const qsoAutoNotifyOnCardReceived =
+      systemSettingsForm.qsoCardReceivedMailPolicy === 'AUTO_SEND'
+    const onlineAutoNotifyOnCardCreated =
+      systemSettingsForm.onlineCardCreatedMailPolicy === 'AUTO_SEND'
+    const onlineAutoNotifyOnCardSent =
+      systemSettingsForm.onlineCardSentMailPolicy === 'AUTO_SEND'
+    const onlineAutoNotifyOnCardReceived =
+      systemSettingsForm.onlineCardReceivedMailPolicy === 'AUTO_SEND'
+    const onlineAutoNotifyOnExchangeReviewed =
+      systemSettingsForm.onlineExchangeReviewedMailPolicy === 'AUTO_SEND'
     await upsertSingleton<SystemSettingSpec>({
       plural: resourcePlural,
       kind: resourceKind,
       name: resourceName,
       spec: {
         guestQueryPerMinute: systemSettingsForm.guestQueryPerMinute,
-        requiresExchangeReview: systemSettingsForm.requiresExchangeReview,
+        requiresExchangeReview: systemSettingsForm.onlineExchangeRequestPolicy !== 'AUTO_APPROVE',
+        onlineExchangeRequestPolicy: systemSettingsForm.onlineExchangeRequestPolicy,
+        onlineAutoApprovedRequestMailPolicy:
+          systemSettingsForm.onlineAutoApprovedRequestMailPolicy,
         autoNotifyOnCardCreated: false,
         autoNotifyOnCardSent: false,
         autoNotifyOnCardReceived: false,
         autoNotifyOnExchangeReviewed: false,
-        qsoAutoNotifyOnCardCreated: systemSettingsForm.qsoAutoNotifyOnCardCreated,
-        qsoAutoNotifyOnCardSent: systemSettingsForm.qsoAutoNotifyOnCardSent,
-        qsoAutoNotifyOnCardReceived: systemSettingsForm.qsoAutoNotifyOnCardReceived,
-        onlineAutoNotifyOnCardCreated: systemSettingsForm.onlineAutoNotifyOnCardCreated,
-        onlineAutoNotifyOnCardSent: systemSettingsForm.onlineAutoNotifyOnCardSent,
-        onlineAutoNotifyOnCardReceived: systemSettingsForm.onlineAutoNotifyOnCardReceived,
-        onlineAutoNotifyOnExchangeReviewed: systemSettingsForm.onlineAutoNotifyOnExchangeReviewed,
+        qsoCardCreatedMailPolicy: systemSettingsForm.qsoCardCreatedMailPolicy,
+        qsoCardSentMailPolicy: systemSettingsForm.qsoCardSentMailPolicy,
+        qsoCardReceivedMailPolicy: systemSettingsForm.qsoCardReceivedMailPolicy,
+        onlineCardCreatedMailPolicy: systemSettingsForm.onlineCardCreatedMailPolicy,
+        onlineCardSentMailPolicy: systemSettingsForm.onlineCardSentMailPolicy,
+        onlineCardReceivedMailPolicy: systemSettingsForm.onlineCardReceivedMailPolicy,
+        onlineExchangeReviewedMailPolicy: systemSettingsForm.onlineExchangeReviewedMailPolicy,
+        qsoAutoNotifyOnCardCreated,
+        qsoAutoNotifyOnCardSent,
+        qsoAutoNotifyOnCardReceived,
+        onlineAutoNotifyOnCardCreated,
+        onlineAutoNotifyOnCardSent,
+        onlineAutoNotifyOnCardReceived,
+        onlineAutoNotifyOnExchangeReviewed,
         offlineAutoNotifyOnCardReceived: systemSettingsForm.offlineAutoNotifyOnCardReceived,
         cardRecordSequence: systemSettingsForm.cardRecordSequence,
         receiveRecordSequence: systemSettingsForm.receiveRecordSequence,
@@ -465,7 +629,7 @@ const saveSystemSettings = async () => {
       action: '更新系统参数',
       resourceType: 'system-setting',
       resourceName,
-      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，换卡审核=${systemSettingsForm.requiresExchangeReview ? '是' : '否'}，邮件通知策略已按通联、线上换卡、线下换卡分别保存，AI功能=${systemSettingsForm.aiEnabled ? '启用' : '停用'}。`,
+      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，线上换卡表单处理策略=${onlineExchangeRequestPolicyLabel(systemSettingsForm.onlineExchangeRequestPolicy)}，自动审批本台邮件通知=${autoMailPolicyLabel(systemSettingsForm.onlineAutoApprovedRequestMailPolicy)}，邮件通知策略已按通联、线上换卡、线下换卡分别保存，AI功能=${systemSettingsForm.aiEnabled ? '启用' : '停用'}。`,
     })
     feedback.value = '系统参数已保存。'
   } catch (error) {
@@ -583,7 +747,7 @@ onMounted(loadSystemSettings)
           <section class="qsl-setting-section">
           <header class="qsl-setting-section__header">
             <h3>基础参数</h3>
-            <p>控制系统访问频率与换卡审核策略。</p>
+            <p>控制系统访问频率与线上换卡表单处理策略。</p>
           </header>
 
           <label class="qsl-field">
@@ -602,12 +766,44 @@ onMounted(loadSystemSettings)
             >
           </label>
 
-          <div class="qsl-switch-row">
+          <div class="qsl-switch-row qsl-switch-row--policy">
             <div>
-              <p class="qsl-switch-row__title">换卡是否需要审核</p>
-              <p class="qsl-switch-row__desc">开启后，前台换卡申请需要管理员审批。</p>
+              <p class="qsl-switch-row__title">线上换卡表单处理策略</p>
+              <p class="qsl-switch-row__desc">控制前台线上换卡页面收到表单后的处理方式。</p>
             </div>
-            <VSwitch v-model="systemSettingsForm.requiresExchangeReview" />
+            <div class="qsl-policy-control">
+              <div class="qsl-segmented-control" role="radiogroup" aria-label="线上换卡表单处理策略">
+                <button
+                  v-for="option in onlineExchangeRequestPolicyOptions"
+                  :key="option.value"
+                  type="button"
+                  :class="{ 'is-active': systemSettingsForm.onlineExchangeRequestPolicy === option.value }"
+                  @click="systemSettingsForm.onlineExchangeRequestPolicy = option.value"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="qsl-switch-row qsl-switch-row--policy">
+            <div>
+              <p class="qsl-switch-row__title">自动审批通过后的本台邮件通知策略</p>
+              <p class="qsl-switch-row__desc">仅用于系统自动审批通过线上换卡申请后，向本台通信地址中的电子邮件发送通知。</p>
+            </div>
+            <div class="qsl-policy-control">
+              <div class="qsl-segmented-control" role="radiogroup" aria-label="自动审批通过后的本台邮件通知策略">
+                <button
+                  v-for="option in autoMailPolicyOptions"
+                  :key="option.value"
+                  type="button"
+                  :class="{ 'is-active': systemSettingsForm.onlineAutoApprovedRequestMailPolicy === option.value }"
+                  @click="systemSettingsForm.onlineAutoApprovedRequestMailPolicy = option.value"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -619,9 +815,9 @@ onMounted(loadSystemSettings)
 
           <div class="qsl-policy-group">
             <h4>通联业务</h4>
-            <div class="qsl-switch-row">
+            <div class="qsl-switch-row qsl-switch-row--policy">
               <div>
-                <p class="qsl-switch-row__title">制卡后自动发送邮件</p>
+                <p class="qsl-switch-row__title">制卡后的邮件发送策略</p>
                 <p class="qsl-switch-row__desc">适用于通联业务创建 QSO/SWL 卡片记录。</p>
               </div>
               <div class="qsl-switch-row__controls">
@@ -634,12 +830,24 @@ onMounted(loadSystemSettings)
                 >
                   {{ sendingTestScene === 'created' ? '发送中' : '发送测试邮件' }}
                 </VButton>
-                <VSwitch v-model="systemSettingsForm.qsoAutoNotifyOnCardCreated" />
+                <div class="qsl-policy-control">
+                  <div class="qsl-segmented-control" role="radiogroup" aria-label="通联业务制卡后的邮件发送策略">
+                    <button
+                      v-for="option in mailPolicyOptions"
+                      :key="option.value"
+                      type="button"
+                      :class="{ 'is-active': systemSettingsForm.qsoCardCreatedMailPolicy === option.value }"
+                      @click="systemSettingsForm.qsoCardCreatedMailPolicy = option.value"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="qsl-switch-row">
+            <div class="qsl-switch-row qsl-switch-row--policy">
               <div>
-                <p class="qsl-switch-row__title">发卡后自动发送邮件</p>
+                <p class="qsl-switch-row__title">发卡后的邮件发送策略</p>
                 <p class="qsl-switch-row__desc">适用于通联业务发信确认。</p>
               </div>
               <div class="qsl-switch-row__controls">
@@ -652,12 +860,24 @@ onMounted(loadSystemSettings)
                 >
                   {{ sendingTestScene === 'sent' ? '发送中' : '发送测试邮件' }}
                 </VButton>
-                <VSwitch v-model="systemSettingsForm.qsoAutoNotifyOnCardSent" />
+                <div class="qsl-policy-control">
+                  <div class="qsl-segmented-control" role="radiogroup" aria-label="通联业务发卡后的邮件发送策略">
+                    <button
+                      v-for="option in mailPolicyOptions"
+                      :key="option.value"
+                      type="button"
+                      :class="{ 'is-active': systemSettingsForm.qsoCardSentMailPolicy === option.value }"
+                      @click="systemSettingsForm.qsoCardSentMailPolicy = option.value"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="qsl-switch-row">
+            <div class="qsl-switch-row qsl-switch-row--policy">
               <div>
-                <p class="qsl-switch-row__title">收卡后自动发送邮件</p>
+                <p class="qsl-switch-row__title">收卡后的邮件发送策略</p>
                 <p class="qsl-switch-row__desc">适用于通联收卡确认。</p>
               </div>
               <div class="qsl-switch-row__controls">
@@ -670,16 +890,28 @@ onMounted(loadSystemSettings)
                 >
                   {{ sendingTestScene === 'received' ? '发送中' : '发送测试邮件' }}
                 </VButton>
-                <VSwitch v-model="systemSettingsForm.qsoAutoNotifyOnCardReceived" />
+                <div class="qsl-policy-control">
+                  <div class="qsl-segmented-control" role="radiogroup" aria-label="通联业务收卡后的邮件发送策略">
+                    <button
+                      v-for="option in mailPolicyOptions"
+                      :key="option.value"
+                      type="button"
+                      :class="{ 'is-active': systemSettingsForm.qsoCardReceivedMailPolicy === option.value }"
+                      @click="systemSettingsForm.qsoCardReceivedMailPolicy = option.value"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
           <div class="qsl-policy-group">
             <h4>线上换卡业务</h4>
-            <div class="qsl-switch-row">
+            <div class="qsl-switch-row qsl-switch-row--policy">
               <div>
-                <p class="qsl-switch-row__title">制卡后自动发送邮件</p>
+                <p class="qsl-switch-row__title">制卡后的邮件发送策略</p>
                 <p class="qsl-switch-row__desc">适用于线上换卡自动或手动创建卡片记录。</p>
               </div>
               <div class="qsl-switch-row__controls">
@@ -692,12 +924,24 @@ onMounted(loadSystemSettings)
                 >
                   {{ sendingTestScene === 'created' ? '发送中' : '发送测试邮件' }}
                 </VButton>
-                <VSwitch v-model="systemSettingsForm.onlineAutoNotifyOnCardCreated" />
+                <div class="qsl-policy-control">
+                  <div class="qsl-segmented-control" role="radiogroup" aria-label="线上换卡业务制卡后的邮件发送策略">
+                    <button
+                      v-for="option in mailPolicyOptions"
+                      :key="option.value"
+                      type="button"
+                      :class="{ 'is-active': systemSettingsForm.onlineCardCreatedMailPolicy === option.value }"
+                      @click="systemSettingsForm.onlineCardCreatedMailPolicy = option.value"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="qsl-switch-row">
+            <div class="qsl-switch-row qsl-switch-row--policy">
               <div>
-                <p class="qsl-switch-row__title">发卡后自动发送邮件</p>
+                <p class="qsl-switch-row__title">发卡后的邮件发送策略</p>
                 <p class="qsl-switch-row__desc">适用于线上换卡发信确认。</p>
               </div>
               <div class="qsl-switch-row__controls">
@@ -710,12 +954,24 @@ onMounted(loadSystemSettings)
                 >
                   {{ sendingTestScene === 'sent' ? '发送中' : '发送测试邮件' }}
                 </VButton>
-                <VSwitch v-model="systemSettingsForm.onlineAutoNotifyOnCardSent" />
+                <div class="qsl-policy-control">
+                  <div class="qsl-segmented-control" role="radiogroup" aria-label="线上换卡业务发卡后的邮件发送策略">
+                    <button
+                      v-for="option in mailPolicyOptions"
+                      :key="option.value"
+                      type="button"
+                      :class="{ 'is-active': systemSettingsForm.onlineCardSentMailPolicy === option.value }"
+                      @click="systemSettingsForm.onlineCardSentMailPolicy = option.value"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="qsl-switch-row">
+            <div class="qsl-switch-row qsl-switch-row--policy">
               <div>
-                <p class="qsl-switch-row__title">收卡后自动发送邮件</p>
+                <p class="qsl-switch-row__title">收卡后的邮件发送策略</p>
                 <p class="qsl-switch-row__desc">适用于线上换卡收卡确认。</p>
               </div>
               <div class="qsl-switch-row__controls">
@@ -728,12 +984,24 @@ onMounted(loadSystemSettings)
                 >
                   {{ sendingTestScene === 'received' ? '发送中' : '发送测试邮件' }}
                 </VButton>
-                <VSwitch v-model="systemSettingsForm.onlineAutoNotifyOnCardReceived" />
+                <div class="qsl-policy-control">
+                  <div class="qsl-segmented-control" role="radiogroup" aria-label="线上换卡业务收卡后的邮件发送策略">
+                    <button
+                      v-for="option in mailPolicyOptions"
+                      :key="option.value"
+                      type="button"
+                      :class="{ 'is-active': systemSettingsForm.onlineCardReceivedMailPolicy === option.value }"
+                      @click="systemSettingsForm.onlineCardReceivedMailPolicy = option.value"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="qsl-switch-row">
+            <div class="qsl-switch-row qsl-switch-row--policy">
               <div>
-                <p class="qsl-switch-row__title">审核后自动发送邮件</p>
+                <p class="qsl-switch-row__title">审核后的邮件发送策略</p>
                 <p class="qsl-switch-row__desc">适用于线上换卡申请审核通过或拒绝。</p>
               </div>
               <div class="qsl-switch-row__controls">
@@ -746,7 +1014,19 @@ onMounted(loadSystemSettings)
                 >
                   {{ sendingTestScene === 'exchange-reviewed' ? '发送中' : '发送测试邮件' }}
                 </VButton>
-                <VSwitch v-model="systemSettingsForm.onlineAutoNotifyOnExchangeReviewed" />
+                <div class="qsl-policy-control">
+                  <div class="qsl-segmented-control" role="radiogroup" aria-label="线上换卡业务审核后的邮件发送策略">
+                    <button
+                      v-for="option in mailPolicyOptions"
+                      :key="option.value"
+                      type="button"
+                      :class="{ 'is-active': systemSettingsForm.onlineExchangeReviewedMailPolicy === option.value }"
+                      @click="systemSettingsForm.onlineExchangeReviewedMailPolicy = option.value"
+                    >
+                      {{ option.label }}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1265,6 +1545,47 @@ onMounted(loadSystemSettings)
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.qsl-switch-row--policy {
+  align-items: flex-start;
+}
+
+.qsl-policy-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.qsl-segmented-control {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.qsl-segmented-control button {
+  min-width: 74px;
+  border: 0;
+  border-right: 1px solid #d1d5db;
+  background: transparent;
+  color: #374151;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.qsl-segmented-control button:last-child {
+  border-right: 0;
+}
+
+.qsl-segmented-control button.is-active {
+  background: #111827;
+  color: #fff;
+  font-weight: 600;
 }
 
 .qsl-policy-group {

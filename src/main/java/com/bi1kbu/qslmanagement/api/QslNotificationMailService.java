@@ -34,6 +34,10 @@ public class QslNotificationMailService {
     private static final String CARD_RECORD_KIND = "CardRecord";
     private static final String EXCHANGE_REQUEST_KIND = "ExchangeRequest";
     private static final String EXCHANGE_REVIEW_REASON_TYPE = "qsl-exchange-reviewed";
+    private static final String ONLINE_AUTO_APPROVED_REQUEST_REASON_TYPE = "qsl-online-auto-approved-request";
+    private static final String MAIL_POLICY_AUTO_SKIP = "AUTO_SKIP";
+    private static final String MAIL_POLICY_MANUAL = "MANUAL";
+    private static final String MAIL_POLICY_AUTO_SEND = "AUTO_SEND";
 
     private final ReactiveExtensionClient client;
     private final NotificationCenter notificationCenter;
@@ -156,12 +160,31 @@ public class QslNotificationMailService {
     ) {
         return loadSystemSetting()
             .flatMap(systemSetting -> {
-                if (!isSettingEnabled(systemSetting.getOnlineAutoNotifyOnExchangeReviewed(),
+                if (!isMailPolicyAutoSend(systemSetting.getOnlineExchangeReviewedMailPolicy(),
+                    systemSetting.getOnlineAutoNotifyOnExchangeReviewed(),
                     systemSetting.getAutoNotifyOnExchangeReviewed())) {
                     return Mono.empty();
                 }
                 return sendExchangeReviewMail(requestName, operator, clientIp, "自动触发")
                     .then();
+            })
+            .onErrorResume(error -> Mono.empty());
+    }
+
+    public Mono<Void> autoSendOnlineAutoApprovedRequestIfEnabled(
+        String requestName,
+        String operator,
+        String clientIp
+    ) {
+        return loadSystemSetting()
+            .flatMap(systemSetting -> {
+                var policy = StringUtils.defaultString(systemSetting.getOnlineAutoApprovedRequestMailPolicy())
+                    .trim()
+                    .toUpperCase(Locale.ROOT);
+                if (!MAIL_POLICY_AUTO_SEND.equals(policy)) {
+                    return Mono.empty();
+                }
+                return sendOnlineAutoApprovedRequestMail(requestName, operator, clientIp).then();
             })
             .onErrorResume(error -> Mono.empty());
     }
@@ -282,6 +305,33 @@ public class QslNotificationMailService {
                         source
                     ));
             });
+    }
+
+    private Mono<Void> sendOnlineAutoApprovedRequestMail(
+        String requestName,
+        String operator,
+        String clientIp
+    ) {
+        return fetchOr404(ExchangeRequest.class, requestName.trim())
+            .flatMap(exchangeRequest -> loadStationProfile()
+                .flatMap(stationProfile -> {
+                    var targetEmail = StringUtils.defaultString(stationProfile.getMyEmail()).trim();
+                    if (StringUtils.isBlank(targetEmail)) {
+                        return Mono.empty();
+                    }
+                    var sentAt = QslApiSupport.nowText();
+                    return subscribeTarget(targetEmail, ONLINE_AUTO_APPROVED_REQUEST_REASON_TYPE, EXCHANGE_REQUEST_KIND)
+                        .then(emitOnlineAutoApprovedRequestReason(exchangeRequest, stationProfile, targetEmail,
+                            safeOperator(operator), sentAt))
+                        .then(qslAuditService.appendAuditLog(
+                            "自动审批线上换卡申请邮件通知",
+                            "exchange-request",
+                            exchangeRequest.getMetadata().getName(),
+                            "目标邮箱=" + targetEmail + "；状态=SENT；消息=自动审批通过后已通知本台。",
+                            safeOperator(operator),
+                            clientIp
+                        ));
+                }));
     }
 
     private Mono<NotificationMailSendResult> sendSceneMail(
@@ -548,6 +598,53 @@ public class QslNotificationMailService {
                     .attribute("operator", operator)
                 ).then();
             });
+    }
+
+    private Mono<Void> emitOnlineAutoApprovedRequestReason(
+        ExchangeRequest exchangeRequest,
+        StationProfile.StationProfileSpec stationProfile,
+        String targetEmail,
+        String operator,
+        String sentAt
+    ) {
+        var spec = exchangeRequest.getSpec() == null
+            ? new ExchangeRequest.ExchangeRequestSpec()
+            : exchangeRequest.getSpec();
+        var status = exchangeRequest.getStatus() == null
+            ? new ExchangeRequest.ExchangeRequestStatus()
+            : exchangeRequest.getStatus();
+        var anonymousIdentity = UserIdentity.anonymousWithEmail(targetEmail).name();
+        var callSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
+        var subject = Reason.Subject.builder()
+            .apiVersion(QSL_API_VERSION)
+            .kind(EXCHANGE_REQUEST_KIND)
+            .name(anonymousIdentity)
+            .title("QSL 自动审批线上换卡申请：" + callSign)
+            .build();
+
+        return notificationReasonEmitter.emit(ONLINE_AUTO_APPROVED_REQUEST_REASON_TYPE, builder -> builder
+            .subject(subject)
+            .author(UserIdentity.of(operator))
+            .attribute("stationCallSign", stationCallSign(stationProfile))
+            .attribute("stationName", StringUtils.defaultString(stationProfile.getMyName()))
+            .attribute("stationEmail", StringUtils.defaultString(stationProfile.getMyEmail()))
+            .attribute("callSign", callSign)
+            .attribute("targetName", StringUtils.defaultString(spec.getName()))
+            .attribute("targetTelephone", StringUtils.defaultString(spec.getTelephone()))
+            .attribute("targetEmail", StringUtils.defaultString(spec.getEmail()))
+            .attribute("requestName", StringUtils.defaultString(exchangeRequest.getMetadata().getName()))
+            .attribute("cardVersion", StringUtils.defaultString(spec.getCardVersion()))
+            .attribute("addressMode", Boolean.TRUE.equals(spec.getUseBureau()) ? "卡片局地址" : "个人地址")
+            .attribute("bureauName", StringUtils.defaultString(spec.getBureauName()))
+            .attribute("postalCode", StringUtils.defaultString(spec.getPostalCode()))
+            .attribute("address", StringUtils.defaultString(spec.getAddress()))
+            .attribute("remarks", StringUtils.defaultString(spec.getRemarks()))
+            .attribute("reviewStatus", StringUtils.defaultString(status.getReviewStatus()))
+            .attribute("reviewReason", StringUtils.defaultString(status.getReviewReason()))
+            .attribute("triggerAt", sentAt)
+            .attribute("dateText", dateText(sentAt))
+            .attribute("operator", operator)
+        ).then();
     }
 
     private Mono<Void> emitTestReason(
@@ -854,36 +951,42 @@ public class QslNotificationMailService {
             return switch (this) {
                 case CARD_CREATED -> {
                     if ("ONLINE_EYEBALL".equals(sceneType)) {
-                        yield isSettingEnabled(systemSetting.getOnlineAutoNotifyOnCardCreated(),
+                        yield isMailPolicyAutoSend(systemSetting.getOnlineCardCreatedMailPolicy(),
+                            systemSetting.getOnlineAutoNotifyOnCardCreated(),
                             systemSetting.getAutoNotifyOnCardCreated());
                     }
                     if ("QSO".equals(sceneType) || "SWL".equals(sceneType)) {
-                        yield isSettingEnabled(systemSetting.getQsoAutoNotifyOnCardCreated(),
+                        yield isMailPolicyAutoSend(systemSetting.getQsoCardCreatedMailPolicy(),
+                            systemSetting.getQsoAutoNotifyOnCardCreated(),
                             systemSetting.getAutoNotifyOnCardCreated());
                     }
                     yield false;
                 }
                 case CARD_SENT -> {
                     if ("ONLINE_EYEBALL".equals(sceneType)) {
-                        yield isSettingEnabled(systemSetting.getOnlineAutoNotifyOnCardSent(),
+                        yield isMailPolicyAutoSend(systemSetting.getOnlineCardSentMailPolicy(),
+                            systemSetting.getOnlineAutoNotifyOnCardSent(),
                             systemSetting.getAutoNotifyOnCardSent());
                     }
                     if ("QSO".equals(sceneType) || "SWL".equals(sceneType)) {
-                        yield isSettingEnabled(systemSetting.getQsoAutoNotifyOnCardSent(),
+                        yield isMailPolicyAutoSend(systemSetting.getQsoCardSentMailPolicy(),
+                            systemSetting.getQsoAutoNotifyOnCardSent(),
                             systemSetting.getAutoNotifyOnCardSent());
                     }
                     yield false;
                 }
                 case CARD_RECEIVED -> {
                     if ("ONLINE_EYEBALL".equals(sceneType)) {
-                        yield isSettingEnabled(systemSetting.getOnlineAutoNotifyOnCardReceived(),
+                        yield isMailPolicyAutoSend(systemSetting.getOnlineCardReceivedMailPolicy(),
+                            systemSetting.getOnlineAutoNotifyOnCardReceived(),
                             systemSetting.getAutoNotifyOnCardReceived());
                     }
                     if ("EYEBALL".equals(sceneType)) {
                         yield false;
                     }
                     if ("QSO".equals(sceneType) || "SWL".equals(sceneType)) {
-                        yield isSettingEnabled(systemSetting.getQsoAutoNotifyOnCardReceived(),
+                        yield isMailPolicyAutoSend(systemSetting.getQsoCardReceivedMailPolicy(),
+                            systemSetting.getQsoAutoNotifyOnCardReceived(),
                             systemSetting.getAutoNotifyOnCardReceived());
                     }
                     yield false;
@@ -909,6 +1012,17 @@ public class QslNotificationMailService {
 
     private static boolean isSettingEnabled(Boolean sceneSetting, Boolean legacySetting) {
         return sceneSetting == null ? Boolean.TRUE.equals(legacySetting) : Boolean.TRUE.equals(sceneSetting);
+    }
+
+    private static boolean isMailPolicyAutoSend(String policy, Boolean sceneSetting, Boolean legacySetting) {
+        var normalizedPolicy = StringUtils.defaultString(policy).trim().toUpperCase(Locale.ROOT);
+        if (MAIL_POLICY_AUTO_SEND.equals(normalizedPolicy)) {
+            return true;
+        }
+        if (MAIL_POLICY_AUTO_SKIP.equals(normalizedPolicy) || MAIL_POLICY_MANUAL.equals(normalizedPolicy)) {
+            return false;
+        }
+        return isSettingEnabled(sceneSetting, legacySetting);
     }
 
     public enum TestMailScene {
