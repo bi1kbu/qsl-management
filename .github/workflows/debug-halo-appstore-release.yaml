@@ -177,7 +177,7 @@ jobs:
 
             publish_resource_put_response=/tmp/halo-publish-resource-put-response.json
             publish_resource_put_code="$(curl -sS -o "$publish_resource_put_response" -w "%{http_code}" \
-              -X PUT "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/app-release-qsl-management-2-3-0" \
+              -X PUT "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/app-release-qsl-management-2-3-0?applicationName=$APP_ID" \
               -H "Authorization: Bearer $HALO_PAT" \
               -H "Content-Type: application/json" \
               --data-binary @"$publish_resource_payload")"
