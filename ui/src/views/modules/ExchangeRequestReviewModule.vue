@@ -74,6 +74,14 @@ interface ExchangeRequestItem {
   reviewMailSentAt: string
   reviewMailLastError: string
   reviewMailTargetEmail: string
+  createdCardRecordName: string
+}
+
+interface CardRecordSpec {
+  sceneType?: string
+  cardType?: string
+  callSign?: string
+  businessRemarks?: string
 }
 
 const rows = ref<ExchangeRequestItem[]>([])
@@ -154,6 +162,7 @@ const normalizeStatus = (status?: Partial<ExchangeRequestStatus>): ExchangeReque
 
 const toRow = (
   extension: QslExtension<ExchangeRequestSpec, ExchangeRequestStatus>,
+  createdCardRecordNames: Map<string, string>,
 ): ExchangeRequestItem => {
   const spec = normalizeSpec(extension.spec)
   const status = normalizeStatus(extension.status)
@@ -179,6 +188,7 @@ const toRow = (
     reviewMailSentAt: status.reviewMailSentAt,
     reviewMailLastError: status.reviewMailLastError,
     reviewMailTargetEmail: status.reviewMailTargetEmail,
+    createdCardRecordName: createdCardRecordNames.get(extension.metadata.name) ?? '',
   }
 }
 
@@ -195,13 +205,34 @@ const resolveMailStatusText = (status: MailStatus): string => {
   }
 }
 
+const buildCreatedCardRecordMap = (
+  cardRecords: QslExtension<CardRecordSpec>[],
+): Map<string, string> => {
+  const result = new Map<string, string>()
+  cardRecords.forEach((cardRecord) => {
+    const businessRemarks = cardRecord.spec?.businessRemarks ?? ''
+    const matched = businessRemarks.match(/申请编号：([^；\s]+)/)
+    if (!matched?.[1]) {
+      return
+    }
+    const requestName = matched[1]
+    const current = result.get(requestName)
+    if (!current || cardRecord.metadata.name.localeCompare(current) < 0) {
+      result.set(requestName, cardRecord.metadata.name)
+    }
+  })
+  return result
+}
+
 const loadRows = async () => {
   loading.value = true
   try {
-    const extensions = await listExtensions<ExchangeRequestSpec, ExchangeRequestStatus>(
-      resourcePlural,
-    )
-    rows.value = extensions.map((extension) => toRow(extension))
+    const [extensions, cardRecords] = await Promise.all([
+      listExtensions<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural),
+      listExtensions<CardRecordSpec>('card-records'),
+    ])
+    const createdCardRecordNames = buildCreatedCardRecordMap(cardRecords)
+    rows.value = extensions.map((extension) => toRow(extension, createdCardRecordNames))
     feedback.value = ''
   } catch (error) {
     feedback.value = `加载换卡申请失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -258,6 +289,47 @@ const sendReviewMail = async (row: ExchangeRequestItem) => {
     feedback.value = `审核通知${result.status === 'SENT' ? '发送成功' : result.status === 'SKIPPED' ? '已跳过' : '发送失败'}：${result.message}`
   } catch (error) {
     feedback.value = `发送审核通知失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    notifyingId.value = ''
+  }
+}
+
+const skipReviewMail = async (row: ExchangeRequestItem) => {
+  if (row.status === '待审核' || row.reviewMailStatus === 'SENT' || row.reviewMailStatus === 'SKIPPED') {
+    return
+  }
+  notifyingId.value = row.id
+  try {
+    const nextStatus: ExchangeRequestStatus = {
+      reviewStatus: row.status,
+      reviewReason: row.reviewReason,
+      reviewedBy: row.reviewedBy,
+      reviewedAt: row.reviewedAt,
+      reviewMailStatus: 'SKIPPED',
+      reviewMailSentAt: '',
+      reviewMailLastError: '',
+      reviewMailTargetEmail: row.reviewMailTargetEmail,
+    }
+    await updateExtension<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural, row.id, {
+      apiVersion: qslApiVersion,
+      kind: resourceKind,
+      metadata: {
+        name: row.id,
+        version: row.metadataVersion,
+      },
+      spec: row.spec,
+      status: nextStatus,
+    })
+    await appendQslAuditLog({
+      action: '换卡审核邮件标记跳过',
+      resourceType: 'exchange-request',
+      resourceName: row.id,
+      detail: `呼号=${row.callSign}，审核状态=${row.status}，模式=不发邮件`,
+    })
+    await loadRows()
+    feedback.value = `已将 ${row.callSign} 的审核通知标记为不发邮件。`
+  } catch (error) {
+    feedback.value = `标记不发邮件失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     notifyingId.value = ''
   }
@@ -582,7 +654,22 @@ onMounted(loadRows)
               发送邮件通知
             </VButton>
             <VButton
-              v-if="toExchangeItem(row).status === '已通过'"
+              v-if="toExchangeItem(row).status !== '待审核'"
+              size="xs"
+              type="secondary"
+              :disabled="
+                toExchangeItem(row).reviewMailStatus === 'SENT' ||
+                toExchangeItem(row).reviewMailStatus === 'SKIPPED' ||
+                notifyingId === toExchangeItem(row).id ||
+                pendingId === toExchangeItem(row).id ||
+                loading
+              "
+              @click="skipReviewMail(toExchangeItem(row))"
+            >
+              不发邮件
+            </VButton>
+            <VButton
+              v-if="toExchangeItem(row).status === '已通过' && !toExchangeItem(row).createdCardRecordName"
               size="xs"
               type="secondary"
               :disabled="
@@ -594,6 +681,12 @@ onMounted(loadRows)
             >
               {{ creatingCardId === toExchangeItem(row).id ? '创建中' : '创建卡片' }}
             </VButton>
+            <VTag
+              v-if="toExchangeItem(row).status === '已通过' && toExchangeItem(row).createdCardRecordName"
+              theme="secondary"
+            >
+              已创建卡片
+            </VTag>
             <VTag
               v-if="toExchangeItem(row).reviewMailStatus"
               :theme="
