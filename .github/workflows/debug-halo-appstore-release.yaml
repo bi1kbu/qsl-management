@@ -157,6 +157,37 @@ jobs:
             echo
           fi
 
+          existing_release_response=/tmp/halo-existing-release-response.json
+          existing_release_code="$(curl -sS -o "$existing_release_response" -w "%{http_code}" \
+            "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/app-release-qsl-management-2-3-0" \
+            -H "Authorization: Bearer $HALO_PAT")"
+
+          echo "Halo 查询既有草稿 HTTP 状态：$existing_release_code"
+          echo "Halo 查询既有草稿响应体："
+          cat "$existing_release_response"
+          echo
+
+          if [[ "$existing_release_code" == 2* ]]; then
+            publish_resource_payload=/tmp/halo-publish-resource-payload.json
+            jq --arg appId "$APP_ID" '
+              .spec.applicationName = $appId
+              | .spec.draft = false
+              | .metadata.annotations = ((.metadata.annotations // {}) + {"store.halo.run/make-latest": "true"})
+            ' "$existing_release_response" > "$publish_resource_payload"
+
+            publish_resource_put_response=/tmp/halo-publish-resource-put-response.json
+            publish_resource_put_code="$(curl -sS -o "$publish_resource_put_response" -w "%{http_code}" \
+              -X PUT "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/app-release-qsl-management-2-3-0" \
+              -H "Authorization: Bearer $HALO_PAT" \
+              -H "Content-Type: application/json" \
+              --data-binary @"$publish_resource_payload")"
+
+            echo "Halo PUT Release资源发布草稿 HTTP 状态：$publish_resource_put_code"
+            echo "Halo PUT Release资源发布草稿响应体："
+            cat "$publish_resource_put_response"
+            echo
+          fi
+
           probe_response_file=/tmp/halo-asset-probe-response.json
           probe_code="$(curl -sS -o "$probe_response_file" -w "%{http_code}" \
             -X POST "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/assets" \
