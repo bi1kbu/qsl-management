@@ -186,6 +186,42 @@ jobs:
             echo "Halo PUT Release资源发布草稿响应体："
             cat "$publish_resource_put_response"
             echo
+
+            publish_wrapper_payload=/tmp/halo-publish-wrapper-payload.json
+            jq --arg appId "$APP_ID" '
+              .release.spec.applicationName = $appId
+              | .release.spec.draft = false
+              | .release.metadata.name = "app-release-qsl-management-2-3-0"
+              | .makeLatest = true
+            ' /tmp/app-release-payload.json > "$publish_wrapper_payload"
+
+            publish_wrapper_put_response=/tmp/halo-publish-wrapper-put-response.json
+            publish_wrapper_put_code="$(curl -sS -o "$publish_wrapper_put_response" -w "%{http_code}" \
+              -X PUT "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/app-release-qsl-management-2-3-0?applicationName=$APP_ID" \
+              -H "Authorization: Bearer $HALO_PAT" \
+              -H "Content-Type: application/json" \
+              --data-binary @"$publish_wrapper_payload")"
+
+            echo "Halo PUT 包装体发布草稿 HTTP 状态：$publish_wrapper_put_code"
+            echo "Halo PUT 包装体发布草稿响应体："
+            cat "$publish_wrapper_put_response"
+            echo
+
+            for publish_path in \
+              "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/app-release-qsl-management-2-3-0/publish?applicationName=$APP_ID" \
+              "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/app-release-qsl-management-2-3-0/publish" \
+              "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/app-release-qsl-management-2-3-0/submit?applicationName=$APP_ID"; do
+              publish_action_response=/tmp/halo-publish-action-response.json
+              publish_action_code="$(curl -sS -o "$publish_action_response" -w "%{http_code}" \
+                -X POST "$publish_path" \
+                -H "Authorization: Bearer $HALO_PAT" \
+                -H "Content-Type: application/json" \
+                --data-binary '{"makeLatest":true}')"
+              echo "Halo 发布动作 $publish_path HTTP 状态：$publish_action_code"
+              echo "Halo 发布动作响应体："
+              cat "$publish_action_response"
+              echo
+            done
           fi
 
           probe_response_file=/tmp/halo-asset-probe-response.json
