@@ -597,17 +597,37 @@ onMounted(loadRows)
         @update:page-size="(value) => (pageSize = value)"
       >
         <template #cell-status="{ row }">
-          <VTag
-            :theme="
-              toExchangeItem(row).status === '待审核'
-                ? 'default'
-                : toExchangeItem(row).status === '已通过'
+          <div class="qsl-status-tags">
+            <VTag
+              :theme="
+                toExchangeItem(row).status === '待审核'
+                  ? 'default'
+                  : toExchangeItem(row).status === '已通过'
+                    ? 'secondary'
+                    : 'danger'
+              "
+            >
+              {{ toExchangeItem(row).status }}
+            </VTag>
+            <VTag
+              v-if="toExchangeItem(row).status === '已通过' && toExchangeItem(row).createdCardRecordName"
+              theme="secondary"
+            >
+              已创建卡片
+            </VTag>
+            <VTag
+              v-if="toExchangeItem(row).reviewMailStatus"
+              :theme="
+                toExchangeItem(row).reviewMailStatus === 'SENT'
                   ? 'secondary'
-                  : 'danger'
-            "
-          >
-            {{ toExchangeItem(row).status }}
-          </VTag>
+                  : toExchangeItem(row).reviewMailStatus === 'FAILED'
+                    ? 'danger'
+                    : 'default'
+              "
+            >
+              {{ resolveMailStatusText(toExchangeItem(row).reviewMailStatus) }}
+            </VTag>
+          </div>
         </template>
         <template #row-actions="{ row }">
           <div class="qsl-actions qsl-actions--tight">
@@ -681,24 +701,6 @@ onMounted(loadRows)
             >
               {{ creatingCardId === toExchangeItem(row).id ? '创建中' : '创建卡片' }}
             </VButton>
-            <VTag
-              v-if="toExchangeItem(row).status === '已通过' && toExchangeItem(row).createdCardRecordName"
-              theme="secondary"
-            >
-              已创建卡片
-            </VTag>
-            <VTag
-              v-if="toExchangeItem(row).reviewMailStatus"
-              :theme="
-                toExchangeItem(row).reviewMailStatus === 'SENT'
-                  ? 'secondary'
-                  : toExchangeItem(row).reviewMailStatus === 'FAILED'
-                    ? 'danger'
-                    : 'default'
-              "
-            >
-              {{ resolveMailStatusText(toExchangeItem(row).reviewMailStatus) }}
-            </VTag>
             <VButton
               v-if="toExchangeItem(row).status !== '待审核'"
               size="xs"
@@ -918,5 +920,11 @@ onMounted(loadRows)
 
 .qsl-review-reason-editor__text {
   margin: 0;
+}
+
+.qsl-status-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 </style>
