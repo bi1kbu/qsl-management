@@ -189,6 +189,56 @@ class QslNotificationMailServiceTest {
     }
 
     @Test
+    void shouldPersistSkippedWhenAutoSkipPolicyEnabled() {
+        var client = mock(ReactiveExtensionClient.class);
+        var notificationCenter = mock(NotificationCenter.class);
+        var notificationReasonEmitter = mock(NotificationReasonEmitter.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslNotificationMailService(
+            client,
+            notificationCenter,
+            notificationReasonEmitter,
+            auditService
+        );
+
+        var cardRecord = new CardRecord();
+        cardRecord.setMetadata(QslApiSupport.createMetadata("C1003"));
+        var cardSpec = new CardRecord.CardRecordSpec();
+        cardSpec.setCallSign("BI1KBU");
+        cardSpec.setCardType("QSO");
+        cardSpec.setSceneType("QSO");
+        cardSpec.setCreatedMailStatus("");
+        cardRecord.setSpec(cardSpec);
+
+        var systemSetting = new SystemSetting();
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setQsoCardCreatedMailPolicy("AUTO_SKIP");
+        settingSpec.setQsoAutoNotifyOnCardCreated(Boolean.TRUE);
+        settingSpec.setAutoNotifyOnCardCreated(Boolean.TRUE);
+        systemSetting.setSpec(settingSpec);
+
+        when(client.fetch(eq(CardRecord.class), eq("C1003"))).thenReturn(Mono.just(cardRecord));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default"))).thenReturn(Mono.just(systemSetting));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.applyAutomaticPolicy(
+            "C1003",
+            QslNotificationMailService.MailScene.CARD_CREATED,
+            "admin",
+            "127.0.0.1",
+            "测试"
+        ).block();
+
+        assertEquals("SKIPPED", result.status());
+        assertEquals("SKIPPED", cardRecord.getSpec().getCreatedMailStatus());
+        assertEquals("", cardRecord.getSpec().getCreatedMailSentAt());
+        verify(notificationCenter, never()).subscribe(any(), any());
+        verify(notificationReasonEmitter, never()).emit(anyString(), any());
+        verify(client).update(any(CardRecord.class));
+    }
+
+    @Test
     void shouldSendStationMailWhenOnlineAutoApprovedPolicyEnabled() {
         var client = mock(ReactiveExtensionClient.class);
         var notificationCenter = mock(NotificationCenter.class);

@@ -220,7 +220,9 @@ const builtinDailyOfflineActivity: OfflineActivitySpec = {
 }
 
 const filteredRows = computed(() => {
-  const pendingRows = rows.value.filter((row) => !row.sent || row.spec.sentMailStatus !== 'SENT')
+  const pendingRows = rows.value.filter(
+    (row) => !row.sent || !['SENT', 'SKIPPED'].includes(row.spec.sentMailStatus || ''),
+  )
   const filteredByActivity =
     showOfflineActivity.value && activityFilter.value
       ? pendingRows.filter((row) => (row.spec.offlineActivityName || '') === activityFilter.value)
@@ -840,8 +842,8 @@ const markSentMailAsSentForRow = async (row: SendConfirmItem) => {
   try {
     const nextSpec: CardRecordSpec = {
       ...row.spec,
-      sentMailStatus: 'SENT',
-      sentMailSentAt: nowText(),
+      sentMailStatus: 'SKIPPED',
+      sentMailSentAt: '',
       sentMailLastError: '',
     }
 
@@ -857,16 +859,16 @@ const markSentMailAsSentForRow = async (row: SendConfirmItem) => {
     })
 
     await appendQslAuditLog({
-      action: '发卡邮件标记已发',
+      action: '发卡邮件标记跳过',
       resourceType: 'card-record',
       resourceName: row.resourceName,
       detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}，模式：不发邮件`,
     })
 
     await loadRows({ silent: true })
-    feedback.value = `已标记发卡邮件为已发送：${row.resourceName}`
+    feedback.value = `已标记发卡邮件为不发送：${row.resourceName}`
   } catch (error) {
-    feedback.value = `标记发卡邮件已发送失败：${error instanceof Error ? error.message : '未知错误'}`
+    feedback.value = `标记发卡邮件不发送失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     pendingRowName.value = ''
   }

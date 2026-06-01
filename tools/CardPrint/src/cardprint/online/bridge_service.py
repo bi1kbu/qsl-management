@@ -219,6 +219,16 @@ FIXED_DATASET_MAPPINGS: dict[str, dict[str, Any]] = {
                 "收件地址",
             ],
         },
+        "destinationCountry": {
+            "type": "coalesce",
+            "sources": [
+                "addressInfo.spec.destinationCountry",
+                "spec.destinationCountry",
+                "destinationCountry",
+                "destination_country",
+                "去向国",
+            ],
+        },
         "name": {
             "type": "coalesce",
             "sources": [

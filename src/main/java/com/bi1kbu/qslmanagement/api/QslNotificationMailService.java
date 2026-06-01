@@ -140,17 +140,87 @@ public class QslNotificationMailService {
         String operator,
         String clientIp
     ) {
+        return applyAutomaticPolicy(cardRecordName, scene, operator, clientIp, "自动触发").then();
+    }
+
+    public Mono<NotificationMailSendResult> applyAutomaticPolicy(
+        String cardRecordName,
+        MailScene scene,
+        String operator,
+        String clientIp,
+        String source
+    ) {
         return fetchOr404(CardRecord.class, cardRecordName)
             .flatMap(cardRecord -> loadSystemSetting()
                 .flatMap(systemSetting -> {
                     var spec = ensureCardRecordSpec(cardRecord);
-                    if (!scene.isAutoEnabled(systemSetting, spec)) {
-                        return Mono.empty();
+                    var policy = scene.resolveMailPolicy(systemSetting, spec);
+                    if (MAIL_POLICY_AUTO_SEND.equals(policy)) {
+                        return sendSceneMail(cardRecord, scene, operator, clientIp, source);
                     }
-                    return sendSceneMail(cardRecord, scene, operator, clientIp, "自动触发")
-                        .then();
+                    if (MAIL_POLICY_AUTO_SKIP.equals(policy)) {
+                        return applyAutoSkipPolicy(cardRecord, spec, scene, operator, clientIp, source);
+                    }
+                    return Mono.just(new NotificationMailSendResult(
+                        cardRecord.getMetadata().getName(),
+                        scene.code,
+                        MAIL_STATUS_SKIPPED,
+                        "邮件策略为手动，未自动处理。",
+                        StringUtils.defaultString(spec.getMailTargetEmail()),
+                        StringUtils.defaultString(scene.currentSentAt(spec))
+                    ));
                 }))
-            .onErrorResume(error -> Mono.empty());
+            .onErrorResume(error -> Mono.just(new NotificationMailSendResult(
+                StringUtils.defaultString(cardRecordName),
+                scene == null ? "" : scene.code,
+                MAIL_STATUS_FAILED,
+                "自动邮件策略处理失败：" + shortError(error),
+                "",
+                ""
+            )));
+    }
+
+    private Mono<NotificationMailSendResult> applyAutoSkipPolicy(
+        CardRecord cardRecord,
+        CardRecord.CardRecordSpec spec,
+        MailScene scene,
+        String operator,
+        String clientIp,
+        String source
+    ) {
+        var currentStatus = scene.currentStatus(spec);
+        if (MAIL_STATUS_SENT.equalsIgnoreCase(currentStatus) || MAIL_STATUS_SKIPPED.equalsIgnoreCase(currentStatus)) {
+            return Mono.just(new NotificationMailSendResult(
+                cardRecord.getMetadata().getName(),
+                scene.code,
+                MAIL_STATUS_SKIPPED,
+                "该场景邮件已处理，已跳过。",
+                StringUtils.defaultString(spec.getMailTargetEmail()),
+                StringUtils.defaultString(scene.currentSentAt(spec))
+            ));
+        }
+        if (!scene.meetsBusinessState(spec)) {
+            return Mono.just(new NotificationMailSendResult(
+                cardRecord.getMetadata().getName(),
+                scene.code,
+                MAIL_STATUS_SKIPPED,
+                "当前记录尚未满足该场景自动处理条件。",
+                StringUtils.defaultString(spec.getMailTargetEmail()),
+                StringUtils.defaultString(scene.currentSentAt(spec))
+            ));
+        }
+        return persistStatusAndAudit(
+            cardRecord,
+            spec,
+            scene,
+            MAIL_STATUS_SKIPPED,
+            "",
+            "",
+            "邮件策略为自动不发送，已跳过。",
+            operator,
+            clientIp,
+            source
+        );
     }
 
     public Mono<Void> autoSendExchangeReviewIfEnabled(
@@ -885,7 +955,7 @@ public class QslNotificationMailService {
             this.displayName = displayName;
         }
 
-        static MailScene fromCode(String code) {
+        public static MailScene fromCode(String code) {
             if (StringUtils.isBlank(code)) {
                 return null;
             }
@@ -946,50 +1016,50 @@ public class QslNotificationMailService {
             }
         }
 
-        boolean isAutoEnabled(SystemSetting.SystemSettingSpec systemSetting, CardRecord.CardRecordSpec spec) {
+        String resolveMailPolicy(SystemSetting.SystemSettingSpec systemSetting, CardRecord.CardRecordSpec spec) {
             var sceneType = normalizeSceneType(spec.getSceneType(), spec.getCardType());
             return switch (this) {
                 case CARD_CREATED -> {
                     if ("ONLINE_EYEBALL".equals(sceneType)) {
-                        yield isMailPolicyAutoSend(systemSetting.getOnlineCardCreatedMailPolicy(),
+                        yield QslNotificationMailService.resolveMailPolicy(systemSetting.getOnlineCardCreatedMailPolicy(),
                             systemSetting.getOnlineAutoNotifyOnCardCreated(),
                             systemSetting.getAutoNotifyOnCardCreated());
                     }
                     if ("QSO".equals(sceneType) || "SWL".equals(sceneType)) {
-                        yield isMailPolicyAutoSend(systemSetting.getQsoCardCreatedMailPolicy(),
+                        yield QslNotificationMailService.resolveMailPolicy(systemSetting.getQsoCardCreatedMailPolicy(),
                             systemSetting.getQsoAutoNotifyOnCardCreated(),
                             systemSetting.getAutoNotifyOnCardCreated());
                     }
-                    yield false;
+                    yield MAIL_POLICY_MANUAL;
                 }
                 case CARD_SENT -> {
                     if ("ONLINE_EYEBALL".equals(sceneType)) {
-                        yield isMailPolicyAutoSend(systemSetting.getOnlineCardSentMailPolicy(),
+                        yield QslNotificationMailService.resolveMailPolicy(systemSetting.getOnlineCardSentMailPolicy(),
                             systemSetting.getOnlineAutoNotifyOnCardSent(),
                             systemSetting.getAutoNotifyOnCardSent());
                     }
                     if ("QSO".equals(sceneType) || "SWL".equals(sceneType)) {
-                        yield isMailPolicyAutoSend(systemSetting.getQsoCardSentMailPolicy(),
+                        yield QslNotificationMailService.resolveMailPolicy(systemSetting.getQsoCardSentMailPolicy(),
                             systemSetting.getQsoAutoNotifyOnCardSent(),
                             systemSetting.getAutoNotifyOnCardSent());
                     }
-                    yield false;
+                    yield MAIL_POLICY_MANUAL;
                 }
                 case CARD_RECEIVED -> {
                     if ("ONLINE_EYEBALL".equals(sceneType)) {
-                        yield isMailPolicyAutoSend(systemSetting.getOnlineCardReceivedMailPolicy(),
+                        yield QslNotificationMailService.resolveMailPolicy(systemSetting.getOnlineCardReceivedMailPolicy(),
                             systemSetting.getOnlineAutoNotifyOnCardReceived(),
                             systemSetting.getAutoNotifyOnCardReceived());
                     }
                     if ("EYEBALL".equals(sceneType)) {
-                        yield false;
+                        yield MAIL_POLICY_MANUAL;
                     }
                     if ("QSO".equals(sceneType) || "SWL".equals(sceneType)) {
-                        yield isMailPolicyAutoSend(systemSetting.getQsoCardReceivedMailPolicy(),
+                        yield QslNotificationMailService.resolveMailPolicy(systemSetting.getQsoCardReceivedMailPolicy(),
                             systemSetting.getQsoAutoNotifyOnCardReceived(),
                             systemSetting.getAutoNotifyOnCardReceived());
                     }
-                    yield false;
+                    yield MAIL_POLICY_MANUAL;
                 }
             };
         }
@@ -1015,14 +1085,18 @@ public class QslNotificationMailService {
     }
 
     private static boolean isMailPolicyAutoSend(String policy, Boolean sceneSetting, Boolean legacySetting) {
+        return MAIL_POLICY_AUTO_SEND.equals(resolveMailPolicy(policy, sceneSetting, legacySetting));
+    }
+
+    private static String resolveMailPolicy(String policy, Boolean sceneSetting, Boolean legacySetting) {
         var normalizedPolicy = StringUtils.defaultString(policy).trim().toUpperCase(Locale.ROOT);
         if (MAIL_POLICY_AUTO_SEND.equals(normalizedPolicy)) {
-            return true;
+            return MAIL_POLICY_AUTO_SEND;
         }
         if (MAIL_POLICY_AUTO_SKIP.equals(normalizedPolicy) || MAIL_POLICY_MANUAL.equals(normalizedPolicy)) {
-            return false;
+            return normalizedPolicy;
         }
-        return isSettingEnabled(sceneSetting, legacySetting);
+        return isSettingEnabled(sceneSetting, legacySetting) ? MAIL_POLICY_AUTO_SEND : MAIL_POLICY_MANUAL;
     }
 
     public enum TestMailScene {

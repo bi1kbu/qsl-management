@@ -22,6 +22,7 @@ public class AddressBookEntry extends QslBaseExtension<AddressBookEntry.AddressB
         private String name;
         private String telephone;
         private String postalCode;
+        private String destinationCountry;
         private String address;
         private String email;
         private String addressRemarks;
@@ -32,4 +33,3 @@ public class AddressBookEntry extends QslBaseExtension<AddressBookEntry.AddressB
         private String syncStatus;
     }
 }
-

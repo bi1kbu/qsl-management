@@ -41,5 +41,9 @@ public class ExchangeRequest extends QslBaseExtension<ExchangeRequest.ExchangeRe
         private String reviewMailSentAt;
         private String reviewMailLastError;
         private String reviewMailTargetEmail;
+        private Boolean cardCreated;
+        private String cardCreatedAt;
+        private String cardCreatedBy;
+        private String createdCardRecordName;
     }
 }

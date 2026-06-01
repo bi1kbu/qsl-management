@@ -11,6 +11,7 @@ import {
 import {
   approveExchangeRequest,
   createExchangeRequestCard,
+  markExchangeRequestCardCreated,
   notifyExchangeRequest,
   rejectExchangeRequest,
 } from '../../api/qsl-console-api'
@@ -50,6 +51,10 @@ interface ExchangeRequestStatus {
   reviewMailSentAt: string
   reviewMailLastError: string
   reviewMailTargetEmail: string
+  cardCreated: boolean
+  cardCreatedAt: string
+  cardCreatedBy: string
+  createdCardRecordName: string
 }
 
 interface ExchangeRequestItem {
@@ -74,6 +79,9 @@ interface ExchangeRequestItem {
   reviewMailSentAt: string
   reviewMailLastError: string
   reviewMailTargetEmail: string
+  cardCreated: boolean
+  cardCreatedAt: string
+  cardCreatedBy: string
   createdCardRecordName: string
 }
 
@@ -157,6 +165,10 @@ const normalizeStatus = (status?: Partial<ExchangeRequestStatus>): ExchangeReque
     reviewMailSentAt: status?.reviewMailSentAt ?? '',
     reviewMailLastError: status?.reviewMailLastError ?? '',
     reviewMailTargetEmail: status?.reviewMailTargetEmail ?? '',
+    cardCreated: Boolean(status?.cardCreated),
+    cardCreatedAt: status?.cardCreatedAt ?? '',
+    cardCreatedBy: status?.cardCreatedBy ?? '',
+    createdCardRecordName: status?.createdCardRecordName ?? '',
   }
 }
 
@@ -188,7 +200,13 @@ const toRow = (
     reviewMailSentAt: status.reviewMailSentAt,
     reviewMailLastError: status.reviewMailLastError,
     reviewMailTargetEmail: status.reviewMailTargetEmail,
-    createdCardRecordName: createdCardRecordNames.get(extension.metadata.name) ?? '',
+    cardCreated: status.cardCreated,
+    cardCreatedAt: status.cardCreatedAt,
+    cardCreatedBy: status.cardCreatedBy,
+    createdCardRecordName:
+      status.createdCardRecordName ||
+      createdCardRecordNames.get(extension.metadata.name) ||
+      (status.cardCreated ? '手动标记' : ''),
   }
 }
 
@@ -309,6 +327,10 @@ const skipReviewMail = async (row: ExchangeRequestItem) => {
       reviewMailSentAt: '',
       reviewMailLastError: '',
       reviewMailTargetEmail: row.reviewMailTargetEmail,
+      cardCreated: row.cardCreated,
+      cardCreatedAt: row.cardCreatedAt,
+      cardCreatedBy: row.cardCreatedBy,
+      createdCardRecordName: row.createdCardRecordName === '手动标记' ? '' : row.createdCardRecordName,
     }
     await updateExtension<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural, row.id, {
       apiVersion: qslApiVersion,
@@ -349,6 +371,34 @@ const createCard = async (row: ExchangeRequestItem) => {
     feedback.value = `创建卡片失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     creatingCardId.value = ''
+  }
+}
+
+const markCardCreated = async () => {
+  const target = rows.value.find((row) => row.id === editingId.value)
+  if (!target) {
+    feedback.value = '未找到待标记的换卡申请，请刷新后重试。'
+    return
+  }
+  if (target.status !== '已通过') {
+    feedback.value = '只有已通过的换卡申请可以标记已发卡。'
+    return
+  }
+  if (target.createdCardRecordName) {
+    feedback.value = `换卡申请已是已创建卡片状态：${target.id}`
+    return
+  }
+
+  savingEdit.value = true
+  try {
+    await markExchangeRequestCardCreated(target.id)
+    await loadRows()
+    editingId.value = ''
+    feedback.value = `已将 ${target.callSign} 的换卡申请标记为已发卡。`
+  } catch (error) {
+    feedback.value = `标记已发卡失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    savingEdit.value = false
   }
 }
 
@@ -414,6 +464,11 @@ const saveEdit = async () => {
       reviewMailSentAt: target.reviewMailSentAt,
       reviewMailLastError: target.reviewMailLastError,
       reviewMailTargetEmail: target.reviewMailTargetEmail,
+      cardCreated: target.cardCreated,
+      cardCreatedAt: target.cardCreatedAt,
+      cardCreatedBy: target.cardCreatedBy,
+      createdCardRecordName:
+        target.createdCardRecordName === '手动标记' ? '' : target.createdCardRecordName,
     }
 
     await updateExtension<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural, target.id, {
@@ -491,6 +546,10 @@ const saveReviewReason = async (row: ExchangeRequestItem) => {
       reviewMailSentAt: row.reviewMailSentAt,
       reviewMailLastError: row.reviewMailLastError,
       reviewMailTargetEmail: row.reviewMailTargetEmail,
+      cardCreated: row.cardCreated,
+      cardCreatedAt: row.cardCreatedAt,
+      cardCreatedBy: row.cardCreatedBy,
+      createdCardRecordName: row.createdCardRecordName === '手动标记' ? '' : row.createdCardRecordName,
     }
 
     await updateExtension<ExchangeRequestSpec, ExchangeRequestStatus>(resourcePlural, row.id, {
@@ -545,6 +604,8 @@ const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return sortedRows.value.slice(start, start + pageSize.value)
 })
+
+const editingRow = computed(() => rows.value.find((row) => row.id === editingId.value))
 
 const toggleSort = (key: string) => {
   const nextKey = key as ExchangeSortKey
@@ -884,6 +945,20 @@ onMounted(loadRows)
       </div>
       <div class="qsl-actions">
         <VButton type="secondary" :disabled="savingEdit" @click="saveEdit">保存修改</VButton>
+        <QslConfirmActionButton
+          label="标记已发卡"
+          type="secondary"
+          :disabled="
+            savingEdit ||
+            editingRow?.status !== '已通过' ||
+            Boolean(editingRow?.createdCardRecordName)
+          "
+          confirm-enabled
+          confirm-title="确认标记已发卡"
+          :confirm-message="`确认将换卡申请 ${editingId} 标记为已发卡吗？该操作只修正申请状态，不会创建新的卡片记录。`"
+          confirm-text="确认标记"
+          @confirm="markCardCreated"
+        />
         <VButton :disabled="savingEdit" @click="cancelEdit">取消</VButton>
         <QslConfirmActionButton
           label="删除本条数据"

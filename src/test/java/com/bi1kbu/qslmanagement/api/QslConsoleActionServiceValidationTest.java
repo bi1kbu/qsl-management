@@ -755,6 +755,7 @@ class QslConsoleActionServiceValidationTest {
             .thenReturn(Mono.just(systemSetting));
         when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty(), Flux.empty());
         when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(ExchangeRequest.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         when(client.create(any(CardRecord.class))).thenAnswer(invocation -> {
             capturedCardRecord.set(invocation.getArgument(0));
             return Mono.just(invocation.getArgument(0));
@@ -773,6 +774,72 @@ class QslConsoleActionServiceValidationTest {
             "期待与您空中相遇。\nLooking forward to meeting you on the air.",
             capturedCardRecord.get().getSpec().getCardRemarks()
         );
+        assertEquals(Boolean.TRUE, exchangeRequest.getStatus().getCardCreated());
+        assertEquals("admin", exchangeRequest.getStatus().getCardCreatedBy());
+        assertEquals("C1001", exchangeRequest.getStatus().getCreatedCardRecordName());
+    }
+
+    @Test
+    void shouldMarkApprovedExchangeRequestCardCreatedWithoutCreatingCard() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            notificationMailService
+        );
+
+        var exchangeRequest = new ExchangeRequest();
+        exchangeRequest.setMetadata(QslApiSupport.createMetadata("EX0001"));
+        var status = new ExchangeRequest.ExchangeRequestStatus();
+        status.setReviewStatus("已通过");
+        status.setReviewReason("");
+        exchangeRequest.setStatus(status);
+
+        when(client.fetch(eq(ExchangeRequest.class), eq("EX0001")))
+            .thenReturn(Mono.just(exchangeRequest));
+        when(client.update(any(ExchangeRequest.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.markExchangeRequestCardCreated("EX0001", "admin", "127.0.0.1").block();
+
+        assertEquals("EX0001", result.requestName());
+        assertEquals("已通过", result.reviewStatus());
+        assertEquals("", result.createdCardRecordName());
+        assertEquals(Boolean.TRUE, exchangeRequest.getStatus().getCardCreated());
+        assertEquals("admin", exchangeRequest.getStatus().getCardCreatedBy());
+        verify(client, org.mockito.Mockito.never()).create(any(CardRecord.class));
+    }
+
+    @Test
+    void shouldRejectCreateCardWhenExchangeRequestAlreadyMarkedCardCreated() {
+        var client = mock(ReactiveExtensionClient.class);
+        var service = new QslConsoleActionService(
+            client,
+            mock(QslAuditService.class),
+            mock(QslNotificationMailService.class)
+        );
+
+        var exchangeRequest = new ExchangeRequest();
+        exchangeRequest.setMetadata(QslApiSupport.createMetadata("EX0001"));
+        var status = new ExchangeRequest.ExchangeRequestStatus();
+        status.setReviewStatus("已通过");
+        status.setCardCreated(Boolean.TRUE);
+        exchangeRequest.setStatus(status);
+
+        when(client.fetch(eq(ExchangeRequest.class), eq("EX0001")))
+            .thenReturn(Mono.just(exchangeRequest));
+
+        var error = assertThrows(QslApiException.class, () -> service.createCardForApprovedExchangeRequest(
+            "EX0001",
+            "admin",
+            "127.0.0.1"
+        ).block());
+
+        assertEquals("QSL-422-0001", error.getCode());
+        assertEquals(422, error.getStatus().value());
+        verify(client, org.mockito.Mockito.never()).create(any(CardRecord.class));
     }
 
     @Test

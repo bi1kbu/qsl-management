@@ -529,6 +529,10 @@ public class QslImportExportJobService {
                     status.setReviewMailSentAt(value(row, "reviewMailSentAt"));
                     status.setReviewMailLastError(value(row, "reviewMailLastError"));
                     status.setReviewMailTargetEmail(value(row, "reviewMailTargetEmail"));
+                    status.setCardCreated(parseBoolean(value(row, "cardCreated")));
+                    status.setCardCreatedAt(value(row, "cardCreatedAt"));
+                    status.setCardCreatedBy(value(row, "cardCreatedBy"));
+                    status.setCreatedCardRecordName(value(row, "createdCardRecordName"));
                     record.setStatus(status);
                 }
             );
@@ -583,6 +587,7 @@ public class QslImportExportJobService {
                     spec.setName(value(row, "name"));
                     spec.setTelephone(value(row, "telephone"));
                     spec.setPostalCode(value(row, "postalCode"));
+                    spec.setDestinationCountry(value(row, "destinationCountry"));
                     spec.setAddress(value(row, "address"));
                     spec.setEmail(value(row, "email"));
                     spec.setAddressRemarks(value(row, "addressRemarks"));
@@ -1223,7 +1228,11 @@ public class QslImportExportJobService {
                         status == null ? "" : nullToEmpty(status.getReviewMailStatus()),
                         status == null ? "" : nullToEmpty(status.getReviewMailSentAt()),
                         status == null ? "" : nullToEmpty(status.getReviewMailLastError()),
-                        status == null ? "" : nullToEmpty(status.getReviewMailTargetEmail())
+                        status == null ? "" : nullToEmpty(status.getReviewMailTargetEmail()),
+                        status == null ? "false" : boolToText(status.getCardCreated()),
+                        status == null ? "" : nullToEmpty(status.getCardCreatedAt()),
+                        status == null ? "" : nullToEmpty(status.getCardCreatedBy()),
+                        status == null ? "" : nullToEmpty(status.getCreatedCardRecordName())
                     );
                 })
                 .collectList()
@@ -1247,7 +1256,11 @@ public class QslImportExportJobService {
                     "reviewMailStatus",
                     "reviewMailSentAt",
                     "reviewMailLastError",
-                    "reviewMailTargetEmail"
+                    "reviewMailTargetEmail",
+                    "cardCreated",
+                    "cardCreatedAt",
+                    "cardCreatedBy",
+                    "createdCardRecordName"
                 ), rows));
             case "offline-activity" -> client.listAll(OfflineActivity.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
@@ -1315,6 +1328,7 @@ public class QslImportExportJobService {
                         spec == null ? "" : nullToEmpty(spec.getName()),
                         spec == null ? "" : nullToEmpty(spec.getTelephone()),
                         spec == null ? "" : nullToEmpty(spec.getPostalCode()),
+                        spec == null ? "" : nullToEmpty(spec.getDestinationCountry()),
                         spec == null ? "" : nullToEmpty(spec.getAddress()),
                         spec == null ? "" : nullToEmpty(spec.getEmail()),
                         spec == null ? "" : nullToEmpty(spec.getAddressRemarks()),
@@ -1328,6 +1342,7 @@ public class QslImportExportJobService {
                     "name",
                     "telephone",
                     "postalCode",
+                    "destinationCountry",
                     "address",
                     "email",
                     "addressRemarks",

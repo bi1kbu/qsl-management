@@ -327,7 +327,9 @@ const availableCardTypes = computed<CardRecordSpec['cardType'][]>(() => {
 
 const filteredResults = computed(() => {
   const actionableResults = results.value.filter(
-    (item) => !isCardReceivedForDisplay(item) || item.spec.receivedMailStatus !== 'SENT',
+    (item) =>
+      !isCardReceivedForDisplay(item) ||
+      !['SENT', 'SKIPPED'].includes(item.spec.receivedMailStatus || ''),
   )
   const filteredByActivity =
     showOfflineActivity.value && selectedOfflineActivity.value
@@ -1610,8 +1612,8 @@ const markReceivedMailAsSentForRow = async (item: ReceiveResult) => {
   try {
     const nextSpec: CardRecordSpec = {
       ...item.spec,
-      receivedMailStatus: 'SENT',
-      receivedMailSentAt: nowText(),
+      receivedMailStatus: 'SKIPPED',
+      receivedMailSentAt: '',
       receivedMailLastError: '',
     }
 
@@ -1627,16 +1629,16 @@ const markReceivedMailAsSentForRow = async (item: ReceiveResult) => {
     })
 
     await appendQslAuditLog({
-      action: '收卡邮件标记已发',
+      action: '收卡邮件标记跳过',
       resourceType: 'card-record',
       resourceName: item.resourceName,
       detail: `呼号：${item.callSign || '-'}，卡片类型：${item.cardType || '-'}，模式：不发邮件`,
     })
 
     await loadResults({ silent: true })
-    feedback.value = `已标记收卡邮件为已发送：${item.resourceName}`
+    feedback.value = `已标记收卡邮件为不发送：${item.resourceName}`
   } catch (error) {
-    feedback.value = `标记收卡邮件已发送失败：${error instanceof Error ? error.message : '未知错误'}`
+    feedback.value = `标记收卡邮件不发送失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     pendingMailRowName.value = ''
   }
@@ -1654,8 +1656,8 @@ const closeReceiveForRow = async (item: ReceiveResult) => {
   try {
     const nextSpec: CardRecordSpec = {
       ...item.spec,
-      receivedMailStatus: showReceivedMailActions.value ? 'PENDING' : 'SENT',
-      receivedMailSentAt: showReceivedMailActions.value ? '' : nowText(),
+      receivedMailStatus: showReceivedMailActions.value ? 'PENDING' : 'SKIPPED',
+      receivedMailSentAt: '',
       receivedMailLastError: '',
     }
 

@@ -166,6 +166,46 @@ class QslConsoleApiEndpointForbiddenTest {
     }
 
     @Test
+    void shouldRejectExchangeMarkCardCreatedWhenAuthorizedButForbidden() {
+        when(actionService.markExchangeRequestCardCreated(anyString(), anyString(), anyString()))
+            .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));
+        var client = buildAuthenticatedClient();
+
+        client.post()
+            .uri("/exchange-requests/EX0001/mark-card-created")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue("{}")
+            .exchange()
+            .expectStatus().isForbidden()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-403-0001")
+            .jsonPath("$.message").isEqualTo("无权限");
+    }
+
+    @Test
+    void shouldRejectNotificationMailPolicyApplyWhenAuthorizedButForbidden() {
+        when(notificationMailService.applyAutomaticPolicy(anyString(), any(), anyString(), anyString(), anyString()))
+            .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));
+        var client = buildAuthenticatedClient();
+
+        client.post()
+            .uri("/notification-mails/apply-policy")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue("""
+                {
+                  "cardRecordName": "C1001",
+                  "scene": "created",
+                  "source": "自动策略"
+                }
+                """)
+            .exchange()
+            .expectStatus().isForbidden()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-403-0001")
+            .jsonPath("$.message").isEqualTo("无权限");
+    }
+
+    @Test
     void shouldRejectQrzCredentialTestWhenAuthorizedButForbidden() {
         when(qrzAddressLookupService.testAndSaveCredential(any(), anyString(), anyString()))
             .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权限")));

@@ -2,8 +2,9 @@
 import { VButton, VCard, VTag } from '@halo-dev/components'
 import { computed, onMounted, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import { sendNotificationMail } from '../../api/qsl-console-api'
+import { applyNotificationMailPolicy, sendNotificationMail } from '../../api/qsl-console-api'
 import {
+  getExtensionOrNull,
   listExtensions,
   qslApiVersion,
   updateExtension,
@@ -66,6 +67,7 @@ interface AddressBookSpec {
   name: string
   telephone: string
   postalCode: string
+  destinationCountry: string
   address: string
   email: string
   addressRemarks: string
@@ -89,6 +91,11 @@ interface QsoRecordSpec {
   callSign: string
   qth: string
   remarks: string
+}
+
+interface SystemSettingSpec {
+  qsoCardCreatedMailPolicy?: string
+  onlineCardCreatedMailPolicy?: string
 }
 
 interface CardIssueCardRow {
@@ -153,6 +160,7 @@ type IssueAddressSortKey =
   | 'name'
   | 'telephone'
   | 'postalCode'
+  | 'destinationCountry'
   | 'address'
   | 'email'
   | 'remarks'
@@ -255,6 +263,7 @@ const issueAddressColumns = [
   { key: 'name', label: '姓名', sortable: true },
   { key: 'telephone', label: '电话', sortable: true },
   { key: 'postalCode', label: '邮编', sortable: true },
+  { key: 'destinationCountry', label: '去向国', sortable: true },
   { key: 'address', label: '收件地址', sortable: true },
   { key: 'email', label: '邮箱', sortable: true },
   { key: 'remarks', label: '备注', sortable: true },
@@ -294,6 +303,7 @@ interface CardIssueAddressRow {
   name: string
   telephone: string
   postalCode: string
+  destinationCountry: string
   address: string
   email: string
   remarks: string
@@ -333,6 +343,8 @@ const addressBookPlural = 'address-book-entries'
 const bureauPlural = 'bureau-entries'
 const qsoRecordPlural = 'qso-records'
 const offlineActivityPlural = 'offline-activities'
+const systemSettingPlural = 'system-settings'
+const systemSettingName = 'qsl-system-setting-default'
 const builtinDailyOfflineActivityTitle = BUILTIN_DAILY_OFFLINE_ACTIVITY_NAME
 
 const loading = ref(false)
@@ -366,6 +378,7 @@ const pendingSortDirection = ref<QslSortDirection>('asc')
 const pendingIssueCurrentPage = ref(1)
 const pendingIssuePageSize = ref(20)
 const pendingIssuePageSizeOptions: number[] = [20, 30, 50, 100]
+const systemSetting = ref<SystemSettingSpec>({})
 
 const normalizedKeyword = computed(() => searchedCallSign.value.trim().toUpperCase())
 const hasKeyword = computed(() => normalizedKeyword.value.length > 0)
@@ -445,6 +458,7 @@ const matchedAddressRows = computed(() => {
       item.bureauName,
       item.name,
       item.address,
+      item.destinationCountry,
       item.telephone,
     ]
       .join(' ')
@@ -499,7 +513,9 @@ const pendingIssueCardRows = computed(() => {
     }
     return (
       matchesActivity &&
-      (!item.cardIssued || !item.envelopePrinted || item.spec.createdMailStatus !== 'SENT')
+      (!item.cardIssued ||
+        !item.envelopePrinted ||
+        !['SENT', 'SKIPPED'].includes(item.spec.createdMailStatus || ''))
     )
   })
 })
@@ -689,6 +705,54 @@ const resolveMailStatusText = (status: string): string => {
   return ''
 }
 
+const resolveCreatedMailPolicy = (spec: CardRecordSpec): string => {
+  const sceneType = normalizeSceneType(spec.sceneType, spec.cardType)
+  if (sceneType === 'ONLINE_EYEBALL') {
+    return (systemSetting.value.onlineCardCreatedMailPolicy || 'MANUAL').trim().toUpperCase()
+  }
+  if (sceneType === 'QSO' || sceneType === 'SWL') {
+    return (systemSetting.value.qsoCardCreatedMailPolicy || 'MANUAL').trim().toUpperCase()
+  }
+  return 'MANUAL'
+}
+
+const applyAutoSkipCreatedMailPolicy = async (targets: CardIssueCardRow[]) => {
+  const autoSkipTargets = targets.filter((row) => {
+    return (
+      row.cardIssued &&
+      row.envelopePrinted &&
+      resolveCreatedMailPolicy(row.spec) === 'AUTO_SKIP' &&
+      !['SENT', 'SKIPPED'].includes(row.spec.createdMailStatus || '')
+    )
+  })
+  for (const row of autoSkipTargets) {
+    const nextSpec: CardRecordSpec = {
+      ...row.spec,
+      createdMailStatus: 'SKIPPED',
+      createdMailSentAt: '',
+      createdMailLastError: '',
+    }
+    await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, row.id, {
+      apiVersion: qslApiVersion,
+      kind: 'CardRecord',
+      metadata: {
+        name: row.id,
+        version: row.metadataVersion,
+      },
+      spec: nextSpec,
+      status: row.status,
+    })
+    row.spec = nextSpec
+    row.metadataVersion = (row.metadataVersion ?? 0) + 1
+    await appendQslAuditLog({
+      action: '制卡邮件自动跳过',
+      resourceType: 'card-record',
+      resourceName: row.id,
+      detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}，来源：制卡签发自动不发送策略`,
+    })
+  }
+}
+
 const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec => {
   return {
     callSign: spec?.callSign ?? '',
@@ -777,6 +841,7 @@ const toAddressRow = (extension: QslExtension<AddressBookSpec>): CardIssueAddres
     name: extension.spec?.name ?? '',
     telephone: extension.spec?.telephone ?? '',
     postalCode: extension.spec?.postalCode ?? '',
+    destinationCountry: extension.spec?.destinationCountry ?? '',
     address: extension.spec?.address ?? '',
     email: extension.spec?.email ?? '',
     remarks: extension.spec?.addressRemarks ?? '',
@@ -792,6 +857,7 @@ const toBureauRow = (extension: QslExtension<BureauSpec>): CardIssueAddressRow =
     name: extension.spec?.bureauName ?? '',
     telephone: extension.spec?.telephone ?? '',
     postalCode: extension.spec?.postalCode ?? '',
+    destinationCountry: '',
     address: extension.spec?.address ?? '',
     email: '',
     remarks: extension.spec?.addressRemarks ?? '',
@@ -816,7 +882,7 @@ const toQsoRow = (extension: QslExtension<QsoRecordSpec>): CardIssueQsoRow => {
 const loadSourceData = async () => {
   loading.value = true
   try {
-    const [cards, addresses, bureaus, qsos] = await Promise.all([
+    const [cards, addresses, bureaus, qsos, loadedSystemSetting] = await Promise.all([
       listExtensions<CardRecordSpec, CardRecordStatus>(cardRecordPlural),
       showAddressSection.value
         ? listExtensions<AddressBookSpec>(addressBookPlural)
@@ -825,7 +891,9 @@ const loadSourceData = async () => {
       showAssociationColumns.value
         ? listExtensions<QsoRecordSpec>(qsoRecordPlural)
         : Promise.resolve([]),
+      getExtensionOrNull<SystemSettingSpec>(systemSettingPlural, systemSettingName),
     ])
+    systemSetting.value = loadedSystemSetting?.spec ?? {}
     let activityExtensions: QslExtension<OfflineActivitySpec>[] = []
     if (shouldLoadOfflineActivities.value) {
       try {
@@ -843,6 +911,7 @@ const loadSourceData = async () => {
       )
       .filter((item) => isFormalCardRecord(item))
       .filter((item) => !isBuiltinNoSendCardVersion(item.spec.cardVersion))
+    await applyAutoSkipCreatedMailPolicy(cardRows.value)
     addressRows.value = addresses.map((item) => toAddressRow(item))
     bureauRows.value = bureaus.map((item) => toBureauRow(item))
     qsoRows.value = qsos.map((item) => toQsoRow(item))
@@ -1175,8 +1244,16 @@ const confirmEnvelopePrintedForRow = async (row: CardIssueCardRow) => {
       resourceName: row.id,
       detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}，地址编号：${nextSpec.addressEntryName || '-'}`,
     })
+    const policyResult = await applyNotificationMailPolicy({
+      cardRecordName: row.id,
+      scene: 'created',
+      source: '制卡签发-确认打包自动策略',
+    })
     await loadSourceData()
-    feedback.value = `已确认打包：${row.id}`
+    feedback.value =
+      policyResult.message === '邮件策略为手动，未自动处理。'
+        ? `已确认打包：${row.id}`
+        : `已确认打包：${row.id}；制卡邮件${policyResult.status === 'SENT' ? '已自动发送' : policyResult.status === 'SKIPPED' ? '已自动跳过' : '自动处理失败'}。`
   } catch (error) {
     feedback.value = `确认打包失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -1221,8 +1298,8 @@ const markCreatedMailAsSentForRow = async (row: CardIssueCardRow) => {
   try {
     const nextSpec: CardRecordSpec = {
       ...row.spec,
-      createdMailStatus: 'SENT',
-      createdMailSentAt: nowText(),
+      createdMailStatus: 'SKIPPED',
+      createdMailSentAt: '',
       createdMailLastError: '',
     }
 
@@ -1238,16 +1315,16 @@ const markCreatedMailAsSentForRow = async (row: CardIssueCardRow) => {
     })
 
     await appendQslAuditLog({
-      action: '制卡邮件标记已发',
+      action: '制卡邮件标记跳过',
       resourceType: 'card-record',
       resourceName: row.id,
       detail: `呼号：${row.callSign || '-'}，卡片类型：${row.cardType || '-'}，模式：不发邮件`,
     })
 
     await loadSourceData()
-    feedback.value = `已标记制卡邮件为已发送：${row.id}`
+    feedback.value = `已标记制卡邮件为不发送：${row.id}`
   } catch (error) {
-    feedback.value = `标记制卡邮件已发送失败：${error instanceof Error ? error.message : '未知错误'}`
+    feedback.value = `标记制卡邮件不发送失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     pendingIssueMailRowName.value = ''
   }

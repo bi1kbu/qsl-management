@@ -97,6 +97,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/exchange-requests/{name}/approve"), this::approveExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/reject"), this::rejectExchangeRequest)
             .andRoute(POST("/exchange-requests/{name}/create-card"), this::createExchangeRequestCard)
+            .andRoute(POST("/exchange-requests/{name}/mark-card-created"), this::markExchangeRequestCardCreated)
             .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
             .andRoute(POST("/online-card-imports"), this::importOnlineCards)
             .andRoute(POST("/ai-config-tests"), this::testAiConfig)
@@ -105,6 +106,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/ai-online-import-parses"), this::parseAiOnlineImport)
             .andRoute(POST("/qrz-credential-tests"), this::testQrzCredential)
             .andRoute(POST("/qrz-address-lookups/preview"), this::previewQrzAddressLookup)
+            .andRoute(POST("/notification-mails/apply-policy"), this::applyNotificationMailPolicy)
             .andRoute(POST("/notification-mails/send"), this::sendNotificationMail)
             .andRoute(POST("/notification-mails/batch-send"), this::batchSendNotificationMail)
             .andRoute(POST("/notification-mails/test"), this::sendTestNotificationMail)
@@ -332,6 +334,18 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .onErrorResume(QslApiResponses::handleError);
     }
 
+    private Mono<ServerResponse> markExchangeRequestCardCreated(ServerRequest request) {
+        var requestName = request.pathVariable("name");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> actionService.markExchangeRequestCardCreated(
+                requestName,
+                authenticatedOperator.name(),
+                authenticatedOperator.clientIp()
+            ))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
     private Mono<ServerResponse> notifyExchangeRequest(ServerRequest request) {
         var requestName = request.pathVariable("name");
         return ensureAuthenticated(request)
@@ -502,6 +516,27 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                     authenticatedOperator.clientIp(),
                     payload.source()
                 )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> applyNotificationMailPolicy(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(NotificationMailSendRequest.class)
+                .flatMap(payload -> {
+                    var scene = QslNotificationMailService.MailScene.fromCode(payload.scene());
+                    if (scene == null) {
+                        return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST,
+                            "QSL-400-0001", "邮件场景不支持"));
+                    }
+                    return notificationMailService.applyAutomaticPolicy(
+                        payload.cardRecordName(),
+                        scene,
+                        authenticatedOperator.name(),
+                        authenticatedOperator.clientIp(),
+                        payload.source()
+                    );
+                }))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

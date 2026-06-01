@@ -110,6 +110,22 @@ class QslConsoleApiEndpointAuthTest {
     }
 
     @Test
+    void shouldRejectExchangeMarkCardCreatedWhenUnauthenticated() {
+        unauthorizedPost("/exchange-requests/exchange-request-1/mark-card-created", "{}");
+    }
+
+    @Test
+    void shouldRejectNotificationMailPolicyApplyWhenUnauthenticated() {
+        unauthorizedPost("/notification-mails/apply-policy", """
+            {
+              "cardRecordName": "C1001",
+              "scene": "created",
+              "source": "自动策略"
+            }
+            """);
+    }
+
+    @Test
     void shouldRejectImportPrecheckWhenUnauthenticated() {
         unauthorizedPost("/imports/precheck", """
             {

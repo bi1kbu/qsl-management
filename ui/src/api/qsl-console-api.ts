@@ -508,6 +508,15 @@ export async function createOnlineCardFromReceiveRecord(
   return response.data.data
 }
 
+export async function markExchangeRequestCardCreated(
+  requestName: string,
+): Promise<ExchangeReviewResult> {
+  const response = await axiosInstance.post<ApiResult<ExchangeReviewResult>>(
+    `${consoleApiBase}/exchange-requests/${encodeURIComponent(requestName)}/mark-card-created`,
+  )
+  return response.data.data
+}
+
 export async function migrateReceivedRecordCode(
   sourceCardRecordName: string,
   payload: ReceivedRecordCodeMigratePayload,
@@ -564,6 +573,16 @@ export async function sendNotificationMail(
 ): Promise<NotificationMailSendResult> {
   const response = await axiosInstance.post<ApiResult<NotificationMailSendResult>>(
     `${consoleApiBase}/notification-mails/send`,
+    payload,
+  )
+  return response.data.data
+}
+
+export async function applyNotificationMailPolicy(
+  payload: NotificationMailSendPayload,
+): Promise<NotificationMailSendResult> {
+  const response = await axiosInstance.post<ApiResult<NotificationMailSendResult>>(
+    `${consoleApiBase}/notification-mails/apply-policy`,
     payload,
   )
   return response.data.data

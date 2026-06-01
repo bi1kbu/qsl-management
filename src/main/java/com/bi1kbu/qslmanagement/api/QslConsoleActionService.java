@@ -590,6 +590,10 @@ public class QslConsoleActionService {
                     return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "QSL-422-0001", "只有已通过的换卡申请可以创建卡片"));
                 }
+                if (Boolean.TRUE.equals(status.getCardCreated())) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "该换卡申请已标记为已创建卡片"));
+                }
                 var spec = exchangeRequest.getSpec();
                 var callSign = spec == null ? "" : QslApiSupport.normalizeCallSign(spec.getCallSign());
                 if (callSign.isBlank()) {
@@ -601,12 +605,16 @@ public class QslConsoleActionService {
                         "QSL-422-0001", "只有线上换卡申请可以创建卡片"));
                 }
                 return createEyeballCardByExchange(exchangeRequest)
-                    .map(createdCard -> new ExchangeReviewResult(
-                        exchangeRequest.getMetadata().getName(),
-                        status.getReviewStatus(),
+                    .flatMap(createdCard -> markExchangeRequestCardCreatedStatus(
+                        exchangeRequest,
                         createdCard.getMetadata().getName(),
-                        status.getReviewReason()
-                    ));
+                        operator
+                    ).map(updatedExchangeRequest -> new ExchangeReviewResult(
+                        updatedExchangeRequest.getMetadata().getName(),
+                        updatedExchangeRequest.getStatus().getReviewStatus(),
+                        createdCard.getMetadata().getName(),
+                        updatedExchangeRequest.getStatus().getReviewReason()
+                    )));
             })
             .flatMap(result -> qslAuditService.appendAuditLog(
                 "换卡申请创建卡片",
@@ -621,6 +629,56 @@ public class QslConsoleActionService {
                 operator,
                 clientIp
             )).thenReturn(result));
+    }
+
+    public Mono<ExchangeReviewResult> markExchangeRequestCardCreated(String requestName, String operator,
+        String clientIp) {
+        return fetchOr404(ExchangeRequest.class, requestName)
+            .flatMap(exchangeRequest -> {
+                var status = exchangeRequest.getStatus();
+                if (status == null || !"已通过".equals(defaultIfBlank(status.getReviewStatus(), ""))) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "只有已通过的换卡申请可以标记已发卡"));
+                }
+                if (Boolean.TRUE.equals(status.getCardCreated())) {
+                    return Mono.just(new ExchangeReviewResult(
+                        exchangeRequest.getMetadata().getName(),
+                        status.getReviewStatus(),
+                        defaultIfBlank(status.getCreatedCardRecordName(), ""),
+                        status.getReviewReason()
+                    ));
+                }
+                return markExchangeRequestCardCreatedStatus(exchangeRequest, "", operator)
+                    .map(updatedExchangeRequest -> new ExchangeReviewResult(
+                        updatedExchangeRequest.getMetadata().getName(),
+                        updatedExchangeRequest.getStatus().getReviewStatus(),
+                        defaultIfBlank(updatedExchangeRequest.getStatus().getCreatedCardRecordName(), ""),
+                        updatedExchangeRequest.getStatus().getReviewReason()
+                    ));
+            })
+            .flatMap(result -> qslAuditService.appendAuditLog(
+                "标记换卡申请已发卡",
+                "exchange-request",
+                result.requestName(),
+                "已手动标记为已创建卡片，不创建新的卡片记录",
+                safeOperator(operator),
+                clientIp
+            ).thenReturn(result));
+    }
+
+    private Mono<ExchangeRequest> markExchangeRequestCardCreatedStatus(ExchangeRequest exchangeRequest,
+        String createdCardRecordName, String operator) {
+        var status = exchangeRequest.getStatus() == null
+            ? new ExchangeRequest.ExchangeRequestStatus()
+            : exchangeRequest.getStatus();
+        status.setCardCreated(Boolean.TRUE);
+        status.setCardCreatedAt(QslApiSupport.nowText());
+        status.setCardCreatedBy(safeOperator(operator));
+        if (!defaultIfBlank(createdCardRecordName, "").isBlank()) {
+            status.setCreatedCardRecordName(createdCardRecordName.trim());
+        }
+        exchangeRequest.setStatus(status);
+        return client.update(exchangeRequest);
     }
 
     public Mono<ReceiveRecordCardCreateResult> createOnlineCardForUnmatchedReceiveRecord(String receivedRecordCode,
@@ -979,6 +1037,7 @@ public class QslConsoleActionService {
                 spec.setName(name);
                 spec.setTelephone(telephone);
                 spec.setPostalCode(postalCode);
+                spec.setDestinationCountry("");
                 spec.setAddress(address);
                 spec.setEmail(email);
                 spec.setAddressRemarks(source + "导入");
@@ -1117,6 +1176,7 @@ public class QslConsoleActionService {
                 spec.setName(name);
                 spec.setTelephone(telephone);
                 spec.setPostalCode(postalCode);
+                spec.setDestinationCountry("");
                 spec.setAddress(address);
                 spec.setEmail(email);
                 spec.setAddressRemarks("线上换卡申请自动生成");

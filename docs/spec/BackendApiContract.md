@@ -107,9 +107,11 @@ API 版本：`v1alpha1`
 | POST | `/exchange-requests/{name}/approve` | 换卡申请通过；只更新审核状态，不创建线上换卡卡片 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/reject` | 换卡申请拒绝 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/create-card` | 已通过的换卡申请显式创建线上换卡卡片；服务端校验状态、场景和呼号并防止重复创建 | `exchange-request-review:edit` |
+| POST | `/exchange-requests/{name}/mark-card-created` | 将已通过的换卡申请强制标记为已创建卡片；只写入 `ExchangeRequest.status.cardCreated/cardCreatedAt/cardCreatedBy`，不创建卡片记录 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/notify` | 发送线上换卡申请审核结果邮件 | `exchange-request-review:edit` |
 | POST | `/online-card-imports` | 导入手工文本解析后的线上换卡数据，直接创建 `ONLINE_EYEBALL` 卡片记录并按需创建/绑定地址簿 | `online-bh6syx-import:edit` |
 | POST | `/notification-mails/send` | 单条发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
+| POST | `/notification-mails/apply-policy` | 按当前邮件策略自动处理单条邮件场景；`AUTO_SKIP` 只写入跳过状态，`AUTO_SEND` 才触发发送，`MANUAL` 不改数据 | `card-record:edit` 或相关业务编辑权限 |
 | POST | `/notification-mails/batch-send` | 批量发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
 | POST | `/notification-mails/test` | 向“本台电子邮件”发送测试通知邮件 | `system-settings:edit` |
 
@@ -259,7 +261,7 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 }
 ```
 
-`source` 只允许 `手工文本导入` 或 `BH6SYX卡片广场`，两类导入统一提交到 `/online-card-imports`，由 `source` 区分来源。服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。线上换卡创建卡片默认写入卡片备注“期待与您空中相遇。\nLooking forward to meeting you on the air.”。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
+`source` 只允许 `手工文本导入` 或 `BH6SYX卡片广场`，两类导入统一提交到 `/online-card-imports`，由 `source` 区分来源。服务端只允许 `status` 为 `对方已寄出，待我签收` 或 `待双方寄出` 的行创建卡片。缺失可选字段按空值处理；缺呼号或缺卡片版本的行失败。成功行直接创建 `CardRecord`，固定 `cardType=EYEBALL`、`sceneType=ONLINE_EYEBALL`、`cardReceived=false`，以本站卡片编号 `CardRecord.metadata.name` 作为后续流程主键，并将收件信息写入或复用 `AddressBookEntry` 后绑定 `CardRecord.spec.addressEntryName`。地址管理导入导出字段包含 `destinationCountry`（去向国，非必填），线上换卡导入暂不从来源数据自动填充该字段。线上换卡创建卡片默认写入卡片备注“期待与您空中相遇。\nLooking forward to meeting you on the air.”。BH6SYX 表格中的“交换ID”不提交服务端、不写入数据、不参与去重；“对方备注”仅在前端导入清单预览中显示，不提交服务端，也不写入卡片或地址数据。
 
 导入预检/导入任务：
 

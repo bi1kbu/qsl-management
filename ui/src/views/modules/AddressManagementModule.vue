@@ -36,6 +36,7 @@ type AddressSortKey =
   | 'name'
   | 'telephone'
   | 'postalCode'
+  | 'destinationCountry'
   | 'address'
   | 'email'
   | 'remarks'
@@ -46,6 +47,7 @@ interface AddressBookSpec {
   name: string
   telephone: string
   postalCode: string
+  destinationCountry: string
   address: string
   email: string
   addressRemarks: string
@@ -59,6 +61,7 @@ interface AddressItem {
   name: string
   telephone: string
   postalCode: string
+  destinationCountry: string
   address: string
   email: string
   remarks: string
@@ -118,6 +121,7 @@ const form = reactive({
   name: '',
   telephone: '',
   postalCode: '',
+  destinationCountry: '',
   address: '',
   email: '',
   remarks: '',
@@ -163,6 +167,7 @@ const addressColumns = [
   { key: 'name', label: '姓名', sortable: true },
   { key: 'telephone', label: '电话', sortable: true },
   { key: 'postalCode', label: '邮编', sortable: true },
+  { key: 'destinationCountry', label: '去向国', sortable: true },
   { key: 'address', label: '地址', sortable: true },
   { key: 'email', label: '邮箱', sortable: true },
   { key: 'remarks', label: '地址备注', sortable: true },
@@ -181,6 +186,7 @@ const aiAddressColumns = [
   { key: 'name', label: '姓名', sortable: false },
   { key: 'telephone', label: '电话', sortable: false },
   { key: 'postalCode', label: '邮编', sortable: false },
+  { key: 'destinationCountry', label: '去向国', sortable: false },
   { key: 'address', label: '地址', sortable: false },
   { key: 'email', label: '邮箱', sortable: false },
 ]
@@ -246,6 +252,7 @@ const toRow = (extension: QslExtension<AddressBookSpec>): AddressItem => {
     name: extension.spec?.name ?? '',
     telephone: extension.spec?.telephone ?? '',
     postalCode: extension.spec?.postalCode ?? '',
+    destinationCountry: extension.spec?.destinationCountry ?? '',
     address: extension.spec?.address ?? '',
     email: extension.spec?.email ?? '',
     remarks: extension.spec?.addressRemarks ?? '',
@@ -258,6 +265,7 @@ const toSpec = (row: AddressItem): AddressBookSpec => {
     name: row.name,
     telephone: row.telephone,
     postalCode: row.postalCode,
+    destinationCountry: row.destinationCountry,
     address: row.address,
     email: row.email,
     addressRemarks: row.remarks,
@@ -285,6 +293,7 @@ const filteredRows = computed(() => {
       item.id.toUpperCase().includes(keyword) ||
       item.callSign.toUpperCase().includes(keyword) ||
       item.name.toUpperCase().includes(keyword) ||
+      item.destinationCountry.toUpperCase().includes(keyword) ||
       item.address.toUpperCase().includes(keyword) ||
       item.email.toUpperCase().includes(keyword)
     )
@@ -317,6 +326,7 @@ const filteredAiRows = computed(() => {
       item.name.toUpperCase().includes(keyword) ||
       item.telephone.toUpperCase().includes(keyword) ||
       item.postalCode.toUpperCase().includes(keyword) ||
+      item.destinationCountry.toUpperCase().includes(keyword) ||
       item.address.toUpperCase().includes(keyword) ||
       item.email.toUpperCase().includes(keyword)
     )
@@ -692,6 +702,7 @@ const resetForm = () => {
   form.name = ''
   form.telephone = ''
   form.postalCode = ''
+  form.destinationCountry = ''
   form.address = ''
   form.email = ''
   form.remarks = ''
@@ -718,6 +729,7 @@ const startEdit = (item: AddressItem) => {
   form.name = item.name
   form.telephone = item.telephone
   form.postalCode = item.postalCode
+  form.destinationCountry = item.destinationCountry
   form.address = item.address
   form.email = item.email
   form.remarks = item.remarks
@@ -901,6 +913,7 @@ const addAddress = async () => {
         name: form.name.trim(),
         telephone: form.telephone.trim(),
         postalCode: form.postalCode.trim(),
+        destinationCountry: form.destinationCountry.trim(),
         address: form.address.trim(),
         email: form.email.trim(),
         addressRemarks: form.remarks.trim(),
@@ -968,6 +981,7 @@ const updateAddressRecord = async () => {
         name: form.name.trim(),
         telephone: form.telephone.trim(),
         postalCode: form.postalCode.trim(),
+        destinationCountry: form.destinationCountry.trim(),
         address: form.address.trim(),
         email: form.email.trim(),
         addressRemarks: form.remarks.trim(),
@@ -1195,6 +1209,13 @@ onMounted(() => {
             <span class="qsl-field__label">邮编（Postal_Code）</span>
             <div class="qsl-input-shell">
               <input v-model.trim="form.postalCode" type="text" placeholder="输入邮编" />
+            </div>
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">去向国（Destination_Country）</span>
+            <div class="qsl-input-shell">
+              <input v-model.trim="form.destinationCountry" type="text" placeholder="输入去向国" />
             </div>
           </label>
 

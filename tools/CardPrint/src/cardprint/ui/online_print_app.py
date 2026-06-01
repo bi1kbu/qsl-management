@@ -1096,6 +1096,7 @@ class OnlineDatasetPage(QWidget):
                 ("收件姓名", ["mapped_row.name", "source_row.addressInfo.spec.name", "source_row.bureauInfo.spec.bureauName"]),
                 ("收件地址", ["mapped_row.address", "source_row.addressInfo.spec.address", "source_row.bureauInfo.spec.address"]),
                 ("收件邮编", ["mapped_row.postCode", "source_row.addressInfo.spec.postalCode", "source_row.bureauInfo.spec.postalCode"]),
+                ("去向国", ["mapped_row.destinationCountry", "source_row.addressInfo.spec.destinationCountry"]),
                 ("收件电话", ["mapped_row.phone", "source_row.addressInfo.spec.telephone", "source_row.bureauInfo.spec.telephone"]),
                 ("邮箱", ["source_row.addressInfo.spec.email", "source_row.spec.email"]),
             ]
@@ -1106,6 +1107,7 @@ class OnlineDatasetPage(QWidget):
                 ("收件姓名", ["mapped_row.name", "source_row.addressInfo.spec.name", "source_row.bureauInfo.spec.bureauName"]),
                 ("收件地址", ["mapped_row.address", "source_row.addressInfo.spec.address", "source_row.bureauInfo.spec.address"]),
                 ("收件邮编", ["mapped_row.postCode", "source_row.addressInfo.spec.postalCode", "source_row.bureauInfo.spec.postalCode"]),
+                ("去向国", ["mapped_row.destinationCountry", "source_row.addressInfo.spec.destinationCountry"]),
                 ("收件电话", ["mapped_row.phone", "source_row.addressInfo.spec.telephone", "source_row.bureauInfo.spec.telephone"]),
             ]
         check_columns = 1 if self._enable_batch_check else 0
@@ -2509,6 +2511,7 @@ class OnlineManualConfirmPage(QWidget):
                 ("收件姓名", ["source_row.addressInfo.spec.name", "source_row.bureauInfo.spec.bureauName"]),
                 ("收件地址", ["source_row.addressInfo.spec.address", "source_row.bureauInfo.spec.address"]),
                 ("收件邮编", ["source_row.addressInfo.spec.postalCode", "source_row.bureauInfo.spec.postalCode"]),
+                ("去向国", ["source_row.addressInfo.spec.destinationCountry"]),
                 ("打包状态", ["source_row.spec.envelopePrinted", "source_row.envelopePrinted"]),
             ]
         self.record_table.setColumnCount(len(self._table_schema) + 1)
