@@ -1,0 +1,29 @@
+name: Debug Halo App Store Cleanup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Delete temporary Halo app store draft release
+        env:
+          HALO_PAT: ${{ secrets.HALO_PAT }}
+          APP_ID: app-z7ouhnfn
+          HALO_BACKEND_BASEURL: https://www.halo.run
+          RELEASE_NAME: app-release-qsl-management-2-3-0
+        shell: bash
+        run: |
+          set -euo pipefail
+          response=/tmp/halo-delete-release-response.json
+          code="$(curl -sS -o "$response" -w "%{http_code}" \
+            -X DELETE "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/$RELEASE_NAME?applicationName=$APP_ID" \
+            -H "Authorization: Bearer $HALO_PAT")"
+          echo "Halo 删除临时草稿 HTTP 状态：$code"
+          echo "Halo 删除临时草稿响应体："
+          cat "$response"
+          echo
+          if [[ "$code" != 2* && "$code" != "404" ]]; then
+            exit 1
+          fi
