@@ -1,0 +1,125 @@
+name: Debug Halo App Store Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "GitHub Release tag"
+        required: true
+        default: "v2.3.0"
+
+jobs:
+  debug-halo-appstore-release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Reproduce Halo app store release request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HALO_PAT: ${{ secrets.HALO_PAT }}
+          TAG: ${{ inputs.tag }}
+          APP_ID: app-z7ouhnfn
+          HALO_BACKEND_BASEURL: https://www.halo.run
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_json="$(gh release view "$TAG" --json databaseId,name,tagName,body,isPrerelease,url)"
+          release_name="$(jq -r '.name' <<<"$release_json")"
+          release_body="$(jq -r '.body // ""' <<<"$release_json")"
+          prerelease="$(jq -r '.isPrerelease' <<<"$release_json")"
+          release_url="$(jq -r '.url' <<<"$release_json")"
+
+          mkdir -p build/libs
+          gh release download "$TAG" --pattern "*.jar" --dir build/libs --clobber
+          jar_file="$(find build/libs -maxdepth 1 -name "*.jar" | head -n 1)"
+          if [[ -z "$jar_file" ]]; then
+            echo "未找到 Release JAR 附件。"
+            exit 1
+          fi
+
+          unzip -p "$jar_file" plugin.yaml > /tmp/plugin.yaml
+          app_version="$(awk -F': ' '/^[[:space:]]*version:/{print $2; exit}' /tmp/plugin.yaml | tr -d '"')"
+          app_requires="$(awk -F': ' '/^[[:space:]]*requires:/{print $2; exit}' /tmp/plugin.yaml | tr -d '"')"
+
+          notes_markdown="$release_body"
+          notes_markdown="${notes_markdown}"$'\n\n---\n\n'"*Generated from [$TAG]($release_url)*"
+          notes_html="$(jq -n --arg text "$notes_markdown" --arg context "${{ github.repository }}" '{text: $text, mode: "gfm", context: $context}' | gh api markdown --input -)"
+
+          jq -n \
+            --arg displayName "$release_name" \
+            --argjson preRelease "$prerelease" \
+            --arg requires "$app_requires" \
+            --arg version "$app_version" \
+            --arg html "$notes_html" \
+            --arg raw "$notes_markdown" \
+            '{
+              release: {
+                apiVersion: "store.halo.run/v1alpha1",
+                kind: "Release",
+                metadata: {generateName: "app-release-", name: ""},
+                spec: {
+                  applicationName: "",
+                  displayName: $displayName,
+                  draft: false,
+                  ownerName: "",
+                  preRelease: $preRelease,
+                  requires: $requires,
+                  version: $version,
+                  notesName: ""
+                }
+              },
+              notes: {
+                apiVersion: "store.halo.run/v1alpha1",
+                html: $html,
+                kind: "Content",
+                metadata: {generateName: "app-release-notes-", name: ""},
+                rawType: "MARKDOWN",
+                raw: $raw
+              },
+              makeLatest: true
+            }' > /tmp/app-release-payload.json
+
+          echo "应用市场发布请求摘要："
+          jq '{displayName: .release.spec.displayName, version: .release.spec.version, requires: .release.spec.requires, makeLatest}' /tmp/app-release-payload.json
+
+          response_file=/tmp/halo-response.json
+          http_code="$(curl -sS -o "$response_file" -w "%{http_code}" \
+            -X POST "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases?applicationName=$APP_ID" \
+            -H "Authorization: Bearer $HALO_PAT" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/app-release-payload.json)"
+
+          echo "Halo 创建发布 HTTP 状态：$http_code"
+          echo "Halo 创建发布响应体："
+          cat "$response_file"
+          echo
+
+          if [[ "$http_code" != 2* ]]; then
+            exit 1
+          fi
+
+          release_resource_name="$(jq -r '.metadata.name // empty' "$response_file")"
+          if [[ -z "$release_resource_name" ]]; then
+            echo "创建发布成功，但响应中缺少 metadata.name，无法上传附件。"
+            exit 1
+          fi
+
+          upload_response=/tmp/halo-upload-response.json
+          upload_code="$(curl -sS -o "$upload_response" -w "%{http_code}" \
+            -X POST "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/assets" \
+            -H "Authorization: Bearer $HALO_PAT" \
+            -F "releaseName=$release_resource_name" \
+            -F "file=@$jar_file")"
+
+          echo "Halo 上传附件 HTTP 状态：$upload_code"
+          echo "Halo 上传附件响应体："
+          cat "$upload_response"
+          echo
+
+          if [[ "$upload_code" != 2* ]]; then
+            exit 1
+          fi
