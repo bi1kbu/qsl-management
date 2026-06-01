@@ -101,8 +101,60 @@ jobs:
           cat "$preupload_response"
           echo
 
-          if [[ "$preupload_code" != 2* ]]; then
-            exit 1
+          draft_payload=/tmp/app-release-draft-payload.json
+          jq '.release.spec.draft = true | .makeLatest = false' /tmp/app-release-payload.json > "$draft_payload"
+          draft_response=/tmp/halo-draft-response.json
+          draft_code="$(curl -sS -o "$draft_response" -w "%{http_code}" \
+            -X POST "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases?applicationName=$APP_ID" \
+            -H "Authorization: Bearer $HALO_PAT" \
+            -H "Content-Type: application/json" \
+            --data-binary @"$draft_payload")"
+
+          echo "Halo 创建草稿发布 HTTP 状态：$draft_code"
+          echo "Halo 创建草稿发布响应体："
+          cat "$draft_response"
+          echo
+
+          if [[ "$draft_code" == 2* ]]; then
+            draft_release_name="$(jq -r '.metadata.name // empty' "$draft_response")"
+            draft_upload_response=/tmp/halo-draft-upload-response.json
+            draft_upload_code="$(curl -sS -o "$draft_upload_response" -w "%{http_code}" \
+              -X POST "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/assets" \
+              -H "Authorization: Bearer $HALO_PAT" \
+              -F "releaseName=$draft_release_name" \
+              -F "file=@$jar_file")"
+
+            echo "Halo 草稿上传附件 HTTP 状态：$draft_upload_code"
+            echo "Halo 草稿上传附件响应体："
+            cat "$draft_upload_response"
+            echo
+
+            publish_payload=/tmp/app-release-publish-payload.json
+            jq --arg releaseName "$draft_release_name" '.release.metadata.name = $releaseName | .release.spec.draft = false | .makeLatest = true' /tmp/app-release-payload.json > "$publish_payload"
+
+            publish_put_response=/tmp/halo-publish-put-response.json
+            publish_put_code="$(curl -sS -o "$publish_put_response" -w "%{http_code}" \
+              -X PUT "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/$draft_release_name?applicationName=$APP_ID" \
+              -H "Authorization: Bearer $HALO_PAT" \
+              -H "Content-Type: application/json" \
+              --data-binary @"$publish_payload")"
+
+            echo "Halo PUT 发布草稿 HTTP 状态：$publish_put_code"
+            echo "Halo PUT 发布草稿响应体："
+            cat "$publish_put_response"
+            echo
+
+            publish_patch_response=/tmp/halo-publish-patch-response.json
+            publish_patch_code="$(curl -sS -o "$publish_patch_response" -w "%{http_code}" \
+              -X PATCH "$HALO_BACKEND_BASEURL/apis/uc.api.developer.store.halo.run/v1alpha1/releases/$draft_release_name?applicationName=$APP_ID" \
+              -H "Authorization: Bearer $HALO_PAT" \
+              -H "Content-Type: application/merge-patch+json" \
+              --data-binary '{"spec":{"draft":false},"makeLatest":true}')"
+
+            echo "Halo PATCH 发布草稿 HTTP 状态：$publish_patch_code"
+            echo "Halo PATCH 发布草稿响应体："
+            cat "$publish_patch_response"
+            echo
           fi
 
           probe_response_file=/tmp/halo-asset-probe-response.json
