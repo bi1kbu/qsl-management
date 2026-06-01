@@ -25,6 +25,7 @@ import {
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
 import { resolveCardFlowStatus as resolveDerivedCardFlowStatus } from '../../utils/qsl-card-state'
+import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
 
 type CardType = 'QSO' | 'SWL' | 'EYEBALL'
 type CardMutationRecordType = string
@@ -117,6 +118,8 @@ interface OptionItem {
 }
 
 interface AddressOptionItem extends OptionItem {
+  sourceType: 'ADDRESS' | 'BURO'
+  callSign: string
   searchText: string
 }
 
@@ -449,6 +452,65 @@ const selectedAddressOption = computed(() => {
   }
   return addressOptions.value.find((item) => item.value === editForm.addressEntryName) ?? null
 })
+
+const parseAddressSequence = (resourceName: string, callSign: string): number => {
+  const pattern = new RegExp(`^${callSign}-(\\d+)$`)
+  const matched = resourceName.trim().toUpperCase().match(pattern)
+  if (!matched) {
+    return Number.POSITIVE_INFINITY
+  }
+  const numeric = Number.parseInt(matched[1] ?? '', 10)
+  return Number.isFinite(numeric) ? numeric : Number.POSITIVE_INFINITY
+}
+
+const findMatchedAddressId = (callSign: string): string => {
+  const normalizedCallSign = callSign.trim().toUpperCase()
+  if (!normalizedCallSign) {
+    return ''
+  }
+  const matchedOptions = addressOptions.value
+    .filter((item) => item.sourceType === 'ADDRESS' && item.callSign === normalizedCallSign)
+    .sort((a, b) => {
+      const seqA = parseAddressSequence(a.value, normalizedCallSign)
+      const seqB = parseAddressSequence(b.value, normalizedCallSign)
+      if (seqA !== seqB) {
+        return seqA - seqB
+      }
+      return a.value.localeCompare(b.value)
+    })
+  return matchedOptions[0]?.value ?? ''
+}
+
+const isOfflineExchangeSpec = (spec: CardRecordSpec): boolean => {
+  const sceneType = String(spec.sceneType ?? '')
+    .trim()
+    .toUpperCase()
+  const cardType = String(spec.cardType ?? '')
+    .trim()
+    .toUpperCase()
+  return sceneType === 'EYEBALL' || (!sceneType && cardType === 'EYEBALL')
+}
+
+const applyAddressBindingAfterNoSendCardVersionChange = (
+  previousSpec: CardRecordSpec,
+  nextSpec: CardRecordSpec,
+): boolean => {
+  if (
+    !isBuiltinNoSendCardVersion(previousSpec.cardVersion) ||
+    isBuiltinNoSendCardVersion(nextSpec.cardVersion) ||
+    nextSpec.addressEntryName.trim() ||
+    isOfflineExchangeSpec(nextSpec)
+  ) {
+    return false
+  }
+
+  const matchedAddressId = findMatchedAddressId(nextSpec.callSign)
+  if (!matchedAddressId) {
+    return false
+  }
+  nextSpec.addressEntryName = matchedAddressId
+  return true
+}
 
 const selectableAddressOptions = computed(() => {
   if (!selectedAddressOption.value) {
@@ -956,6 +1018,8 @@ const loadAddressOptions = async () => {
     return {
       value: name,
       label,
+      sourceType: 'ADDRESS',
+      callSign,
       searchText: [name, callSign, label].join(' ').toUpperCase(),
     }
   })
@@ -967,6 +1031,8 @@ const loadAddressOptions = async () => {
     return {
       value: name,
       label,
+      sourceType: 'BURO',
+      callSign: '',
       searchText: [name, bureauName, label].join(' ').toUpperCase(),
     }
   })
@@ -1192,6 +1258,7 @@ const saveEdit = async () => {
     const baseStatus = normalizeCardRecordStatus(latest?.status ?? target.status)
 
     const nextSpec = buildSpecFromEditForm(baseSpec)
+    const addressAutoBound = applyAddressBindingAfterNoSendCardVersionChange(baseSpec, nextSpec)
     const nextStatus: CardRecordStatus = {
       ...baseStatus,
       flowStatus: resolveNextFlowStatus(nextSpec, editForm.flowStatus),
@@ -1212,11 +1279,15 @@ const saveEdit = async () => {
       action: '卡片异动-单条编辑',
       resourceType: 'card-record',
       resourceName: target.resourceName,
-      detail: `呼号=${nextSpec.callSign}，类型=${nextSpec.cardType}`,
+      detail: `呼号=${nextSpec.callSign}，类型=${nextSpec.cardType}${
+        addressAutoBound ? `，自动绑定地址=${nextSpec.addressEntryName}` : ''
+      }`,
     })
 
     await loadRows({ silent: true })
-    feedback.value = `卡片异动保存成功：${target.resourceName}`
+    feedback.value = addressAutoBound
+      ? `卡片异动保存成功：${target.resourceName}，已自动绑定地址 ${nextSpec.addressEntryName}。`
+      : `卡片异动保存成功：${target.resourceName}`
   } catch (error) {
     feedback.value = `保存卡片异动失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -1496,6 +1567,7 @@ const applyHistoryBatchEdit = async () => {
     const targets = normalRows.value.filter((item) =>
       selectedHistoryNames.value.includes(item.resourceName),
     )
+    let autoBoundCount = 0
 
     for (const item of targets) {
       const latest = await getExtensionOrNull<CardRecordSpec, CardRecordStatus>(
@@ -1513,6 +1585,9 @@ const applyHistoryBatchEdit = async () => {
         batchEditField.value,
         normalizedValue,
       )
+      if (applyAddressBindingAfterNoSendCardVersionChange(baseSpec, nextSpec)) {
+        autoBoundCount += 1
+      }
       await updateExtension<CardRecordSpec, CardRecordStatus>(resourcePlural, item.resourceName, {
         apiVersion: qslApiVersion,
         kind: resourceKind,
@@ -1529,14 +1604,19 @@ const applyHistoryBatchEdit = async () => {
       action: '卡片异动-批量编辑',
       resourceType: 'card-record',
       resourceName: `count=${targets.length}`,
-      detail: `字段=${batchEditField.value}，值=${normalizedValue}`,
+      detail: `字段=${batchEditField.value}，值=${normalizedValue}${
+        autoBoundCount > 0 ? `，自动绑定地址=${autoBoundCount}条` : ''
+      }`,
     })
 
     await loadRows({ silent: true })
     clearHistorySelection()
     batchEditField.value = ''
     batchEditValue.value = ''
-    feedback.value = `已批量更新 ${targets.length} 条卡片记录。`
+    feedback.value =
+      autoBoundCount > 0
+        ? `已批量更新 ${targets.length} 条卡片记录，并自动绑定 ${autoBoundCount} 条地址。`
+        : `已批量更新 ${targets.length} 条卡片记录。`
   } catch (error) {
     feedback.value = `批量更新失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

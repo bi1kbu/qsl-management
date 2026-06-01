@@ -29,6 +29,7 @@ import {
   compareText,
   type QslSortDirection,
 } from '../../utils/qsl-table-sort'
+import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
 
 type AddressSortKey =
   | 'id'
@@ -95,6 +96,7 @@ interface BindCandidateItem {
 interface CardRecordSpec {
   callSign: string
   addressEntryName: string
+  cardVersion?: string
   businessRemarks?: string
   cardRemarks?: string
   [key: string]: unknown
@@ -555,6 +557,9 @@ const buildPendingBindings = (
     if (isOfflineExchangeCard(item)) {
       return
     }
+    if (isBuiltinNoSendCardVersion(item.spec?.cardVersion)) {
+      return
+    }
     const callSign = normalizeCallSign(item.spec?.callSign ?? '')
     const addressEntryName = (item.spec?.addressEntryName ?? '').trim()
     if (!callSign || addressEntryName) {
@@ -800,6 +805,9 @@ const bindAddressForCallSign = async (
   let updatedCount = 0
   for (const record of cardExtensions) {
     if (isOfflineExchangeCard(record)) {
+      continue
+    }
+    if (isBuiltinNoSendCardVersion(record.spec?.cardVersion)) {
       continue
     }
     const recordCallSign = normalizeCallSign(record.spec?.callSign ?? '')
