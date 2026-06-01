@@ -410,6 +410,9 @@ const resolveMailStatusText = (status: string): string => {
   if (status === 'SENT') {
     return '已发送'
   }
+  if (status === 'SKIPPED') {
+    return '邮件已跳过'
+  }
   if (status === 'FAILED') {
     return '发送失败'
   }
@@ -808,6 +811,10 @@ const applyHistoryBatchEdit = async () => {
 }
 
 const sendSentMailForRow = async (row: SendConfirmItem, source = '发信确认-单条发送') => {
+  if (!row.sent || ['SENT', 'SKIPPED'].includes(row.spec.sentMailStatus || '')) {
+    return
+  }
+
   pendingRowName.value = row.resourceName
   try {
     const result = await sendNotificationMail({
@@ -825,7 +832,7 @@ const sendSentMailForRow = async (row: SendConfirmItem, source = '发信确认-�
 }
 
 const markSentMailAsSentForRow = async (row: SendConfirmItem) => {
-  if (!row.sent || row.spec.sentMailStatus === 'SENT') {
+  if (!row.sent || ['SENT', 'SKIPPED'].includes(row.spec.sentMailStatus || '')) {
     return
   }
 
@@ -1127,6 +1134,7 @@ onMounted(() => {
               :disabled="
                 pendingRowName === toSendItem(row).resourceName ||
                 toSendItem(row).spec.sentMailStatus === 'SENT' ||
+                toSendItem(row).spec.sentMailStatus === 'SKIPPED' ||
                 !toSendItem(row).sent
               "
               @click="sendSentMailForRow(toSendItem(row))"
@@ -1139,6 +1147,7 @@ onMounted(() => {
               :disabled="
                 pendingRowName === toSendItem(row).resourceName ||
                 toSendItem(row).spec.sentMailStatus === 'SENT' ||
+                toSendItem(row).spec.sentMailStatus === 'SKIPPED' ||
                 !toSendItem(row).sent
               "
               @click="markSentMailAsSentForRow(toSendItem(row))"
@@ -1148,9 +1157,16 @@ onMounted(() => {
             <VTag
               v-if="
                 toSendItem(row).spec.sentMailStatus === 'SENT' ||
+                toSendItem(row).spec.sentMailStatus === 'SKIPPED' ||
                 toSendItem(row).spec.sentMailStatus === 'FAILED'
               "
-              :theme="toSendItem(row).spec.sentMailStatus === 'SENT' ? 'secondary' : 'danger'"
+              :theme="
+                toSendItem(row).spec.sentMailStatus === 'SENT'
+                  ? 'secondary'
+                  : toSendItem(row).spec.sentMailStatus === 'FAILED'
+                    ? 'danger'
+                    : 'default'
+              "
             >
               {{ resolveMailStatusText(toSendItem(row).spec.sentMailStatus) }}
             </VTag>

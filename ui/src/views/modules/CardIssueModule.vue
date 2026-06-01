@@ -680,6 +680,9 @@ const resolveMailStatusText = (status: string): string => {
   if (status === 'SENT') {
     return '已发送'
   }
+  if (status === 'SKIPPED') {
+    return '邮件已跳过'
+  }
   if (status === 'FAILED') {
     return '发送失败'
   }
@@ -1182,7 +1185,11 @@ const confirmEnvelopePrintedForRow = async (row: CardIssueCardRow) => {
 }
 
 const sendCreatedMailForRow = async (row: CardIssueCardRow) => {
-  if (!row.cardIssued || !row.envelopePrinted) {
+  if (
+    !row.cardIssued ||
+    !row.envelopePrinted ||
+    ['SENT', 'SKIPPED'].includes(row.spec.createdMailStatus || '')
+  ) {
     return
   }
   pendingIssueMailRowName.value = row.id
@@ -1202,7 +1209,11 @@ const sendCreatedMailForRow = async (row: CardIssueCardRow) => {
 }
 
 const markCreatedMailAsSentForRow = async (row: CardIssueCardRow) => {
-  if (!row.cardIssued || !row.envelopePrinted || row.spec.createdMailStatus === 'SENT') {
+  if (
+    !row.cardIssued ||
+    !row.envelopePrinted ||
+    ['SENT', 'SKIPPED'].includes(row.spec.createdMailStatus || '')
+  ) {
     return
   }
 
@@ -1480,6 +1491,7 @@ onMounted(loadSourceData)
                 !toCardIssueCardRow(row).cardIssued ||
                 !toCardIssueCardRow(row).envelopePrinted ||
                 toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ||
+                toCardIssueCardRow(row).spec.createdMailStatus === 'SKIPPED' ||
                 pendingIssueMailRowName === toCardIssueCardRow(row).id ||
                 pendingIssueRowName === toCardIssueCardRow(row).id ||
                 pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
@@ -1497,6 +1509,7 @@ onMounted(loadSourceData)
                 !toCardIssueCardRow(row).cardIssued ||
                 !toCardIssueCardRow(row).envelopePrinted ||
                 toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ||
+                toCardIssueCardRow(row).spec.createdMailStatus === 'SKIPPED' ||
                 pendingIssueMailRowName === toCardIssueCardRow(row).id ||
                 pendingIssueRowName === toCardIssueCardRow(row).id ||
                 pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
@@ -1510,10 +1523,15 @@ onMounted(loadSourceData)
               v-if="
                 !isOfflineExchangeScene &&
                 (toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ||
+                  toCardIssueCardRow(row).spec.createdMailStatus === 'SKIPPED' ||
                   toCardIssueCardRow(row).spec.createdMailStatus === 'FAILED')
               "
               :theme="
-                toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ? 'secondary' : 'danger'
+                toCardIssueCardRow(row).spec.createdMailStatus === 'SENT'
+                  ? 'secondary'
+                  : toCardIssueCardRow(row).spec.createdMailStatus === 'FAILED'
+                    ? 'danger'
+                    : 'default'
               "
             >
               {{ resolveMailStatusText(toCardIssueCardRow(row).spec.createdMailStatus) }}

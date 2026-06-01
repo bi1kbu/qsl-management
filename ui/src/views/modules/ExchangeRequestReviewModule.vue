@@ -572,6 +572,7 @@ onMounted(loadRows)
               type="secondary"
               :disabled="
                 toExchangeItem(row).reviewMailStatus === 'SENT' ||
+                toExchangeItem(row).reviewMailStatus === 'SKIPPED' ||
                 notifyingId === toExchangeItem(row).id ||
                 pendingId === toExchangeItem(row).id ||
                 loading

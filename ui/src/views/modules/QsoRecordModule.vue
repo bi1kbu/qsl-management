@@ -907,6 +907,7 @@ const unsupportedAdifFieldsForRemarks = (
     'MODE',
     'SUBMODE',
     'FREQ',
+    'BAND',
     'RST_SENT',
     'RST_RCVD',
     'QTH',
@@ -917,6 +918,8 @@ const unsupportedAdifFieldsForRemarks = (
     'TX_PWR',
     'OPERATOR',
     'STATION_CALLSIGN',
+    'MY_SIG',
+    'MY_SIG_INFO',
     'SWL',
   ])
   return Object.entries(fields)
@@ -938,14 +941,26 @@ const buildAdifImportRemarks = (
     remarks.push(notes)
   }
   if (unsupportedFields.length) {
-    remarks.push(
-      [
-        'ADIF扩展字段：',
-        ...unsupportedFields.map((item) => `${item.name}=${item.value}`),
-      ].join('\n'),
-    )
+    remarks.push(unsupportedFields.map((item) => `${item.name}：${item.value}；`).join('\n'))
   }
   return remarks.join('\n\n')
+}
+
+const resolveAdifImportFreq = (fields: Record<string, string>): string => {
+  const freq = fields.FREQ?.trim() ?? ''
+  if (freq) {
+    return freq
+  }
+  const band = fields.BAND?.trim().toUpperCase() ?? ''
+  return band ? `${band} BAND` : ''
+}
+
+const resolveAdifImportMyQth = (fields: Record<string, string>): string => {
+  const mySig = fields.MY_SIG?.trim().toUpperCase() ?? ''
+  if (mySig === 'POTA') {
+    return fields.MY_SIG_INFO?.trim() ?? ''
+  }
+  return ''
 }
 
 const toAdifImportPreviewItem = (
@@ -963,17 +978,19 @@ const toAdifImportPreviewItem = (
   const resolvedMyRigAnt = fields.MY_ANTENNA?.trim() || equipment?.antennas?.[0]?.trim() || ''
   const resolvedMyRigPwr = fields.TX_PWR?.trim() || equipment?.powers?.[0]?.trim() || ''
   const unsupportedFields = unsupportedAdifFieldsForRemarks(fields)
+  const resolvedFreq = resolveAdifImportFreq(fields)
+  const resolvedMyQth = resolveAdifImportMyQth(fields)
   const spec: QsoRecordSpec = {
     sceneType,
     date,
     time,
     timezone: 'UTC',
-    freq: fields.FREQ?.trim() ?? '',
+    freq: resolvedFreq,
     myRig: resolvedMyRig,
     myRigMode: mode || equipment?.modes?.[0]?.trim() || '',
     myRigAnt: resolvedMyRigAnt,
     myRigPwr: sceneType === 'SWL' ? '' : resolvedMyRigPwr,
-    myQth: '',
+    myQth: resolvedMyQth,
     operator: fields.OPERATOR?.trim() || fields.STATION_CALLSIGN?.trim() || stationProfileCallSign.value,
     callSign,
     rig: '',

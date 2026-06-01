@@ -805,6 +805,9 @@ const resolveMailStatusText = (status: string): string => {
   if (status === 'SENT') {
     return '已发送'
   }
+  if (status === 'SKIPPED') {
+    return '邮件已跳过'
+  }
   if (status === 'FAILED') {
     return '发送失败'
   }
@@ -1555,6 +1558,13 @@ const applyHistoryBatchEdit = async () => {
 }
 
 const sendReceivedMailForRow = async (item: ReceiveResult, source = '收信确认-单条发送') => {
+  if (
+    !isCardReceivedForDisplay(item) ||
+    ['SENT', 'SKIPPED'].includes(item.spec.receivedMailStatus || '')
+  ) {
+    return
+  }
+
   pendingMailRowName.value = item.resourceName
   try {
     const result = await sendNotificationMail({
@@ -1589,7 +1599,10 @@ const createOnlineCardForReceivedRecord = async (item: ReceivedRecordResult) => 
 }
 
 const markReceivedMailAsSentForRow = async (item: ReceiveResult) => {
-  if (!isCardReceivedForDisplay(item) || item.spec.receivedMailStatus === 'SENT') {
+  if (
+    !isCardReceivedForDisplay(item) ||
+    ['SENT', 'SKIPPED'].includes(item.spec.receivedMailStatus || '')
+  ) {
     return
   }
 
@@ -1630,7 +1643,10 @@ const markReceivedMailAsSentForRow = async (item: ReceiveResult) => {
 }
 
 const closeReceiveForRow = async (item: ReceiveResult) => {
-  if (!isCardReceivedForDisplay(item) || item.spec.receivedMailStatus === 'SENT') {
+  if (
+    !isCardReceivedForDisplay(item) ||
+    ['SENT', 'SKIPPED'].includes(item.spec.receivedMailStatus || '')
+  ) {
     return
   }
 
@@ -2089,6 +2105,7 @@ onMounted(() => {
                 pendingMailRowName === asReceiveResultRow(row).resourceName ||
                 !isCardReceivedForDisplay(asReceiveResultRow(row)) ||
                 asReceiveResultRow(row).spec.receivedMailStatus === 'SENT' ||
+                asReceiveResultRow(row).spec.receivedMailStatus === 'SKIPPED' ||
                 asReceiveResultRow(row).spec.receivedMailStatus === 'PENDING'
               "
               @click="closeReceiveForRow(asReceiveResultRow(row))"
@@ -2103,6 +2120,7 @@ onMounted(() => {
               :disabled="
                 pendingMailRowName === asReceiveResultRow(row).resourceName ||
                 asReceiveResultRow(row).spec.receivedMailStatus === 'SENT' ||
+                asReceiveResultRow(row).spec.receivedMailStatus === 'SKIPPED' ||
                 !isCardReceivedForDisplay(asReceiveResultRow(row)) ||
                 (asReceiveResultRow(row).spec.receivedMailStatus !== 'PENDING' &&
                   asReceiveResultRow(row).spec.receivedMailStatus !== 'FAILED')
@@ -2118,6 +2136,7 @@ onMounted(() => {
               :disabled="
                 pendingMailRowName === asReceiveResultRow(row).resourceName ||
                 asReceiveResultRow(row).spec.receivedMailStatus === 'SENT' ||
+                asReceiveResultRow(row).spec.receivedMailStatus === 'SKIPPED' ||
                 !isCardReceivedForDisplay(asReceiveResultRow(row)) ||
                 (asReceiveResultRow(row).spec.receivedMailStatus !== 'PENDING' &&
                   asReceiveResultRow(row).spec.receivedMailStatus !== 'FAILED')
@@ -2128,7 +2147,7 @@ onMounted(() => {
             </VButton>
             <VTag
               v-if="
-                ['PENDING', 'SENT', 'FAILED'].includes(
+                ['PENDING', 'SENT', 'SKIPPED', 'FAILED'].includes(
                   asReceiveResultRow(row).spec.receivedMailStatus || '',
                 )
               "
