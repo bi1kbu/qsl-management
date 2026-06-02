@@ -11,6 +11,7 @@ import {
 import {
   approveExchangeRequest,
   createExchangeRequestCard,
+  getConsoleApiErrorMessage,
   markExchangeRequestCardCreated,
   notifyExchangeRequest,
   rejectExchangeRequest,
@@ -222,6 +223,27 @@ const resolveMailStatusText = (status: MailStatus): string => {
       return '未发送'
   }
 }
+const resolveReviewStatusTagClass = (status: ExchangeRequestItem['status']): string => {
+  if (status === '已通过') {
+    return 'qsl-review-status-tag--approved'
+  }
+  if (status === '已拒绝') {
+    return 'qsl-review-status-tag--rejected'
+  }
+  return 'qsl-review-status-tag--pending'
+}
+const resolveReviewMailStatusTagClass = (status: MailStatus): string => {
+  switch (status) {
+    case 'SENT':
+      return 'qsl-review-status-tag--mail-sent'
+    case 'SKIPPED':
+      return 'qsl-review-status-tag--mail-skipped'
+    case 'FAILED':
+      return 'qsl-review-status-tag--mail-failed'
+    default:
+      return 'qsl-review-status-tag--mail-default'
+  }
+}
 
 const buildCreatedCardRecordMap = (
   cardRecords: QslExtension<CardRecordSpec>[],
@@ -362,13 +384,17 @@ const createCard = async (row: ExchangeRequestItem) => {
     feedback.value = '只有已通过的换卡申请可以创建卡片。'
     return
   }
+  if (row.cardCreated || row.createdCardRecordName) {
+    feedback.value = '该换卡申请已标记为已创建卡片。'
+    return
+  }
   creatingCardId.value = row.id
   try {
     const result = await createExchangeRequestCard(row.id)
     await loadRows()
     feedback.value = `已为 ${row.callSign} 创建卡片：${result.createdCardRecordName || '-'}。`
   } catch (error) {
-    feedback.value = `创建卡片失败：${error instanceof Error ? error.message : '未知错误'}`
+    feedback.value = `创建卡片失败：${getConsoleApiErrorMessage(error)}`
   } finally {
     creatingCardId.value = ''
   }
@@ -384,7 +410,7 @@ const markCardCreated = async () => {
     feedback.value = '只有已通过的换卡申请可以标记已发卡。'
     return
   }
-  if (target.createdCardRecordName) {
+  if (target.cardCreated || target.createdCardRecordName) {
     feedback.value = `换卡申请已是已创建卡片状态：${target.id}`
     return
   }
@@ -660,31 +686,21 @@ onMounted(loadRows)
         <template #cell-status="{ row }">
           <div class="qsl-status-tags">
             <VTag
-              :theme="
-                toExchangeItem(row).status === '待审核'
-                  ? 'default'
-                  : toExchangeItem(row).status === '已通过'
-                    ? 'secondary'
-                    : 'danger'
-              "
+              class="qsl-review-status-tag"
+              :class="resolveReviewStatusTagClass(toExchangeItem(row).status)"
             >
               {{ toExchangeItem(row).status }}
             </VTag>
             <VTag
               v-if="toExchangeItem(row).status === '已通过' && toExchangeItem(row).createdCardRecordName"
-              theme="secondary"
+              class="qsl-review-status-tag qsl-review-status-tag--card-created"
             >
               已创建卡片
             </VTag>
             <VTag
               v-if="toExchangeItem(row).reviewMailStatus"
-              :theme="
-                toExchangeItem(row).reviewMailStatus === 'SENT'
-                  ? 'secondary'
-                  : toExchangeItem(row).reviewMailStatus === 'FAILED'
-                    ? 'danger'
-                    : 'default'
-              "
+              class="qsl-review-status-tag"
+              :class="resolveReviewMailStatusTagClass(toExchangeItem(row).reviewMailStatus)"
             >
               {{ resolveMailStatusText(toExchangeItem(row).reviewMailStatus) }}
             </VTag>
@@ -750,7 +766,11 @@ onMounted(loadRows)
               不发邮件
             </VButton>
             <VButton
-              v-if="toExchangeItem(row).status === '已通过' && !toExchangeItem(row).createdCardRecordName"
+              v-if="
+                toExchangeItem(row).status === '已通过' &&
+                !toExchangeItem(row).cardCreated &&
+                !toExchangeItem(row).createdCardRecordName
+              "
               class="qsl-action-warning"
               size="xs"
               type="secondary"
@@ -953,6 +973,7 @@ onMounted(loadRows)
           :disabled="
             savingEdit ||
             editingRow?.status !== '已通过' ||
+            Boolean(editingRow?.cardCreated) ||
             Boolean(editingRow?.createdCardRecordName)
           "
           confirm-enabled
@@ -998,5 +1019,46 @@ onMounted(loadRows)
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.qsl-review-status-tag {
+  border: 1px solid currentColor;
+  font-weight: 600;
+}
+
+.qsl-review-status-tag--pending {
+  background: #fffbeb !important;
+  color: #b45309 !important;
+}
+
+.qsl-review-status-tag--approved {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+}
+
+.qsl-review-status-tag--rejected,
+.qsl-review-status-tag--mail-failed {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
+.qsl-review-status-tag--card-created {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+
+.qsl-review-status-tag--mail-sent {
+  background: #eef2ff !important;
+  color: #4338ca !important;
+}
+
+.qsl-review-status-tag--mail-skipped {
+  background: #f3f4f6 !important;
+  color: #4b5563 !important;
+}
+
+.qsl-review-status-tag--mail-default {
+  background: #f8fafc !important;
+  color: #64748b !important;
 }
 </style>

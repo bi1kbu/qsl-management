@@ -600,10 +600,6 @@ public class QslConsoleActionService {
                     return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "QSL-422-0001", "换卡申请缺少呼号，无法创建卡片"));
                 }
-                if (spec != null && !"ONLINE_EYEBALL".equals(normalizeSceneType(spec.getSceneType(), "EYEBALL"))) {
-                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
-                        "QSL-422-0001", "只有线上换卡申请可以创建卡片"));
-                }
                 return createEyeballCardByExchange(exchangeRequest)
                     .flatMap(createdCard -> markExchangeRequestCardCreatedStatus(
                         exchangeRequest,

@@ -780,6 +780,58 @@ class QslConsoleActionServiceValidationTest {
     }
 
     @Test
+    void shouldCreateCardForLegacyApprovedExchangeRequestWithQsoSceneType() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(
+            client,
+            auditService,
+            notificationMailService
+        );
+        var capturedCardRecord = new AtomicReference<CardRecord>();
+
+        var exchangeRequest = new ExchangeRequest();
+        exchangeRequest.setMetadata(QslApiSupport.createMetadata("EX0002"));
+        var spec = new ExchangeRequest.ExchangeRequestSpec();
+        spec.setSceneType("QSO");
+        spec.setCallSign("BI1KBU");
+        spec.setCardVersion("默认卡片A");
+        exchangeRequest.setSpec(spec);
+        var status = new ExchangeRequest.ExchangeRequestStatus();
+        status.setReviewStatus("已通过");
+        status.setReviewReason("");
+        exchangeRequest.setStatus(status);
+
+        var systemSetting = new SystemSetting();
+        systemSetting.setMetadata(QslApiSupport.createMetadata("qsl-system-setting-default"));
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setCardRecordSequence(1001);
+        systemSetting.setSpec(settingSpec);
+
+        when(client.fetch(eq(ExchangeRequest.class), eq("EX0002")))
+            .thenReturn(Mono.just(exchangeRequest));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty(), Flux.empty());
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(ExchangeRequest.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.create(any(CardRecord.class))).thenAnswer(invocation -> {
+            capturedCardRecord.set(invocation.getArgument(0));
+            return Mono.just(invocation.getArgument(0));
+        });
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendIfEnabled(any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.createCardForApprovedExchangeRequest("EX0002", "admin", "127.0.0.1").block();
+
+        assertEquals("EX0002", result.requestName());
+        assertEquals("C1002", result.createdCardRecordName());
+        assertEquals("ONLINE_EYEBALL", capturedCardRecord.get().getSpec().getSceneType());
+        assertEquals(Boolean.TRUE, exchangeRequest.getStatus().getCardCreated());
+    }
+
+    @Test
     void shouldMarkApprovedExchangeRequestCardCreatedWithoutCreatingCard() {
         var client = mock(ReactiveExtensionClient.class);
         var auditService = mock(QslAuditService.class);
