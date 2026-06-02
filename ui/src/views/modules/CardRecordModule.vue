@@ -2311,6 +2311,7 @@ onBeforeUnmount(() => {
             </div>
           </label>
           <VButton
+            class="qsl-action-warning"
             type="secondary"
             :disabled="loading || saving || !form.cardVersion.trim()"
             @click="createOfflineBatchCards"
@@ -2449,6 +2450,7 @@ onBeforeUnmount(() => {
         </template>
         <template #row-actions="{ row }">
           <VButton
+            class="qsl-action-warning"
             size="xs"
             type="secondary"
             :disabled="
@@ -2506,7 +2508,9 @@ onBeforeUnmount(() => {
 
         <template #row-actions="{ row }">
           <div class="qsl-row-actions">
-            <VButton size="xs" @click="startEditRecord(toHistoryItem(row))">编辑</VButton>
+            <VButton class="qsl-action-edit" size="xs" @click="startEditRecord(toHistoryItem(row))"
+              >编辑</VButton
+            >
             <QslConfirmActionButton
               v-if="allowDeleteCardRecord"
               size="xs"

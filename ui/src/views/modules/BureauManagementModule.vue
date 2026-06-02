@@ -381,6 +381,7 @@ onMounted(loadRows)
       >
         <template #row-actions="{ row }">
           <VButton
+            class="qsl-action-edit"
             size="xs"
             :disabled="loading || submitting"
             @click="startEdit(toBureauItem(row))"

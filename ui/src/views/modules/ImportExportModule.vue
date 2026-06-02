@@ -783,7 +783,11 @@ onBeforeUnmount(() => {
             <VButton type="secondary" :disabled="importBusy" @click="runImportPrecheck"
               >预检导入</VButton
             >
-            <VButton type="secondary" :disabled="importBusy" @click="runImportExecute"
+            <VButton
+              class="qsl-action-warning"
+              type="secondary"
+              :disabled="importBusy"
+              @click="runImportExecute"
               >执行导入</VButton
             >
           </div>

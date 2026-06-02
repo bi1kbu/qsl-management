@@ -751,6 +751,7 @@ onMounted(loadRows)
             </VButton>
             <VButton
               v-if="toExchangeItem(row).status === '已通过' && !toExchangeItem(row).createdCardRecordName"
+              class="qsl-action-warning"
               size="xs"
               type="secondary"
               :disabled="
@@ -764,6 +765,7 @@ onMounted(loadRows)
             </VButton>
             <VButton
               v-if="toExchangeItem(row).status !== '待审核'"
+              class="qsl-action-edit"
               size="xs"
               :disabled="savingEdit || pendingId === toExchangeItem(row).id || loading"
               @click="startEdit(toExchangeItem(row))"
@@ -976,11 +978,6 @@ onMounted(loadRows)
 </template>
 
 <style scoped lang="scss">
-:deep(.qsl-mail-action:not(:disabled)) {
-  color: #ff0e0e !important;
-  font-weight: 600;
-}
-
 .qsl-review-reason-editor {
   display: grid;
   gap: 8px;

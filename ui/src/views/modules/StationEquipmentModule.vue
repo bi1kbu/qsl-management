@@ -316,7 +316,7 @@ onMounted(loadStationEquipment)
             <span
               v-for="(item, index) in selectedRig.antennas"
               :key="`${item}-${index}`"
-              class="qsl-tag-pill"
+              class="qsl-tag-pill qsl-equipment-capability-pill"
             >
               {{ item }}
               <QslConfirmActionButton
@@ -356,7 +356,7 @@ onMounted(loadStationEquipment)
             <span
               v-for="(item, index) in selectedRig.powers"
               :key="`${item}-${index}`"
-              class="qsl-tag-pill"
+              class="qsl-tag-pill qsl-equipment-capability-pill"
             >
               {{ item }}
               <QslConfirmActionButton
@@ -396,7 +396,7 @@ onMounted(loadStationEquipment)
             <span
               v-for="(item, index) in selectedRig.modes"
               :key="`${item}-${index}`"
-              class="qsl-tag-pill"
+              class="qsl-tag-pill qsl-equipment-capability-pill"
             >
               {{ item }}
               <QslConfirmActionButton
@@ -430,3 +430,24 @@ onMounted(loadStationEquipment)
     </VCard>
   </div>
 </template>
+
+<style scoped lang="scss">
+.qsl-equipment-capability-pill {
+  min-height: 24px;
+  gap: 4px;
+  padding: 2px 6px 2px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.qsl-equipment-capability-pill :deep(.qsl-confirm-action-button--danger-outline) {
+  min-height: 18px;
+  border-radius: 4px;
+  margin-left: 2px;
+  padding: 0 3px !important;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+}
+</style>

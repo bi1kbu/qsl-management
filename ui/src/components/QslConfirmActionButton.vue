@@ -115,8 +115,18 @@ const confirm = () => {
 }
 
 .qsl-confirm-action-button--warning {
-  border-color: #d97706;
-  color: #92400e;
+  border-color: #b45309 !important;
+  background: #fffbeb !important;
+  color: #b45309 !important;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px #f59e0b;
+}
+
+.qsl-confirm-action-button--warning:hover {
+  border-color: #92400e !important;
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  box-shadow: inset 0 0 0 1px #d97706;
 }
 
 .qsl-confirm-action-button--danger {
@@ -124,14 +134,16 @@ const confirm = () => {
 }
 
 .qsl-confirm-action-button--danger-outline {
-  border-color: #fecaca;
+  border-color: transparent !important;
   background: transparent !important;
   color: #dc2626 !important;
+  box-shadow: none !important;
 }
 
 .qsl-confirm-action-button--danger-outline:hover {
-  border-color: #fca5a5;
-  background: #fef2f2 !important;
+  border-color: transparent !important;
+  background: transparent !important;
   color: #b91c1c !important;
+  text-decoration: underline;
 }
 </style>

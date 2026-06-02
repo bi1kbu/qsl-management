@@ -506,6 +506,7 @@ onMounted(() => {
         <template #row-actions="{ row }">
           <div class="qsl-actions qsl-actions--tight">
             <VButton
+              class="qsl-action-edit"
               size="xs"
               type="secondary"
               :disabled="saving || loading || toActivityItem(row).builtin"

@@ -741,6 +741,7 @@ onMounted(() => {
             <template v-else>
               <div class="qsl-card-list__button-row">
                 <VButton
+                  class="qsl-action-edit"
                   size="xs"
                   type="secondary"
                   :disabled="loading || saving"

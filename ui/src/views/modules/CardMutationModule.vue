@@ -2256,7 +2256,11 @@ onMounted(() => {
 
         <template #row-actions="{ row }">
           <template v-if="!isErrorTab">
-            <VButton size="xs" type="secondary" @click="startEditRow(toHistoryItem(row))"
+            <VButton
+              class="qsl-action-edit"
+              size="xs"
+              type="secondary"
+              @click="startEditRow(toHistoryItem(row))"
               >编辑</VButton
             >
             <QslConfirmActionButton

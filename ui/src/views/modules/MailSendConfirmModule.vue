@@ -1114,7 +1114,7 @@ onMounted(() => {
         </template>
         <template #row-actions="{ row }">
           <div class="qsl-actions qsl-actions--tight">
-            <VButton size="xs" type="secondary" @click="startEditRow(toSendItem(row))"
+            <VButton class="qsl-action-edit" size="xs" type="secondary" @click="startEditRow(toSendItem(row))"
               >编辑</VButton
             >
             <VButton
@@ -1187,11 +1187,6 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
-:deep(.qsl-mail-action:not(:disabled)) {
-  color: #ff0e0e !important;
-  font-weight: 600;
-}
-
 .qsl-send-confirm-tabs {
   margin-bottom: 12px;
 }

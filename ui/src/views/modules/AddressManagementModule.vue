@@ -1309,6 +1309,7 @@ onMounted(() => {
           <template #row-actions="{ row }">
             <div class="qsl-actions qsl-actions--tight">
               <VButton
+                class="qsl-action-edit"
                 size="xs"
                 :disabled="loading || submitting"
                 @click="startEdit(toAddressItem(row))"
@@ -1386,8 +1387,9 @@ onMounted(() => {
             <strong>AI整理结果</strong>
             <span class="qsl-muted">已勾选 {{ selectedAiPreviewRows.length }} 条可应用结果</span>
             <VButton
+              class="qsl-action-warning"
               size="sm"
-              type="primary"
+              type="secondary"
               :loading="aiApplying"
               :disabled="aiPreviewing || selectedAiPreviewRows.length === 0"
               @click="applySelectedAiAddresses"
@@ -1463,7 +1465,9 @@ onMounted(() => {
                   置信度 {{ Math.round(qrzPreviewResult.confidence * 100) }}%
                 </span>
               </div>
-              <VButton type="primary" @click="fillAddressFromQrzPreview">填入地址表单</VButton>
+              <VButton class="qsl-action-warning" type="secondary" @click="fillAddressFromQrzPreview"
+                >填入地址表单</VButton
+              >
             </div>
             <dl class="qsl-qrz-preview__grid">
               <div>

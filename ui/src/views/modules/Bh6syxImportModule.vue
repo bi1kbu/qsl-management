@@ -361,7 +361,8 @@ onMounted(() => {
           批量设置卡片
         </VButton>
         <VButton
-          type="primary"
+          class="qsl-action-warning"
+          type="secondary"
           :loading="importing"
           :disabled="!canImport || parsing"
           @click="submitImport"

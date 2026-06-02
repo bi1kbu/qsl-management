@@ -1765,6 +1765,8 @@ onMounted(() => {
               解析ADIF内容
             </VButton>
             <VButton
+              class="qsl-action-warning"
+              type="secondary"
               :disabled="
                 loading ||
                 adifImporting ||
@@ -1907,7 +1909,11 @@ onMounted(() => {
         </template>
 
         <template #row-actions="{ row }">
-          <VButton size="xs" type="secondary" @click="startEditRecord(toHistoryItem(row))"
+          <VButton
+            class="qsl-action-edit"
+            size="xs"
+            type="secondary"
+            @click="startEditRecord(toHistoryItem(row))"
             >编辑</VButton
           >
           <QslConfirmActionButton

@@ -763,6 +763,7 @@ onMounted(loadRows)
         </template>
         <template #row-actions="{ row }">
           <VButton
+            class="qsl-action-warning"
             size="xs"
             type="secondary"
             :disabled="

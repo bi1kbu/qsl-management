@@ -1964,6 +1964,7 @@ onMounted(() => {
         </template>
         <template #row-actions="{ row }">
           <VButton
+            class="qsl-action-warning"
             size="xs"
             type="secondary"
             :disabled="
@@ -2066,6 +2067,7 @@ onMounted(() => {
         <template #row-actions="{ row }">
           <div v-if="isBatchTab" class="qsl-actions qsl-actions--tight">
             <VButton
+              class="qsl-action-edit"
               size="xs"
               type="secondary"
               :disabled="savingSingleEdit"
@@ -2260,11 +2262,6 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
-:deep(.qsl-mail-action:not(:disabled)) {
-  color: #ff0e0e !important;
-  font-weight: 600;
-}
-
 .qsl-tab-panel-placeholder {
   display: none;
 }

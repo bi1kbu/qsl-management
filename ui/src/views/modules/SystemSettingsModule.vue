@@ -1502,11 +1502,6 @@ onMounted(loadSystemSettings)
 </template>
 
 <style scoped lang="scss">
-:deep(.qsl-mail-action:not(:disabled)) {
-  color: #ff0e0e !important;
-  font-weight: 600;
-}
-
 .qsl-tab-panel-placeholder {
   display: none;
 }

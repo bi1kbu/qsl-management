@@ -1622,11 +1622,6 @@ onMounted(loadSourceData)
 </template>
 
 <style scoped lang="scss">
-:deep(.qsl-mail-action:not(:disabled)) {
-  color: #ff0e0e !important;
-  font-weight: 600;
-}
-
 .qsl-selected-address {
   font-size: 13px;
   color: #374151;

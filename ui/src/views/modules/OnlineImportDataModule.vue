@@ -510,7 +510,13 @@ watch(activeTab, () => {
               <VButton type="secondary" :loading="parsing" :disabled="importing" @click="parseManualText">
                 解析预览
               </VButton>
-              <VButton type="primary" :loading="importing" :disabled="!canImport" @click="submitManualImport">
+              <VButton
+                class="qsl-action-warning"
+                type="secondary"
+                :loading="importing"
+                :disabled="!canImport"
+                @click="submitManualImport"
+              >
                 导入创建卡片
               </VButton>
             </div>
@@ -556,7 +562,13 @@ watch(activeTab, () => {
               <VButton type="secondary" :loading="parsing" :disabled="importing" @click="parseManualText">
                 解析预览
               </VButton>
-              <VButton type="primary" :loading="importing" :disabled="!canImport" @click="submitManualImport">
+              <VButton
+                class="qsl-action-warning"
+                type="secondary"
+                :loading="importing"
+                :disabled="!canImport"
+                @click="submitManualImport"
+              >
                 导入创建卡片
               </VButton>
             </div>
