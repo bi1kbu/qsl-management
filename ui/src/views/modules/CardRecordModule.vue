@@ -414,6 +414,9 @@ const resolveDefaultCardVersion = (): string => {
   }
   return cardVersionOptions.value[0] ?? ''
 }
+const resolveSelectedOrDefaultCardVersion = (): string => {
+  return form.cardVersion.trim() || resolveDefaultCardVersion()
+}
 const batchEditFields = computed(() => {
   const fields = [
     {
@@ -1447,7 +1450,7 @@ const createCardRecordFromQso = async (item: QsoRecordItem) => {
     }
 
     await loadCardVersions()
-    const cardVersion = resolveDefaultCardVersion()
+    const cardVersion = resolveSelectedOrDefaultCardVersion()
     if (!cardVersion) {
       feedback.value = '没有找到可用卡片版本，请先在“本台卡片”中配置卡片版本库存，或选择系统内置“不发卡”。'
       return
