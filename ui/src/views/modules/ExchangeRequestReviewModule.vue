@@ -735,13 +735,15 @@ onMounted(loadRows)
               拒绝
             </VButton>
             <VButton
-              v-if="toExchangeItem(row).status !== '待审核'"
+              v-if="
+                toExchangeItem(row).status !== '待审核' &&
+                toExchangeItem(row).reviewMailStatus !== 'SENT' &&
+                toExchangeItem(row).reviewMailStatus !== 'SKIPPED'
+              "
               class="qsl-mail-action"
               size="xs"
               type="secondary"
               :disabled="
-                toExchangeItem(row).reviewMailStatus === 'SENT' ||
-                toExchangeItem(row).reviewMailStatus === 'SKIPPED' ||
                 notifyingId === toExchangeItem(row).id ||
                 pendingId === toExchangeItem(row).id ||
                 loading
@@ -751,12 +753,14 @@ onMounted(loadRows)
               发送邮件通知
             </VButton>
             <VButton
-              v-if="toExchangeItem(row).status !== '待审核'"
+              v-if="
+                toExchangeItem(row).status !== '待审核' &&
+                toExchangeItem(row).reviewMailStatus !== 'SENT' &&
+                toExchangeItem(row).reviewMailStatus !== 'SKIPPED'
+              "
               size="xs"
               type="secondary"
               :disabled="
-                toExchangeItem(row).reviewMailStatus === 'SENT' ||
-                toExchangeItem(row).reviewMailStatus === 'SKIPPED' ||
                 notifyingId === toExchangeItem(row).id ||
                 pendingId === toExchangeItem(row).id ||
                 loading

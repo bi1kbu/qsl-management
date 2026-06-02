@@ -2117,14 +2117,16 @@ onMounted(() => {
               结束收卡
             </VButton>
             <VButton
-              v-if="showReceivedMailActions"
+              v-if="
+                showReceivedMailActions &&
+                asReceiveResultRow(row).spec.receivedMailStatus !== 'SENT' &&
+                asReceiveResultRow(row).spec.receivedMailStatus !== 'SKIPPED'
+              "
               class="qsl-mail-action"
               size="xs"
               type="secondary"
               :disabled="
                 pendingMailRowName === asReceiveResultRow(row).resourceName ||
-                asReceiveResultRow(row).spec.receivedMailStatus === 'SENT' ||
-                asReceiveResultRow(row).spec.receivedMailStatus === 'SKIPPED' ||
                 !isCardReceivedForDisplay(asReceiveResultRow(row)) ||
                 (asReceiveResultRow(row).spec.receivedMailStatus !== 'PENDING' &&
                   asReceiveResultRow(row).spec.receivedMailStatus !== 'FAILED')
@@ -2134,13 +2136,15 @@ onMounted(() => {
               发送收卡回执
             </VButton>
             <VButton
-              v-if="showReceivedMailActions"
+              v-if="
+                showReceivedMailActions &&
+                asReceiveResultRow(row).spec.receivedMailStatus !== 'SENT' &&
+                asReceiveResultRow(row).spec.receivedMailStatus !== 'SKIPPED'
+              "
               size="xs"
               type="secondary"
               :disabled="
                 pendingMailRowName === asReceiveResultRow(row).resourceName ||
-                asReceiveResultRow(row).spec.receivedMailStatus === 'SENT' ||
-                asReceiveResultRow(row).spec.receivedMailStatus === 'SKIPPED' ||
                 !isCardReceivedForDisplay(asReceiveResultRow(row)) ||
                 (asReceiveResultRow(row).spec.receivedMailStatus !== 'PENDING' &&
                   asReceiveResultRow(row).spec.receivedMailStatus !== 'FAILED')

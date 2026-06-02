@@ -1130,13 +1130,15 @@ onMounted(() => {
               确认发信
             </VButton>
             <VButton
+              v-if="
+                toSendItem(row).spec.sentMailStatus !== 'SENT' &&
+                toSendItem(row).spec.sentMailStatus !== 'SKIPPED'
+              "
               class="qsl-mail-action"
               size="xs"
               type="secondary"
               :disabled="
                 pendingRowName === toSendItem(row).resourceName ||
-                toSendItem(row).spec.sentMailStatus === 'SENT' ||
-                toSendItem(row).spec.sentMailStatus === 'SKIPPED' ||
                 !toSendItem(row).sent
               "
               @click="sendSentMailForRow(toSendItem(row))"
@@ -1144,12 +1146,14 @@ onMounted(() => {
               发送发卡邮件
             </VButton>
             <VButton
+              v-if="
+                toSendItem(row).spec.sentMailStatus !== 'SENT' &&
+                toSendItem(row).spec.sentMailStatus !== 'SKIPPED'
+              "
               size="xs"
               type="secondary"
               :disabled="
                 pendingRowName === toSendItem(row).resourceName ||
-                toSendItem(row).spec.sentMailStatus === 'SENT' ||
-                toSendItem(row).spec.sentMailStatus === 'SKIPPED' ||
                 !toSendItem(row).sent
               "
               @click="markSentMailAsSentForRow(toSendItem(row))"

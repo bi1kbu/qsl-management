@@ -1561,15 +1561,17 @@ onMounted(loadSourceData)
               确认打包
             </VButton>
             <VButton
-              v-if="!isOfflineExchangeScene"
+              v-if="
+                !isOfflineExchangeScene &&
+                toCardIssueCardRow(row).spec.createdMailStatus !== 'SENT' &&
+                toCardIssueCardRow(row).spec.createdMailStatus !== 'SKIPPED'
+              "
               class="qsl-mail-action"
               size="xs"
               type="secondary"
               :disabled="
                 !toCardIssueCardRow(row).cardIssued ||
                 !toCardIssueCardRow(row).envelopePrinted ||
-                toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ||
-                toCardIssueCardRow(row).spec.createdMailStatus === 'SKIPPED' ||
                 pendingIssueMailRowName === toCardIssueCardRow(row).id ||
                 pendingIssueRowName === toCardIssueCardRow(row).id ||
                 pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
@@ -1580,14 +1582,16 @@ onMounted(loadSourceData)
               发送制卡邮件
             </VButton>
             <VButton
-              v-if="!isOfflineExchangeScene"
+              v-if="
+                !isOfflineExchangeScene &&
+                toCardIssueCardRow(row).spec.createdMailStatus !== 'SENT' &&
+                toCardIssueCardRow(row).spec.createdMailStatus !== 'SKIPPED'
+              "
               size="xs"
               type="secondary"
               :disabled="
                 !toCardIssueCardRow(row).cardIssued ||
                 !toCardIssueCardRow(row).envelopePrinted ||
-                toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ||
-                toCardIssueCardRow(row).spec.createdMailStatus === 'SKIPPED' ||
                 pendingIssueMailRowName === toCardIssueCardRow(row).id ||
                 pendingIssueRowName === toCardIssueCardRow(row).id ||
                 pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
