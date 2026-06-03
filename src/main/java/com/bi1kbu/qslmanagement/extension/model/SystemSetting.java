@@ -21,6 +21,7 @@ public class SystemSetting extends QslBaseExtension<SystemSetting.SystemSettingS
         private Integer guestQueryPerMinute;
         private Boolean requiresExchangeReview;
         private String onlineExchangeRequestPolicy;
+        private Integer onlineExchangeRequestCooldownMinutes;
         private String onlineAutoApprovedRequestMailPolicy;
         private Boolean autoNotifyOnCardCreated;
         private Boolean autoNotifyOnCardSent;

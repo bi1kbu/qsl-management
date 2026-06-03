@@ -17,7 +17,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,11 +48,13 @@ public class QslPublicApiService {
     private static final String ONLINE_EXCHANGE_DISABLED = "DISABLED";
     private static final String ONLINE_EXCHANGE_MANUAL = "MANUAL";
     private static final String ONLINE_EXCHANGE_AUTO_APPROVE = "AUTO_APPROVE";
+    private static final int DEFAULT_ONLINE_EXCHANGE_REQUEST_COOLDOWN_MINUTES = 5;
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
     private final QslConsoleActionService consoleActionService;
     private final QslNotificationMailService notificationMailService;
+    private final Set<String> activeOnlineExchangeSubmitCallSigns = ConcurrentHashMap.newKeySet();
     private final AtomicReference<StationCardCacheEntry> stationCardCache = new AtomicReference<>(
         new StationCardCacheEntry(List.of(), Instant.EPOCH)
     );
@@ -185,13 +189,13 @@ public class QslPublicApiService {
             return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "最多只能选择两张卡片"));
         }
 
-        return onlineExchangeRequestPolicy()
+        return withOnlineExchangeSubmitLock(callSign, () -> onlineExchangeRequestPolicy()
             .flatMap(policy -> {
                 if (ONLINE_EXCHANGE_DISABLED.equals(policy)) {
                     return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "QSL-422-0001", "线上换卡页面已关闭"));
                 }
-                return ensureNoPendingOnlineExchangeRequest(callSign)
+                return ensureOnlineExchangeRequestInterval(callSign)
                     .then(Mono.defer(() -> validateSelectedStationCardVersions(cardVersions)))
                     .map(persistedCardVersion -> Map.entry(policy, persistedCardVersion));
             })
@@ -258,7 +262,26 @@ public class QslPublicApiService {
                             nullToEmpty(contact.stationAddress()),
                             QslApiSupport.nowText()
                         )));
-            }));
+            })));
+    }
+
+    private <T> Mono<T> withOnlineExchangeSubmitLock(String callSign, Supplier<Mono<T>> action) {
+        var lockKey = QslApiSupport.normalizeCallSign(callSign);
+        return Mono.defer(() -> {
+            if (!activeOnlineExchangeSubmitCallSigns.add(lockKey)) {
+                return Mono.error(new QslApiException(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "QSL-429-0001",
+                    "该呼号换卡申请正在提交处理中，请稍后再试"
+                ));
+            }
+            try {
+                return action.get().doFinally(signal -> activeOnlineExchangeSubmitCallSigns.remove(lockKey));
+            } catch (Throwable error) {
+                activeOnlineExchangeSubmitCallSigns.remove(lockKey);
+                return Mono.error(error);
+            }
+        });
     }
 
     private Mono<String> onlineExchangeRequestPolicy() {
@@ -686,23 +709,75 @@ public class QslPublicApiService {
             });
     }
 
-    private Mono<Void> ensureNoPendingOnlineExchangeRequest(String callSign) {
-        return client.listAll(ExchangeRequest.class, EMPTY_OPTIONS, DEFAULT_SORT)
-            .filter(request -> request.getSpec() != null)
-            .filter(request -> "ONLINE_EYEBALL".equals(normalizeSceneType(request.getSpec().getSceneType())))
-            .filter(request -> callSign.equals(QslApiSupport.normalizeCallSign(request.getSpec().getCallSign())))
-            .filter(request -> isPendingReview(request.getStatus()))
-            .hasElements()
-            .flatMap(exists -> {
-                if (Boolean.TRUE.equals(exists)) {
+    private Mono<Void> ensureOnlineExchangeRequestInterval(String callSign) {
+        return Mono.zip(
+                client.listAll(ExchangeRequest.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                    .filter(request -> request.getSpec() != null)
+                    .filter(request -> "ONLINE_EYEBALL".equals(normalizeSceneType(request.getSpec().getSceneType())))
+                    .filter(request -> callSign.equals(QslApiSupport.normalizeCallSign(request.getSpec().getCallSign())))
+                    .collectList(),
+                onlineExchangeRequestCooldownMinutes()
+            )
+            .flatMap(tuple -> {
+                var requests = tuple.getT1();
+                var cooldownMinutes = tuple.getT2();
+                var pendingExists = requests.stream().anyMatch(request -> isPendingReview(request.getStatus()));
+                if (pendingExists) {
                     return Mono.error(new QslApiException(
                         HttpStatus.CONFLICT,
                         "QSL-409-0001",
                         "该呼号已有待审核换卡申请，请等待后台审核后再提交"
                     ));
                 }
+                if (cooldownMinutes <= 0) {
+                    return Mono.<Void>empty();
+                }
+                var now = Instant.now();
+                var cooldownSeconds = cooldownMinutes * 60L;
+                var cooling = requests.stream()
+                    .map(this::resolveExchangeRequestCreatedAt)
+                    .anyMatch(createdAt -> now.isBefore(createdAt.plusSeconds(cooldownSeconds)));
+                if (cooling) {
+                    return Mono.error(new QslApiException(
+                        HttpStatus.TOO_MANY_REQUESTS,
+                        "QSL-429-0001",
+                        "该呼号提交换卡申请过于频繁，请等待冷却期结束后再提交"
+                    ));
+                }
                 return Mono.<Void>empty();
             });
+    }
+
+    private Mono<Integer> onlineExchangeRequestCooldownMinutes() {
+        return client.fetch(SystemSetting.class, SYSTEM_SETTING_NAME)
+            .map(systemSetting -> normalizeOnlineExchangeRequestCooldownMinutes(
+                systemSetting.getSpec() == null ? null : systemSetting.getSpec().getOnlineExchangeRequestCooldownMinutes()
+            ))
+            .defaultIfEmpty(DEFAULT_ONLINE_EXCHANGE_REQUEST_COOLDOWN_MINUTES)
+            .onErrorResume(error -> {
+                log.warn("读取线上换卡提交冷却时间失败，使用默认值。message={}", error.getMessage());
+                return Mono.just(DEFAULT_ONLINE_EXCHANGE_REQUEST_COOLDOWN_MINUTES);
+            });
+    }
+
+    private int normalizeOnlineExchangeRequestCooldownMinutes(Integer rawValue) {
+        if (rawValue == null) {
+            return DEFAULT_ONLINE_EXCHANGE_REQUEST_COOLDOWN_MINUTES;
+        }
+        if (rawValue < 0) {
+            return 0;
+        }
+        if (rawValue > 1440) {
+            return 1440;
+        }
+        return rawValue;
+    }
+
+    private Instant resolveExchangeRequestCreatedAt(ExchangeRequest request) {
+        if (request.getMetadata() == null || request.getMetadata().getCreationTimestamp() == null) {
+            return Instant.now();
+        }
+        return request.getMetadata().getCreationTimestamp();
     }
 
     private Mono<String> nextExchangeRequestName() {

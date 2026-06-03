@@ -17,6 +17,7 @@ import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.StationCard;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -222,6 +223,92 @@ class QslPublicApiServiceValidationTest {
         var error = assertThrows(QslApiException.class, () -> service.submitExchangeRequest(command, "127.0.0.1").block());
         assertEquals("QSL-409-0001", error.getCode());
         assertEquals(409, error.getStatus().value());
+    }
+
+    @Test
+    void shouldRejectRecentlyApprovedOnlineExchangeSubmitWithinCooldown() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var existing = new ExchangeRequest();
+        var metadata = QslApiSupport.createMetadata("EX0001");
+        metadata.setCreationTimestamp(Instant.now().minusSeconds(60));
+        existing.setMetadata(metadata);
+        var spec = new ExchangeRequest.ExchangeRequestSpec();
+        spec.setSceneType("ONLINE_EYEBALL");
+        spec.setCallSign("bi1kbu");
+        existing.setSpec(spec);
+        var status = new ExchangeRequest.ExchangeRequestStatus();
+        status.setReviewStatus("已通过");
+        existing.setStatus(status);
+
+        var systemSetting = new SystemSetting();
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setOnlineExchangeRequestPolicy("MANUAL");
+        settingSpec.setOnlineExchangeRequestCooldownMinutes(5);
+        systemSetting.setSpec(settingSpec);
+
+        when(client.fetch(eq(SystemSetting.class), anyString())).thenReturn(Mono.just(systemSetting));
+        when(client.listAll(eq(ExchangeRequest.class), any(), any())).thenReturn(Flux.just(existing));
+
+        var service = new QslPublicApiService(
+            client,
+            Mockito.mock(QslAuditService.class),
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
+        );
+
+        var command = new QslPublicApiService.PublicExchangeSubmitCommand(
+            "BI1KBU",
+            Boolean.FALSE,
+            "",
+            "",
+            "测试台",
+            "010-00000000",
+            "510000",
+            "广东省某市",
+            "测试",
+            "2026春季版"
+        );
+        var error = assertThrows(QslApiException.class, () -> service.submitExchangeRequest(command, "127.0.0.1").block());
+        assertEquals("QSL-429-0001", error.getCode());
+        assertEquals(429, error.getStatus().value());
+        verify(client, never()).create(any(ExchangeRequest.class));
+    }
+
+    @Test
+    void shouldRejectConcurrentOnlineExchangeSubmitForSameCallSign() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        when(client.fetch(eq(SystemSetting.class), anyString())).thenReturn(Mono.never());
+
+        var service = new QslPublicApiService(
+            client,
+            Mockito.mock(QslAuditService.class),
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
+        );
+
+        var command = new QslPublicApiService.PublicExchangeSubmitCommand(
+            "BI1KBU",
+            Boolean.FALSE,
+            "",
+            "",
+            "测试台",
+            "010-00000000",
+            "510000",
+            "广东省某市",
+            "测试",
+            "2026春季版"
+        );
+
+        var firstSubmit = service.submitExchangeRequest(command, "127.0.0.1").subscribe();
+        try {
+            var error = assertThrows(QslApiException.class,
+                () -> service.submitExchangeRequest(command, "127.0.0.1").block());
+            assertEquals("QSL-429-0001", error.getCode());
+            assertEquals(429, error.getStatus().value());
+        } finally {
+            firstSubmit.dispose();
+        }
+        verify(client, never()).create(any(ExchangeRequest.class));
     }
 
     @Test

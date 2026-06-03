@@ -643,6 +643,7 @@ public class QslImportExportJobService {
                     spec.setGuestQueryPerMinute(parseInteger(value(row, "guestQueryPerMinute")));
                     spec.setRequiresExchangeReview(parseBoolean(value(row, "requiresExchangeReview")));
                     spec.setOnlineExchangeRequestPolicy(value(row, "onlineExchangeRequestPolicy"));
+                    spec.setOnlineExchangeRequestCooldownMinutes(parseInteger(value(row, "onlineExchangeRequestCooldownMinutes")));
                     spec.setOnlineAutoApprovedRequestMailPolicy(value(row, "onlineAutoApprovedRequestMailPolicy"));
                     spec.setAutoNotifyOnCardCreated(parseBoolean(value(row, "autoNotifyOnCardCreated")));
                     spec.setAutoNotifyOnCardSent(parseBoolean(value(row, "autoNotifyOnCardSent")));
@@ -1404,6 +1405,7 @@ public class QslImportExportJobService {
                         spec == null ? "" : integerToText(spec.getGuestQueryPerMinute()),
                         spec == null ? "" : boolToText(spec.getRequiresExchangeReview()),
                         spec == null ? "" : nullToEmpty(spec.getOnlineExchangeRequestPolicy()),
+                        spec == null ? "" : integerToText(spec.getOnlineExchangeRequestCooldownMinutes()),
                         spec == null ? "" : nullToEmpty(spec.getOnlineAutoApprovedRequestMailPolicy()),
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnCardCreated()),
                         spec == null ? "" : boolToText(spec.getAutoNotifyOnCardSent()),
@@ -1460,6 +1462,7 @@ public class QslImportExportJobService {
                     "guestQueryPerMinute",
                     "requiresExchangeReview",
                     "onlineExchangeRequestPolicy",
+                    "onlineExchangeRequestCooldownMinutes",
                     "onlineAutoApprovedRequestMailPolicy",
                     "autoNotifyOnCardCreated",
                     "autoNotifyOnCardSent",

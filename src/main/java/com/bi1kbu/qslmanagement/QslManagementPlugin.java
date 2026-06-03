@@ -74,6 +74,7 @@ public class QslManagementPlugin extends BasePlugin {
                 spec.setGuestQueryPerMinute(30);
                 spec.setRequiresExchangeReview(Boolean.TRUE);
                 spec.setOnlineExchangeRequestPolicy("MANUAL");
+                spec.setOnlineExchangeRequestCooldownMinutes(5);
                 spec.setOnlineAutoApprovedRequestMailPolicy("AUTO_SKIP");
                 spec.setAutoNotifyOnCardCreated(Boolean.FALSE);
                 spec.setAutoNotifyOnCardSent(Boolean.FALSE);

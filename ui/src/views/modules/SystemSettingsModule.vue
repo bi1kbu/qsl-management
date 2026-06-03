@@ -90,6 +90,7 @@ const systemSettingsForm = reactive({
   guestQueryPerMinute: 30,
   requiresExchangeReview: true,
   onlineExchangeRequestPolicy: 'MANUAL' as OnlineExchangeRequestPolicy,
+  onlineExchangeRequestCooldownMinutes: 5,
   onlineAutoApprovedRequestMailPolicy: 'AUTO_SKIP' as AutoMailPolicy,
   qsoCardCreatedMailPolicy: 'MANUAL' as MailSendPolicy,
   qsoCardSentMailPolicy: 'MANUAL' as MailSendPolicy,
@@ -152,6 +153,7 @@ interface SystemSettingSpec {
   guestQueryPerMinute: number
   requiresExchangeReview: boolean
   onlineExchangeRequestPolicy?: OnlineExchangeRequestPolicy
+  onlineExchangeRequestCooldownMinutes?: number
   onlineAutoApprovedRequestMailPolicy?: AutoMailPolicy
   autoNotifyOnCardCreated?: boolean
   autoNotifyOnCardSent?: boolean
@@ -269,6 +271,8 @@ const fillForm = (extension: QslExtension<SystemSettingSpec>) => {
     extension.spec?.onlineExchangeRequestPolicy,
     extension.spec?.requiresExchangeReview,
   )
+  systemSettingsForm.onlineExchangeRequestCooldownMinutes =
+    extension.spec?.onlineExchangeRequestCooldownMinutes ?? 5
   systemSettingsForm.onlineAutoApprovedRequestMailPolicy = resolveAutoMailPolicy(
     extension.spec?.onlineAutoApprovedRequestMailPolicy,
   )
@@ -364,6 +368,7 @@ const createDefaultSystemSettingSpec = (): SystemSettingSpec => {
     guestQueryPerMinute: 30,
     requiresExchangeReview: true,
     onlineExchangeRequestPolicy: 'MANUAL',
+    onlineExchangeRequestCooldownMinutes: 5,
     onlineAutoApprovedRequestMailPolicy: 'AUTO_SKIP',
     autoNotifyOnCardCreated: false,
     autoNotifyOnCardSent: false,
@@ -486,6 +491,14 @@ const saveSystemSettings = async () => {
     feedback.value = '游客每分钟查询次数必须为大于 0 的整数。'
     return
   }
+  if (
+    !Number.isInteger(systemSettingsForm.onlineExchangeRequestCooldownMinutes) ||
+    systemSettingsForm.onlineExchangeRequestCooldownMinutes < 0 ||
+    systemSettingsForm.onlineExchangeRequestCooldownMinutes > 1440
+  ) {
+    feedback.value = '线上换卡同呼号提交冷却时间必须为 0 到 1440 之间的整数。'
+    return
+  }
 
   if (
     !Number.isFinite(systemSettingsForm.aiTemperature) ||
@@ -568,6 +581,8 @@ const saveSystemSettings = async () => {
         guestQueryPerMinute: systemSettingsForm.guestQueryPerMinute,
         requiresExchangeReview: systemSettingsForm.onlineExchangeRequestPolicy !== 'AUTO_APPROVE',
         onlineExchangeRequestPolicy: systemSettingsForm.onlineExchangeRequestPolicy,
+        onlineExchangeRequestCooldownMinutes:
+          systemSettingsForm.onlineExchangeRequestCooldownMinutes,
         onlineAutoApprovedRequestMailPolicy:
           systemSettingsForm.onlineAutoApprovedRequestMailPolicy,
         autoNotifyOnCardCreated: false,
@@ -629,7 +644,7 @@ const saveSystemSettings = async () => {
       action: '更新系统参数',
       resourceType: 'system-setting',
       resourceName,
-      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，线上换卡表单处理策略=${onlineExchangeRequestPolicyLabel(systemSettingsForm.onlineExchangeRequestPolicy)}，自动审批本台邮件通知=${autoMailPolicyLabel(systemSettingsForm.onlineAutoApprovedRequestMailPolicy)}，邮件通知策略已按通联、线上换卡、线下换卡分别保存，AI功能=${systemSettingsForm.aiEnabled ? '启用' : '停用'}。`,
+      detail: `游客查询频率=${systemSettingsForm.guestQueryPerMinute}，线上换卡表单处理策略=${onlineExchangeRequestPolicyLabel(systemSettingsForm.onlineExchangeRequestPolicy)}，同呼号提交冷却=${systemSettingsForm.onlineExchangeRequestCooldownMinutes}分钟，自动审批本台邮件通知=${autoMailPolicyLabel(systemSettingsForm.onlineAutoApprovedRequestMailPolicy)}，邮件通知策略已按通联、线上换卡、线下换卡分别保存，AI功能=${systemSettingsForm.aiEnabled ? '启用' : '停用'}。`,
     })
     feedback.value = '系统参数已保存。'
   } catch (error) {
@@ -763,6 +778,23 @@ onMounted(loadSystemSettings)
             </div>
             <small class="qsl-field__tip"
               >用于限制单 IP 每分钟通过前台卡片访问后端接口的频率。</small
+            >
+          </label>
+
+          <label class="qsl-field">
+            <span class="qsl-field__label">线上换卡同呼号提交冷却时间（分钟）</span>
+            <div class="qsl-input-shell">
+              <input
+                v-model.number="systemSettingsForm.onlineExchangeRequestCooldownMinutes"
+                type="number"
+                min="0"
+                max="1440"
+                step="1"
+                placeholder="默认 5 分钟"
+              />
+            </div>
+            <small class="qsl-field__tip"
+              >同一呼号提交后，无论待审核、已通过或已拒绝，冷却期内都不能再次提交；填 0 表示关闭冷却。</small
             >
           </label>
 

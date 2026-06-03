@@ -631,6 +631,7 @@ const datasetConfigs: DatasetConfig[] = [
       'guestQueryPerMinute',
       'requiresExchangeReview',
       'onlineExchangeRequestPolicy',
+      'onlineExchangeRequestCooldownMinutes',
       'onlineAutoApprovedRequestMailPolicy',
       'autoNotifyOnCardCreated',
       'autoNotifyOnCardSent',
@@ -686,6 +687,9 @@ const datasetConfigs: DatasetConfig[] = [
       guestQueryPerMinute: String(item.spec?.guestQueryPerMinute ?? ''),
       requiresExchangeReview: String(Boolean(item.spec?.requiresExchangeReview)),
       onlineExchangeRequestPolicy: String(item.spec?.onlineExchangeRequestPolicy ?? ''),
+      onlineExchangeRequestCooldownMinutes: String(
+        item.spec?.onlineExchangeRequestCooldownMinutes ?? '',
+      ),
       onlineAutoApprovedRequestMailPolicy: String(
         item.spec?.onlineAutoApprovedRequestMailPolicy ?? '',
       ),
@@ -744,6 +748,9 @@ const datasetConfigs: DatasetConfig[] = [
         guestQueryPerMinute: parseInteger(row.guestQueryPerMinute ?? ''),
         requiresExchangeReview: parseBoolean(row.requiresExchangeReview ?? ''),
         onlineExchangeRequestPolicy: row.onlineExchangeRequestPolicy ?? '',
+        onlineExchangeRequestCooldownMinutes: parseInteger(
+          row.onlineExchangeRequestCooldownMinutes ?? '',
+        ),
         onlineAutoApprovedRequestMailPolicy: row.onlineAutoApprovedRequestMailPolicy ?? '',
         autoNotifyOnCardCreated: parseBoolean(row.autoNotifyOnCardCreated ?? ''),
         autoNotifyOnCardSent: parseBoolean(row.autoNotifyOnCardSent ?? ''),

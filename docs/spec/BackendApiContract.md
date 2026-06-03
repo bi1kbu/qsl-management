@@ -1,6 +1,6 @@
 # QSL 管理插件后端 API 合同
 
-更新时间：2026-05-22
+更新时间：2026-06-03
 适用插件：`qsl-management`
 目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.24 官方文档核验
 API 版本：`v1alpha1`
@@ -12,7 +12,7 @@ API 版本：`v1alpha1`
 
 ## 2. 官方依据
 
-核验日期：2026-05-21
+核验日期：2026-06-03
 
 1. Halo Extension、自定义模型与自动 CRUD
    https://docs.halo.run/developer-guide/plugin/api-reference/server/extension
@@ -312,11 +312,11 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 | GET | `/exchange-online/-/bureaus` | 公开线上换卡卡片局候选，只返回卡片局名称、邮编、地址 | 是 |
 | GET | `/exchange-online/-/station-cards` | 公开线上换卡本台卡片版本候选，按配置顺序返回图案、版本号、版本总量、库存余量 | 是 |
 | GET | `/exchange-offline/-/activities` | 公开线下活动列表 | 是 |
-| POST | `/exchange-online/-/requests` | 匿名提交线上换卡申请；同呼号存在待审核申请时返回 `409/QSL-409-0001`；提交写入成功后返回本站通信地址用于寄送提示 | 是 |
+| POST | `/exchange-online/-/requests` | 匿名提交线上换卡申请；同呼号存在待审核申请时返回 `409/QSL-409-0001`；同呼号上一条申请仍处于冷却期时返回 `429/QSL-429-0001`；提交写入成功后返回本站通信地址用于寄送提示 | 是 |
 | POST | `/exchange-offline/-/confirm` | 匿名确认线下换卡；提交校验通过并写入卡片后才返回本站通信地址 | 是 |
 | POST | `/receipt-public/-/confirm` | 匿名签收确认 | 是 |
 
-公开 `POST /exchange-offline/-/confirm` 和 `POST /receipt-public/-/confirm` 均受 `QslPublicRateLimitService` 限制，限流键分别为 `exchange-offline-confirm` 与 `receipt-public-confirm`。线上换卡申请资源名由服务端扫描现有 `EX####` 并生成下一号，例如 `EX0001`、`EX0002`；历史 `exchange-request-*` 名称不参与新序列计算。前端“不创建卡片”占位记录使用 `NC####` 递增资源名，后台可持久化，前台作为空白卡片 ID 展示。
+公开 `POST /exchange-online/-/requests`、`POST /exchange-offline/-/confirm` 和 `POST /receipt-public/-/confirm` 均受 `QslPublicRateLimitService` 限制，限流键分别为 `exchange-online-requests`、`exchange-offline-confirm` 与 `receipt-public-confirm`。线上换卡申请额外按同呼号执行服务端冷却校验，冷却时间来自 `SystemSetting.spec.onlineExchangeRequestCooldownMinutes`，默认 5 分钟，填 0 表示关闭冷却；待审核申请直接拒绝重复提交，已通过或已拒绝申请仍需等待冷却期结束。线上换卡申请资源名由服务端扫描现有 `EX####` 并生成下一号，例如 `EX0001`、`EX0002`；历史 `exchange-request-*` 名称不参与新序列计算。前端“不创建卡片”占位记录使用 `NC####` 递增资源名，后台可持久化，前台作为空白卡片 ID 展示。
 
 ### 7.2 公开页面
 

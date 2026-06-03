@@ -90,6 +90,7 @@ class QslImportExportJobServiceTest {
         spec.setGuestQueryPerMinute(30);
         spec.setRequiresExchangeReview(Boolean.TRUE);
         spec.setOnlineExchangeRequestPolicy("MANUAL");
+        spec.setOnlineExchangeRequestCooldownMinutes(5);
         spec.setOnlineAutoApprovedRequestMailPolicy("AUTO_SEND");
         spec.setAutoNotifyOnCardCreated(Boolean.FALSE);
         spec.setAutoNotifyOnCardSent(Boolean.TRUE);
@@ -122,9 +123,9 @@ class QslImportExportJobServiceTest {
         assertNotNull(payload);
         assertEquals("export-job-1.csv", payload.fileName());
         var csv = new String(payload.content(), StandardCharsets.UTF_8);
-        assertEquals(true, csv.contains("id#system-setting,guestQueryPerMinute,requiresExchangeReview,onlineExchangeRequestPolicy,onlineAutoApprovedRequestMailPolicy"));
+        assertEquals(true, csv.contains("id#system-setting,guestQueryPerMinute,requiresExchangeReview,onlineExchangeRequestPolicy,onlineExchangeRequestCooldownMinutes,onlineAutoApprovedRequestMailPolicy"));
         assertEquals(true, csv.contains("AUTO_SEND,MANUAL,AUTO_SEND,MANUAL,AUTO_SEND,MANUAL,AUTO_SEND"));
-        assertEquals(true, csv.contains("qsl-system-setting-default,30,true,MANUAL,AUTO_SEND,false,true,false,true"));
+        assertEquals(true, csv.contains("qsl-system-setting-default,30,true,MANUAL,5,AUTO_SEND,false,true,false,true"));
     }
 
     @Test
