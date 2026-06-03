@@ -6,7 +6,7 @@ import {
   getConsoleApiErrorMessage,
   linkReceiveRecordToOutboundCard,
 } from '../../api/qsl-console-api'
-import QslDataTable from '../../components/QslDataTable.vue'
+import QslDataTable, { type QslDataTableStatusItem } from '../../components/QslDataTable.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 import {
   applySortDirection,
@@ -318,7 +318,6 @@ const receiveColumns = computed(() => {
     columns.push({ key: 'offlineActivityName', label: '活动', sortable: true })
   }
   if (showMatchColumns.value) {
-    columns.push({ key: 'matchStatus', label: '匹配状态', sortable: true })
     columns.push({ key: 'matchReason', label: '匹配说明', sortable: false })
   }
   columns.push({ key: 'receivedDate', label: '收卡日期', sortable: true })
@@ -418,6 +417,21 @@ const canLinkReceiveRecord = (row: ReceiveRecordRow): boolean => {
 
 const toReceiveRecordRow = (row: Record<string, unknown>): ReceiveRecordRow =>
   row as unknown as ReceiveRecordRow
+
+const resolveReceiveRecordStatusItems = (
+  row: Record<string, unknown>,
+): QslDataTableStatusItem[] => {
+  const item = toReceiveRecordRow(row)
+  const matched = item.matchStatus === '已匹配' || Boolean(item.cardId.trim())
+  return [
+    {
+      key: 'match',
+      label: item.matchStatus || (matched ? '已匹配' : '未匹配'),
+      tone: matched ? 'success' : 'warning',
+      hidden: !showMatchColumns.value,
+    },
+  ]
+}
 
 const startLinkReceiveRecord = (row: ReceiveRecordRow) => {
   linkingRecordCode.value =
@@ -614,6 +628,9 @@ onMounted(loadRows)
         :sort-key="sortKey"
         :sort-direction="sortDirection"
         :loading="loading"
+        :status-items="resolveReceiveRecordStatusItems"
+        status-key="matchStatus"
+        status-sortable
         show-actions
         actions-label="人工关联"
         :expanded-row-key="linkingRecordCode"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { VButton, VCard, VTabItem, VTabs, VTag } from '@halo-dev/components'
+import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
@@ -16,7 +16,7 @@ import {
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
-import QslDataTable from '../../components/QslDataTable.vue'
+import QslDataTable, { type QslDataTableStatusItem } from '../../components/QslDataTable.vue'
 import {
   applySortDirection,
   compareCallSign,
@@ -421,6 +421,36 @@ const resolveMailStatusText = (status: string): string => {
   return ''
 }
 
+const resolveMailStatusTone = (status: string): QslDataTableStatusItem['tone'] => {
+  if (status === 'SENT') {
+    return 'info'
+  }
+  if (status === 'SKIPPED') {
+    return 'muted'
+  }
+  if (status === 'FAILED') {
+    return 'danger'
+  }
+  return 'default'
+}
+
+const resolveSendStatusItems = (row: Record<string, unknown>): QslDataTableStatusItem[] => {
+  const item = toSendItem(row)
+  return [
+    {
+      key: 'sent',
+      label: item.sent ? '已发信' : '待发信',
+      tone: item.sent ? 'success' : 'warning',
+    },
+    {
+      key: 'sent-mail',
+      label: resolveMailStatusText(item.spec.sentMailStatus),
+      tone: resolveMailStatusTone(item.spec.sentMailStatus),
+      hidden: !item.spec.sentMailStatus,
+    },
+  ]
+}
+
 const normalizeCardRecordSpec = (spec?: Partial<CardRecordSpec>): CardRecordSpec => {
   return {
     callSign: spec?.callSign ?? '',
@@ -659,6 +689,10 @@ const saveEdit = async () => {
 
 const markAsSent = async (row: SendConfirmItem) => {
   if (row.sent) {
+    return
+  }
+  if (!row.spec.envelopePrinted) {
+    feedback.value = `卡片 ${row.resourceName} 尚未打包，不能确认发信。`
     return
   }
 
@@ -1074,6 +1108,7 @@ onMounted(() => {
         :sort-key="sortKey"
         :sort-direction="sortDirection"
         :loading="loading"
+        :status-items="resolveSendStatusItems"
         show-actions
         show-pagination
         :total="filteredRows.length"
@@ -1118,12 +1153,13 @@ onMounted(() => {
               >编辑</VButton
             >
             <VButton
+              v-if="!toSendItem(row).sent"
               size="xs"
               type="secondary"
               :disabled="
-                toSendItem(row).sent ||
                 pendingRowName === toSendItem(row).resourceName ||
-                loading
+                loading ||
+                !toSendItem(row).spec.envelopePrinted
               "
               @click="markAsSent(toSendItem(row))"
             >
@@ -1160,22 +1196,6 @@ onMounted(() => {
             >
               不发邮件
             </VButton>
-            <VTag
-              v-if="
-                toSendItem(row).spec.sentMailStatus === 'SENT' ||
-                toSendItem(row).spec.sentMailStatus === 'SKIPPED' ||
-                toSendItem(row).spec.sentMailStatus === 'FAILED'
-              "
-              :theme="
-                toSendItem(row).spec.sentMailStatus === 'SENT'
-                  ? 'secondary'
-                  : toSendItem(row).spec.sentMailStatus === 'FAILED'
-                    ? 'danger'
-                    : 'default'
-              "
-            >
-              {{ resolveMailStatusText(toSendItem(row).spec.sentMailStatus) }}
-            </VTag>
           </div>
         </template>
       </QslDataTable>

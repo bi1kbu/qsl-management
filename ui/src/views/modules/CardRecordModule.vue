@@ -17,7 +17,7 @@ import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
 import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
-import QslDataTable from '../../components/QslDataTable.vue'
+import QslDataTable, { type QslDataTableStatusItem } from '../../components/QslDataTable.vue'
 import QslDetailTable from '../../components/QslDetailTable.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
@@ -122,6 +122,33 @@ const qsoSelectorColumns = [
 ]
 const asQsoRecordItemRow = (row: Record<string, unknown>): QsoRecordItem =>
   row as unknown as QsoRecordItem
+
+const resolveQsoSelectorStatusItems = (
+  row: Record<string, unknown>,
+): QslDataTableStatusItem[] => {
+  const item = asQsoRecordItemRow(row)
+  const consumed = isQsoRecordConsumed(item.id, editingResourceName.value)
+  if (consumed) {
+    return [{ key: 'processed', label: '已处理', tone: 'success' }]
+  }
+  return [{ key: 'selectable', label: '可选择', tone: 'info' }]
+}
+
+const resolvePendingCreateStatusItems = (
+  row: Record<string, unknown>,
+): QslDataTableStatusItem[] => {
+  const item = asQsoRecordItemRow(row)
+  if (creatingQsoRecordId.value === item.id) {
+    return [{ key: 'creating', label: '创建中', tone: 'info' }]
+  }
+  if (!item.callSign.trim()) {
+    return [{ key: 'missing-call-sign', label: '呼号缺失', tone: 'danger' }]
+  }
+  if (isQsoRecordConsumed(item.id)) {
+    return [{ key: 'processed', label: '已处理', tone: 'success' }]
+  }
+  return [{ key: 'pending-create', label: '待创建卡片', tone: 'warning' }]
+}
 
 interface StationCardSpec {
   cardVersion: string
@@ -2357,6 +2384,7 @@ onBeforeUnmount(() => {
         row-key-field="id"
         empty-text="暂无可选QSO记录。"
         :loading="loading"
+        :status-items="resolveQsoSelectorStatusItems"
         show-actions
       >
         <template #cell-datetime="{ row }">
@@ -2435,6 +2463,7 @@ onBeforeUnmount(() => {
         row-key-field="id"
         empty-text="暂无待创建记录。"
         :loading="loading"
+        :status-items="resolvePendingCreateStatusItems"
         show-actions
         show-pagination
         :total="pendingCreateQsoRecords.length"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { VButton, VCard, VTabItem, VTabs, VTag } from '@halo-dev/components'
+import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
@@ -22,7 +22,7 @@ import {
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
-import QslDataTable from '../../components/QslDataTable.vue'
+import QslDataTable, { type QslDataTableStatusItem } from '../../components/QslDataTable.vue'
 import {
   compareBoolean,
   compareCallSign,
@@ -459,7 +459,6 @@ const receivedRecordColumns = computed(() => {
   if (showOfflineActivity.value) {
     columns.push({ key: 'offlineActivityName', label: '关联活动', sortable: true })
   }
-  columns.push({ key: 'matchStatus', label: '匹配状态', sortable: true })
   columns.push({ key: 'receivedDate', label: '收卡日期', sortable: false })
   columns.push({ key: 'remarks', label: '收卡确认备注', sortable: false })
   return columns
@@ -470,8 +469,6 @@ const receiveConfirmColumns = computed(() => {
     { key: 'resourceName', label: '卡片ID', sortable: true },
     { key: 'callSign', label: '对方呼号', sortable: true },
     { key: 'cardType', label: '卡片类型', sortable: true },
-    { key: 'cardReceived', label: '收卡状态', sortable: true },
-    { key: 'cardSent', label: '发卡状态', sortable: true },
   ]
   if (showOfflineActivity.value) {
     columns.push({ key: 'offlineActivityName', label: '关联活动', sortable: true })
@@ -543,6 +540,12 @@ const pagedFilteredResults = computed(() => {
 const pagedReceivedResults = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return sortedReceivedResults.value.slice(start, start + pageSize.value)
+})
+const hasReceivedRecordCreateActions = computed(() => {
+  return (
+    showReceivedRecordCreateAction.value &&
+    pagedReceivedResults.value.some((item) => canCreateOnlineCardFromReceiveRecord(item))
+  )
 })
 
 const isFormalCardRecordName = (resourceName: string): boolean => {
@@ -814,6 +817,63 @@ const resolveMailStatusText = (status: string): string => {
     return '发送失败'
   }
   return ''
+}
+
+const resolveMailStatusTone = (status: string): QslDataTableStatusItem['tone'] => {
+  if (status === 'SENT') {
+    return 'info'
+  }
+  if (status === 'SKIPPED') {
+    return 'muted'
+  }
+  if (status === 'FAILED') {
+    return 'danger'
+  }
+  if (status === 'PENDING') {
+    return 'warning'
+  }
+  return 'default'
+}
+
+const resolveReceiveStatusItems = (row: Record<string, unknown>): QslDataTableStatusItem[] => {
+  const item = asReceiveResultRow(row)
+  return [
+    {
+      key: 'received',
+      label: isCardReceivedForDisplay(item) ? '已收卡' : '待收卡',
+      tone: isCardReceivedForDisplay(item) ? 'success' : 'warning',
+    },
+    {
+      key: 'sent',
+      label: item.spec.cardSent ? '已发卡' : '未发卡',
+      tone: item.spec.cardSent ? 'success' : 'default',
+    },
+    {
+      key: 'received-mail',
+      label: resolveMailStatusText(item.spec.receivedMailStatus),
+      tone: resolveMailStatusTone(item.spec.receivedMailStatus),
+      hidden: !item.spec.receivedMailStatus,
+    },
+  ]
+}
+
+const resolveReceivedRecordStatusItems = (
+  row: Record<string, unknown>,
+): QslDataTableStatusItem[] => {
+  const item = asReceivedRecordResultRow(row)
+  if (creatingOnlineCardReceiveRecordCode.value === item.receiveRecordCode) {
+    return [{ key: 'creating', label: '创建中', tone: 'info' }]
+  }
+  if (item.matchStatus === '未匹配') {
+    return [{ key: 'match-status', label: '未匹配', tone: 'warning' }]
+  }
+  if (item.matchStatus === '手动匹配') {
+    return [{ key: 'match-status', label: '手动匹配', tone: 'info' }]
+  }
+  if (item.matchStatus === '自动匹配') {
+    return [{ key: 'match-status', label: '自动匹配', tone: 'success' }]
+  }
+  return [{ key: 'match-status', label: item.matchStatus || '未知状态', tone: 'default' }]
 }
 
 const parseResourceNames = (value?: string): string[] => {
@@ -1949,7 +2009,10 @@ onMounted(() => {
         :sort-key="receiveSortKey"
         :sort-direction="receiveSortDirection"
         :loading="loadingResults"
-        :show-actions="showReceivedRecordCreateAction"
+        :status-items="resolveReceivedRecordStatusItems"
+        status-key="matchStatus"
+        status-sortable
+        :show-actions="hasReceivedRecordCreateActions"
         show-pagination
         :total="sortedReceivedResults.length"
         :current-page="currentPage"
@@ -1964,6 +2027,7 @@ onMounted(() => {
         </template>
         <template #row-actions="{ row }">
           <VButton
+            v-if="canCreateOnlineCardFromReceiveRecord(asReceivedRecordResultRow(row))"
             class="qsl-action-warning"
             size="xs"
             type="secondary"
@@ -2019,6 +2083,7 @@ onMounted(() => {
         :sort-key="receiveSortKey"
         :sort-direction="receiveSortDirection"
         :loading="loadingResults"
+        :status-items="resolveReceiveStatusItems"
         show-actions
         :expanded-row-key="migrationExpandedRowKey"
         show-pagination
@@ -2044,16 +2109,6 @@ onMounted(() => {
           <span class="qsl-row-clickable" @click="selectRowForQuery(asReceiveResultRow(row))">
             {{ asReceiveResultRow(row).callSign || '-' }}
           </span>
-        </template>
-        <template #cell-cardReceived="{ row }">
-          <VTag :theme="isCardReceivedForDisplay(asReceiveResultRow(row)) ? 'secondary' : 'default'">
-            {{ isCardReceivedForDisplay(asReceiveResultRow(row)) ? '是' : '否' }}
-          </VTag>
-        </template>
-        <template #cell-cardSent="{ row }">
-          <VTag :theme="asReceiveResultRow(row).spec.cardSent ? 'secondary' : 'default'">
-            {{ asReceiveResultRow(row).spec.cardSent ? '是' : '否' }}
-          </VTag>
         </template>
         <template #cell-offlineActivityName="{ row }">
           {{ asReceiveResultRow(row).spec.offlineActivityName || '-' }}
@@ -2094,6 +2149,7 @@ onMounted(() => {
           </div>
           <div v-else class="qsl-actions qsl-actions--tight">
             <VButton
+              v-if="!isCardReceivedForDisplay(asReceiveResultRow(row))"
               size="xs"
               type="secondary"
               :disabled="pendingReceiveRowName === asReceiveResultRow(row).resourceName || submitting"
@@ -2102,15 +2158,18 @@ onMounted(() => {
               确认收卡
             </VButton>
             <VButton
+              v-if="
+                isCardReceivedForDisplay(asReceiveResultRow(row)) &&
+                asReceiveResultRow(row).spec.receivedMailStatus !== 'SENT' &&
+                asReceiveResultRow(row).spec.receivedMailStatus !== 'SKIPPED' &&
+                asReceiveResultRow(row).spec.receivedMailStatus !== 'PENDING'
+              "
               size="xs"
               type="secondary"
               :disabled="
                 pendingReceiveRowName === asReceiveResultRow(row).resourceName ||
                 pendingMailRowName === asReceiveResultRow(row).resourceName ||
-                !isCardReceivedForDisplay(asReceiveResultRow(row)) ||
-                asReceiveResultRow(row).spec.receivedMailStatus === 'SENT' ||
-                asReceiveResultRow(row).spec.receivedMailStatus === 'SKIPPED' ||
-                asReceiveResultRow(row).spec.receivedMailStatus === 'PENDING'
+                !isCardReceivedForDisplay(asReceiveResultRow(row))
               "
               @click="closeReceiveForRow(asReceiveResultRow(row))"
             >
@@ -2153,22 +2212,6 @@ onMounted(() => {
             >
               不发邮件
             </VButton>
-            <VTag
-              v-if="
-                ['PENDING', 'SENT', 'SKIPPED', 'FAILED'].includes(
-                  asReceiveResultRow(row).spec.receivedMailStatus || '',
-                )
-              "
-              :theme="
-                asReceiveResultRow(row).spec.receivedMailStatus === 'SENT'
-                  ? 'secondary'
-                  : asReceiveResultRow(row).spec.receivedMailStatus === 'FAILED'
-                    ? 'danger'
-                    : 'default'
-              "
-            >
-              {{ resolveMailStatusText(asReceiveResultRow(row).spec.receivedMailStatus) }}
-            </VTag>
           </div>
         </template>
         <template #detail="{ row }">

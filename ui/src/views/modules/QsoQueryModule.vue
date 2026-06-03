@@ -10,7 +10,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import QslDataTable from '../../components/QslDataTable.vue'
+import QslDataTable, { type QslDataTableStatusItem } from '../../components/QslDataTable.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 import { isBuiltinNoSendCardVersion } from '../../utils/qsl-card-version'
 import { resolveCardFlowStatus } from '../../utils/qsl-card-state'
@@ -314,6 +314,18 @@ const isQsoRecordConsumed = (qsoRecordName: string): boolean => {
     return false
   }
   return cardRecords.value.some((item) => item.spec?.qsoRecordName?.trim() === normalizedName)
+}
+
+const resolveQsoStatusItems = (row: Record<string, unknown>): QslDataTableStatusItem[] => {
+  const item = toQsoItem(row)
+  const consumed = isQsoRecordConsumed(item.id)
+  return [
+    {
+      key: 'card-created',
+      label: consumed ? '已创建卡片' : '待创建卡片',
+      tone: consumed ? 'success' : 'warning',
+    },
+  ]
 }
 
 const toRow = (extension: QslExtension<QsoRecordSpec>): QsoQueryItem => {
@@ -742,6 +754,7 @@ onMounted(loadRows)
         :sort-key="sortKey"
         :sort-direction="sortDirection"
         :loading="loading"
+        :status-items="resolveQsoStatusItems"
         clickable-rows
         show-actions
         :expanded-row-key="expandedId"
@@ -763,17 +776,17 @@ onMounted(loadRows)
         </template>
         <template #row-actions="{ row }">
           <VButton
+            v-if="!isQsoRecordConsumed(toQsoItem(row).id)"
             class="qsl-action-warning"
             size="xs"
             type="secondary"
             :disabled="
               loading ||
-              creatingCardRecordId === toQsoItem(row).id ||
-              isQsoRecordConsumed(toQsoItem(row).id)
+              creatingCardRecordId === toQsoItem(row).id
             "
             @click.stop="createCardRecordForQso(toQsoItem(row))"
           >
-            {{ isQsoRecordConsumed(toQsoItem(row).id) ? '已创建' : '创建卡片' }}
+            {{ creatingCardRecordId === toQsoItem(row).id ? '创建中' : '创建卡片' }}
           </VButton>
         </template>
         <template #detail="{ row }">

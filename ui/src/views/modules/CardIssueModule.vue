@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { VButton, VCard, VTag } from '@halo-dev/components'
+import { VButton, VCard } from '@halo-dev/components'
 import { computed, onMounted, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import { applyNotificationMailPolicy, sendNotificationMail } from '../../api/qsl-console-api'
@@ -10,7 +10,7 @@ import {
   updateExtension,
   type QslExtension,
 } from '../../api/qsl-extension-api'
-import QslDataTable from '../../components/QslDataTable.vue'
+import QslDataTable, { type QslDataTableStatusItem } from '../../components/QslDataTable.vue'
 import {
   applySortDirection,
   compareBoolean,
@@ -704,6 +704,42 @@ const resolveMailStatusText = (status: string): string => {
     return '发送失败'
   }
   return ''
+}
+
+const resolveMailStatusTone = (status: string): QslDataTableStatusItem['tone'] => {
+  if (status === 'SENT') {
+    return 'info'
+  }
+  if (status === 'SKIPPED') {
+    return 'muted'
+  }
+  if (status === 'FAILED') {
+    return 'danger'
+  }
+  return 'default'
+}
+
+const resolveCardIssueStatusItems = (row: Record<string, unknown>): QslDataTableStatusItem[] => {
+  const item = toCardIssueCardRow(row)
+  return [
+    {
+      key: 'card-issued',
+      label: item.cardIssued ? '已制卡' : '待制卡',
+      tone: item.cardIssued ? 'success' : 'warning',
+    },
+    {
+      key: 'envelope-printed',
+      label: item.envelopePrinted ? '已打包' : '待打包',
+      tone: item.envelopePrinted ? 'success' : 'warning',
+      hidden: isOfflineExchangeScene.value,
+    },
+    {
+      key: 'created-mail',
+      label: resolveMailStatusText(item.spec.createdMailStatus),
+      tone: resolveMailStatusTone(item.spec.createdMailStatus),
+      hidden: isOfflineExchangeScene.value || !item.spec.createdMailStatus,
+    },
+  ]
 }
 
 const resolveCreatedMailPolicy = (spec: CardRecordSpec): string => {
@@ -1510,6 +1546,7 @@ onMounted(loadSourceData)
         :sort-key="pendingSortKey"
         :sort-direction="pendingSortDirection"
         :loading="loading"
+        :status-items="resolveCardIssueStatusItems"
         show-actions
         show-pagination
         :total="pendingIssueCardRows.length"
@@ -1531,10 +1568,10 @@ onMounted(loadSourceData)
         <template #row-actions="{ row }">
           <div class="qsl-actions qsl-actions--tight">
             <VButton
+              v-if="!toCardIssueCardRow(row).cardIssued"
               size="xs"
               type="secondary"
               :disabled="
-                toCardIssueCardRow(row).cardIssued ||
                 pendingIssueRowName === toCardIssueCardRow(row).id ||
                 pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
                 pendingIssueMailRowName === toCardIssueCardRow(row).id ||
@@ -1545,12 +1582,11 @@ onMounted(loadSourceData)
               确认制卡
             </VButton>
             <VButton
-              v-if="!isOfflineExchangeScene"
+              v-if="!isOfflineExchangeScene && !toCardIssueCardRow(row).envelopePrinted"
               size="xs"
               type="secondary"
               :disabled="
                 !toCardIssueCardRow(row).cardIssued ||
-                toCardIssueCardRow(row).envelopePrinted ||
                 pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
                 pendingIssueRowName === toCardIssueCardRow(row).id ||
                 pendingIssueMailRowName === toCardIssueCardRow(row).id ||
@@ -1601,23 +1637,6 @@ onMounted(loadSourceData)
             >
               不发邮件
             </VButton>
-            <VTag
-              v-if="
-                !isOfflineExchangeScene &&
-                (toCardIssueCardRow(row).spec.createdMailStatus === 'SENT' ||
-                  toCardIssueCardRow(row).spec.createdMailStatus === 'SKIPPED' ||
-                  toCardIssueCardRow(row).spec.createdMailStatus === 'FAILED')
-              "
-              :theme="
-                toCardIssueCardRow(row).spec.createdMailStatus === 'SENT'
-                  ? 'secondary'
-                  : toCardIssueCardRow(row).spec.createdMailStatus === 'FAILED'
-                    ? 'danger'
-                    : 'default'
-              "
-            >
-              {{ resolveMailStatusText(toCardIssueCardRow(row).spec.createdMailStatus) }}
-            </VTag>
           </div>
         </template>
       </QslDataTable>

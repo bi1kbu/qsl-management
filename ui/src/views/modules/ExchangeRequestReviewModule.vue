@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { VButton, VCard, VTag } from '@halo-dev/components'
+import { VButton, VCard } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   deleteExtension,
@@ -18,7 +18,7 @@ import {
 } from '../../api/qsl-console-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
-import QslDataTable from '../../components/QslDataTable.vue'
+import QslDataTable, { type QslDataTableStatusItem } from '../../components/QslDataTable.vue'
 import {
   applySortDirection,
   compareCallSign,
@@ -116,7 +116,6 @@ const resourceKind = 'ExchangeRequest'
 const exchangeColumns = [
   { key: 'id', label: '申请ID', sortable: true },
   { key: 'callSign', label: '呼号', sortable: true },
-  { key: 'status', label: '状态', sortable: true },
   { key: 'reviewedAt', label: '审核时间', sortable: true },
 ]
 
@@ -223,26 +222,47 @@ const resolveMailStatusText = (status: MailStatus): string => {
       return '未发送'
   }
 }
-const resolveReviewStatusTagClass = (status: ExchangeRequestItem['status']): string => {
+const resolveReviewStatusTone = (
+  status: ExchangeRequestItem['status'],
+): QslDataTableStatusItem['tone'] => {
   if (status === '已通过') {
-    return 'qsl-review-status-tag--approved'
+    return 'success'
   }
   if (status === '已拒绝') {
-    return 'qsl-review-status-tag--rejected'
+    return 'danger'
   }
-  return 'qsl-review-status-tag--pending'
+  return 'warning'
 }
-const resolveReviewMailStatusTagClass = (status: MailStatus): string => {
+const resolveReviewMailStatusTone = (status: MailStatus): QslDataTableStatusItem['tone'] => {
   switch (status) {
     case 'SENT':
-      return 'qsl-review-status-tag--mail-sent'
+      return 'info'
     case 'SKIPPED':
-      return 'qsl-review-status-tag--mail-skipped'
+      return 'muted'
     case 'FAILED':
-      return 'qsl-review-status-tag--mail-failed'
+      return 'danger'
     default:
-      return 'qsl-review-status-tag--mail-default'
+      return 'default'
   }
+}
+
+const resolveExchangeStatusItems = (row: Record<string, unknown>): QslDataTableStatusItem[] => {
+  const item = toExchangeItem(row)
+  return [
+    { key: 'review', label: item.status, tone: resolveReviewStatusTone(item.status) },
+    {
+      key: 'card-created',
+      label: '已创建卡片',
+      tone: 'info',
+      hidden: item.status !== '已通过' || !item.createdCardRecordName,
+    },
+    {
+      key: 'review-mail',
+      label: resolveMailStatusText(item.reviewMailStatus),
+      tone: resolveReviewMailStatusTone(item.reviewMailStatus),
+      hidden: !item.reviewMailStatus,
+    },
+  ]
 }
 
 const buildCreatedCardRecordMap = (
@@ -670,6 +690,9 @@ onMounted(loadRows)
         :sort-key="sortKey"
         :sort-direction="sortDirection"
         :loading="loading"
+        :status-items="resolveExchangeStatusItems"
+        status-key="status"
+        status-sortable
         clickable-rows
         :expanded-row-key="expandedId"
         show-actions
@@ -683,29 +706,6 @@ onMounted(loadRows)
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
       >
-        <template #cell-status="{ row }">
-          <div class="qsl-status-tags">
-            <VTag
-              class="qsl-review-status-tag"
-              :class="resolveReviewStatusTagClass(toExchangeItem(row).status)"
-            >
-              {{ toExchangeItem(row).status }}
-            </VTag>
-            <VTag
-              v-if="toExchangeItem(row).status === '已通过' && toExchangeItem(row).createdCardRecordName"
-              class="qsl-review-status-tag qsl-review-status-tag--card-created"
-            >
-              已创建卡片
-            </VTag>
-            <VTag
-              v-if="toExchangeItem(row).reviewMailStatus"
-              class="qsl-review-status-tag"
-              :class="resolveReviewMailStatusTagClass(toExchangeItem(row).reviewMailStatus)"
-            >
-              {{ resolveMailStatusText(toExchangeItem(row).reviewMailStatus) }}
-            </VTag>
-          </div>
-        </template>
         <template #row-actions="{ row }">
           <div class="qsl-actions qsl-actions--tight">
             <VButton
@@ -1019,50 +1019,4 @@ onMounted(loadRows)
   margin: 0;
 }
 
-.qsl-status-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.qsl-review-status-tag {
-  border: 1px solid currentColor;
-  font-weight: 600;
-}
-
-.qsl-review-status-tag--pending {
-  background: #fffbeb !important;
-  color: #b45309 !important;
-}
-
-.qsl-review-status-tag--approved {
-  background: #ecfdf5 !important;
-  color: #047857 !important;
-}
-
-.qsl-review-status-tag--rejected,
-.qsl-review-status-tag--mail-failed {
-  background: #fef2f2 !important;
-  color: #b91c1c !important;
-}
-
-.qsl-review-status-tag--card-created {
-  background: #eff6ff !important;
-  color: #1d4ed8 !important;
-}
-
-.qsl-review-status-tag--mail-sent {
-  background: #eef2ff !important;
-  color: #4338ca !important;
-}
-
-.qsl-review-status-tag--mail-skipped {
-  background: #f3f4f6 !important;
-  color: #4b5563 !important;
-}
-
-.qsl-review-status-tag--mail-default {
-  background: #f8fafc !important;
-  color: #64748b !important;
-}
 </style>

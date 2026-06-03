@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { VButton, VCard, VTabItem, VTabs, VTag } from '@halo-dev/components'
+import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import { confirmReceipt } from '../../api/qsl-console-api'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
-import QslDataTable from '../../components/QslDataTable.vue'
+import QslDataTable, { type QslDataTableStatusItem } from '../../components/QslDataTable.vue'
 import {
   applySortDirection,
   compareCallSign,
@@ -82,13 +82,27 @@ const receiptColumns = [
   { key: 'callSign', label: '对方呼号', sortable: true },
   { key: 'cardType', label: '卡片类型', sortable: true },
   { key: 'cardVersion', label: '卡片版本', sortable: true },
-  { key: 'cardSent', label: '发卡状态', sortable: true },
-  { key: 'receiptConfirmed', label: '签收状态', sortable: true },
   { key: 'sentAt', label: '发卡时间', sortable: false },
   { key: 'publicReceiptRemarks', label: '签收备注', sortable: false },
 ]
 
 const toReceiptRow = (row: Record<string, unknown>): ReceiptRow => row as unknown as ReceiptRow
+
+const resolveReceiptStatusItems = (row: Record<string, unknown>): QslDataTableStatusItem[] => {
+  const item = toReceiptRow(row)
+  return [
+    {
+      key: 'sent',
+      label: item.cardSent ? '已发卡' : '未发卡',
+      tone: item.cardSent ? 'success' : 'default',
+    },
+    {
+      key: 'receipt',
+      label: item.receiptConfirmed ? '已签收' : '待签收',
+      tone: item.receiptConfirmed ? 'success' : 'warning',
+    },
+  ]
+}
 
 const normalizedSceneTypes = computed(
   () => new Set(props.sceneTypes.map((item) => item.trim().toUpperCase())),
@@ -276,6 +290,7 @@ onMounted(loadRows)
         :sort-key="sortKey"
         :sort-direction="sortDirection"
         :loading="loading"
+        :status-items="resolveReceiptStatusItems"
         :show-actions="activeTab === 'pending'"
         show-pagination
         :total="sortedRows.length"
@@ -286,21 +301,12 @@ onMounted(loadRows)
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
       >
-        <template #cell-cardSent="{ row }">
-          <VTag :theme="toReceiptRow(row).cardSent ? 'secondary' : 'default'">
-            {{ toReceiptRow(row).cardSent ? '已发卡' : '未发卡' }}
-          </VTag>
-        </template>
-        <template #cell-receiptConfirmed="{ row }">
-          <VTag :theme="toReceiptRow(row).receiptConfirmed ? 'secondary' : 'default'">
-            {{ toReceiptRow(row).receiptConfirmed ? '已签收' : '待签收' }}
-          </VTag>
-        </template>
         <template #cell-publicReceiptRemarks="{ row }">
           <span class="qsl-pre-line">{{ toReceiptRow(row).publicReceiptRemarks || '-' }}</span>
         </template>
         <template #row-actions="{ row }">
           <VButton
+            v-if="!toReceiptRow(row).receiptConfirmed"
             size="xs"
             type="secondary"
             :disabled="pendingRowName === toReceiptRow(row).resourceName"
