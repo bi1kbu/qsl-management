@@ -230,15 +230,68 @@ public class QslNotificationMailService {
     ) {
         return loadSystemSetting()
             .flatMap(systemSetting -> {
-                if (!isMailPolicyAutoSend(systemSetting.getOnlineExchangeReviewedMailPolicy(),
+                var policy = resolveMailPolicy(systemSetting.getOnlineExchangeReviewedMailPolicy(),
                     systemSetting.getOnlineAutoNotifyOnExchangeReviewed(),
-                    systemSetting.getAutoNotifyOnExchangeReviewed())) {
-                    return Mono.empty();
+                    systemSetting.getAutoNotifyOnExchangeReviewed());
+                if (MAIL_POLICY_AUTO_SEND.equals(policy)) {
+                    return sendExchangeReviewMail(requestName, operator, clientIp, "自动触发")
+                        .then();
                 }
-                return sendExchangeReviewMail(requestName, operator, clientIp, "自动触发")
-                    .then();
+                if (MAIL_POLICY_AUTO_SKIP.equals(policy)) {
+                    return applyAutoSkipExchangeReviewMail(requestName, operator, clientIp, "自动触发")
+                        .then();
+                }
+                return Mono.empty();
             })
             .onErrorResume(error -> Mono.empty());
+    }
+
+    private Mono<ExchangeReviewMailSendResult> applyAutoSkipExchangeReviewMail(
+        String requestName,
+        String operator,
+        String clientIp,
+        String source
+    ) {
+        if (StringUtils.isBlank(requestName)) {
+            return Mono.empty();
+        }
+        return fetchOr404(ExchangeRequest.class, requestName.trim())
+            .flatMap(exchangeRequest -> {
+                var spec = exchangeRequest.getSpec();
+                var status = ensureExchangeRequestStatus(exchangeRequest);
+                var currentStatus = StringUtils.defaultString(status.getReviewMailStatus());
+                if (MAIL_STATUS_SENT.equalsIgnoreCase(currentStatus)
+                    || MAIL_STATUS_SKIPPED.equalsIgnoreCase(currentStatus)) {
+                    return Mono.just(new ExchangeReviewMailSendResult(
+                        exchangeRequest.getMetadata().getName(),
+                        MAIL_STATUS_SKIPPED,
+                        "审核通知邮件已处理，已跳过。",
+                        StringUtils.defaultString(status.getReviewMailTargetEmail()),
+                        StringUtils.defaultString(status.getReviewMailSentAt())
+                    ));
+                }
+                var reviewStatus = StringUtils.defaultString(status.getReviewStatus()).trim();
+                if (StringUtils.isBlank(reviewStatus) || "待审核".equals(reviewStatus)) {
+                    return Mono.just(new ExchangeReviewMailSendResult(
+                        exchangeRequest.getMetadata().getName(),
+                        MAIL_STATUS_SKIPPED,
+                        "换卡申请尚未审核，未自动处理。",
+                        StringUtils.defaultString(status.getReviewMailTargetEmail()),
+                        StringUtils.defaultString(status.getReviewMailSentAt())
+                    ));
+                }
+                var targetEmail = spec == null ? "" : StringUtils.defaultString(spec.getEmail()).trim();
+                return persistExchangeReviewMailStatusAndAudit(
+                    exchangeRequest,
+                    MAIL_STATUS_SKIPPED,
+                    "邮件策略为自动不发送，已跳过。",
+                    targetEmail,
+                    "",
+                    operator,
+                    clientIp,
+                    source
+                );
+            });
     }
 
     public Mono<Void> autoSendOnlineAutoApprovedRequestIfEnabled(

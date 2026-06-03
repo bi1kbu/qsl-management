@@ -108,8 +108,8 @@ const savingReviewReasonId = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
-const sortKey = ref<ExchangeSortKey>('id')
-const sortDirection = ref<QslSortDirection>('asc')
+const sortKey = ref<ExchangeSortKey>('reviewedAt')
+const sortDirection = ref<QslSortDirection>('desc')
 
 const resourcePlural = 'exchange-requests'
 const resourceKind = 'ExchangeRequest'

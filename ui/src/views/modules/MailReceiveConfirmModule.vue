@@ -3,6 +3,7 @@ import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
+  applyNotificationMailPolicy,
   batchSendNotificationMail,
   confirmMailReceive,
   createOnlineCardFromReceiveRecord,
@@ -1741,9 +1742,27 @@ const closeReceiveForRow = async (item: ReceiveResult) => {
         : `呼号：${item.callSign || '-'}，卡片类型：${item.cardType || '-'}，模式：默认不发邮件。`,
     })
 
+    let policyMessage = ''
+    if (showReceivedMailActions.value) {
+      const policyResult = await applyNotificationMailPolicy({
+        cardRecordName: item.resourceName,
+        scene: 'received',
+        source: '收信确认-结束收卡自动策略',
+      })
+      if (policyResult.status === 'SENT') {
+        policyMessage = '，收卡回执已自动发送'
+      } else if (policyResult.status === 'SKIPPED') {
+        policyMessage = '，收卡回执已自动跳过'
+      } else if (policyResult.status === 'FAILED') {
+        policyMessage = `，自动处理失败：${policyResult.message || '请手动处理'}`
+      } else if (policyResult.message) {
+        policyMessage = `，${policyResult.message}`
+      }
+    }
+
     await loadResults({ silent: true })
     feedback.value = showReceivedMailActions.value
-      ? `已结束收卡：${item.callSign || item.resourceName}`
+      ? `已结束收卡：${item.callSign || item.resourceName}${policyMessage}`
       : `已结束收卡并默认不发送邮件：${item.callSign || item.resourceName}`
   } catch (error) {
     feedback.value = `结束收卡失败：${error instanceof Error ? error.message : '未知错误'}`

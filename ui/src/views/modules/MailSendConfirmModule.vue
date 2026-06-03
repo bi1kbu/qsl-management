@@ -3,6 +3,7 @@ import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
 import {
+  applyNotificationMailPolicy,
   batchSendNotificationMail,
   confirmMailSend,
   sendNotificationMail,
@@ -701,6 +702,12 @@ const markAsSent = async (row: SendConfirmItem) => {
   try {
     await confirmMailSend(row.resourceName)
 
+    const policyResult = await applyNotificationMailPolicy({
+      cardRecordName: row.resourceName,
+      scene: 'sent',
+      source: '发信确认-确认发信自动策略',
+    })
+
     await appendQslAuditLog({
       action: '确认发信',
       resourceType: 'card-record',
@@ -709,7 +716,17 @@ const markAsSent = async (row: SendConfirmItem) => {
     })
 
     await loadRows({ silent: true })
-    feedback.value = `已确认发信：${row.callSign}（${sentAt}）`
+    let policyMessage = ''
+    if (policyResult.status === 'SENT') {
+      policyMessage = '，发卡邮件已自动发送'
+    } else if (policyResult.status === 'SKIPPED') {
+      policyMessage = '，发卡邮件已自动跳过'
+    } else if (policyResult.status === 'FAILED') {
+      policyMessage = `，自动处理失败：${policyResult.message || '请手动处理'}`
+    } else if (policyResult.message) {
+      policyMessage = `，${policyResult.message}`
+    }
+    feedback.value = `已确认发信：${row.callSign}（${sentAt}）${policyMessage}`
   } catch (error) {
     feedback.value = `确认发信失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

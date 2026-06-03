@@ -12,7 +12,7 @@ import {
   type QslExtension,
 } from '../../api/qsl-extension-api'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
-import { sendNotificationMail } from '../../api/qsl-console-api'
+import { applyNotificationMailPolicy } from '../../api/qsl-console-api'
 import QslBatchFieldEditor from '../../components/QslBatchFieldEditor.vue'
 import QslBusinessRecordHeader from '../../components/QslBusinessRecordHeader.vue'
 import QslCardRemarkEntries from '../../components/QslCardRemarkEntries.vue'
@@ -306,10 +306,6 @@ const realtimeEnabled = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const pageSizeOptions: number[] = [20, 30, 50, 100]
-const autoNotifyOnCardCreated = ref({
-  qso: false,
-  online: false,
-})
 const batchEditField = ref('')
 const batchEditValue = ref('')
 const historySortKey = ref<CardHistorySortKey>('resourceName')
@@ -1218,27 +1214,42 @@ const loadCardVersions = async () => {
   }
 }
 
-const loadSystemSetting = async () => {
-  const extension = await getExtensionOrNull<SystemSettingSpec>(
-    systemSettingPlural,
-    systemSettingName,
-  )
-  const legacyCreated = Boolean(extension?.spec?.autoNotifyOnCardCreated)
-  autoNotifyOnCardCreated.value = {
-    qso: extension?.spec?.qsoAutoNotifyOnCardCreated ?? legacyCreated,
-    online: extension?.spec?.onlineAutoNotifyOnCardCreated ?? legacyCreated,
+const resolvePolicyFeedback = (
+  result: { status?: string; message?: string },
+  labels: { sent: string; skipped: string },
+): string => {
+  if (result.status === 'SENT') {
+    return `，${labels.sent}`
   }
+  if (result.status === 'SKIPPED') {
+    return `，${labels.skipped}`
+  }
+  if (result.status === 'FAILED') {
+    return `，自动处理失败：${result.message || '请手动处理'}`
+  }
+  if (result.message) {
+    return `，${result.message}`
+  }
+  return ''
 }
 
-const shouldAutoSendCreatedMail = (sceneType?: string, cardType?: string): boolean => {
-  const normalized = normalizeSceneType(sceneType, cardType)
-  if (normalized === 'ONLINE_EYEBALL') {
-    return autoNotifyOnCardCreated.value.online
+const applyCreatedMailPolicyForRecord = async (
+  cardRecordName: string,
+  source: string,
+): Promise<string> => {
+  try {
+    const result = await applyNotificationMailPolicy({
+      cardRecordName,
+      scene: 'created',
+      source,
+    })
+    return resolvePolicyFeedback(result, {
+      sent: '制卡邮件已自动发送',
+      skipped: '制卡邮件已自动跳过',
+    })
+  } catch (error) {
+    return `，邮件策略处理失败：${error instanceof Error ? error.message : '未知错误'}`
   }
-  if (normalized === 'QSO' || normalized === 'SWL') {
-    return autoNotifyOnCardCreated.value.qso
-  }
-  return false
 }
 
 const loadPageData = async () => {
@@ -1249,7 +1260,6 @@ const loadPageData = async () => {
       loadQsoRecords(),
       loadOfflineActivities(),
       loadCardVersions(),
-      loadSystemSetting(),
     ])
   } catch (error) {
     feedback.value = `初始化卡片记录页面失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -1539,21 +1549,13 @@ const createCardRecordFromQso = async (item: QsoRecordItem) => {
       detail: `${normalizedCallSign} ${item.sceneType}，关联记录=${item.id}，版本=${cardVersion}`,
     })
 
+    const policyMessage = await applyCreatedMailPolicyForRecord(
+      createdRecord.metadata.name,
+      '通联业务待创建记录-自动策略',
+    )
     await loadCardRecords({ silent: true })
-    if (shouldAutoSendCreatedMail(createdRecord.spec?.sceneType, createdRecord.spec?.cardType)) {
-      try {
-        await sendNotificationMail({
-          cardRecordName: createdRecord.metadata.name,
-          scene: 'created',
-          source: '通联业务待创建记录-自动触发',
-        })
-      } catch {
-        // 自动邮件发送失败由后端状态与审计记录体现，这里不覆盖主流程结果。
-      }
-      await loadCardRecords({ silent: true })
-    }
     await loadCardVersions()
-    feedback.value = `已创建卡片：${createdRecord.metadata.name}（关联记录 ${item.id}，版本 ${cardVersion}）。`
+    feedback.value = `已创建卡片：${createdRecord.metadata.name}（关联记录 ${item.id}，版本 ${cardVersion}）${policyMessage}。`
   } catch (error) {
     feedback.value = `创建卡片失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -2084,20 +2086,12 @@ const saveCardRecord = async () => {
       detail: `${form.cardType} ${cardDate} ${cardTime}，版本=${cardVersions.join('、')}，版本数量=${cardVersions.length}`,
     })
 
+    const policyMessage = await applyCreatedMailPolicyForRecord(
+      createdRecord.metadata.name,
+      '卡片记录-自动策略',
+    )
     await loadCardRecords({ silent: true })
-    if (shouldAutoSendCreatedMail(createdRecord.spec?.sceneType, createdRecord.spec?.cardType)) {
-      try {
-        await sendNotificationMail({
-          cardRecordName: createdRecord.metadata.name,
-          scene: 'created',
-          source: '卡片记录-自动触发',
-        })
-      } catch {
-        // 自动邮件发送失败由后端状态与审计记录体现，这里不覆盖主流程结果。
-      }
-      await loadCardRecords({ silent: true })
-    }
-    feedback.value = `卡片记录已保存，包含 ${cardVersions.length} 个版本。`
+    feedback.value = `卡片记录已保存，包含 ${cardVersions.length} 个版本${policyMessage}。`
     resetForm()
   } catch (error) {
     feedback.value = `保存卡片记录失败：${error instanceof Error ? error.message : '未知错误'}`

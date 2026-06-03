@@ -239,6 +239,47 @@ class QslNotificationMailServiceTest {
     }
 
     @Test
+    void shouldPersistSkippedWhenExchangeReviewAutoSkipPolicyEnabled() {
+        var client = mock(ReactiveExtensionClient.class);
+        var notificationCenter = mock(NotificationCenter.class);
+        var notificationReasonEmitter = mock(NotificationReasonEmitter.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslNotificationMailService(
+            client,
+            notificationCenter,
+            notificationReasonEmitter,
+            auditService
+        );
+
+        var systemSetting = new SystemSetting();
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setOnlineExchangeReviewedMailPolicy("AUTO_SKIP");
+        systemSetting.setSpec(settingSpec);
+
+        var exchangeRequest = reviewedExchangeRequest();
+        exchangeRequest.getSpec().setEmail("bi1kbu@example.test");
+
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+        when(client.fetch(eq(ExchangeRequest.class), eq("exchange-request-1")))
+            .thenReturn(Mono.just(exchangeRequest));
+        when(client.update(any(ExchangeRequest.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        service.autoSendExchangeReviewIfEnabled(
+            "exchange-request-1",
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("SKIPPED", exchangeRequest.getStatus().getReviewMailStatus());
+        assertEquals("bi1kbu@example.test", exchangeRequest.getStatus().getReviewMailTargetEmail());
+        verify(notificationCenter, never()).subscribe(any(), any());
+        verify(notificationReasonEmitter, never()).emit(anyString(), any());
+        verify(client).update(any(ExchangeRequest.class));
+    }
+
+    @Test
     void shouldSendStationMailWhenOnlineAutoApprovedPolicyEnabled() {
         var client = mock(ReactiveExtensionClient.class);
         var notificationCenter = mock(NotificationCenter.class);
