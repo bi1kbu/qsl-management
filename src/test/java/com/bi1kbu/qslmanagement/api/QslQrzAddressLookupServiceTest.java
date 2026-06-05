@@ -223,6 +223,70 @@ class QslQrzAddressLookupServiceTest {
     }
 
     @Test
+    void shouldJoinQrzCnEmailImagesAsContactHint() {
+        var service = new QslQrzAddressLookupService(
+            mock(ReactiveExtensionClient.class),
+            mock(QslAuditService.class),
+            mock(QslAiService.class)
+        );
+        var html = """
+            <html>
+              <head><title>BA8AOZ - QRZ.CN</title></head>
+              <body>
+                <div class="callsign-profile">
+                  <h1>BA8AOZ</h1>
+                  <p>姓名：肖智远</p>
+                  <p>地址：四川成都市武侯区武阳大道三段51号下一站都市（小区）</p>
+                  <p>邮编：610041</p>
+                  <p>电话：18113052685</p>
+                </div>
+                <div class="contact-images">
+                  <span>邮箱：</span>
+                  <img src="../images/n/nb.gif"><img src="../images/n/na.gif"><img src="../images/n/n8.gif">
+                  <img src="../images/n/na.gif"><img src="../images/n/no.gif"><img src="../images/n/nz.gif">
+                  <img src="../images/n/n@.gif"><img src="../images/n/no.gif"><img src="../images/n/nu.gif">
+                  <img src="../images/n/nt.gif"><img src="../images/n/nl.gif"><img src="../images/n/no.gif">
+                  <img src="../images/n/no.gif"><img src="../images/n/nk.gif"><img src="../images/n/n..gif">
+                  <img src="../images/n/nc.gif"><img src="../images/n/no.gif"><img src="../images/n/nm.gif">
+                </div>
+              </body>
+            </html>
+            """;
+
+        var feature = service.compactQrzCnHtmlFeature("BA8AOZ", html);
+
+        assertTrue(feature.contains("肖智远"), feature);
+        assertTrue(feature.contains("18113052685"), feature);
+        assertTrue(feature.contains("页面字段线索："), feature);
+        assertTrue(feature.contains("图片拼接：ba8aoz@outlook.com"), feature);
+    }
+
+    @Test
+    void shouldExtractQrzCnMailtoLinkAsContactHint() {
+        var service = new QslQrzAddressLookupService(
+            mock(ReactiveExtensionClient.class),
+            mock(QslAuditService.class),
+            mock(QslAiService.class)
+        );
+        var html = """
+            <html>
+              <head><title>BI1KBU - QRZ.CN</title></head>
+              <body>
+                <div class="callsign-profile">
+                  <h1>BI1KBU</h1>
+                  <p>姓名：测试台</p>
+                  <a href="mailto:bi1kbu@example.com?subject=qsl">联系邮箱</a>
+                </div>
+              </body>
+            </html>
+            """;
+
+        var feature = service.compactQrzCnHtmlFeature("BI1KBU", html);
+
+        assertTrue(feature.contains("邮箱：bi1kbu@example.com"), feature);
+    }
+
+    @Test
     void shouldRejectQrzCnSearchPageWithoutTargetCallSign() {
         var service = new QslQrzAddressLookupService(
             mock(ReactiveExtensionClient.class),

@@ -55,6 +55,12 @@ public class QslQrzAddressLookupService {
     );
     private static final Pattern IMG_PATTERN = Pattern.compile("(?is)<img\\b([^>]*)>");
     private static final Pattern ATTR_PATTERN = Pattern.compile("(?is)(alt|title|src)\\s*=\\s*['\"]([^'\"]+)['\"]");
+    private static final Pattern CONTACT_ATTR_PATTERN = Pattern.compile(
+        "(?is)(alt|title|src|href|data-src|data-original)\\s*=\\s*['\"]([^'\"]+)['\"]"
+    );
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(
+        "(?i)[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}"
+    );
     private static final Pattern CHARSET_PATTERN = Pattern.compile("(?is)charset\\s*=\\s*['\"]?([a-z0-9._\\-]+)");
 
     private final ReactiveExtensionClient client;
@@ -905,6 +911,7 @@ public class QslQrzAddressLookupService {
         }
         var text = limit(stripHtml(subjectHtml), MAX_QRZ_CN_TEXT_LENGTH);
         var imageTokens = extractImageTokens(subjectHtml);
+        var contactHints = extractQrzCnContactHints(subjectHtml, safeHtml);
         var feature = new StringBuilder();
         feature.append("来源：QRZ.CN 查询页面预处理\n");
         feature.append("呼号：").append(callSign).append("\n");
@@ -913,6 +920,9 @@ public class QslQrzAddressLookupService {
         }
         if (!imageTokens.isEmpty()) {
             feature.append("图片文字线索：").append(String.join("；", imageTokens)).append("\n");
+        }
+        if (!contactHints.isEmpty()) {
+            feature.append("页面字段线索：").append(String.join("；", contactHints)).append("\n");
         }
         feature.append("主体文本：\n").append(text);
         return limit(feature.toString(), MAX_FEATURE_LENGTH);
@@ -1097,6 +1107,150 @@ public class QslQrzAddressLookupService {
             }
         }
         return new ArrayList<>(tokens);
+    }
+
+    private List<String> extractQrzCnContactHints(String subjectHtml, String fullHtml) {
+        var hints = new LinkedHashSet<String>();
+        appendContactHints(hints, subjectHtml, false);
+        appendContactHints(hints, fullHtml, true);
+        return new ArrayList<>(hints);
+    }
+
+    private void appendContactHints(LinkedHashSet<String> hints, String html, boolean contactOnly) {
+        var normalizedHtml = normalize(html);
+        if (normalizedHtml.isBlank() || hints.size() >= MAX_QRZ_CN_IMAGE_TOKENS) {
+            return;
+        }
+        extractEmails(normalizedHtml).forEach(value -> addContactHint(hints, "邮箱", value));
+        extractContactAttributeValues(normalizedHtml).forEach(value -> {
+            extractEmails(value).forEach(email -> addContactHint(hints, "邮箱", email));
+            if (!contactOnly || looksLikeContactText(value)) {
+                addContactHint(hints, "属性", value);
+            }
+        });
+        extractJoinedImageContactTokens(normalizedHtml).forEach(value -> {
+            if (!contactOnly || looksLikeContactText(value)) {
+                addContactHint(hints, "图片拼接", value);
+            }
+        });
+    }
+
+    private void addContactHint(LinkedHashSet<String> hints, String label, String value) {
+        var normalized = normalize(value);
+        if (normalized.isBlank() || hints.size() >= MAX_QRZ_CN_IMAGE_TOKENS) {
+            return;
+        }
+        hints.add(label + "：" + normalized);
+    }
+
+    private List<String> extractEmails(String value) {
+        var emails = new LinkedHashSet<String>();
+        var matcher = EMAIL_PATTERN.matcher(normalize(value));
+        while (matcher.find() && emails.size() < MAX_QRZ_CN_IMAGE_TOKENS) {
+            emails.add(matcher.group());
+        }
+        return new ArrayList<>(emails);
+    }
+
+    private List<String> extractContactAttributeValues(String html) {
+        var values = new LinkedHashSet<String>();
+        var matcher = CONTACT_ATTR_PATTERN.matcher(normalize(html));
+        while (matcher.find() && values.size() < MAX_QRZ_CN_IMAGE_TOKENS) {
+            var attr = normalize(matcher.group(1)).toLowerCase(Locale.ROOT);
+            var value = normalize(htmlDecode(matcher.group(2)));
+            if (value.isBlank()) {
+                continue;
+            }
+            if ("src".equals(attr) || "data-src".equals(attr) || "data-original".equals(attr)) {
+                value = imageFileName(value);
+            } else if ("href".equals(attr) && value.toLowerCase(Locale.ROOT).startsWith("mailto:")) {
+                value = normalize(value.substring("mailto:".length()).replaceFirst("\\?.*$", ""));
+            }
+            if (!value.isBlank()) {
+                values.add(value);
+            }
+        }
+        return new ArrayList<>(values);
+    }
+
+    private List<String> extractJoinedImageContactTokens(String html) {
+        var sequences = new LinkedHashSet<String>();
+        var matcher = IMG_PATTERN.matcher(normalize(html));
+        var current = new StringBuilder();
+        var previousEnd = -1;
+        while (matcher.find() && sequences.size() < MAX_QRZ_CN_IMAGE_TOKENS) {
+            if (previousEnd >= 0) {
+                var gap = html.substring(previousEnd, matcher.start());
+                if (!stripHtml(gap).isBlank()) {
+                    appendJoinedImageSequence(sequences, current);
+                    current.setLength(0);
+                }
+            }
+            var token = imageContactTokenFromAttributes(matcher.group(1));
+            if (token.isBlank()) {
+                appendJoinedImageSequence(sequences, current);
+                current.setLength(0);
+            } else {
+                current.append(token);
+            }
+            previousEnd = matcher.end();
+        }
+        appendJoinedImageSequence(sequences, current);
+        return new ArrayList<>(sequences);
+    }
+
+    private void appendJoinedImageSequence(LinkedHashSet<String> sequences, StringBuilder current) {
+        var value = normalize(current.toString());
+        if (!value.isBlank() && value.length() >= 5 && looksLikeContactText(value)) {
+            sequences.add(value);
+        }
+    }
+
+    private String imageContactTokenFromAttributes(String attributes) {
+        var matcher = CONTACT_ATTR_PATTERN.matcher(normalize(attributes));
+        while (matcher.find()) {
+            var attr = normalize(matcher.group(1)).toLowerCase(Locale.ROOT);
+            if (!"src".equals(attr) && !"data-src".equals(attr) && !"data-original".equals(attr)) {
+                continue;
+            }
+            var token = imageContactToken(imageFileName(matcher.group(2)));
+            if (!token.isBlank()) {
+                return token;
+            }
+        }
+        return "";
+    }
+
+    private String imageContactToken(String value) {
+        var normalized = normalize(value).toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return "";
+        }
+        normalized = normalized.replaceAll("\\s+", "");
+        if (normalized.length() == 2
+            && normalized.charAt(0) == 'n'
+            && String.valueOf(normalized.charAt(1)).matches("[a-z0-9@._+\\-]")) {
+            normalized = normalized.substring(1);
+        }
+        return switch (normalized) {
+            case "at", "aite", "ai-te" -> "@";
+            case "dot", "dian", "point" -> ".";
+            case "underscore", "under", "xiahuaxian" -> "_";
+            case "dash", "minus", "hyphen", "henggang" -> "-";
+            default -> normalized.matches("[a-z0-9@._+\\-]{1,16}") ? normalized : "";
+        };
+    }
+
+    private boolean looksLikeContactText(String value) {
+        var normalized = normalize(value);
+        if (normalized.isBlank()) {
+            return false;
+        }
+        var lower = normalized.toLowerCase(Locale.ROOT);
+        return EMAIL_PATTERN.matcher(normalized).find()
+            || lower.contains("@")
+            || lower.contains("mail")
+            || normalized.matches(".*\\d{6,}.*");
     }
 
     private String firstMatch(Pattern pattern, String text, int group) {

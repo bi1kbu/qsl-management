@@ -80,6 +80,15 @@ interface AdifImportPreviewItem {
   message: string
 }
 
+interface CabrilloImportPreviewItem {
+  index: number
+  spec: QsoRecordSpec
+  unsupportedFields: Array<{ name: string; value: string }>
+  rawLine: string
+  valid: boolean
+  message: string
+}
+
 interface StationEquipmentSpec {
   rigName: string
   antennas: string[]
@@ -161,7 +170,9 @@ const feedback = ref('')
 const timerId = ref<number | null>(null)
 const loading = ref(false)
 const saving = ref(false)
-const activeFunctionTab = ref<'basic' | 'batch' | 'adif-import' | 'adif'>('basic')
+const activeFunctionTab = ref<
+  'basic' | 'batch' | 'adif-import' | 'adif' | 'cabrillo-import' | 'cabrillo'
+>('basic')
 const syncHistoryQuery = ref(false)
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
@@ -184,6 +195,15 @@ const adifMySigInfo = ref('')
 const adifImportText = ref('')
 const adifImportPreview = ref<AdifImportPreviewItem[]>([])
 const adifImporting = ref(false)
+const cabrilloContest = ref('')
+const cabrilloOperators = ref('')
+const cabrilloCategoryOperator = ref('')
+const cabrilloCategoryBand = ref('')
+const cabrilloCategoryMode = ref('')
+const cabrilloCategoryPower = ref('')
+const cabrilloImportText = ref('')
+const cabrilloImportPreview = ref<CabrilloImportPreviewItem[]>([])
+const cabrilloImporting = ref(false)
 
 const availableSceneTypes = computed<SceneType[]>(() => {
   const deduplicated = Array.from(new Set(props.sceneTypes.map((item) => normalizeSceneType(item))))
@@ -212,6 +232,12 @@ const stationProfilePlural = 'station-profiles'
 const stationProfileName = 'qsl-station-profile-default'
 const adifMySigStorageKey = 'qsl:qso-record:adif-my-sig'
 const adifMySigInfoStorageKey = 'qsl:qso-record:adif-my-sig-info'
+const cabrilloContestStorageKey = 'qsl:qso-record:cabrillo-contest'
+const cabrilloOperatorsStorageKey = 'qsl:qso-record:cabrillo-operators'
+const cabrilloCategoryOperatorStorageKey = 'qsl:qso-record:cabrillo-category-operator'
+const cabrilloCategoryBandStorageKey = 'qsl:qso-record:cabrillo-category-band'
+const cabrilloCategoryModeStorageKey = 'qsl:qso-record:cabrillo-category-mode'
+const cabrilloCategoryPowerStorageKey = 'qsl:qso-record:cabrillo-category-power'
 
 const adifMySigOptions = [
   { value: '', label: '不添加' },
@@ -219,6 +245,11 @@ const adifMySigOptions = [
   { value: 'SOTA', label: 'SOTA' },
   { value: 'WWFF', label: 'WWFF' },
 ]
+
+const cabrilloCategoryOperatorOptions = ['', 'SINGLE-OP', 'MULTI-OP', 'CHECKLOG']
+const cabrilloCategoryBandOptions = ['', 'ALL', '160M', '80M', '40M', '20M', '15M', '10M']
+const cabrilloCategoryModeOptions = ['', 'MIXED', 'CW', 'SSB', 'RTTY', 'DIGI']
+const cabrilloCategoryPowerOptions = ['', 'HIGH', 'LOW', 'QRP']
 
 const myRigOptions = computed(() => {
   return stationEquipments.value
@@ -1074,6 +1105,277 @@ const buildAdifContent = (items: QsoRecordItem[]): string => {
   return `${header}\r\n${items.map((item) => buildAdifRecord(item)).join('\r\n')}\r\n`
 }
 
+const cabrilloExportRecords = adifExportRecords
+
+const normalizeCabrilloMode = (mode: string): string => {
+  const normalized = mode.trim().toUpperCase()
+  const modeMap: Record<string, string> = {
+    PH: 'SSB',
+    PHONE: 'SSB',
+    SSB: 'SSB',
+    RY: 'RTTY',
+    RTTY: 'RTTY',
+    DG: 'FT8',
+    DIGI: 'FT8',
+    DIGITAL: 'FT8',
+    CW: 'CW',
+    FM: 'FM',
+    AM: 'AM',
+  }
+  return modeMap[normalized] ?? normalized
+}
+
+const toCabrilloMode = (mode: string): string => {
+  const normalized = normalizeAdifMode(mode)
+  if (normalized === 'SSB' || normalized === 'USB' || normalized === 'LSB') {
+    return 'PH'
+  }
+  if (normalized === 'RTTY') {
+    return 'RY'
+  }
+  if (normalized === 'FT8' || normalized === 'FT4' || normalized === 'MFSK') {
+    return 'DG'
+  }
+  return normalized || 'PH'
+}
+
+const parseCabrilloDate = (value?: string): string => {
+  const normalized = (value ?? '').trim()
+  const matched = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matched) {
+    return ''
+  }
+  return `${matched[1]}-${matched[2]}-${matched[3]}`
+}
+
+const parseCabrilloTime = (value?: string): string => {
+  const normalized = (value ?? '').trim()
+  return /^\d{4}$/.test(normalized) ? normalized : ''
+}
+
+const resolveCabrilloImportFreq = (value?: string): string => {
+  const normalized = (value ?? '').trim().toUpperCase()
+  if (!normalized) {
+    return ''
+  }
+  const numeric = Number.parseFloat(normalized)
+  if (!Number.isFinite(numeric)) {
+    return normalized
+  }
+  if (numeric >= 1000) {
+    return (numeric / 1000).toFixed(3).replace(/\.?0+$/, '')
+  }
+  return normalized
+}
+
+const toCabrilloFrequency = (freq: string): string => {
+  const normalized = freq.trim().toUpperCase()
+  const numeric = Number.parseFloat(normalized)
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return String(Math.round(numeric * 1000))
+  }
+  const band = resolveAdifBand(freq)
+  const bandMap: Record<string, string> = {
+    '160M': '1800',
+    '80M': '3500',
+    '40M': '7000',
+    '30M': '10100',
+    '20M': '14000',
+    '17M': '18068',
+    '15M': '21000',
+    '12M': '24890',
+    '10M': '28000',
+    '6M': '50000',
+    '2M': '144000',
+    '70CM': '430000',
+  }
+  return bandMap[band] ?? normalized
+}
+
+const parseCabrilloContent = (
+  content: string,
+): { headers: Record<string, string>; qsoLines: string[] } => {
+  const headers: Record<string, string> = {}
+  const qsoLines: string[] = []
+  content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .forEach((line) => {
+      if (!line || line.startsWith('#')) {
+        return
+      }
+      if (/^QSO:/i.test(line)) {
+        qsoLines.push(line)
+        return
+      }
+      const matched = line.match(/^([A-Z0-9_-]+)\s*:\s*(.*)$/i)
+      if (matched) {
+        headers[(matched[1] ?? '').trim().toUpperCase()] = (matched[2] ?? '').trim()
+      }
+    })
+  return { headers, qsoLines }
+}
+
+const cabrilloHeaderFieldsForRemarks = (
+  headers: Record<string, string>,
+): Array<{ name: string; value: string }> => {
+  const supportedFields = new Set([
+    'START-OF-LOG',
+    'END-OF-LOG',
+    'CALLSIGN',
+    'CONTEST',
+    'OPERATORS',
+    'CATEGORY-OPERATOR',
+    'CATEGORY-BAND',
+    'CATEGORY-MODE',
+    'CATEGORY-POWER',
+  ])
+  return Object.entries(headers)
+    .filter(([name, value]) => value.trim() && !supportedFields.has(name))
+    .map(([name, value]) => ({ name, value }))
+}
+
+const buildCabrilloImportRemarks = (
+  headers: Record<string, string>,
+  sentExchange: string,
+  receivedExchange: string,
+  extraFields: string[],
+  unsupportedFields: Array<{ name: string; value: string }>,
+): string => {
+  const remarks: string[] = []
+  const contest = headers.CONTEST?.trim()
+  const operators = headers.OPERATORS?.trim()
+  if (contest) {
+    remarks.push(`CONTEST：${contest}；`)
+  }
+  if (operators) {
+    remarks.push(`OPERATORS：${operators}；`)
+  }
+  if (sentExchange) {
+    remarks.push(`SENT_EXCHANGE：${sentExchange}；`)
+  }
+  if (receivedExchange) {
+    remarks.push(`RECEIVED_EXCHANGE：${receivedExchange}；`)
+  }
+  if (extraFields.length) {
+    remarks.push(`QSO_EXTRA：${extraFields.join(' ')}；`)
+  }
+  if (unsupportedFields.length) {
+    remarks.push(unsupportedFields.map((item) => `${item.name}：${item.value}；`).join('\n'))
+  }
+  return remarks.join('\n')
+}
+
+const toCabrilloImportPreviewItem = (
+  rawLine: string,
+  headers: Record<string, string>,
+  index: number,
+): CabrilloImportPreviewItem => {
+  const tokens = rawLine.replace(/^QSO:\s*/i, '').trim().split(/\s+/)
+  const freq = resolveCabrilloImportFreq(tokens[0])
+  const mode = normalizeCabrilloMode(tokens[1] ?? '')
+  const date = parseCabrilloDate(tokens[2])
+  const time = parseCabrilloTime(tokens[3])
+  const myCall = normalizeAdifCallSign(tokens[4] ?? headers.CALLSIGN)
+  const rstSent = tokens[5] ?? ''
+  const sentExchange = tokens[6] ?? ''
+  const callSign = normalizeAdifCallSign(tokens[7])
+  const rstRcvd = tokens[8] ?? ''
+  const receivedExchange = tokens[9] ?? ''
+  const extraFields = tokens.slice(10)
+  const equipment = resolveAdifStationEquipment('')
+  const unsupportedFields = cabrilloHeaderFieldsForRemarks(headers)
+  const spec: QsoRecordSpec = {
+    sceneType: 'QSO',
+    date,
+    time,
+    timezone: 'UTC',
+    freq,
+    myRig: equipment?.rigName?.trim() || '',
+    myRigMode: mode || equipment?.modes?.[0]?.trim() || '',
+    myRigAnt: equipment?.antennas?.[0]?.trim() || '',
+    myRigPwr: equipment?.powers?.[0]?.trim() || '',
+    myQth: '',
+    operator: myCall || stationProfileCallSign.value,
+    callSign,
+    rig: '',
+    ant: '',
+    pwr: '',
+    qth: headers.CONTEST?.trim() ?? '',
+    rstSent: rstSent || (mode === 'CW' ? '599' : '59'),
+    rstRcvd: rstRcvd || (mode === 'CW' ? '599' : '59'),
+    remarks: buildCabrilloImportRemarks(
+      headers,
+      sentExchange,
+      receivedExchange,
+      extraFields,
+      unsupportedFields,
+    ),
+  }
+  const missing: string[] = []
+  if (!callSign) {
+    missing.push('呼号')
+  }
+  if (!date) {
+    missing.push('日期')
+  }
+  if (!time) {
+    missing.push('时间')
+  }
+  return {
+    index,
+    spec,
+    unsupportedFields,
+    rawLine,
+    valid: missing.length === 0,
+    message: missing.length ? `缺少或无法识别：${missing.join('、')}` : '可导入',
+  }
+}
+
+const cabrilloPadded = (value: string, length: number): string => value.padEnd(length, ' ')
+
+const buildCabrilloQsoLine = (item: QsoRecordItem): string => {
+  const dateTime = toAdifDateTime(item)
+  const date = `${dateTime.date.slice(0, 4)}-${dateTime.date.slice(4, 6)}-${dateTime.date.slice(6, 8)}`
+  const time = dateTime.time.slice(0, 4)
+  const stationCallSign = normalizeAdifCallSign(stationProfileCallSign.value) || 'NOCALL'
+  const operatorCallSign = normalizeAdifCallSign(item.operator) || stationCallSign
+  const rstSent = item.sceneType === 'SWL' ? '000' : item.rstSent || '59'
+  const rstRcvd = item.rstRcvd || '59'
+  return [
+    'QSO:',
+    cabrilloPadded(toCabrilloFrequency(item.freq), 6),
+    cabrilloPadded(toCabrilloMode(item.mode), 3),
+    date,
+    cabrilloPadded(time, 4),
+    cabrilloPadded(stationCallSign, 13),
+    cabrilloPadded(rstSent, 3),
+    cabrilloPadded(operatorCallSign, 10),
+    cabrilloPadded(item.callSign.toUpperCase(), 13),
+    cabrilloPadded(rstRcvd, 3),
+    item.qth || item.remarks || '-',
+  ].join(' ').trimEnd()
+}
+
+const buildCabrilloContent = (items: QsoRecordItem[]): string => {
+  const stationCallSign = normalizeAdifCallSign(stationProfileCallSign.value) || 'NOCALL'
+  const operators = cabrilloOperators.value.trim() || stationCallSign
+  const header = [
+    'START-OF-LOG: 3.0',
+    `CALLSIGN: ${stationCallSign}`,
+    `CONTEST: ${cabrilloContest.value.trim() || 'GENERAL'}`,
+    cabrilloCategoryOperator.value ? `CATEGORY-OPERATOR: ${cabrilloCategoryOperator.value}` : '',
+    cabrilloCategoryBand.value ? `CATEGORY-BAND: ${cabrilloCategoryBand.value}` : '',
+    cabrilloCategoryMode.value ? `CATEGORY-MODE: ${cabrilloCategoryMode.value}` : '',
+    cabrilloCategoryPower.value ? `CATEGORY-POWER: ${cabrilloCategoryPower.value}` : '',
+    `OPERATORS: ${operators}`,
+    'CREATED-BY: QSL Management System',
+  ].filter(Boolean)
+  return `${header.join('\r\n')}\r\n${items
+    .map((item) => buildCabrilloQsoLine(item))
+    .join('\r\n')}\r\nEND-OF-LOG:\r\n`
+}
+
 const downloadTextFile = (fileName: string, content: string) => {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -1096,6 +1398,18 @@ const exportAdifRecords = () => {
   downloadTextFile(`qso-records-${timestamp}.adi`, buildAdifContent(items))
   feedback.value = ''
   Toast.success(`已导出 ${items.length} 条 ADIF 记录。`)
+}
+
+const exportCabrilloRecords = () => {
+  const items = cabrilloExportRecords.value
+  if (!items.length) {
+    feedback.value = '没有可导出的通联记录。'
+    return
+  }
+  const timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)
+  downloadTextFile(`qso-records-${timestamp}.log`, buildCabrilloContent(items))
+  feedback.value = ''
+  Toast.success(`已导出 ${items.length} 条 Cabrillo 记录。`)
 }
 
 const parseAdifImportText = () => {
@@ -1125,6 +1439,36 @@ const handleAdifImportFile = async (event: Event) => {
   }
   adifImportText.value = await file.text()
   parseAdifImportText()
+  input.value = ''
+}
+
+const parseCabrilloImportText = () => {
+  const content = cabrilloImportText.value.trim()
+  if (!content) {
+    cabrilloImportPreview.value = []
+    feedback.value = '请先粘贴或上传 Cabrillo 内容。'
+    return
+  }
+  const parsed = parseCabrilloContent(content)
+  cabrilloImportPreview.value = parsed.qsoLines.map((line, index) =>
+    toCabrilloImportPreviewItem(line, parsed.headers, index + 1),
+  )
+  if (!cabrilloImportPreview.value.length) {
+    feedback.value = '未解析到 Cabrillo 记录，请检查内容是否包含 QSO: 行。'
+    return
+  }
+  const validCount = cabrilloImportPreview.value.filter((item) => item.valid).length
+  feedback.value = `已解析 ${cabrilloImportPreview.value.length} 条记录，可导入 ${validCount} 条。`
+}
+
+const handleCabrilloImportFile = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) {
+    return
+  }
+  cabrilloImportText.value = await file.text()
+  parseCabrilloImportText()
   input.value = ''
 }
 
@@ -1169,6 +1513,47 @@ const importAdifRecords = async () => {
   }
 }
 
+const importCabrilloRecords = async () => {
+  const targets = cabrilloImportPreview.value.filter((item) => item.valid)
+  if (!targets.length) {
+    feedback.value = '没有可导入的 Cabrillo 记录。'
+    return
+  }
+
+  cabrilloImporting.value = true
+  try {
+    const reservedNames = records.value.map((item) => item.resourceName)
+    const createdNames: string[] = []
+    for (const item of targets) {
+      const resourceName = buildQsoResourceName([...reservedNames, ...createdNames])
+      await createExtension<QsoRecordSpec>(resourcePlural, {
+        apiVersion: qslApiVersion,
+        kind: resourceKind,
+        metadata: {
+          name: resourceName,
+        },
+        spec: item.spec,
+      })
+      createdNames.push(resourceName)
+    }
+
+    await appendQslAuditLog({
+      action: '导入Cabrillo通联记录',
+      resourceType: 'qso-record',
+      resourceName: `Cabrillo-${createdNames.length}`,
+      detail: `成功导入 ${createdNames.length} 条通联记录`,
+    })
+
+    await loadRecords({ silent: true })
+    feedback.value = ''
+    Toast.success(`已导入 ${createdNames.length} 条 Cabrillo 记录。`)
+  } catch (error) {
+    feedback.value = `导入 Cabrillo 记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    cabrilloImporting.value = false
+  }
+}
+
 const loadAdifExportSettings = () => {
   try {
     adifMySig.value = window.localStorage.getItem(adifMySigStorageKey) ?? ''
@@ -1176,6 +1561,25 @@ const loadAdifExportSettings = () => {
   } catch {
     adifMySig.value = ''
     adifMySigInfo.value = ''
+  }
+}
+
+const loadCabrilloExportSettings = () => {
+  try {
+    cabrilloContest.value = window.localStorage.getItem(cabrilloContestStorageKey) ?? ''
+    cabrilloOperators.value = window.localStorage.getItem(cabrilloOperatorsStorageKey) ?? ''
+    cabrilloCategoryOperator.value =
+      window.localStorage.getItem(cabrilloCategoryOperatorStorageKey) ?? ''
+    cabrilloCategoryBand.value = window.localStorage.getItem(cabrilloCategoryBandStorageKey) ?? ''
+    cabrilloCategoryMode.value = window.localStorage.getItem(cabrilloCategoryModeStorageKey) ?? ''
+    cabrilloCategoryPower.value = window.localStorage.getItem(cabrilloCategoryPowerStorageKey) ?? ''
+  } catch {
+    cabrilloContest.value = ''
+    cabrilloOperators.value = ''
+    cabrilloCategoryOperator.value = ''
+    cabrilloCategoryBand.value = ''
+    cabrilloCategoryMode.value = ''
+    cabrilloCategoryPower.value = ''
   }
 }
 
@@ -1190,6 +1594,54 @@ watch(adifMySig, (value) => {
 watch(adifMySigInfo, (value) => {
   try {
     window.localStorage.setItem(adifMySigInfoStorageKey, value)
+  } catch {
+    // 浏览器禁用 localStorage 时仅保留当前页面内的导出设置。
+  }
+})
+
+watch(cabrilloContest, (value) => {
+  try {
+    window.localStorage.setItem(cabrilloContestStorageKey, value)
+  } catch {
+    // 浏览器禁用 localStorage 时仅保留当前页面内的导出设置。
+  }
+})
+
+watch(cabrilloOperators, (value) => {
+  try {
+    window.localStorage.setItem(cabrilloOperatorsStorageKey, value)
+  } catch {
+    // 浏览器禁用 localStorage 时仅保留当前页面内的导出设置。
+  }
+})
+
+watch(cabrilloCategoryOperator, (value) => {
+  try {
+    window.localStorage.setItem(cabrilloCategoryOperatorStorageKey, value)
+  } catch {
+    // 浏览器禁用 localStorage 时仅保留当前页面内的导出设置。
+  }
+})
+
+watch(cabrilloCategoryBand, (value) => {
+  try {
+    window.localStorage.setItem(cabrilloCategoryBandStorageKey, value)
+  } catch {
+    // 浏览器禁用 localStorage 时仅保留当前页面内的导出设置。
+  }
+})
+
+watch(cabrilloCategoryMode, (value) => {
+  try {
+    window.localStorage.setItem(cabrilloCategoryModeStorageKey, value)
+  } catch {
+    // 浏览器禁用 localStorage 时仅保留当前页面内的导出设置。
+  }
+})
+
+watch(cabrilloCategoryPower, (value) => {
+  try {
+    window.localStorage.setItem(cabrilloCategoryPowerStorageKey, value)
   } catch {
     // 浏览器禁用 localStorage 时仅保留当前页面内的导出设置。
   }
@@ -1454,6 +1906,7 @@ onBeforeUnmount(() => {
 
 onMounted(() => {
   loadAdifExportSettings()
+  loadCabrilloExportSettings()
   loadPageData()
 })
 </script>
@@ -1474,6 +1927,12 @@ onMounted(() => {
               <div class="qsl-tab-panel-placeholder" />
             </VTabItem>
             <VTabItem id="adif" label="ADIF格式导出">
+              <div class="qsl-tab-panel-placeholder" />
+            </VTabItem>
+            <VTabItem id="cabrillo-import" label="Cabrillo格式导入">
+              <div class="qsl-tab-panel-placeholder" />
+            </VTabItem>
+            <VTabItem id="cabrillo" label="Cabrillo格式导出">
               <div class="qsl-tab-panel-placeholder" />
             </VTabItem>
           </VTabs>
@@ -1860,6 +2319,179 @@ onMounted(() => {
               :disabled="!selectedHistoryCount"
               @click="clearHistorySelection"
             >
+              清空选择
+            </VButton>
+            <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
+          </div>
+        </div>
+      </template>
+
+      <template v-else-if="activeFunctionTab === 'cabrillo-import'">
+        <div class="qsl-record-section">
+          <p class="qsl-record-section__title">Cabrillo格式导入</p>
+          <div class="qsl-form-grid qsl-form-grid--adif">
+            <label class="qsl-field qsl-field--full">
+              <span class="qsl-field__label">Cabrillo内容（Cabrillo_Content）</span>
+              <div class="qsl-input-shell qsl-input-shell--textarea">
+                <textarea
+                  v-model="cabrilloImportText"
+                  rows="10"
+                  placeholder="粘贴 Cabrillo 内容，或通过下方文件选择导入 .log/.txt 文件"
+                />
+              </div>
+            </label>
+            <label class="qsl-field qsl-field--full">
+              <span class="qsl-field__label">Cabrillo文件（Cabrillo_File）</span>
+              <div class="qsl-input-shell">
+                <input type="file" accept=".log,.txt,text/plain" @change="handleCabrilloImportFile" />
+              </div>
+            </label>
+          </div>
+          <div class="qsl-actions">
+            <VButton
+              type="secondary"
+              :disabled="loading || cabrilloImporting"
+              @click="parseCabrilloImportText"
+            >
+              解析Cabrillo内容
+            </VButton>
+            <VButton
+              class="qsl-action-warning"
+              type="secondary"
+              :disabled="
+                loading ||
+                cabrilloImporting ||
+                !cabrilloImportPreview.some((item) => item.valid)
+              "
+              @click="importCabrilloRecords"
+            >
+              导入可用记录
+            </VButton>
+            <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
+          </div>
+          <div v-if="cabrilloImportPreview.length" class="qsl-adif-summary">
+            <p>解析记录数：{{ cabrilloImportPreview.length }}</p>
+            <p>可导入数量：{{ cabrilloImportPreview.filter((item) => item.valid).length }}</p>
+            <p>比赛交换信息和未映射头字段会追加到备注。</p>
+          </div>
+          <div v-if="cabrilloImportPreview.length" class="qsl-adif-preview-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>状态</th>
+                  <th>呼号</th>
+                  <th>日期</th>
+                  <th>时间</th>
+                  <th>频率</th>
+                  <th>模式</th>
+                  <th>备注扩展字段</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in cabrilloImportPreview" :key="item.index">
+                  <td>{{ item.index }}</td>
+                  <td>{{ item.message }}</td>
+                  <td>{{ item.spec.callSign || '-' }}</td>
+                  <td>{{ item.spec.date || '-' }}</td>
+                  <td>{{ item.spec.time || '-' }}</td>
+                  <td>{{ item.spec.freq || '-' }}</td>
+                  <td>{{ item.spec.myRigMode || '-' }}</td>
+                  <td>{{ item.unsupportedFields.map((field) => field.name).join('、') || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+      <template v-else-if="activeFunctionTab === 'cabrillo'">
+        <div class="qsl-record-section">
+          <p class="qsl-record-section__title">Cabrillo格式导出</p>
+          <div class="qsl-form-grid qsl-form-grid--adif">
+            <label class="qsl-field">
+              <span class="qsl-field__label">CONTEST（比赛名称）</span>
+              <div class="qsl-input-shell">
+                <input v-model.trim="cabrilloContest" type="text" placeholder="例如：CQ-WPX-SSB" />
+              </div>
+            </label>
+            <label class="qsl-field">
+              <span class="qsl-field__label">OPERATORS（操作员）</span>
+              <div class="qsl-input-shell">
+                <input v-model.trim="cabrilloOperators" type="text" placeholder="留空使用本台呼号" />
+              </div>
+            </label>
+            <label class="qsl-field">
+              <span class="qsl-field__label">CATEGORY-OPERATOR（操作员类别）</span>
+              <div class="qsl-input-shell">
+                <select v-model="cabrilloCategoryOperator">
+                  <option
+                    v-for="item in cabrilloCategoryOperatorOptions"
+                    :key="item || 'empty'"
+                    :value="item"
+                  >
+                    {{ item || '不添加' }}
+                  </option>
+                </select>
+              </div>
+            </label>
+            <label class="qsl-field">
+              <span class="qsl-field__label">CATEGORY-BAND（频段类别）</span>
+              <div class="qsl-input-shell">
+                <select v-model="cabrilloCategoryBand">
+                  <option
+                    v-for="item in cabrilloCategoryBandOptions"
+                    :key="item || 'empty'"
+                    :value="item"
+                  >
+                    {{ item || '不添加' }}
+                  </option>
+                </select>
+              </div>
+            </label>
+            <label class="qsl-field">
+              <span class="qsl-field__label">CATEGORY-MODE（模式类别）</span>
+              <div class="qsl-input-shell">
+                <select v-model="cabrilloCategoryMode">
+                  <option
+                    v-for="item in cabrilloCategoryModeOptions"
+                    :key="item || 'empty'"
+                    :value="item"
+                  >
+                    {{ item || '不添加' }}
+                  </option>
+                </select>
+              </div>
+            </label>
+            <label class="qsl-field">
+              <span class="qsl-field__label">CATEGORY-POWER（功率类别）</span>
+              <div class="qsl-input-shell">
+                <select v-model="cabrilloCategoryPower">
+                  <option
+                    v-for="item in cabrilloCategoryPowerOptions"
+                    :key="item || 'empty'"
+                    :value="item"
+                  >
+                    {{ item || '不添加' }}
+                  </option>
+                </select>
+              </div>
+            </label>
+          </div>
+          <div class="qsl-adif-summary">
+            <p>导出范围：{{ selectedHistoryCount ? '已勾选记录' : '当前筛选结果' }}</p>
+            <p>待导出数量：{{ cabrilloExportRecords.length }}</p>
+            <p>CALLSIGN：使用本台通信地址中的呼号</p>
+          </div>
+          <div class="qsl-actions">
+            <VButton
+              type="secondary"
+              :disabled="loading || !cabrilloExportRecords.length"
+              @click="exportCabrilloRecords"
+            >
+              导出Cabrillo文件
+            </VButton>
+            <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">
               清空选择
             </VButton>
             <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
