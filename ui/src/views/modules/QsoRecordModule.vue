@@ -145,7 +145,7 @@ const form = reactive({
   sceneType: props.defaultSceneType as SceneType,
   date: '',
   time: '',
-  timezone: 'UTC' as 'UTC' | 'UTC+8',
+  timezone: 'UTC+8' as 'UTC' | 'UTC+8',
   realtime: false,
   freq: '',
   myRig: '',
@@ -775,7 +775,7 @@ const resetForm = () => {
   if (!form.realtime) {
     form.date = ''
     form.time = ''
-    form.timezone = 'UTC'
+    form.timezone = 'UTC+8'
   }
 }
 
@@ -856,6 +856,44 @@ const parseExportTimeParts = (
   }
 }
 
+const getTimezoneOffsetMinutes = (timezone?: string): number => {
+  const normalizedTimezone = (timezone ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace('＋', '+')
+    .replace('－', '-')
+  if (!normalizedTimezone) {
+    return 8 * 60
+  }
+  if (
+    normalizedTimezone === 'UTC' ||
+    normalizedTimezone === 'GMT' ||
+    normalizedTimezone === 'Z'
+  ) {
+    return 0
+  }
+  if (normalizedTimezone === '北京时间' || normalizedTimezone === 'ASIA/SHANGHAI') {
+    return 8 * 60
+  }
+  const matched = normalizedTimezone.match(/^(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?$/)
+  if (!matched) {
+    return 8 * 60
+  }
+  const sign = matched[1] === '-' ? -1 : 1
+  const hour = Number.parseInt(matched[2] ?? '0', 10)
+  const minute = Number.parseInt(matched[3] ?? '0', 10)
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    hour > 14 ||
+    minute > 59
+  ) {
+    return 8 * 60
+  }
+  return sign * (hour * 60 + minute)
+}
+
 const toAdifDateTime = (item: QsoRecordItem): { date: string; time: string } => {
   const dateMatched = item.date.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
   const parsedTime = parseExportTimeParts(item.time)
@@ -870,10 +908,10 @@ const toAdifDateTime = (item: QsoRecordItem): { date: string; time: string } => 
   const year = Number.parseInt(dateMatched[1] ?? '', 10)
   const month = Number.parseInt(dateMatched[2] ?? '', 10) - 1
   const day = Number.parseInt(dateMatched[3] ?? '', 10)
+  const timezoneOffsetMinutes = getTimezoneOffsetMinutes(item.timezone)
   const timestamp =
-    item.timezone === 'UTC+8'
-      ? Date.UTC(year, month, day, parsedTime.hour - 8, parsedTime.minute, parsedTime.second)
-      : Date.UTC(year, month, day, parsedTime.hour, parsedTime.minute, parsedTime.second)
+    Date.UTC(year, month, day, parsedTime.hour, parsedTime.minute, parsedTime.second) -
+    timezoneOffsetMinutes * 60 * 1000
   const utcDate = new Date(timestamp)
   const yyyy = String(utcDate.getUTCFullYear())
   const mm = String(utcDate.getUTCMonth() + 1).padStart(2, '0')
