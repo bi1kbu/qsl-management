@@ -52,6 +52,7 @@
 3. 每次执行正式打包前，必须在现有插件版本基础上递增 `0.0.1`，并同步更新 `src/main/resources/plugin.yaml` 与 `gradle.properties`，确保 Halo 插件元数据版本和 JAR 产物版本一致。
 
 ## 发布与 CI/CD 约定
+0. 用户要求“创建版本”时，默认完整含义为：递增版本号、提交本地 Git、推送 GitHub、创建 GitHub Release，并持续跟踪 CI/CD，直到 GitHub Release 附件上传与 Halo 应用市场提交流程完成或明确失败。
 1. 每次提交并创建 GitHub Release 后，必须立即核实 GitHub Actions 中对应 CI 与 CD 的状态。
 2. 创建 Release 时不手动上传 JAR 附件；Release 附件由 CD 流程自动构建并上传，避免同名资产导致 CD 失败。
 3. GitHub 推送若受到本机代理影响，优先尝试临时清空代理环境的单次命令方案，例如 `git -c http.proxy= -c https.proxy= push origin main`；该方案不得修改全局 Git 代理配置。
