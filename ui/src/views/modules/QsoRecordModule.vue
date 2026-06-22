@@ -76,6 +76,8 @@ interface AdifImportPreviewItem {
   index: number
   spec: QsoRecordSpec
   unsupportedFields: Array<{ name: string; value: string }>
+  sourceRecordName: string
+  duplicateKey: string
   valid: boolean
   message: string
 }
@@ -209,6 +211,23 @@ const availableSceneTypes = computed<SceneType[]>(() => {
   const deduplicated = Array.from(new Set(props.sceneTypes.map((item) => normalizeSceneType(item))))
   return deduplicated.length ? deduplicated : ['QSO']
 })
+
+const adifImportReadyCount = computed(
+  () => adifImportPreview.value.filter((item) => item.valid).length,
+)
+const adifImportDuplicateCount = computed(
+  () =>
+    adifImportPreview.value.filter(
+      (item) => item.message.includes('重复') || item.message.includes('已存在'),
+    ).length,
+)
+const adifImportInvalidCount = computed(
+  () =>
+    adifImportPreview.value.filter(
+      (item) =>
+        !item.valid && !item.message.includes('重复') && !item.message.includes('已存在'),
+    ).length,
+)
 
 const isSwlMode = computed(() => form.sceneType === 'SWL')
 
@@ -895,6 +914,108 @@ const parseAdifRecords = (content: string): Array<Record<string, string>> => {
     .filter((item) => Object.keys(item).length > 0)
 }
 
+const normalizeAdifRecordName = (value?: string): string => {
+  return (value ?? '').trim().toUpperCase()
+}
+
+const normalizeQsoDuplicatePart = (value?: string): string => {
+  return (value ?? '').trim().toUpperCase().replace(/\s+/g, '')
+}
+
+const buildQsoDuplicateKey = (input: {
+  sceneType?: string
+  callSign?: string
+  date?: string
+  time?: string
+  timezone?: string
+  mode?: string
+  freq?: string
+}): string => {
+  return [
+    normalizeSceneType(input.sceneType),
+    normalizeQsoDuplicatePart(input.callSign),
+    normalizeQsoDuplicatePart(input.date),
+    normalizeQsoDuplicatePart(input.time),
+    normalizeQsoDuplicatePart(input.timezone),
+    normalizeQsoDuplicatePart(input.mode),
+    normalizeQsoDuplicatePart(input.freq),
+  ].join('|')
+}
+
+const buildQsoDuplicateKeyFromSpec = (spec: QsoRecordSpec): string => {
+  return buildQsoDuplicateKey({
+    sceneType: spec.sceneType,
+    callSign: spec.callSign,
+    date: spec.date,
+    time: spec.time,
+    timezone: spec.timezone,
+    mode: spec.myRigMode,
+    freq: spec.freq,
+  })
+}
+
+const buildQsoDuplicateKeyFromRecord = (record: QsoRecordItem): string => {
+  return buildQsoDuplicateKey({
+    sceneType: record.sceneType,
+    callSign: record.callSign,
+    date: record.date,
+    time: record.time,
+    timezone: record.timezone,
+    mode: record.mode,
+    freq: record.freq,
+  })
+}
+
+const markAdifImportDuplicates = (items: AdifImportPreviewItem[]): AdifImportPreviewItem[] => {
+  const existingRecordNames = new Set(
+    records.value.map((record) => normalizeAdifRecordName(record.resourceName)).filter(Boolean),
+  )
+  const existingKeys = new Set(records.value.map((record) => buildQsoDuplicateKeyFromRecord(record)))
+  const importedRecordNames = new Set<string>()
+  const importedKeys = new Set<string>()
+
+  return items.map((item) => {
+    if (!item.valid) {
+      return item
+    }
+    const sourceRecordName = normalizeAdifRecordName(item.sourceRecordName)
+    if (sourceRecordName) {
+      if (existingRecordNames.has(sourceRecordName)) {
+        return {
+          ...item,
+          valid: false,
+          message: `已存在：${sourceRecordName}`,
+        }
+      }
+      if (importedRecordNames.has(sourceRecordName)) {
+        return {
+          ...item,
+          valid: false,
+          message: `文件内重复：${sourceRecordName}`,
+        }
+      }
+      importedRecordNames.add(sourceRecordName)
+    }
+
+    if (existingKeys.has(item.duplicateKey)) {
+      return {
+        ...item,
+        valid: false,
+        message: '已存在：同类型、呼号、日期、时间、时区、模式和频率',
+      }
+    }
+    if (importedKeys.has(item.duplicateKey)) {
+      return {
+        ...item,
+        valid: false,
+        message: '文件内重复：同类型、呼号、日期、时间、时区、模式和频率',
+      }
+    }
+    importedKeys.add(item.duplicateKey)
+    return item
+  })
+}
+
 const parseAdifDate = (value?: string): string => {
   const normalized = (value ?? '').trim()
   const matched = normalized.match(/^(\d{4})(\d{2})(\d{2})$/)
@@ -1046,6 +1167,8 @@ const toAdifImportPreviewItem = (
     index,
     spec,
     unsupportedFields,
+    sourceRecordName: fields.APP_QSLMS_RECORD_ID?.trim() ?? '',
+    duplicateKey: buildQsoDuplicateKeyFromSpec(spec),
     valid: missing.length === 0,
     message: missing.length ? `缺少或无法识别：${missing.join('、')}` : '可导入',
   }
@@ -1420,15 +1543,14 @@ const parseAdifImportText = () => {
     return
   }
   const parsedRecords = parseAdifRecords(content)
-  adifImportPreview.value = parsedRecords.map((item, index) =>
-    toAdifImportPreviewItem(item, index + 1),
+  adifImportPreview.value = markAdifImportDuplicates(
+    parsedRecords.map((item, index) => toAdifImportPreviewItem(item, index + 1)),
   )
   if (!adifImportPreview.value.length) {
     feedback.value = '未解析到 ADIF 记录，请检查内容是否包含 <EOR>。'
     return
   }
-  const validCount = adifImportPreview.value.filter((item) => item.valid).length
-  feedback.value = `已解析 ${adifImportPreview.value.length} 条记录，可导入 ${validCount} 条。`
+  feedback.value = `已解析 ${adifImportPreview.value.length} 条记录，可导入 ${adifImportReadyCount.value} 条，跳过重复 ${adifImportDuplicateCount.value} 条，无效 ${adifImportInvalidCount.value} 条。`
 }
 
 const handleAdifImportFile = async (event: Event) => {
@@ -1473,14 +1595,20 @@ const handleCabrilloImportFile = async (event: Event) => {
 }
 
 const importAdifRecords = async () => {
-  const targets = adifImportPreview.value.filter((item) => item.valid)
-  if (!targets.length) {
-    feedback.value = '没有可导入的 ADIF 记录。'
-    return
-  }
-
   adifImporting.value = true
   try {
+    await loadRecords({ silent: true, skipLoading: true })
+    adifImportPreview.value = markAdifImportDuplicates(
+      adifImportPreview.value.map((item) =>
+        item.valid ? { ...item, message: '可导入' } : item,
+      ),
+    )
+    const targets = adifImportPreview.value.filter((item) => item.valid)
+    if (!targets.length) {
+      feedback.value = `没有可导入的 ADIF 记录。跳过重复 ${adifImportDuplicateCount.value} 条，无效 ${adifImportInvalidCount.value} 条。`
+      return
+    }
+
     const reservedNames = records.value.map((item) => item.resourceName)
     const createdNames: string[] = []
     for (const item of targets) {
@@ -1504,7 +1632,7 @@ const importAdifRecords = async () => {
     })
 
     await loadRecords({ silent: true })
-    feedback.value = ''
+    feedback.value = `已导入 ${createdNames.length} 条 ADIF 记录，跳过重复 ${adifImportDuplicateCount.value} 条，无效 ${adifImportInvalidCount.value} 条。`
     Toast.success(`已导入 ${createdNames.length} 条 ADIF 记录。`)
   } catch (error) {
     feedback.value = `导入 ADIF 记录失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -2229,7 +2357,7 @@ onMounted(() => {
               :disabled="
                 loading ||
                 adifImporting ||
-                !adifImportPreview.some((item) => item.valid)
+                !adifImportReadyCount
               "
               @click="importAdifRecords"
             >
@@ -2239,7 +2367,9 @@ onMounted(() => {
           </div>
           <div v-if="adifImportPreview.length" class="qsl-adif-summary">
             <p>解析记录数：{{ adifImportPreview.length }}</p>
-            <p>可导入数量：{{ adifImportPreview.filter((item) => item.valid).length }}</p>
+            <p>可导入数量：{{ adifImportReadyCount }}</p>
+            <p>跳过重复数量：{{ adifImportDuplicateCount }}</p>
+            <p>无效数量：{{ adifImportInvalidCount }}</p>
             <p>无法落入通联模型的 ADIF 字段会追加到备注。</p>
           </div>
           <div v-if="adifImportPreview.length" class="qsl-adif-preview-table">
@@ -2254,6 +2384,7 @@ onMounted(() => {
                   <th>时间</th>
                   <th>频率</th>
                   <th>模式</th>
+                  <th>来源记录</th>
                   <th>备注扩展字段</th>
                 </tr>
               </thead>
@@ -2267,6 +2398,7 @@ onMounted(() => {
                   <td>{{ item.spec.time || '-' }}</td>
                   <td>{{ item.spec.freq || '-' }}</td>
                   <td>{{ item.spec.myRigMode || '-' }}</td>
+                  <td>{{ item.sourceRecordName || '-' }}</td>
                   <td>{{ item.unsupportedFields.map((field) => field.name).join('、') || '-' }}</td>
                 </tr>
               </tbody>
