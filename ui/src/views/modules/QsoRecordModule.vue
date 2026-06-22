@@ -821,34 +821,69 @@ const adifExportRecords = computed(() => {
   return sortedFilteredHistory.value.filter((item) => selectedNameSet.has(item.resourceName))
 })
 
+const parseExportTimeParts = (
+  value: string,
+): { hour: number; minute: number; second: number; compact: string } | null => {
+  const normalized = value.trim()
+  const compact = /^\d{2}:\d{2}(:\d{2})?$/.test(normalized)
+    ? normalized.replace(/:/g, '')
+    : toStorageTime(value).trim()
+  const matched = compact.match(/^(\d{2})(\d{2})(\d{2})?$/)
+  if (!matched) {
+    return null
+  }
+  const hour = Number.parseInt(matched[1] ?? '', 10)
+  const minute = Number.parseInt(matched[2] ?? '', 10)
+  const second = Number.parseInt(matched[3] ?? '0', 10)
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    !Number.isInteger(second) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59 ||
+    second < 0 ||
+    second > 59
+  ) {
+    return null
+  }
+  return {
+    hour,
+    minute,
+    second,
+    compact: `${String(hour).padStart(2, '0')}${String(minute).padStart(2, '0')}${String(second).padStart(2, '0')}`,
+  }
+}
+
 const toAdifDateTime = (item: QsoRecordItem): { date: string; time: string } => {
   const dateMatched = item.date.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  const time = toStorageTime(item.time).padEnd(4, '0')
-  if (!dateMatched || !/^\d{4}$/.test(time)) {
+  const parsedTime = parseExportTimeParts(item.time)
+  if (!dateMatched || !parsedTime) {
+    const fallbackTime = toStorageTime(item.time).padEnd(4, '0')
     return {
       date: item.date.replace(/-/g, ''),
-      time: time ? `${time}00` : '',
+      time: fallbackTime ? fallbackTime.padEnd(6, '0').slice(0, 6) : '',
     }
   }
 
   const year = Number.parseInt(dateMatched[1] ?? '', 10)
   const month = Number.parseInt(dateMatched[2] ?? '', 10) - 1
   const day = Number.parseInt(dateMatched[3] ?? '', 10)
-  const hour = Number.parseInt(time.slice(0, 2), 10)
-  const minute = Number.parseInt(time.slice(2, 4), 10)
   const timestamp =
     item.timezone === 'UTC+8'
-      ? Date.UTC(year, month, day, hour - 8, minute, 0)
-      : Date.UTC(year, month, day, hour, minute, 0)
+      ? Date.UTC(year, month, day, parsedTime.hour - 8, parsedTime.minute, parsedTime.second)
+      : Date.UTC(year, month, day, parsedTime.hour, parsedTime.minute, parsedTime.second)
   const utcDate = new Date(timestamp)
   const yyyy = String(utcDate.getUTCFullYear())
   const mm = String(utcDate.getUTCMonth() + 1).padStart(2, '0')
   const dd = String(utcDate.getUTCDate()).padStart(2, '0')
   const hh = String(utcDate.getUTCHours()).padStart(2, '0')
   const min = String(utcDate.getUTCMinutes()).padStart(2, '0')
+  const sec = String(utcDate.getUTCSeconds()).padStart(2, '0')
   return {
     date: `${yyyy}${mm}${dd}`,
-    time: `${hh}${min}00`,
+    time: `${hh}${min}${sec}`,
   }
 }
 
@@ -878,6 +913,22 @@ const resolveAdifBand = (freq: string): string => {
 
 const normalizeAdifMode = (mode: string): string => {
   return mode.trim().toUpperCase().replace(/\s+/g, '')
+}
+
+const normalizeAdifTxPower = (value?: string): string => {
+  const normalizedValue = (value ?? '').trim()
+  if (!normalizedValue) {
+    return ''
+  }
+  const matched = normalizedValue.match(
+    /^(\d+(?:\.\d+)?|\.\d+)\s*(?:[Ww]|[Ww]atts?|瓦|瓦特)?(?:\s|$)/,
+  )
+  if (!matched) {
+    return ''
+  }
+  const numericText = (matched[1] ?? '').startsWith('.') ? `0${matched[1]}` : (matched[1] ?? '')
+  const numericValue = Number.parseFloat(numericText)
+  return Number.isFinite(numericValue) && numericValue >= 0 ? numericText : ''
 }
 
 const adifField = (name: string, value?: string): string => {
@@ -1206,7 +1257,7 @@ const buildAdifRecord = (item: QsoRecordItem): string => {
     adifField('COMMENT', item.remarks),
     adifField('MY_RIG', item.myRig),
     adifField('MY_ANTENNA', item.myRigAnt),
-    adifField('TX_PWR', item.myRigPwr),
+    adifField('TX_PWR', normalizeAdifTxPower(item.myRigPwr)),
     adifField('OPERATOR', operatorCallSign),
     adifField('STATION_CALLSIGN', stationCallSign),
     adifField('MY_SIG', adifMySig.value),
