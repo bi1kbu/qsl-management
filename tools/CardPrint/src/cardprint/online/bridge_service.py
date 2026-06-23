@@ -128,7 +128,25 @@ FIXED_DATASET_MAPPINGS: dict[str, dict[str, Any]] = {
         "rstSent": {"type": "coalesce", "sources": ["qsoInfo.spec.rstSent", "spec.rstSent", "rstSent"]},
         "qth": {
             "type": "coalesce",
-            "sources": ["offlineActivityInfo.spec.activityLocation", "qsoInfo.spec.qth", "spec.qth", "qth"],
+            "sources": [
+                "offlineActivityInfo.spec.activityLocation",
+                "qsoInfo.spec.myQth",
+                "spec.myQth",
+                "qsoInfo.spec.qth",
+                "spec.qth",
+                "qth",
+            ],
+        },
+        "my_qth": {
+            "type": "coalesce",
+            "sources": [
+                "offlineActivityInfo.spec.activityLocation",
+                "qsoInfo.spec.myQth",
+                "spec.myQth",
+                "qsoInfo.spec.qth",
+                "spec.qth",
+                "qth",
+            ],
         },
         "postCardStatus": {
             "type": "checkbox",
@@ -889,13 +907,6 @@ def _enrich_rows_for_envelope_mapping(cfg: dict[str, Any], rows: list[dict[str, 
     return enriched
 
 
-def _is_online_envelope_row(row: dict[str, Any]) -> bool:
-    spec = row.get("spec")
-    if not isinstance(spec, dict):
-        return False
-    return _normalize_scene_type(spec) == "ONLINE_EYEBALL"
-
-
 def _build_address_envelope_items(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     sender_fields = _resolve_sender_fields(cfg)
     rows: list[dict[str, Any]] = []
@@ -1240,7 +1251,6 @@ class BridgeService:
         if dataset_name == "cards":
             source_rows = _enrich_rows_for_card_mapping(cfg, source_rows)
         elif dataset_name == "envelopes":
-            source_rows = [row for row in source_rows if _is_online_envelope_row(row)]
             source_rows = _enrich_rows_for_envelope_mapping(cfg, source_rows)
         mapping = cfg["mappings"].get(dataset_name, {})
         id_field = str(

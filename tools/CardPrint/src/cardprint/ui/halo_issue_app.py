@@ -489,7 +489,7 @@ class HaloIssueWindow(QMainWindow):
         timezone = str(qso_spec.get("timezone", "") or "UTC")
         frequency = str(qso_spec.get("freq", ""))
         mode = str(qso_spec.get("myRigMode", ""))
-        qth = str(qso_spec.get("qth", ""))
+        my_qth = str(qso_spec.get("myQth", "") or qso_spec.get("qth", ""))
         rst_sent = str(qso_spec.get("rstSent", ""))
         equipment_id = str(qso_spec.get("myRig", ""))
         power_preset_id = str(qso_spec.get("myRigPwr", ""))
@@ -567,7 +567,8 @@ class HaloIssueWindow(QMainWindow):
             "powerPresetId": power_preset_id,
             "antennaId": antenna_id,
             "rstSent": rst_sent,
-            "qth": qth,
+            "qth": my_qth,
+            "my_qth": my_qth,
             "postCardStatus": post_card_status,
             "returnCardStatus": return_card_status,
             "欢迎回卡": "⬛" if request_return_card else "",
@@ -584,6 +585,8 @@ class HaloIssueWindow(QMainWindow):
             if isinstance(source, dict):
                 for key, value in source.items():
                     result[str(key)] = "" if value is None else str(value)
+        result["qth"] = my_qth
+        result["my_qth"] = my_qth
         return result
 
     @staticmethod

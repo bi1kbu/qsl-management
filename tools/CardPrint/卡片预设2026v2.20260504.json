@@ -90,7 +90,7 @@
       "max_len": 0
     },
     {
-      "key": "qth",
+      "key": "my_qth",
       "label_zh": "发射地址",
       "x_mm": 6.5,
       "y_mm": 68.5,

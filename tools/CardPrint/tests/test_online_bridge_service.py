@@ -227,7 +227,13 @@ def test_fetch_cards_enrich_qso_info_by_qso_record_name(monkeypatch) -> None:
       "items": [
         {
           "metadata": {"name": "qso-001"},
-          "spec": {"freq": "144.640", "myRigMode": "FM", "rstSent": "59", "qth": "Beijing"}
+          "spec": {
+            "freq": "144.640",
+            "myRigMode": "FM",
+            "rstSent": "59",
+            "myQth": "ON81",
+            "qth": "OL62"
+          }
         }
       ]
     }
@@ -252,7 +258,20 @@ def test_fetch_cards_enrich_qso_info_by_qso_record_name(monkeypatch) -> None:
     assert mapped["frequency"] == "144.640"
     assert mapped["mode"] == "FM"
     assert mapped["rstSent"] == "59"
+    assert mapped["qth"] == "ON81"
+    assert mapped["my_qth"] == "ON81"
+
+
+def test_card_mapping_falls_back_to_peer_qth_when_my_qth_missing() -> None:
+    mapping = bs.normalize_bridge_config({})["mappings"]["cards"]
+
+    mapped = bs.map_export_row(
+        {"spec": {"cardType": "QSO"}, "qsoInfo": {"spec": {"qth": "Beijing"}}},
+        mapping,
+    )
+
     assert mapped["qth"] == "Beijing"
+    assert mapped["my_qth"] == "Beijing"
 
 
 def test_fetch_offline_cards_use_activity_location_as_qth(monkeypatch) -> None:
@@ -314,6 +333,10 @@ def test_fetch_envelopes_enrich_address_info(monkeypatch) -> None:
         {
           "metadata": {"name": "card-record-c2002"},
           "spec": {"callSign": "BI1KBU", "sceneType": "EYEBALL", "addressEntryName": "BI1KBU-2"}
+        },
+        {
+          "metadata": {"name": "card-record-c2003"},
+          "spec": {"callSign": "BG1AAA", "cardType": "QSO", "sceneType": "QSO", "addressEntryName": "BG1AAA-1"}
         }
       ]
     }
@@ -324,6 +347,10 @@ def test_fetch_envelopes_enrich_address_info(monkeypatch) -> None:
         {
           "metadata": {"name": "BI1KBU-1"},
           "spec": {"name": "测试台", "address": "北京市某区某路", "postalCode": "100000", "telephone": "138****0000"}
+        },
+        {
+          "metadata": {"name": "BG1AAA-1"},
+          "spec": {"name": "通联台", "address": "北京市另一地址", "postalCode": "100001", "telephone": "139****0000"}
         }
       ]
     }
@@ -347,13 +374,15 @@ def test_fetch_envelopes_enrich_address_info(monkeypatch) -> None:
     result = service.fetch_dataset(_sample_config(), "envelopes")
 
     assert len(calls) == 4
-    assert result["count"] == 1
+    assert result["count"] == 3
     assert result["records"][0]["record_id"] == "card-record-c2001"
     mapped = result["records"][0]["mapped_row"]
     assert mapped["name"] == "测试台"
     assert mapped["address"] == "北京市某区某路"
     assert mapped["postCode"] == "100000"
     assert mapped["phone"] == "138****0000"
+    assert result["records"][2]["record_id"] == "card-record-c2003"
+    assert result["records"][2]["mapped_row"]["name"] == "通联台"
 
 
 def test_fetch_address_envelopes_reads_address_and_bureau_entries(monkeypatch) -> None:

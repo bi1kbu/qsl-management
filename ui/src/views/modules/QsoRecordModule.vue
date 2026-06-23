@@ -78,6 +78,8 @@ interface AdifImportPreviewItem {
   unsupportedFields: Array<{ name: string; value: string }>
   sourceRecordName: string
   duplicateKey: string
+  matchedResourceName: string
+  matchedResourceNames: string[]
   valid: boolean
   message: string
 }
@@ -178,6 +180,8 @@ const activeFunctionTab = ref<
 const syncHistoryQuery = ref(false)
 const historyKeyword = ref('')
 const historyKeywordInput = ref('')
+const historyDateStart = ref('')
+const historyDateEnd = ref('')
 const editingResourceName = ref('')
 const selectedHistoryNames = ref<string[]>([])
 const batchUpdating = ref(false)
@@ -220,6 +224,18 @@ const adifImportDuplicateCount = computed(
     adifImportPreview.value.filter(
       (item) => item.message.includes('重复') || item.message.includes('已存在'),
     ).length,
+)
+const adifImportOverwriteCount = computed(
+  () =>
+    new Set(
+      adifImportPreview.value.flatMap((item) =>
+        item.matchedResourceNames.length
+          ? item.matchedResourceNames
+          : item.matchedResourceName
+            ? [item.matchedResourceName]
+            : [],
+      ),
+    ).size,
 )
 const adifImportInvalidCount = computed(
   () =>
@@ -342,11 +358,20 @@ const filteredHistory = computed(() => {
     availableSceneTypes.value.includes(item.sceneType),
   )
   const callSign = historyKeyword.value.trim().toUpperCase()
-  if (!callSign) {
-    return filteredByScene
+  const startDate = historyDateStart.value.trim()
+  const endDate = historyDateEnd.value.trim()
+  if (startDate && endDate && startDate > endDate) {
+    return []
   }
 
-  return filteredByScene.filter((item) => item.callSign.toUpperCase().includes(callSign))
+  return filteredByScene.filter((item) => {
+    const itemDate = item.date.trim()
+    return (
+      (!callSign || item.callSign.toUpperCase().includes(callSign)) &&
+      (!startDate || itemDate >= startDate) &&
+      (!endDate || itemDate <= endDate)
+    )
+  })
 })
 
 const compareHistoryRows = (
@@ -511,6 +536,16 @@ watch(
 
 const applyHistorySearch = () => {
   historyKeyword.value = historyKeywordInput.value.trim().toUpperCase()
+  currentPage.value = 1
+}
+
+const applyHistoryDateFilter = () => {
+  currentPage.value = 1
+}
+
+const resetHistoryDateFilter = () => {
+  historyDateStart.value = ''
+  historyDateEnd.value = ''
   currentPage.value = 1
 }
 
@@ -925,32 +960,109 @@ const toAdifDateTime = (item: QsoRecordItem): { date: string; time: string } => 
   }
 }
 
-const resolveAdifBand = (freq: string): string => {
-  const mhz = Number.parseFloat(freq.trim())
-  if (!Number.isFinite(mhz)) {
+const adifBandRanges: Array<{ min: number; max: number; band: string }> = [
+  { min: 0.1357, max: 0.1378, band: '2190M' },
+  { min: 0.472, max: 0.479, band: '630M' },
+  { min: 0.501, max: 0.504, band: '560M' },
+  { min: 1.8, max: 2.0, band: '160M' },
+  { min: 3.5, max: 4.0, band: '80M' },
+  { min: 5.06, max: 5.45, band: '60M' },
+  { min: 7.0, max: 7.3, band: '40M' },
+  { min: 10.1, max: 10.15, band: '30M' },
+  { min: 14.0, max: 14.35, band: '20M' },
+  { min: 18.068, max: 18.168, band: '17M' },
+  { min: 21.0, max: 21.45, band: '15M' },
+  { min: 24.89, max: 24.99, band: '12M' },
+  { min: 28.0, max: 29.7, band: '10M' },
+  { min: 40.0, max: 45.0, band: '8M' },
+  { min: 50.0, max: 54.0, band: '6M' },
+  { min: 54.000001, max: 69.9, band: '5M' },
+  { min: 70.0, max: 71.0, band: '4M' },
+  { min: 144.0, max: 148.0, band: '2M' },
+  { min: 222.0, max: 225.0, band: '1.25M' },
+  { min: 420.0, max: 450.0, band: '70CM' },
+  { min: 902.0, max: 928.0, band: '33CM' },
+  { min: 1240.0, max: 1300.0, band: '23CM' },
+  { min: 2300.0, max: 2450.0, band: '13CM' },
+  { min: 3300.0, max: 3500.0, band: '9CM' },
+  { min: 5650.0, max: 5925.0, band: '6CM' },
+  { min: 10000.0, max: 10500.0, band: '3CM' },
+  { min: 24000.0, max: 24250.0, band: '1.25CM' },
+  { min: 47000.0, max: 47200.0, band: '6MM' },
+  { min: 75500.0, max: 81000.0, band: '4MM' },
+  { min: 119980.0, max: 123000.0, band: '2.5MM' },
+  { min: 134000.0, max: 149000.0, band: '2MM' },
+  { min: 241000.0, max: 250000.0, band: '1MM' },
+  { min: 300000.0, max: 7500000.0, band: 'SUBMM' },
+]
+
+const adifBandValues = new Set(adifBandRanges.map((item) => item.band))
+
+const normalizeAdifFrequency = (freq: string): string => {
+  const normalized = freq.trim()
+  return /^(\d+(?:\.\d+)?|\.\d+)$/.test(normalized) && Number.parseFloat(normalized) > 0
+    ? normalized
+    : ''
+}
+
+const resolveExplicitAdifBand = (value: string): string => {
+  const normalized = value.trim().toUpperCase().replace(/\s+/g, ' ')
+  const matched = normalized.match(/^([0-9]+(?:\.[0-9]+)?(?:CM|MM|M)|SUBMM)\s*(?:BAND)?$/)
+  if (!matched) {
     return ''
   }
-  const bands: Array<{ min: number; max: number; band: string }> = [
-    { min: 1.8, max: 2.0, band: '160M' },
-    { min: 3.5, max: 4.0, band: '80M' },
-    { min: 5.0, max: 5.5, band: '60M' },
-    { min: 7.0, max: 7.3, band: '40M' },
-    { min: 10.1, max: 10.15, band: '30M' },
-    { min: 14.0, max: 14.35, band: '20M' },
-    { min: 18.068, max: 18.168, band: '17M' },
-    { min: 21.0, max: 21.45, band: '15M' },
-    { min: 24.89, max: 24.99, band: '12M' },
-    { min: 28.0, max: 29.7, band: '10M' },
-    { min: 50.0, max: 54.0, band: '6M' },
-    { min: 144.0, max: 148.0, band: '2M' },
-    { min: 430.0, max: 440.0, band: '70CM' },
-    { min: 1240.0, max: 1300.0, band: '23CM' },
-  ]
-  return bands.find((item) => mhz >= item.min && mhz <= item.max)?.band ?? ''
+  const band = matched[1] ?? ''
+  return adifBandValues.has(band) ? band : ''
+}
+
+const resolveAdifBand = (freq: string): string => {
+  const explicitBand = resolveExplicitAdifBand(freq)
+  if (explicitBand) {
+    return explicitBand
+  }
+  const normalizedFrequency = normalizeAdifFrequency(freq)
+  if (!normalizedFrequency) {
+    return ''
+  }
+  const mhz = Number.parseFloat(normalizedFrequency)
+  return adifBandRanges.find((item) => mhz >= item.min && mhz <= item.max)?.band ?? ''
 }
 
 const normalizeAdifMode = (mode: string): string => {
   return mode.trim().toUpperCase().replace(/\s+/g, '')
+}
+
+const adifRemarkExportFields = new Set([
+  'GRIDSQUARE',
+  'MY_GRIDSQUARE',
+  'MY_STATE',
+  'QSO_DATE_OFF',
+  'SIG',
+  'SIG_INFO',
+  'STATE',
+  'TIME_OFF',
+])
+
+const extractAdifRemarkFields = (
+  remarks: string,
+): { fields: Array<{ name: string; value: string }>; comment: string } => {
+  const fields: Array<{ name: string; value: string }> = []
+  const commentLines: string[] = []
+  remarks.split(/\r?\n/).forEach((line) => {
+    const trimmedLine = line.trim()
+    const matched = trimmedLine.match(/^([A-Za-z0-9_]+)\s*[：:]\s*(.*?)\s*；?\s*$/)
+    const name = matched?.[1]?.trim().toUpperCase() ?? ''
+    const value = matched?.[2]?.trim() ?? ''
+    if (name && value && adifRemarkExportFields.has(name)) {
+      fields.push({ name, value })
+      return
+    }
+    commentLines.push(line)
+  })
+  return {
+    fields,
+    comment: commentLines.join('\n').trim(),
+  }
 }
 
 const normalizeAdifTxPower = (value?: string): string => {
@@ -1056,29 +1168,52 @@ const buildQsoDuplicateKeyFromRecord = (record: QsoRecordItem): string => {
 }
 
 const markAdifImportDuplicates = (items: AdifImportPreviewItem[]): AdifImportPreviewItem[] => {
-  const existingRecordNames = new Set(
-    records.value.map((record) => normalizeAdifRecordName(record.resourceName)).filter(Boolean),
+  const existingRecordNames = new Map(
+    records.value
+      .map((record) => [normalizeAdifRecordName(record.resourceName), record.resourceName] as const)
+      .filter(([name]) => Boolean(name)),
   )
-  const existingKeys = new Set(records.value.map((record) => buildQsoDuplicateKeyFromRecord(record)))
+  const existingKeys = new Map<string, string[]>()
+  records.value.forEach((record) => {
+    const key = buildQsoDuplicateKeyFromRecord(record)
+    const resourceNames = existingKeys.get(key) ?? []
+    resourceNames.push(record.resourceName)
+    existingKeys.set(key, resourceNames)
+  })
   const importedRecordNames = new Set<string>()
   const importedKeys = new Set<string>()
 
   return items.map((item) => {
-    if (!item.valid) {
-      return item
+    if (!item.spec.callSign || !item.spec.date || !item.spec.time) {
+      return {
+        ...item,
+        matchedResourceName: '',
+        matchedResourceNames: [],
+        valid: false,
+      }
+    }
+    const baseItem: AdifImportPreviewItem = {
+      ...item,
+      matchedResourceName: '',
+      matchedResourceNames: [],
+      valid: true,
+      message: '可导入',
     }
     const sourceRecordName = normalizeAdifRecordName(item.sourceRecordName)
     if (sourceRecordName) {
-      if (existingRecordNames.has(sourceRecordName)) {
+      const existingResourceName = existingRecordNames.get(sourceRecordName)
+      if (existingResourceName) {
         return {
-          ...item,
+          ...baseItem,
+          matchedResourceName: existingResourceName,
+          matchedResourceNames: [existingResourceName],
           valid: false,
           message: `已存在：${sourceRecordName}`,
         }
       }
       if (importedRecordNames.has(sourceRecordName)) {
         return {
-          ...item,
+          ...baseItem,
           valid: false,
           message: `文件内重复：${sourceRecordName}`,
         }
@@ -1086,22 +1221,25 @@ const markAdifImportDuplicates = (items: AdifImportPreviewItem[]): AdifImportPre
       importedRecordNames.add(sourceRecordName)
     }
 
-    if (existingKeys.has(item.duplicateKey)) {
+    const existingResourceNames = existingKeys.get(item.duplicateKey) ?? []
+    if (existingResourceNames.length) {
       return {
-        ...item,
+        ...baseItem,
+        matchedResourceName: existingResourceNames[0] ?? '',
+        matchedResourceNames: existingResourceNames,
         valid: false,
         message: '已存在：同类型、呼号、日期、时间、时区、模式和频率',
       }
     }
     if (importedKeys.has(item.duplicateKey)) {
       return {
-        ...item,
+        ...baseItem,
         valid: false,
         message: '文件内重复：同类型、呼号、日期、时间、时区、模式和频率',
       }
     }
     importedKeys.add(item.duplicateKey)
-    return item
+    return baseItem
   })
 }
 
@@ -1138,6 +1276,7 @@ const resolveAdifStationEquipment = (myRig: string): StationEquipmentSpec | unde
 
 const unsupportedAdifFieldsForRemarks = (
   fields: Record<string, string>,
+  consumedFields = new Set<string>(),
 ): Array<{ name: string; value: string }> => {
   const supportedFields = new Set([
     'APP_QSLMS_RECORD_ID',
@@ -1164,7 +1303,7 @@ const unsupportedAdifFieldsForRemarks = (
     'SWL',
   ])
   return Object.entries(fields)
-    .filter(([name, value]) => value.trim() && !supportedFields.has(name))
+    .filter(([name, value]) => value.trim() && !supportedFields.has(name) && !consumedFields.has(name))
     .map(([name, value]) => ({ name, value }))
 }
 
@@ -1198,10 +1337,28 @@ const resolveAdifImportFreq = (fields: Record<string, string>): string => {
 
 const resolveAdifImportMyQth = (fields: Record<string, string>): string => {
   const mySig = fields.MY_SIG?.trim().toUpperCase() ?? ''
+  const mySigInfo = fields.MY_SIG_INFO?.trim() ?? ''
   if (mySig === 'POTA') {
-    return fields.MY_SIG_INFO?.trim() ?? ''
+    return mySigInfo || fields.MY_GRIDSQUARE?.trim() || ''
   }
-  return ''
+  return fields.MY_GRIDSQUARE?.trim() || ''
+}
+
+const resolveAdifImportQth = (fields: Record<string, string>): string => {
+  return fields.QTH?.trim() || fields.GRIDSQUARE?.trim() || ''
+}
+
+const consumedAdifImportFallbackFields = (fields: Record<string, string>): Set<string> => {
+  const consumedFields = new Set<string>()
+  if (!fields.QTH?.trim() && fields.GRIDSQUARE?.trim()) {
+    consumedFields.add('GRIDSQUARE')
+  }
+  const mySig = fields.MY_SIG?.trim().toUpperCase() ?? ''
+  const hasPrimaryMyQth = mySig === 'POTA' && Boolean(fields.MY_SIG_INFO?.trim())
+  if (!hasPrimaryMyQth && fields.MY_GRIDSQUARE?.trim()) {
+    consumedFields.add('MY_GRIDSQUARE')
+  }
+  return consumedFields
 }
 
 const toAdifImportPreviewItem = (
@@ -1218,9 +1375,13 @@ const toAdifImportPreviewItem = (
   const resolvedMyRig = myRig || equipment?.rigName?.trim() || ''
   const resolvedMyRigAnt = fields.MY_ANTENNA?.trim() || equipment?.antennas?.[0]?.trim() || ''
   const resolvedMyRigPwr = fields.TX_PWR?.trim() || equipment?.powers?.[0]?.trim() || ''
-  const unsupportedFields = unsupportedAdifFieldsForRemarks(fields)
+  const resolvedQth = resolveAdifImportQth(fields)
   const resolvedFreq = resolveAdifImportFreq(fields)
   const resolvedMyQth = resolveAdifImportMyQth(fields)
+  const unsupportedFields = unsupportedAdifFieldsForRemarks(
+    fields,
+    consumedAdifImportFallbackFields(fields),
+  )
   const spec: QsoRecordSpec = {
     sceneType,
     date,
@@ -1237,7 +1398,7 @@ const toAdifImportPreviewItem = (
     rig: '',
     ant: '',
     pwr: '',
-    qth: fields.QTH?.trim() ?? '',
+    qth: resolvedQth,
     rstSent: sceneType === 'SWL' ? '' : fields.RST_SENT?.trim() || '59',
     rstRcvd: fields.RST_RCVD?.trim() || '59',
     remarks: buildAdifImportRemarks(fields, unsupportedFields),
@@ -1258,6 +1419,8 @@ const toAdifImportPreviewItem = (
     unsupportedFields,
     sourceRecordName: fields.APP_QSLMS_RECORD_ID?.trim() ?? '',
     duplicateKey: buildQsoDuplicateKeyFromSpec(spec),
+    matchedResourceName: '',
+    matchedResourceNames: [],
     valid: missing.length === 0,
     message: missing.length ? `缺少或无法识别：${missing.join('、')}` : '可导入',
   }
@@ -1281,18 +1444,21 @@ const buildAdifRecord = (item: QsoRecordItem): string => {
   const stationCallSign = stationProfileCallSign.value.trim().toUpperCase()
   const operatorCallSign =
     normalizeAdifCallSign(item.operator) || normalizeAdifCallSign(stationCallSign)
+  const adifRemarks = extractAdifRemarkFields(item.remarks)
+  const remarkFields = adifRemarks.fields.map((field) => adifField(field.name, field.value))
   const fields = [
     adifField('APP_QSLMS_RECORD_ID', item.resourceName),
     adifField('CALL', item.callSign.toUpperCase()),
     adifField('QSO_DATE', dateTime.date),
     adifField('TIME_ON', dateTime.time),
     adifField('MODE', normalizeAdifMode(item.mode)),
-    adifField('FREQ', item.freq),
+    adifField('FREQ', normalizeAdifFrequency(item.freq)),
     adifField('BAND', resolveAdifBand(item.freq)),
     adifField('RST_SENT', item.rstSent),
     adifField('RST_RCVD', item.rstRcvd),
     adifField('QTH', item.qth),
-    adifField('COMMENT', item.remarks),
+    ...remarkFields,
+    adifField('COMMENT', adifRemarks.comment),
     adifField('MY_RIG', item.myRig),
     adifField('MY_ANTENNA', item.myRigAnt),
     adifField('TX_PWR', normalizeAdifTxPower(item.myRigPwr)),
@@ -1687,11 +1853,7 @@ const importAdifRecords = async () => {
   adifImporting.value = true
   try {
     await loadRecords({ silent: true, skipLoading: true })
-    adifImportPreview.value = markAdifImportDuplicates(
-      adifImportPreview.value.map((item) =>
-        item.valid ? { ...item, message: '可导入' } : item,
-      ),
-    )
+    adifImportPreview.value = markAdifImportDuplicates(adifImportPreview.value)
     const targets = adifImportPreview.value.filter((item) => item.valid)
     if (!targets.length) {
       feedback.value = `没有可导入的 ADIF 记录。跳过重复 ${adifImportDuplicateCount.value} 条，无效 ${adifImportInvalidCount.value} 条。`
@@ -1725,6 +1887,66 @@ const importAdifRecords = async () => {
     Toast.success(`已导入 ${createdNames.length} 条 ADIF 记录。`)
   } catch (error) {
     feedback.value = `导入 ADIF 记录失败：${error instanceof Error ? error.message : '未知错误'}`
+  } finally {
+    adifImporting.value = false
+  }
+}
+
+const overwriteAdifRecords = async () => {
+  adifImporting.value = true
+  try {
+    await loadRecords({ silent: true, skipLoading: true })
+    adifImportPreview.value = markAdifImportDuplicates(adifImportPreview.value)
+
+    const targetItems = new Map<string, AdifImportPreviewItem>()
+    for (const item of adifImportPreview.value) {
+      const matchedResourceNames = item.matchedResourceNames.length
+        ? item.matchedResourceNames
+        : item.matchedResourceName
+          ? [item.matchedResourceName]
+          : []
+      for (const resourceName of matchedResourceNames) {
+        if (!targetItems.has(resourceName)) {
+          targetItems.set(resourceName, item)
+        }
+      }
+    }
+
+    if (!targetItems.size) {
+      feedback.value = '没有可覆盖更新的 ADIF 重复记录。'
+      return
+    }
+
+    const recordVersions = new Map(
+      records.value.map((record) => [record.resourceName, record.metadataVersion] as const),
+    )
+    const updatedNames: string[] = []
+    for (const [resourceName, item] of targetItems.entries()) {
+      await updateExtension<QsoRecordSpec>(resourcePlural, resourceName, {
+        apiVersion: qslApiVersion,
+        kind: resourceKind,
+        metadata: {
+          name: resourceName,
+          version: recordVersions.get(resourceName),
+        },
+        spec: item.spec,
+      })
+      updatedNames.push(resourceName)
+    }
+
+    await appendQslAuditLog({
+      action: '覆盖导入ADIF通联记录',
+      resourceType: 'qso-record',
+      resourceName: `ADIF-overwrite-${updatedNames.length}`,
+      detail: `成功覆盖更新 ${updatedNames.length} 条通联记录：${updatedNames.join(', ')}`,
+    })
+
+    await loadRecords({ silent: true })
+    adifImportPreview.value = markAdifImportDuplicates(adifImportPreview.value)
+    feedback.value = `已覆盖更新 ${updatedNames.length} 条 ADIF 记录。`
+    Toast.success(`已覆盖更新 ${updatedNames.length} 条 ADIF 记录。`)
+  } catch (error) {
+    feedback.value = `覆盖导入 ADIF 记录失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     adifImporting.value = false
   }
@@ -2452,12 +2674,24 @@ onMounted(() => {
             >
               导入可用记录
             </VButton>
+            <QslConfirmActionButton
+              label="覆盖导入"
+              type="secondary"
+              danger-level="warning"
+              :disabled="loading || adifImporting || !adifImportOverwriteCount"
+              confirm-enabled
+              confirm-title="确认覆盖导入"
+              :confirm-message="`将使用当前 ADIF 解析结果覆盖更新 ${adifImportOverwriteCount} 条已存在的通联记录。该操作会批量替换这些记录的通联字段，是否继续？`"
+              confirm-text="确认覆盖"
+              @confirm="overwriteAdifRecords"
+            />
             <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
           </div>
           <div v-if="adifImportPreview.length" class="qsl-adif-summary">
             <p>解析记录数：{{ adifImportPreview.length }}</p>
             <p>可导入数量：{{ adifImportReadyCount }}</p>
             <p>跳过重复数量：{{ adifImportDuplicateCount }}</p>
+            <p>可覆盖数量：{{ adifImportOverwriteCount }}</p>
             <p>无效数量：{{ adifImportInvalidCount }}</p>
             <p>无法落入通联模型的 ADIF 字段会追加到备注。</p>
           </div>
@@ -2734,6 +2968,38 @@ onMounted(() => {
         @toggle-all="toggleAllFilteredHistorySelection"
         @update:sync-enabled="(value) => (syncHistoryQuery = value)"
       />
+      <div class="qsl-form-inline qsl-history-date-filter">
+        <label class="qsl-field qsl-field--inline">
+          <span class="qsl-field__label">开始日期</span>
+          <div class="qsl-input-shell">
+            <input
+              v-model="historyDateStart"
+              type="date"
+              :max="historyDateEnd || undefined"
+              @change="applyHistoryDateFilter"
+            />
+          </div>
+        </label>
+        <label class="qsl-field qsl-field--inline">
+          <span class="qsl-field__label">结束日期</span>
+          <div class="qsl-input-shell">
+            <input
+              v-model="historyDateEnd"
+              type="date"
+              :min="historyDateStart || undefined"
+              @change="applyHistoryDateFilter"
+            />
+          </div>
+        </label>
+        <VButton
+          size="sm"
+          type="secondary"
+          :disabled="!historyDateStart && !historyDateEnd"
+          @click="resetHistoryDateFilter"
+        >
+          清空日期
+        </VButton>
+      </div>
       <QslExpandableHistoryTable
         title="历史记录"
         :rows="pagedFilteredHistory"
@@ -2854,6 +3120,18 @@ onMounted(() => {
 
 .qsl-tab-panel-placeholder {
   display: none;
+}
+
+.qsl-history-date-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin: -2px 0 12px;
+}
+
+.qsl-history-date-filter .qsl-field {
+  min-width: 180px;
 }
 
 .qsl-record-section {

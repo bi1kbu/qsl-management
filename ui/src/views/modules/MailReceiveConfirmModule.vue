@@ -557,6 +557,12 @@ const isReceivedFlowStatus = (status?: Partial<CardRecordStatus>): boolean => {
   return (status?.flowStatus ?? '').trim() === '已收卡片'
 }
 
+const isReceiveClosedForDisplay = (item: ReceiveResult): boolean => {
+  return ['PENDING', 'SENT', 'SKIPPED', 'FAILED'].includes(
+    (item.spec.receivedMailStatus || '').trim().toUpperCase(),
+  )
+}
+
 const compareReceiveRows = (
   left: ReceiveResult,
   right: ReceiveResult,
@@ -2168,27 +2174,26 @@ onMounted(() => {
           </div>
           <div v-else class="qsl-actions qsl-actions--tight">
             <VButton
-              v-if="!isCardReceivedForDisplay(asReceiveResultRow(row))"
+              v-if="!isReceiveClosedForDisplay(asReceiveResultRow(row))"
               size="xs"
               type="secondary"
               :disabled="pendingReceiveRowName === asReceiveResultRow(row).resourceName || submitting"
               @click="confirmReceiveForRow(asReceiveResultRow(row))"
             >
-              确认收卡
+              {{ isCardReceivedForDisplay(asReceiveResultRow(row)) ? '继续收卡' : '确认收卡' }}
             </VButton>
             <VButton
               v-if="
                 isCardReceivedForDisplay(asReceiveResultRow(row)) &&
-                asReceiveResultRow(row).spec.receivedMailStatus !== 'SENT' &&
-                asReceiveResultRow(row).spec.receivedMailStatus !== 'SKIPPED' &&
-                asReceiveResultRow(row).spec.receivedMailStatus !== 'PENDING'
+                !isReceiveClosedForDisplay(asReceiveResultRow(row))
               "
               size="xs"
               type="secondary"
               :disabled="
                 pendingReceiveRowName === asReceiveResultRow(row).resourceName ||
                 pendingMailRowName === asReceiveResultRow(row).resourceName ||
-                !isCardReceivedForDisplay(asReceiveResultRow(row))
+                !isCardReceivedForDisplay(asReceiveResultRow(row)) ||
+                isReceiveClosedForDisplay(asReceiveResultRow(row))
               "
               @click="closeReceiveForRow(asReceiveResultRow(row))"
             >

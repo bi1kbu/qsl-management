@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -150,6 +151,111 @@ class QslConsoleActionServiceValidationTest {
         assertEquals("C1002", result.cardRecordName());
         assertEquals(Boolean.TRUE, older.getSpec().getCardReceived());
         assertEquals(Boolean.TRUE, newer.getSpec().getCardReceived());
+    }
+
+    @Test
+    void shouldAppendMultipleReceiveRecordsToOpenReceivedCardRecord() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(client, auditService, notificationMailService);
+        var target = createCardRecord("C1001", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", false);
+        var systemSetting = createSystemSetting();
+        var createdReceiveRecords = new java.util.ArrayList<ReceiveRecord>();
+
+        when(client.listAll(eq(CardRecord.class), any(), any()))
+            .thenReturn(Flux.just(target), Flux.just(target));
+        when(client.listAll(eq(ReceiveRecord.class), any(), any())).thenReturn(Flux.empty());
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.create(any(ReceiveRecord.class))).thenAnswer(invocation -> {
+            var receiveRecord = invocation.getArgument(0, ReceiveRecord.class);
+            createdReceiveRecords.add(receiveRecord);
+            return Mono.just(receiveRecord);
+        });
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendIfEnabled(any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var first = service.confirmMailReceive(
+            new QslConsoleActionService.MailReceiveConfirmCommand(
+                "BI1KBU",
+                "EYEBALL",
+                "ONLINE_EYEBALL",
+                "第一张来卡",
+                "2026-05-06",
+                ""
+            ),
+            "admin",
+            "127.0.0.1"
+        ).block();
+        var second = service.confirmMailReceive(
+            new QslConsoleActionService.MailReceiveConfirmCommand(
+                "BI1KBU",
+                "EYEBALL",
+                "ONLINE_EYEBALL",
+                "第二张来卡",
+                "2026-05-06",
+                ""
+            ),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("C1001", first.cardRecordName());
+        assertEquals("C1001", second.cardRecordName());
+        assertEquals("R0001-20260506", first.receivedRecordCode());
+        assertEquals("R0002-20260506", second.receivedRecordCode());
+        var createdReceiveRecordNames = createdReceiveRecords.stream()
+            .map(item -> item.getMetadata().getName())
+            .distinct()
+            .toList();
+        assertEquals(List.of("R0001-20260506", "R0002-20260506"), createdReceiveRecordNames);
+        createdReceiveRecords.forEach(receiveRecord ->
+            assertEquals("C1001", receiveRecord.getSpec().getOutboundCardNames()));
+        assertEquals(Boolean.TRUE, target.getSpec().getCardReceived());
+        assertEquals("", target.getSpec().getReceivedMailStatus());
+        verify(notificationMailService, never()).autoSendIfEnabled(any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldSkipSkippedReceivedCardRecordWhenBindingMailReceive() {
+        var client = mock(ReactiveExtensionClient.class);
+        var auditService = mock(QslAuditService.class);
+        var notificationMailService = mock(QslNotificationMailService.class);
+        var service = new QslConsoleActionService(client, auditService, notificationMailService);
+        var older = createCardRecord("C1001", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", true);
+        older.getSpec().setReceivedMailStatus("SKIPPED");
+        var newer = createCardRecord("C1002", "BI1KBU", "EYEBALL", "ONLINE_EYEBALL", false);
+        var systemSetting = createSystemSetting();
+
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(newer, older));
+        stubReceiveRecordStorage(client);
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+        when(client.update(any(SystemSetting.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(client.update(any(CardRecord.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(auditService.appendAuditLog(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(notificationMailService.autoSendIfEnabled(any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        var result = service.confirmMailReceive(
+            new QslConsoleActionService.MailReceiveConfirmCommand(
+                "BI1KBU",
+                "EYEBALL",
+                "ONLINE_EYEBALL",
+                "已收到",
+                "2026-05-06",
+                ""
+            ),
+            "admin",
+            "127.0.0.1"
+        ).block();
+
+        assertEquals("C1002", result.cardRecordName());
+        assertEquals(Boolean.TRUE, older.getSpec().getCardReceived());
+        assertEquals(Boolean.TRUE, newer.getSpec().getCardReceived());
+        verify(notificationMailService, never()).autoSendIfEnabled(any(), any(), any(), any());
     }
 
     @Test

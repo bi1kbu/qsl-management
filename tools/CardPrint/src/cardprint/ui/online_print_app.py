@@ -193,13 +193,6 @@ def _resolve_offline_activity_name(source_row: dict[str, Any]) -> str:
     return ""
 
 
-def _is_online_envelope_source_row(source_row: dict[str, Any]) -> bool:
-    spec_raw = source_row.get("spec")
-    spec = spec_raw if isinstance(spec_raw, dict) else {}
-    scene_type = str(spec.get("sceneType", "")).strip().upper()
-    return scene_type == "ONLINE_EYEBALL"
-
-
 def _build_envelope_recipient_name(source_row: dict[str, Any], mapped_row: dict[str, Any]) -> str:
     spec_raw = source_row.get("spec")
     spec = spec_raw if isinstance(spec_raw, dict) else {}
@@ -1084,7 +1077,17 @@ class OnlineDatasetPage(QWidget):
                 ("频率", ["mapped_row.frequency", "source_row.qsoInfo.spec.freq", "source_row.spec.freq"]),
                 ("模式", ["mapped_row.mode", "source_row.qsoInfo.spec.myRigMode", "source_row.spec.myRigMode"]),
                 ("信号报告", ["mapped_row.rstSent", "source_row.qsoInfo.spec.rstSent", "source_row.spec.rstSent"]),
-                ("QTH", ["mapped_row.qth", "source_row.qsoInfo.spec.qth", "source_row.spec.qth"]),
+                (
+                    "QTH",
+                    [
+                        "mapped_row.my_qth",
+                        "mapped_row.qth",
+                        "source_row.qsoInfo.spec.myQth",
+                        "source_row.spec.myQth",
+                        "source_row.qsoInfo.spec.qth",
+                        "source_row.spec.qth",
+                    ],
+                ),
             ]
             if self.card_business == CARD_BUSINESS_OFFLINE:
                 self._table_schema.insert(4, ("关联活动", ["source_row.spec.offlineActivityName", "source_row.offlineActivityName"]))
@@ -1191,9 +1194,7 @@ class OnlineDatasetPage(QWidget):
                 return False
             return selected_version in row_versions
         if self.dataset == "envelopes":
-            # 封面打印队列：仅线上换卡且未打包。
-            if not _is_online_envelope_source_row(source_row):
-                return False
+            # 封面打印队列：所有未打包卡片。
             if envelope_printed:
                 return False
             return True
@@ -2534,8 +2535,6 @@ class OnlineManualConfirmPage(QWidget):
         if self.dataset == "cards":
             card_issued = _to_bool(spec.get("cardIssued", source_row.get("cardIssued")))
             return not card_issued
-        if self.dataset == "envelopes" and not _is_online_envelope_source_row(source_row):
-            return False
         envelope_printed = _to_bool(spec.get("envelopePrinted", source_row.get("envelopePrinted")))
         return not envelope_printed
 

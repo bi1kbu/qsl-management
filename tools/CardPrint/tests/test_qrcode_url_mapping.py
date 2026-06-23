@@ -160,7 +160,7 @@ def test_offline_card_page_activity_filter_all_keeps_all_activities() -> None:
     assert page._matches_queue_rule(row) is True
 
 
-def test_envelope_page_only_keeps_online_exchange_rows() -> None:
+def test_envelope_page_keeps_all_unpacked_card_rows() -> None:
     page = OnlineDatasetPage.__new__(OnlineDatasetPage)
     page.dataset = "envelopes"
     page.card_business = ""
@@ -180,17 +180,35 @@ def test_envelope_page_only_keeps_online_exchange_rows() -> None:
             "envelopePrinted": False,
         }
     }
+    qso_row = {
+        "spec": {
+            "sceneType": "QSO",
+            "cardType": "QSO",
+            "envelopePrinted": False,
+        }
+    }
+    packed_row = {
+        "spec": {
+            "sceneType": "QSO",
+            "cardType": "QSO",
+            "envelopePrinted": True,
+        }
+    }
 
     assert page._matches_queue_rule(online_row) is True
-    assert page._matches_queue_rule(offline_row) is False
+    assert page._matches_queue_rule(offline_row) is True
+    assert page._matches_queue_rule(qso_row) is True
+    assert page._matches_queue_rule(packed_row) is False
 
 
-def test_envelope_confirm_only_keeps_online_exchange_rows() -> None:
+def test_envelope_confirm_keeps_all_unpacked_card_rows() -> None:
     page = OnlineManualConfirmPage.__new__(OnlineManualConfirmPage)
     page.dataset = "envelopes"
 
     assert page._matches_queue_rule({"spec": {"sceneType": "ONLINE_EYEBALL", "envelopePrinted": False}}) is True
-    assert page._matches_queue_rule({"spec": {"sceneType": "EYEBALL", "envelopePrinted": False}}) is False
+    assert page._matches_queue_rule({"spec": {"sceneType": "EYEBALL", "envelopePrinted": False}}) is True
+    assert page._matches_queue_rule({"spec": {"sceneType": "QSO", "cardType": "QSO", "envelopePrinted": False}}) is True
+    assert page._matches_queue_rule({"spec": {"sceneType": "QSO", "cardType": "QSO", "envelopePrinted": True}}) is False
 
 
 def test_address_envelope_page_filters_by_call_sign_or_resource_name() -> None:

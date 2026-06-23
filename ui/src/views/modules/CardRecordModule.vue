@@ -433,7 +433,7 @@ const selectedCardVersionIsBuiltinNoSend = computed(() =>
 )
 const resolveDefaultCardVersion = (): string => {
   if (isCommQsoBusiness.value) {
-    return BUILTIN_NO_SEND_CARD_VERSION
+    return ''
   }
   return cardVersionOptions.value[0] ?? ''
 }
@@ -1489,7 +1489,7 @@ const createCardRecordFromQso = async (item: QsoRecordItem) => {
     await loadCardVersions()
     const cardVersion = resolveSelectedOrDefaultCardVersion()
     if (!cardVersion) {
-      feedback.value = '没有找到可用卡片版本，请先在“本台卡片”中配置卡片版本库存，或选择系统内置“不发卡”。'
+      feedback.value = '请先选择卡片版本。'
       return
     }
 
@@ -2480,7 +2480,8 @@ onBeforeUnmount(() => {
               saving ||
               loading ||
               creatingQsoRecordId === asQsoRecordItemRow(row).id ||
-              !asQsoRecordItemRow(row).callSign.trim()
+              !asQsoRecordItemRow(row).callSign.trim() ||
+              !form.cardVersion.trim()
             "
             @click="createCardRecordFromQso(asQsoRecordItemRow(row))"
           >

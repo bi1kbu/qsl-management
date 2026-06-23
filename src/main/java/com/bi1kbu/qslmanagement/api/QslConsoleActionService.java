@@ -312,8 +312,8 @@ public class QslConsoleActionService {
                             receivedAt,
                             receivedRecordCode
                         ))))
-                    .switchIfEmpty(createUnmatchedReceiveResult(callSign, cardType, sceneType, command.receiptRemarks(),
-                        receivedRecordCode, receivedDate, receivedAt, offlineActivityName));
+                    .switchIfEmpty(Mono.defer(() -> createUnmatchedReceiveResult(callSign, cardType, sceneType,
+                        command.receiptRemarks(), receivedRecordCode, receivedDate, receivedAt, offlineActivityName)));
             })
             .flatMap(result -> qslAuditService.appendAuditLog(
                 "确认收信",
@@ -322,18 +322,7 @@ public class QslConsoleActionService {
                 result.message() + " 收卡编号：" + result.receivedRecordCode(),
                 safeOperator(operator),
                 clientIp
-            ).thenReturn(result))
-            .flatMap(result -> {
-                if (result.cardRecordName() == null || result.cardRecordName().isBlank()) {
-                    return Mono.just(result);
-                }
-                return notificationMailService.autoSendIfEnabled(
-                    result.cardRecordName(),
-                    QslNotificationMailService.MailScene.CARD_RECEIVED,
-                    operator,
-                    clientIp
-                ).thenReturn(result);
-            });
+            ).thenReturn(result));
     }
 
     private Mono<MailReceiveConfirmResult> confirmTargetCardRecordReceive(
@@ -363,6 +352,10 @@ public class QslConsoleActionService {
                         return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
                             "QSL-422-0001", "目标卡片关联活动与收卡请求不匹配"));
                     }
+                }
+                if (isReceiveClosed(cardRecord.getSpec())) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-0001", "目标卡片已结束收卡"));
                 }
                 return updateReceivedCardRecord(cardRecord, callSign, receiptRemarks, receivedRecordCode, receivedAt)
                     .flatMap(updatedCard -> createReceiveRecord(
@@ -1674,6 +1667,7 @@ public class QslConsoleActionService {
         var receivedMailStatus = defaultIfBlank(spec.getReceivedMailStatus(), "").trim().toUpperCase();
         return "PENDING".equals(receivedMailStatus)
             || "SENT".equals(receivedMailStatus)
+            || "SKIPPED".equals(receivedMailStatus)
             || "FAILED".equals(receivedMailStatus);
     }
 

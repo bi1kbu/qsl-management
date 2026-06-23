@@ -1,8 +1,8 @@
 # QSL 卡片管理系统产品定义
 
-更新时间：2026-06-02
+更新时间：2026-06-24
 代码核验范围：`插件工程根目录` 后端、控制台前端、RBAC 模板与 `tools/CardPrint` 在线打印桥接
-Halo 官方资料核验日期：2026-06-02
+Halo 官方资料核验日期：2026-06-24
 
 ## 1. 产品一句话定义
 
@@ -109,12 +109,12 @@ Halo 官方资料核验日期：2026-06-02
 
 通联业务包含通联日志、创建卡片、制卡签发、发信确认、送达确认。
 
-1. 通联日志支持 `QSO/SWL` 场景切换，字段落在 `QsoRecord.spec`。通联日志提供 `ADIF格式导入`、`ADIF格式导出`、`Cabrillo格式导入` 与 `Cabrillo格式导出` 功能页签；手工新增记录默认使用 `UTC+8`，启用 UTC 实时填充、ADIF 导入与 Cabrillo 导入保留 `UTC`。ADIF 导入先解析预览，再通过现有通联记录保存能力创建 `QsoRecord`，`CALL/QSO_DATE/TIME_ON/MODE/FREQ/BAND/RST/QTH/COMMENT/MY_RIG/MY_ANTENNA/TX_PWR/OPERATOR/MY_SIG/MY_SIG_INFO/SWL` 等可落入现有模型的字段直接写入；当 `FREQ` 为空且 `BAND` 有值时，将频率写为 `{BAND} BAND`；当 `MY_SIG=POTA` 时，将 `MY_SIG_INFO` 视为本台 QTH。其余 ADIF 字段按 `字段名称：字段内容；` 追加到备注，避免导入时丢失标准内容之外的数据。ADIF 导入预览默认跳过重复记录：本站导出的 `APP_QSLMS_RECORD_ID` 已存在时按本站记录编号判重，外部 ADIF 或缺少本站记录编号时按 `sceneType/callSign/date/time/timezone/myRigMode/freq` 组成业务键判重；文件内部重复和与现有通联日志重复均不写入，也不覆盖已有记录。ADIF 导出范围优先使用已勾选记录，未勾选时导出当前筛选结果；导出内容使用 ADIF 文本格式，按记录时区换算为 UTC 后写入 `QSO_DATE` 与 `TIME_ON`，并兼容 `UTC+8/UTC+08:00/GMT+8/北京时间/Asia/Shanghai` 等等价时区写法，尽量从频率推导 `BAND`，`TX_PWR` 导出时按 ADIF `Number` 类型规范化为瓦特数值。导出页支持 `MY_SIG` 下拉与 `MY_SIG_INFO` 输入，`MY_SIG` 为空时表示“不添加”，且 `OPERATOR` 仅导出呼号，不再回退为姓名。Cabrillo 导入先解析 `START-OF-LOG/CALLSIGN/CONTEST/OPERATORS/CATEGORY-*` 等头字段与 `QSO:` 行，再预览确认后写入 `QsoRecord`；频率、模式、日期、时间、本台呼号、对方呼号和信号报告直接落入模型，比赛交换信息、未映射头字段和 QSO 行尾扩展按 `字段名称：字段内容；` 追加到备注。Cabrillo 导出使用 Cabrillo 3.0 文本格式，导出日期和时间按记录时区换算为 UTC，支持配置 `CONTEST/OPERATORS/CATEGORY-OPERATOR/CATEGORY-BAND/CATEGORY-MODE/CATEGORY-POWER`，范围同样优先使用已勾选记录，未勾选时导出当前筛选结果。
-2. 创建卡片必须关联 QSO/SWL 记录，候选列表排除已写入 `CardRecord.spec.qsoRecordName` 的记录；若选择“不创建卡片”，写入不占用 `C{序号}` 的占位 `CardRecord`，该记录后续不再出现在候选列表中。通联业务创建卡片页下方展示“待创建记录”，数据来源为尚未创建卡片且未标记“不创建卡片”的 QSO/SWL 记录；操作栏提供“创建卡片”按钮，一键生成正式 `CardRecord`，优先使用页面当前选择的卡片版本，未选择时才使用系统内置“不发卡”，业务备注为空。通联业务创建卡片默认 `CardRecord.spec.cardRemarks` 为“通联愉快，期待空中常见。\nNice QSO，Hope to catch you on the air often.”。
-3. 通联日志清单支持对单条 QSO 一键创建卡片，默认使用排序最靠前且仍有库存的卡片版本，写入空业务备注与通联业务默认卡片备注；已正式创建卡片或已标记“不创建卡片”的通联记录不允许再次一键创建。
+1. 通联日志支持 `QSO/SWL` 场景切换，字段落在 `QsoRecord.spec`。通联日志清单支持按呼号和通联日期范围筛选，日期范围按 `QsoRecord.spec.date` 做闭区间匹配，并影响当前筛选导出范围。通联日志提供 `ADIF格式导入`、`ADIF格式导出`、`Cabrillo格式导入` 与 `Cabrillo格式导出` 功能页签；手工新增记录默认使用 `UTC+8`，启用 UTC 实时填充、ADIF 导入与 Cabrillo 导入保留 `UTC`。ADIF 导入先解析预览，再通过现有通联记录保存能力创建 `QsoRecord`，`CALL/QSO_DATE/TIME_ON/MODE/FREQ/BAND/RST/QTH/COMMENT/MY_RIG/MY_ANTENNA/TX_PWR/OPERATOR/MY_SIG/MY_SIG_INFO/SWL` 等可落入现有模型的字段直接写入；当 `FREQ` 为空且 `BAND` 有值时，将频率写为 `{BAND} BAND`；当 `QTH` 缺失且 `GRIDSQUARE` 有值时，将 `GRIDSQUARE` 兼容写入对方位置；当 `MY_SIG=POTA` 时，将 `MY_SIG_INFO` 视为本台 QTH，若本台 QTH 仍为空则兼容使用 `MY_GRIDSQUARE`；`TX_PWR` 作为我台发射功率写入，缺失时才回落到设备默认功率。其余 ADIF 字段按 `字段名称：字段内容；` 追加到备注，避免导入时丢失标准内容之外的数据。ADIF 导入预览默认跳过重复记录：本站导出的 `APP_QSLMS_RECORD_ID` 已存在时按本站记录编号判重，外部 ADIF 或缺少本站记录编号时按 `sceneType/callSign/date/time/timezone/myRigMode/freq` 组成业务键判重；文件内部重复和与现有通联日志重复均不写入。ADIF 导入页提供“导入可用记录”和“覆盖导入”：前者只创建非重复记录，后者需二次确认，仅对已匹配到现有资源名或业务判重键的重复记录执行批量更新；同一业务判重键下存在多条现有记录时全部覆盖更新，不处理文件内部重复和无效记录。ADIF 导出范围优先使用已勾选记录，未勾选时导出当前筛选结果；导出内容使用 ADIF 文本格式，按记录时区换算为 UTC 后写入 `QSO_DATE` 与 `TIME_ON`，并兼容 `UTC+8/UTC+08:00/GMT+8/北京时间/Asia/Shanghai` 等等价时区写法；`FREQ` 仅在存在 ADIF `Number` 类型的 MHz 数值时导出，`{BAND} BAND` 占位按 ADIF 3.1.7 波段枚举导出为 `BAND` 字段，不写入非数值 `FREQ`，备注中由导入保留的 `MY_STATE/STATE/GRIDSQUARE/MY_GRIDSQUARE/SIG/SIG_INFO/QSO_DATE_OFF/TIME_OFF` 等标准 ADIF 字段会恢复为独立字段；`TX_PWR` 导出时按 ADIF `Number` 类型规范化为瓦特数值。导出页支持 `MY_SIG` 下拉与 `MY_SIG_INFO` 输入，`MY_SIG` 为空时表示“不添加”，且 `OPERATOR` 仅导出呼号，不再回退为姓名。Cabrillo 导入先解析 `START-OF-LOG/CALLSIGN/CONTEST/OPERATORS/CATEGORY-*` 等头字段与 `QSO:` 行，再预览确认后写入 `QsoRecord`；频率、模式、日期、时间、本台呼号、对方呼号和信号报告直接落入模型，比赛交换信息、未映射头字段和 QSO 行尾扩展按 `字段名称：字段内容；` 追加到备注。Cabrillo 导出使用 Cabrillo 3.0 文本格式，导出日期和时间按记录时区换算为 UTC，支持配置 `CONTEST/OPERATORS/CATEGORY-OPERATOR/CATEGORY-BAND/CATEGORY-MODE/CATEGORY-POWER`，范围同样优先使用已勾选记录，未勾选时导出当前筛选结果。
+2. 创建卡片必须关联 QSO/SWL 记录，候选列表排除已写入 `CardRecord.spec.qsoRecordName` 的记录；若选择“不创建卡片”，写入不占用 `C{序号}` 的占位 `CardRecord`，该记录后续不再出现在候选列表中。通联业务创建卡片页下方展示“待创建记录”，数据来源为尚未创建卡片且未标记“不创建卡片”的 QSO/SWL 记录；页面默认不选中卡片版本，操作栏提供“创建卡片”按钮，一键生成正式 `CardRecord` 时必须先人工选择卡片版本，用户可手动选择系统内置“不发卡”，业务备注为空。通联业务创建卡片默认 `CardRecord.spec.cardRemarks` 为“通联愉快，期待空中常见。\nNice QSO，Hope to catch you on the air often.”。
+3. 通联日志清单支持对单条 QSO 一键创建卡片，卡片版本必须由用户在通联业务创建卡片页手动选择，写入空业务备注与通联业务默认卡片备注；已正式创建卡片或已标记“不创建卡片”的通联记录不允许再次一键创建。
 4. 制卡签发只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，不显示“不创建卡片”的无编号占位记录；确认制卡更新 `CardRecord.spec.cardIssued/cardIssuedAt`，信封打印或打包状态使用 `envelopePrinted`。制卡签发完成打包后按当前制卡邮件策略自动处理邮件状态：自动不发送写入 `createdMailStatus=SKIPPED`，自动发送调用通知接口，手动则保留按钮。
 5. 发信确认只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，调用控制台接口更新 `cardSent/sentAt`，并可触发发卡邮件通知；通联业务只要 `cardSent=true`，系统会联动补齐 `cardIssued/cardIssuedAt/envelopePrinted`。
-6. 送达确认只处理正式卡片编号为 `C{序号}` 的 `CardRecord`；2.0.0 起调用控制台接口创建 `ReceiveRecord` 并尝试关联已有发卡记录，未匹配时保留未匹配收卡事实，不再自动补建发卡记录。
+6. 送达确认只处理正式卡片编号为 `C{序号}` 的 `CardRecord`；2.0.0 起调用控制台接口创建 `ReceiveRecord` 并尝试关联已有发卡记录，未匹配时保留未匹配收卡事实，不再自动补建发卡记录。同一发卡卡片 ID 可连续关联多条收卡事实，确认收卡只新增 `ReceiveRecord` 并保持本轮收卡打开，不触发收卡邮件自动策略；只有人工点击“结束收卡”进入回执处理状态后才关闭该发卡记录的继续收卡入口。
 
 ### 3.5 线上换卡业务
 
@@ -232,8 +232,8 @@ python -m cardprint.cli ui online
 当前在线桥接代码事实：
 
 1. 默认地址为 `http://localhost:8090`，但配置中可传入其他 `base_url`。
-2. 读取 `card-records` 生成卡片/信封队列，卡片打印会按 `CardRecord.spec.qsoRecordName` 额外读取 `qso-records` 并注入 `qsoInfo`；`CardRecord.spec.cardReceived` 为空或缺失时按未收卡处理，打印互斥项默认勾选“请回卡片”。
-3. 信封打印只纳入线上换卡 `sceneType=ONLINE_EYEBALL` 记录，并额外读取 `station-profiles`、`address-book-entries`、`bureau-entries` 做本台地址和收件地址补全；线下换卡 `sceneType=EYEBALL` 记录不进入封面打印和打包确认清单。
+2. 读取 `card-records` 生成卡片/信封队列，卡片打印会按 `CardRecord.spec.qsoRecordName` 额外读取 `qso-records` 并注入 `qsoInfo`；通联业务制卡的发射地址字段优先使用 `QsoRecord.spec.myQth`，旧预设字段 `qth` 与新预设字段 `my_qth` 均按此规则取值，缺失时才兜底到对方 `qth`；线下换卡制卡仍优先使用关联活动的 `OfflineActivity.spec.activityLocation`；`CardRecord.spec.cardReceived` 为空或缺失时按未收卡处理，打印互斥项默认勾选“请回卡片”。
+3. 信封打印纳入所有未打包（`envelopePrinted=false`）的卡片记录，并额外读取 `station-profiles`、`address-book-entries`、`bureau-entries` 做本台地址和收件地址补全；打包确认使用同一未打包口径回写 `envelopePrinted`。
 4. 补打信封页位于打包确认后，读取 `address-book-entries` 与 `bureau-entries` 生成独立队列，复用信封预设，支持按呼号、地址编号或卡片局编号筛选，支持当前行打印、勾选批量打印与全部打印，不回写业务状态。
 5. 补打眼球卡片页位于在线打印工具内，使用 `bridge_config.json` 的 `presets.eyeball_reprint_card` 持久化保存专用补卡预设；手工输入呼号与日期时间，支持实时取当前日期时间，生成打印行时固定 `cardType=EYEBALL`、“发出卡片”状态与“请回卡片”状态，不读取或回写后台业务记录。
 6. 卡片版本以 `station-cards` 为准；本地打印工具通过公开接口 `GET /apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` 拉取版本列表，并按 `sortOrder` 与版本号排序，不从 `card-records` 反推。
