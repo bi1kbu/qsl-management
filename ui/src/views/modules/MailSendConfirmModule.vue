@@ -197,7 +197,7 @@ const sendColumns = computed(() => {
   if (showOfflineActivity.value) {
     columns.push({ key: 'offlineActivityName', label: '关联活动', sortable: true })
   }
-  columns.push({ key: 'cardRemarks', label: '卡片备注', sortable: true })
+  columns.push({ key: 'cardRemarks', label: '备注', sortable: true })
   return columns
 })
 
@@ -254,8 +254,8 @@ const compareSendRows = (
       return compareText(left.spec.offlineActivityName || '', right.spec.offlineActivityName || '')
     case 'cardRemarks':
       return compareText(
-        left.spec.cardRemarks || left.spec.businessRemarks,
-        right.spec.cardRemarks || right.spec.businessRemarks,
+        `${left.spec.businessRemarks || ''}\n${left.spec.cardRemarks || ''}`,
+        `${right.spec.businessRemarks || ''}\n${right.spec.cardRemarks || ''}`,
       )
     default:
       return compareText(left[key], right[key])
