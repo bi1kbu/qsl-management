@@ -211,6 +211,48 @@ def test_envelope_confirm_keeps_all_unpacked_card_rows() -> None:
     assert page._matches_queue_rule({"spec": {"sceneType": "QSO", "cardType": "QSO", "envelopePrinted": True}}) is False
 
 
+def test_envelope_destination_filter_splits_domestic_and_international_rows() -> None:
+    page = OnlineDatasetPage.__new__(OnlineDatasetPage)
+    page.dataset = "envelopes"
+    page.card_business = ""
+    page._enable_card_version_filter = False
+    page._enable_activity_filter = False
+    page._enable_address_envelope_filter = False
+    page._enable_envelope_destination_filter = True
+
+    domestic_row = {
+        "spec": {
+            "sceneType": "QSO",
+            "cardType": "QSO",
+            "envelopePrinted": False,
+        }
+    }
+    international_row = {
+        "spec": {
+            "sceneType": "QSO",
+            "cardType": "QSO",
+            "envelopePrinted": False,
+        },
+        "addressInfo": {
+            "spec": {
+                "destinationCountry": "Japan",
+            }
+        },
+    }
+
+    page.envelope_destination_filter_combo = FakeComboBox(app.ENVELOPE_DESTINATION_ALL)
+    assert page._matches_queue_rule(domestic_row) is True
+    assert page._matches_queue_rule(international_row) is True
+
+    page.envelope_destination_filter_combo = FakeComboBox(app.ENVELOPE_DESTINATION_DOMESTIC)
+    assert page._matches_queue_rule(domestic_row) is True
+    assert page._matches_queue_rule(international_row) is False
+
+    page.envelope_destination_filter_combo = FakeComboBox(app.ENVELOPE_DESTINATION_INTERNATIONAL)
+    assert page._matches_queue_rule(domestic_row) is False
+    assert page._matches_queue_rule(international_row) is True
+
+
 def test_address_envelope_page_filters_by_call_sign_or_resource_name() -> None:
     page = OnlineDatasetPage.__new__(OnlineDatasetPage)
     page.dataset = bs.ADDRESS_ENVELOPE_DATASET

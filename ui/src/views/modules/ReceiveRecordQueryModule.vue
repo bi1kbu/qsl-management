@@ -2,10 +2,6 @@
 import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listExtensions, type QslExtension } from '../../api/qsl-extension-api'
-import {
-  getConsoleApiErrorMessage,
-  linkReceiveRecordToOutboundCard,
-} from '../../api/qsl-console-api'
 import QslDataTable, { type QslDataTableStatusItem } from '../../components/QslDataTable.vue'
 import QslQueryToolbar from '../../components/QslQueryToolbar.vue'
 import {
@@ -43,27 +39,6 @@ interface ReceiveRecordRow {
   receivedRemarks: string
 }
 
-interface CardRecordSpec {
-  callSign: string
-  cardType: 'QSO' | 'SWL' | 'EYEBALL'
-  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
-  cardVersion: string
-  offlineActivityName: string
-  cardDate: string
-  cardTime: string
-}
-
-interface CardCandidateRow {
-  resourceName: string
-  callSign: string
-  cardType: 'QSO' | 'SWL' | 'EYEBALL'
-  sceneType: 'QSO' | 'SWL' | 'ONLINE_EYEBALL' | 'EYEBALL'
-  offlineActivityName: string
-  cardVersion: string
-  cardDate: string
-  cardTime: string
-}
-
 type ReceiveRecordSortKey =
   | 'receiveRecordCode'
   | 'cardId'
@@ -78,9 +53,7 @@ type ReceiveRecordSortKey =
 type BusinessTab = 'ALL' | ReceiveRecordSpec['businessType']
 
 const resourcePlural = 'receive-records'
-const cardRecordPlural = 'card-records'
 const rows = ref<ReceiveRecordRow[]>([])
-const cardRows = ref<CardCandidateRow[]>([])
 const loading = ref(false)
 const feedback = ref('')
 const currentPage = ref(1)
@@ -100,10 +73,6 @@ const filters = reactive({
 })
 
 const keywordInput = ref('')
-const linkingRecordCode = ref('')
-const linkCandidateKeyword = ref('')
-const selectedTargetCardName = ref('')
-const linkSubmitting = ref(false)
 
 const parseReceivedCodes = (value: string): string[] => {
   if (!value?.trim()) {
@@ -170,87 +139,16 @@ const toReceiveRows = (extension: QslExtension<ReceiveRecordSpec>): ReceiveRecor
   ]
 }
 
-const normalizeCardType = (cardType?: string): CardCandidateRow['cardType'] => {
-  const upper = (cardType ?? '').trim().toUpperCase()
-  if (upper === 'SWL') {
-    return 'SWL'
-  }
-  if (upper === 'EYEBALL') {
-    return 'EYEBALL'
-  }
-  return 'QSO'
-}
-
-const normalizeSceneType = (
-  sceneType?: string,
-  cardType?: string,
-): CardCandidateRow['sceneType'] => {
-  const upper = (sceneType ?? '').trim().toUpperCase()
-  if (upper === 'SWL') {
-    return 'SWL'
-  }
-  if (upper === 'ONLINE_EYEBALL') {
-    return 'ONLINE_EYEBALL'
-  }
-  if (upper === 'EYEBALL') {
-    return 'EYEBALL'
-  }
-  return normalizeCardType(cardType) === 'SWL' ? 'SWL' : 'QSO'
-}
-
-const receiveBusinessTypeToSceneType = (
-  businessType: ReceiveRecordSpec['businessType'],
-  cardType: ReceiveRecordSpec['cardType'],
-): CardCandidateRow['sceneType'] => {
-  if (businessType === 'SWL') {
-    return 'SWL'
-  }
-  if (businessType === 'ONLINE_EYEBALL') {
-    return 'ONLINE_EYEBALL'
-  }
-  if (businessType === 'OFFLINE_EYEBALL') {
-    return 'EYEBALL'
-  }
-  return cardType === 'SWL' ? 'SWL' : 'QSO'
-}
-
-const toCardCandidateRow = (extension: QslExtension<CardRecordSpec>): CardCandidateRow | null => {
-  const resourceName = extension.metadata?.name ?? ''
-  if (!/^C\d+$/.test(resourceName)) {
-    return null
-  }
-  const spec = extension.spec
-  if (!spec) {
-    return null
-  }
-  return {
-    resourceName,
-    callSign: (spec.callSign ?? '').trim().toUpperCase(),
-    cardType: normalizeCardType(spec.cardType),
-    sceneType: normalizeSceneType(spec.sceneType, spec.cardType),
-    offlineActivityName: spec.offlineActivityName ?? '',
-    cardVersion: spec.cardVersion ?? '',
-    cardDate: spec.cardDate ?? '',
-    cardTime: spec.cardTime ?? '',
-  }
-}
-
 const loadRows = async () => {
   loading.value = true
   try {
-    const [extensions, cardExtensions] = await Promise.all([
-      listExtensions<ReceiveRecordSpec>(resourcePlural),
-      listExtensions<CardRecordSpec>(cardRecordPlural),
-    ])
+    const extensions = await listExtensions<ReceiveRecordSpec>(resourcePlural)
     rows.value = extensions
       .flatMap((item) => toReceiveRows(item))
       .sort(
         (a, b) =>
           extractCodeSequence(b.receiveRecordCode) - extractCodeSequence(a.receiveRecordCode),
       )
-    cardRows.value = cardExtensions
-      .map((item) => toCardCandidateRow(item))
-      .filter((item): item is CardCandidateRow => Boolean(item))
     feedback.value = ''
   } catch (error) {
     feedback.value = `加载收卡记录失败：${error instanceof Error ? error.message : '未知错误'}`
@@ -364,57 +262,6 @@ const pagedRows = computed(() => {
   return sortedRows.value.slice(start, start + pageSize.value)
 })
 
-const currentLinkingRow = computed(() => {
-  if (!linkingRecordCode.value) {
-    return null
-  }
-  return rows.value.find((item) => item.receiveRecordCode === linkingRecordCode.value) ?? null
-})
-
-const linkCandidateRows = computed(() => {
-  const row = currentLinkingRow.value
-  if (!row) {
-    return []
-  }
-  const callSign = row.callSign.trim().toUpperCase()
-  const targetSceneType = receiveBusinessTypeToSceneType(row.businessType, row.cardType)
-  const keyword = linkCandidateKeyword.value.trim().toUpperCase()
-  return cardRows.value
-    .filter((item) => {
-      if (!item.callSign || item.callSign !== callSign) {
-        return false
-      }
-      if (item.cardType !== row.cardType || item.sceneType !== targetSceneType) {
-        return false
-      }
-      if (
-        row.businessType === 'OFFLINE_EYEBALL' &&
-        item.offlineActivityName !== row.offlineActivityName
-      ) {
-        return false
-      }
-      if (!keyword) {
-        return true
-      }
-      return item.resourceName.includes(keyword) || item.callSign.includes(keyword)
-    })
-    .sort((left, right) => compareText(left.resourceName, right.resourceName))
-    .slice(0, 50)
-})
-
-const selectedTargetCard = computed(() => {
-  if (!selectedTargetCardName.value) {
-    return null
-  }
-  return (
-    cardRows.value.find((item) => item.resourceName === selectedTargetCardName.value) ?? null
-  )
-})
-
-const canLinkReceiveRecord = (row: ReceiveRecordRow): boolean => {
-  return !row.cardId.trim() && Boolean(row.callSign.trim())
-}
-
 const toReceiveRecordRow = (row: Record<string, unknown>): ReceiveRecordRow =>
   row as unknown as ReceiveRecordRow
 
@@ -431,43 +278,6 @@ const resolveReceiveRecordStatusItems = (
       hidden: !showMatchColumns.value,
     },
   ]
-}
-
-const startLinkReceiveRecord = (row: ReceiveRecordRow) => {
-  linkingRecordCode.value =
-    linkingRecordCode.value === row.receiveRecordCode ? '' : row.receiveRecordCode
-  linkCandidateKeyword.value = row.callSign.trim().toUpperCase()
-  selectedTargetCardName.value = ''
-}
-
-const cancelLinkReceiveRecord = () => {
-  linkingRecordCode.value = ''
-  linkCandidateKeyword.value = ''
-  selectedTargetCardName.value = ''
-}
-
-const applyLinkReceiveRecord = async () => {
-  if (!currentLinkingRow.value) {
-    feedback.value = '请选择需要关联的收卡记录。'
-    return
-  }
-  if (!selectedTargetCardName.value) {
-    feedback.value = '请选择目标发卡记录。'
-    return
-  }
-  linkSubmitting.value = true
-  try {
-    const result = await linkReceiveRecordToOutboundCard(currentLinkingRow.value.receiveRecordCode, {
-      targetCardRecordName: selectedTargetCardName.value,
-    })
-    feedback.value = `${result.receivedRecordCode} 已关联发卡记录 ${result.targetCardRecordName}。`
-    cancelLinkReceiveRecord()
-    await loadRows()
-  } catch (error) {
-    feedback.value = `关联发卡记录失败：${getConsoleApiErrorMessage(error)}`
-  } finally {
-    linkSubmitting.value = false
-  }
 }
 
 const toggleSort = (key: string) => {
@@ -515,22 +325,6 @@ watch(filteredRows, () => {
 
 watch(pageSize, () => {
   currentPage.value = 1
-})
-
-watch(linkCandidateRows, (candidates) => {
-  if (!currentLinkingRow.value) {
-    return
-  }
-  if (candidates.length === 1) {
-    selectedTargetCardName.value = candidates[0].resourceName
-    return
-  }
-  if (
-    selectedTargetCardName.value &&
-    !candidates.some((item) => item.resourceName === selectedTargetCardName.value)
-  ) {
-    selectedTargetCardName.value = ''
-  }
 })
 
 onMounted(loadRows)
@@ -631,9 +425,6 @@ onMounted(loadRows)
         :status-items="resolveReceiveRecordStatusItems"
         status-key="matchStatus"
         status-sortable
-        show-actions
-        actions-label="人工关联"
-        :expanded-row-key="linkingRecordCode"
         show-pagination
         :total="filteredRows.length"
         :current-page="currentPage"
@@ -642,105 +433,9 @@ onMounted(loadRows)
         @sort="toggleSort"
         @update:current-page="(value) => (currentPage = value)"
         @update:page-size="(value) => (pageSize = value)"
-      >
-        <template #row-actions="{ row }">
-          <VButton
-            v-if="canLinkReceiveRecord(toReceiveRecordRow(row))"
-            size="xs"
-            type="secondary"
-            :disabled="loading || linkSubmitting"
-            @click="startLinkReceiveRecord(toReceiveRecordRow(row))"
-          >
-            关联发卡记录
-          </VButton>
-          <span v-else>-</span>
-        </template>
-
-        <template #detail="{ row }">
-          <div
-            v-if="currentLinkingRow?.receiveRecordCode === toReceiveRecordRow(row).receiveRecordCode"
-            class="qsl-link-panel"
-          >
-            <div class="qsl-link-panel__summary">
-              <span>收卡编号：{{ currentLinkingRow.receiveRecordCode }}</span>
-              <span>呼号：{{ currentLinkingRow.callSign || '-' }}</span>
-              <span>卡片类型：{{ currentLinkingRow.cardType }}</span>
-            </div>
-
-            <div class="qsl-form-grid">
-              <label class="qsl-field">
-                <span class="qsl-field__label">筛选发卡记录</span>
-                <div class="qsl-input-shell">
-                  <input
-                    v-model.trim="linkCandidateKeyword"
-                    type="text"
-                    placeholder="输入卡片ID或呼号"
-                  />
-                </div>
-              </label>
-              <label class="qsl-field qsl-field--full">
-                <span class="qsl-field__label">目标发卡记录</span>
-                <div class="qsl-input-shell">
-                  <select v-model="selectedTargetCardName">
-                    <option value="">请选择目标发卡记录</option>
-                    <option
-                      v-for="item in linkCandidateRows"
-                      :key="item.resourceName"
-                      :value="item.resourceName"
-                    >
-                      {{ item.resourceName }} ｜ {{ item.callSign }} ｜ {{ item.cardType }} ｜
-                      {{ item.cardVersion || '-' }} ｜ {{ item.cardDate || '-' }}
-                    </option>
-                  </select>
-                </div>
-              </label>
-            </div>
-
-            <div v-if="selectedTargetCard" class="qsl-link-panel__target">
-              <span>已选择：{{ selectedTargetCard.resourceName }}</span>
-              <span>呼号：{{ selectedTargetCard.callSign || '-' }}</span>
-              <span>制卡日期：{{ selectedTargetCard.cardDate || '-' }}</span>
-              <span>卡片版本：{{ selectedTargetCard.cardVersion || '-' }}</span>
-            </div>
-
-            <div class="qsl-actions">
-              <VButton
-                type="secondary"
-                :disabled="linkSubmitting || !selectedTargetCardName"
-                @click="applyLinkReceiveRecord"
-              >
-                确认关联
-              </VButton>
-              <VButton :disabled="linkSubmitting" @click="cancelLinkReceiveRecord">取消</VButton>
-              <span v-if="!linkCandidateRows.length" class="qsl-feedback"
-                >未找到匹配的发卡记录。</span
-              >
-            </div>
-          </div>
-        </template>
-      </QslDataTable>
+      />
 
       <p v-if="feedback" class="qsl-feedback">{{ feedback }}</p>
     </VCard>
   </div>
 </template>
-
-<style scoped lang="scss">
-.qsl-link-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  background: #f9fafb;
-  border-radius: 6px;
-}
-
-.qsl-link-panel__summary,
-.qsl-link-panel__target {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  color: #374151;
-  font-size: 13px;
-}
-</style>

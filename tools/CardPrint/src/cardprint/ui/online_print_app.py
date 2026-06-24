@@ -54,6 +54,9 @@ from cardprint.ui.cli_bridge import run_cli_json
 from cardprint.ui.widgets.preview_canvas import PreviewCanvas
 
 CARD_VERSION_FILTER_PENDING = "__PENDING__"
+ENVELOPE_DESTINATION_ALL = ""
+ENVELOPE_DESTINATION_DOMESTIC = "domestic"
+ENVELOPE_DESTINATION_INTERNATIONAL = "international"
 ACTIVITY_FILTER_ALL = ""
 QRCODE_REMARK_DEFAULT = "请扫二维码并确认签收"
 CARD_BUSINESS_QSO = "qso"
@@ -188,6 +191,21 @@ def _resolve_offline_activity_name(source_row: dict[str, Any]) -> str:
     ]
     for value in candidates:
         text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _resolve_envelope_destination_country(source_row: dict[str, Any]) -> str:
+    for path in (
+        "addressInfo.spec.destinationCountry",
+        "bureauInfo.spec.destinationCountry",
+        "spec.destinationCountry",
+        "destinationCountry",
+        "destination_country",
+        "去向国",
+    ):
+        text = str(_lookup_path_value(source_row, path) or "").strip()
         if text:
             return text
     return ""
@@ -775,6 +793,7 @@ class OnlineDatasetPage(QWidget):
         self._enable_activity_filter = dataset == "cards" and self.card_business == CARD_BUSINESS_OFFLINE
         self._enable_batch_check = dataset == ADDRESS_ENVELOPE_DATASET
         self._enable_address_envelope_filter = dataset == ADDRESS_ENVELOPE_DATASET
+        self._enable_envelope_destination_filter = dataset == "envelopes"
 
         self._preset_path = ""
         self._preset_meta: dict[str, Any] = {"field_keys": [], "paper_name": "", "preferred_printer": ""}
@@ -813,6 +832,12 @@ class OnlineDatasetPage(QWidget):
         self.activity_filter_combo.addItem("全部活动", ACTIVITY_FILTER_ALL)
         self.activity_filter_combo.setEnabled(self._enable_activity_filter)
         self.activity_filter_combo.setVisible(self._enable_activity_filter)
+        self.envelope_destination_filter_combo = QComboBox(self)
+        self.envelope_destination_filter_combo.addItem("全部卡片", ENVELOPE_DESTINATION_ALL)
+        self.envelope_destination_filter_combo.addItem("国内卡片", ENVELOPE_DESTINATION_DOMESTIC)
+        self.envelope_destination_filter_combo.addItem("国际卡片", ENVELOPE_DESTINATION_INTERNATIONAL)
+        self.envelope_destination_filter_combo.setEnabled(self._enable_envelope_destination_filter)
+        self.envelope_destination_filter_combo.setVisible(self._enable_envelope_destination_filter)
         self.address_envelope_filter_edit = QLineEdit(self)
         self.address_envelope_filter_edit.setPlaceholderText("输入呼号、地址编号或卡片局编号")
         self.address_envelope_filter_edit.setEnabled(self._enable_address_envelope_filter)
@@ -876,6 +901,9 @@ class OnlineDatasetPage(QWidget):
         if self._enable_activity_filter:
             fetch_row.addWidget(QLabel("关联活动", left))
             fetch_row.addWidget(self.activity_filter_combo)
+        if self._enable_envelope_destination_filter:
+            fetch_row.addWidget(QLabel("去向类型", left))
+            fetch_row.addWidget(self.envelope_destination_filter_combo)
         if self._enable_address_envelope_filter:
             fetch_row.addWidget(QLabel("筛选", left))
             fetch_row.addWidget(self.address_envelope_filter_edit, 1)
@@ -920,6 +948,8 @@ class OnlineDatasetPage(QWidget):
             self.qrcode_remark_edit.textChanged.connect(self._on_qrcode_remark_text_changed)
         if self._enable_activity_filter:
             self.activity_filter_combo.currentIndexChanged.connect(self._on_activity_filter_changed)
+        if self._enable_envelope_destination_filter:
+            self.envelope_destination_filter_combo.currentIndexChanged.connect(self._on_envelope_destination_filter_changed)
         if self._enable_address_envelope_filter:
             self.address_envelope_filter_edit.textChanged.connect(self._on_address_envelope_filter_changed)
         self.record_table.itemSelectionChanged.connect(self.preview_selected_record)
@@ -1163,8 +1193,23 @@ class OnlineDatasetPage(QWidget):
         ]
         return any(keyword in str(item or "").strip().upper() for item in candidates)
 
+    def _matches_envelope_destination_filter(self, source_row: dict[str, Any]) -> bool:
+        if not getattr(self, "_enable_envelope_destination_filter", False):
+            return True
+        selected = str(self.envelope_destination_filter_combo.currentData() or "").strip()
+        if not selected:
+            return True
+        has_destination_country = bool(_resolve_envelope_destination_country(source_row))
+        if selected == ENVELOPE_DESTINATION_DOMESTIC:
+            return not has_destination_country
+        if selected == ENVELOPE_DESTINATION_INTERNATIONAL:
+            return has_destination_country
+        return True
+
     def _matches_queue_rule(self, source_row: dict[str, Any]) -> bool:
         if not self._matches_card_business(source_row):
+            return False
+        if self.dataset == "envelopes" and not self._matches_envelope_destination_filter(source_row):
             return False
         if self.dataset == ADDRESS_ENVELOPE_DATASET and not self._matches_address_envelope_filter(source_row):
             return False
@@ -1478,6 +1523,11 @@ class OnlineDatasetPage(QWidget):
 
     def _on_activity_filter_changed(self) -> None:
         if not self._enable_activity_filter:
+            return
+        self._rebuild_rows_from_source()
+
+    def _on_envelope_destination_filter_changed(self) -> None:
+        if not self._enable_envelope_destination_filter:
             return
         self._rebuild_rows_from_source()
 

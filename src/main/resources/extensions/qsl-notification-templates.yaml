@@ -18,7 +18,7 @@ spec:
           制卡时间：[(${triggerAt})]
           卡片备注：[(${remarks})]
 
-          期待与您保持通联，顺祝一切顺利。
+          期待与您保持通联，祝一切顺利。
 
       [(${stationCallSign})]
       [(${dateText})]
@@ -32,7 +32,7 @@ spec:
         <p th:text="|卡片编号：${cardRecordName}|"></p>
         <p th:text="|制卡时间：${triggerAt}|"></p>
         <p th:text="|卡片备注：${remarks}|"></p>
-        <p>期待与您保持通联，顺祝一切顺利。</p>
+        <p>期待与您保持通联，祝一切顺利。</p>
         <p th:text="${stationCallSign}"></p>
         <p th:text="${dateText}"></p>
       </div>
@@ -166,7 +166,7 @@ spec:
           发卡时间：[(${triggerAt})]
           卡片备注：[(${remarks})]
 
-          期待与您保持通联，顺祝一切顺利。
+          期待与您保持通联，祝一切顺利。
 
       [(${stationCallSign})]
       [(${dateText})]
@@ -180,7 +180,7 @@ spec:
         <p th:text="|卡片编号：${cardRecordName}|"></p>
         <p th:text="|发卡时间：${triggerAt}|"></p>
         <p th:text="|卡片备注：${remarks}|"></p>
-        <p>期待与您保持通联，顺祝一切顺利。</p>
+        <p>期待与您保持通联，祝一切顺利。</p>
         <p th:text="${stationCallSign}"></p>
         <p th:text="${dateText}"></p>
       </div>
@@ -198,7 +198,7 @@ spec:
     rawBody: |
       [(${callSign})]：
           您好，很高兴于[(${dateText})]收到了您的[(${cardType})]卡片，感谢您的来卡。
-          期待与您保持通联，顺祝一切顺利。
+          期待与您保持通联，祝一切顺利。
 
           签收备注：[(${remarks})]
 
@@ -208,7 +208,7 @@ spec:
       <div class="notification-content">
         <p th:text="|${callSign}：|"></p>
         <p th:text="|您好，很高兴于${dateText}收到了您的${cardType}卡片，感谢您的来卡。|"></p>
-        <p>期待与您保持通联，顺祝一切顺利。</p>
+        <p>期待与您保持通联，祝一切顺利。</p>
         <p th:text="|签收备注：${remarks}|"></p>
         <p th:text="${stationCallSign}"></p>
         <p th:text="${dateText}"></p>

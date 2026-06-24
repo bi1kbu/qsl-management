@@ -8,6 +8,7 @@ import {
   confirmMailReceive,
   createOnlineCardFromReceiveRecord,
   getConsoleApiErrorMessage,
+  linkReceiveRecordToOutboundCard,
   migrateReceivedRecordCode,
   sendNotificationMail,
   type MailReceiveConfirmResult,
@@ -231,6 +232,7 @@ const form = reactive({
 })
 
 const results = ref<ReceiveResult[]>([])
+const linkCandidateSourceResults = ref<ReceiveResult[]>([])
 const receiveRecords = ref<ReceivedRecordResult[]>([])
 const feedback = ref('')
 const submitting = ref(false)
@@ -245,6 +247,10 @@ const batchSendingReceivedMail = ref(false)
 const pendingMailRowName = ref('')
 const pendingReceiveRowName = ref('')
 const creatingOnlineCardReceiveRecordCode = ref('')
+const linkingReceiveRecordCode = ref('')
+const linkTargetKeyword = ref('')
+const linkTargetCardName = ref('')
+const linkSubmitting = ref(false)
 const migrationSourceName = ref('')
 const migrationReceiveRecordCode = ref('')
 const migrationTargetKeyword = ref('')
@@ -447,6 +453,9 @@ const showReceivedRecordMigration = computed(() => props.showReceivedRecordMigra
 const showReceivedRecordCreateAction = computed(() =>
   normalizedSceneTypes.value.includes('ONLINE_EYEBALL'),
 )
+const receivedRecordExpandedRowKey = computed(() =>
+  isReceivedTab.value ? linkingReceiveRecordCode.value : '',
+)
 const migrationExpandedRowKey = computed(() =>
   showReceivedRecordMigration.value && isBatchTab.value ? migrationSourceName.value : '',
 )
@@ -488,6 +497,12 @@ const canCreateOnlineCardFromReceiveRecord = (item: ReceivedRecordResult): boole
     item.cardType === 'EYEBALL' &&
     item.matchStatus === '未匹配' &&
     !item.outboundCardNames.trim()
+  )
+}
+
+const canLinkReceiveRecordToOutboundCard = (item: ReceivedRecordResult): boolean => {
+  return Boolean(
+    item.receiveRecordCode.trim() && item.callSign.trim() && !item.outboundCardNames.trim(),
   )
 }
 const batchEditFields = [
@@ -542,10 +557,11 @@ const pagedReceivedResults = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return sortedReceivedResults.value.slice(start, start + pageSize.value)
 })
-const hasReceivedRecordCreateActions = computed(() => {
-  return (
-    showReceivedRecordCreateAction.value &&
-    pagedReceivedResults.value.some((item) => canCreateOnlineCardFromReceiveRecord(item))
+const hasReceivedRecordActions = computed(() => {
+  return pagedReceivedResults.value.some(
+    (item) =>
+      canLinkReceiveRecordToOutboundCard(item) ||
+      (showReceivedRecordCreateAction.value && canCreateOnlineCardFromReceiveRecord(item)),
   )
 })
 
@@ -651,6 +667,15 @@ watch(results, () => {
   }
 })
 
+watch(receiveRecords, () => {
+  const codeSet = new Set(receiveRecords.value.map((item) => item.receiveRecordCode))
+  if (linkingReceiveRecordCode.value && !codeSet.has(linkingReceiveRecordCode.value)) {
+    linkingReceiveRecordCode.value = ''
+    linkTargetKeyword.value = ''
+    linkTargetCardName.value = ''
+  }
+})
+
 watch(activeHistoryResults, () => {
   if (!isReceivedTab.value && currentPage.value > totalPages.value) {
     currentPage.value = totalPages.value
@@ -723,6 +748,53 @@ const syncHistoryKeywordFromForm = () => {
   historyKeyword.value = keyword
   historyKeywordInput.value = keyword
   currentPage.value = 1
+}
+
+const startLinkReceiveRecord = (item: ReceivedRecordResult) => {
+  if (!canLinkReceiveRecordToOutboundCard(item)) {
+    feedback.value = '只有未关联发卡编号且存在呼号的收卡记录可以人工关联。'
+    return
+  }
+  if (linkingReceiveRecordCode.value === item.receiveRecordCode) {
+    linkingReceiveRecordCode.value = ''
+    linkTargetKeyword.value = ''
+    linkTargetCardName.value = ''
+    return
+  }
+  linkingReceiveRecordCode.value = item.receiveRecordCode
+  linkTargetKeyword.value = item.callSign.trim().toUpperCase()
+  linkTargetCardName.value = ''
+}
+
+const cancelLinkReceiveRecord = () => {
+  linkingReceiveRecordCode.value = ''
+  linkTargetKeyword.value = ''
+  linkTargetCardName.value = ''
+}
+
+const applyLinkReceiveRecord = async () => {
+  const source = currentLinkingReceiveRecord.value
+  if (!source) {
+    feedback.value = '请选择需要关联的收卡记录。'
+    return
+  }
+  if (!linkTargetCardName.value) {
+    feedback.value = '请选择目标卡片。'
+    return
+  }
+  linkSubmitting.value = true
+  try {
+    const result = await linkReceiveRecordToOutboundCard(source.receiveRecordCode, {
+      targetCardRecordName: linkTargetCardName.value,
+    })
+    feedback.value = `${result.receivedRecordCode} 已关联到 ${result.targetCardRecordName}。`
+    cancelLinkReceiveRecord()
+    await loadResults({ silent: true })
+  } catch (error) {
+    feedback.value = `关联卡片失败：${getConsoleApiErrorMessage(error)}`
+  } finally {
+    linkSubmitting.value = false
+  }
 }
 
 const startReceivedRecordCodeMigration = (item: ReceiveResult) => {
@@ -906,6 +978,90 @@ const linkedReceiveRecordsForCard = (item: ReceiveResult): ReceivedRecordResult[
   return receiveRecordsByOutboundCard.value.get(item.resourceName.trim().toUpperCase()) ?? []
 }
 
+const receiveBusinessTypeToSceneType = (item: ReceivedRecordResult): SceneType => {
+  switch (item.businessType) {
+    case 'QSO':
+      return 'QSO'
+    case 'SWL':
+      return 'SWL'
+    case 'ONLINE_EYEBALL':
+      return 'ONLINE_EYEBALL'
+    case 'OFFLINE_EYEBALL':
+      return 'EYEBALL'
+    default:
+      return normalizeSceneType('', item.cardType)
+  }
+}
+
+const currentLinkingReceiveRecord = computed(() => {
+  if (!linkingReceiveRecordCode.value) {
+    return null
+  }
+  return (
+    receiveRecords.value.find(
+      (item) => item.receiveRecordCode === linkingReceiveRecordCode.value,
+    ) ?? null
+  )
+})
+
+const isSameReceiveRecordLinkScene = (
+  source: ReceivedRecordResult,
+  target: ReceiveResult,
+): boolean => {
+  const sourceScene = receiveBusinessTypeToSceneType(source)
+  const targetScene = normalizeSceneType(target.spec.sceneType, target.spec.cardType)
+  if (sourceScene !== targetScene || source.cardType !== target.cardType) {
+    return false
+  }
+  if (sourceScene === 'EYEBALL') {
+    return (source.offlineActivityName || '') === (target.spec.offlineActivityName || '')
+  }
+  return true
+}
+
+const linkTargetCandidates = computed(() => {
+  const source = currentLinkingReceiveRecord.value
+  if (!source) {
+    return []
+  }
+  const callSign = source.callSign.trim().toUpperCase()
+  const keyword = linkTargetKeyword.value.trim().toUpperCase()
+  return linkCandidateSourceResults.value
+    .filter((item) => {
+      if (!isFormalCardRecordName(item.resourceName)) {
+        return false
+      }
+      if (!isSameReceiveRecordLinkScene(source, item)) {
+        return false
+      }
+      if (callSign !== item.callSign.trim().toUpperCase()) {
+        return false
+      }
+      if (!keyword) {
+        return true
+      }
+      return (
+        item.resourceName.toUpperCase().includes(keyword) ||
+        item.callSign.toUpperCase().includes(keyword) ||
+        (item.spec.cardVersion || '').toUpperCase().includes(keyword) ||
+        (item.spec.cardDate || '').toUpperCase().includes(keyword)
+      )
+    })
+    .sort((left, right) => compareText(left.resourceName, right.resourceName))
+    .slice(0, 50)
+})
+
+const selectedLinkTarget = computed(() => {
+  if (!linkTargetCardName.value) {
+    return null
+  }
+  return (
+    linkCandidateSourceResults.value.find(
+      (item) => item.resourceName === linkTargetCardName.value,
+    ) ?? null
+  )
+})
+
 const migrationSourceRow = computed(() => {
   if (!migrationSourceName.value) {
     return null
@@ -996,6 +1152,22 @@ watch(migrationTargetCandidates, (candidates) => {
     !candidates.some((item) => item.resourceName === migrationTargetCardName.value)
   ) {
     migrationTargetCardName.value = ''
+  }
+})
+
+watch(linkTargetCandidates, (candidates) => {
+  if (!linkingReceiveRecordCode.value) {
+    return
+  }
+  if (candidates.length === 1) {
+    linkTargetCardName.value = candidates[0].resourceName
+    return
+  }
+  if (
+    linkTargetCardName.value &&
+    !candidates.some((item) => item.resourceName === linkTargetCardName.value)
+  ) {
+    linkTargetCardName.value = ''
   }
 })
 
@@ -1213,7 +1385,7 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
       listExtensions<CardRecordSpec, CardRecordStatus>(resourcePlural),
       listExtensions<ReceiveRecordSpec>(receiveRecordPlural),
     ])
-    results.value = extensions
+    const sceneResults = extensions
       .map((extension) => toReceiveResult(extension))
       .filter((item) =>
         normalizedSceneTypes.value.includes(
@@ -1221,8 +1393,11 @@ const loadResults = async (options: { silent?: boolean } = {}) => {
         ),
       )
       .filter((item) => isFormalCardRecordName(item.resourceName))
+    linkCandidateSourceResults.value = [...sceneResults]
+    results.value = sceneResults
       .filter(
-        (item) => !props.hideNoSendCardRecords || !isBuiltinNoSendCardVersion(item.spec.cardVersion),
+        (item) =>
+          !props.hideNoSendCardRecords || !isBuiltinNoSendCardVersion(item.spec.cardVersion),
       )
       .filter(
         (item) =>
@@ -2037,7 +2212,8 @@ onMounted(() => {
         :status-items="resolveReceivedRecordStatusItems"
         status-key="matchStatus"
         status-sortable
-        :show-actions="hasReceivedRecordCreateActions"
+        :show-actions="hasReceivedRecordActions"
+        :expanded-row-key="receivedRecordExpandedRowKey"
         show-pagination
         :total="sortedReceivedResults.length"
         :current-page="currentPage"
@@ -2052,6 +2228,19 @@ onMounted(() => {
         </template>
         <template #row-actions="{ row }">
           <VButton
+            v-if="canLinkReceiveRecordToOutboundCard(asReceivedRecordResultRow(row))"
+            size="xs"
+            type="secondary"
+            :disabled="loadingResults || linkSubmitting"
+            @click="startLinkReceiveRecord(asReceivedRecordResultRow(row))"
+          >
+            {{
+              linkingReceiveRecordCode === asReceivedRecordResultRow(row).receiveRecordCode
+                ? '收起关联'
+                : '关联卡片'
+            }}
+          </VButton>
+          <VButton
             v-if="canCreateOnlineCardFromReceiveRecord(asReceivedRecordResultRow(row))"
             class="qsl-action-warning"
             size="xs"
@@ -2065,11 +2254,74 @@ onMounted(() => {
             @click="createOnlineCardForReceivedRecord(asReceivedRecordResultRow(row))"
           >
             {{
-              creatingOnlineCardReceiveRecordCode === asReceivedRecordResultRow(row).receiveRecordCode
+              creatingOnlineCardReceiveRecordCode ===
+              asReceivedRecordResultRow(row).receiveRecordCode
                 ? '创建中'
                 : '创建卡片'
             }}
           </VButton>
+        </template>
+        <template #detail="{ row }">
+          <div
+            v-if="linkingReceiveRecordCode === asReceivedRecordResultRow(row).receiveRecordCode"
+            class="qsl-migration-panel"
+          >
+            <div class="qsl-migration-panel__summary">
+              <span>收卡编号：{{ currentLinkingReceiveRecord?.receiveRecordCode || '-' }}</span>
+              <span>呼号：{{ currentLinkingReceiveRecord?.callSign || '-' }}</span>
+              <span>卡片类型：{{ currentLinkingReceiveRecord?.cardType || '-' }}</span>
+            </div>
+            <div class="qsl-form-grid">
+              <label class="qsl-field">
+                <span class="qsl-field__label">筛选目标卡片</span>
+                <div class="qsl-input-shell">
+                  <input
+                    v-model.trim="linkTargetKeyword"
+                    type="text"
+                    placeholder="输入卡片ID、呼号、卡片版本或制卡日期"
+                  />
+                </div>
+              </label>
+              <label class="qsl-field qsl-field--full">
+                <span class="qsl-field__label">目标卡片</span>
+                <div class="qsl-input-shell">
+                  <select v-model="linkTargetCardName">
+                    <option value="">请选择目标卡片</option>
+                    <option
+                      v-for="item in linkTargetCandidates"
+                      :key="item.resourceName"
+                      :value="item.resourceName"
+                    >
+                      {{ item.resourceName }} ｜ {{ item.callSign || '-' }} ｜
+                      {{ item.cardType }} ｜ {{ item.spec.cardVersion || '-' }} ｜
+                      {{ item.spec.cardDate || '-' }}
+                    </option>
+                  </select>
+                </div>
+              </label>
+            </div>
+            <div v-if="selectedLinkTarget" class="qsl-migration-panel__summary">
+              <span>已选择：{{ selectedLinkTarget.resourceName }}</span>
+              <span>卡片版本：{{ selectedLinkTarget.spec.cardVersion || '-' }}</span>
+              <span>发卡日期：{{ selectedLinkTarget.spec.sentAt || '-' }}</span>
+            </div>
+            <div class="qsl-actions">
+              <QslConfirmActionButton
+                label="确认关联"
+                danger-level="warning"
+                :disabled="linkSubmitting || !linkTargetCardName"
+                confirm-enabled
+                confirm-title="确认人工关联"
+                :confirm-message="`确认将 ${linkingReceiveRecordCode || '-'} 关联到 ${linkTargetCardName || '-'}？`"
+                confirm-text="确认关联"
+                @confirm="applyLinkReceiveRecord"
+              />
+              <VButton :disabled="linkSubmitting" @click="cancelLinkReceiveRecord">取消</VButton>
+              <span v-if="!linkTargetCandidates.length" class="qsl-feedback"
+                >未找到匹配的目标卡片。</span
+              >
+            </div>
+          </div>
         </template>
       </QslDataTable>
       <div class="qsl-actions">
@@ -2153,15 +2405,16 @@ onMounted(() => {
               :disabled="savingSingleEdit"
               @click="startSingleEdit(asReceiveResultRow(row))"
             >
-              {{ editingResourceName === asReceiveResultRow(row).resourceName ? '正在编辑' : '编辑' }}
+              {{
+                editingResourceName === asReceiveResultRow(row).resourceName ? '正在编辑' : '编辑'
+              }}
             </VButton>
             <VButton
               v-if="showReceivedRecordMigration"
               size="xs"
               type="secondary"
               :disabled="
-                migrationSubmitting ||
-                !canMigrateReceivedRecordCode(asReceiveResultRow(row))
+                migrationSubmitting || !canMigrateReceivedRecordCode(asReceiveResultRow(row))
               "
               @click="startReceivedRecordCodeMigration(asReceiveResultRow(row))"
             >
@@ -2177,7 +2430,9 @@ onMounted(() => {
               v-if="!isReceiveClosedForDisplay(asReceiveResultRow(row))"
               size="xs"
               type="secondary"
-              :disabled="pendingReceiveRowName === asReceiveResultRow(row).resourceName || submitting"
+              :disabled="
+                pendingReceiveRowName === asReceiveResultRow(row).resourceName || submitting
+              "
               @click="confirmReceiveForRow(asReceiveResultRow(row))"
             >
               {{ isCardReceivedForDisplay(asReceiveResultRow(row)) ? '继续收卡' : '确认收卡' }}
@@ -2305,9 +2560,7 @@ onMounted(() => {
                 label="确认迁移"
                 danger-level="warning"
                 :disabled="
-                  migrationSubmitting ||
-                  !migrationReceiveRecordCode ||
-                  !migrationTargetCardName
+                  migrationSubmitting || !migrationReceiveRecordCode || !migrationTargetCardName
                 "
                 confirm-enabled
                 confirm-title="确认迁移收卡编号"
