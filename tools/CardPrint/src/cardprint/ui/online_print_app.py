@@ -54,6 +54,7 @@ from cardprint.ui.cli_bridge import run_cli_json
 from cardprint.ui.widgets.preview_canvas import PreviewCanvas
 
 CARD_VERSION_FILTER_PENDING = "__PENDING__"
+BUILTIN_NO_SEND_CARD_VERSION = "不发卡"
 ENVELOPE_DESTINATION_ALL = ""
 ENVELOPE_DESTINATION_DOMESTIC = "domestic"
 ENVELOPE_DESTINATION_INTERNATIONAL = "international"
@@ -176,6 +177,10 @@ def _split_card_versions(value: Any) -> list[str]:
         seen.add(chunk)
         versions.append(chunk)
     return versions
+
+
+def _is_no_send_card_version(value: Any) -> bool:
+    return BUILTIN_NO_SEND_CARD_VERSION in _split_card_versions(value)
 
 
 def _resolve_offline_activity_name(source_row: dict[str, Any]) -> str:
@@ -1239,7 +1244,9 @@ class OnlineDatasetPage(QWidget):
                 return False
             return selected_version in row_versions
         if self.dataset == "envelopes":
-            # 封面打印队列：所有未打包卡片。
+            # 封面打印队列：所有未打包且需要实际发卡的卡片。
+            if _is_no_send_card_version(spec.get("cardVersion", source_row.get("cardVersion"))):
+                return False
             if envelope_printed:
                 return False
             return True
@@ -2585,6 +2592,8 @@ class OnlineManualConfirmPage(QWidget):
         if self.dataset == "cards":
             card_issued = _to_bool(spec.get("cardIssued", source_row.get("cardIssued")))
             return not card_issued
+        if _is_no_send_card_version(spec.get("cardVersion", source_row.get("cardVersion"))):
+            return False
         envelope_printed = _to_bool(spec.get("envelopePrinted", source_row.get("envelopePrinted")))
         return not envelope_printed
 

@@ -201,6 +201,20 @@ def test_envelope_page_keeps_all_unpacked_card_rows() -> None:
     assert page._matches_queue_rule(packed_row) is False
 
 
+def test_envelope_page_skips_no_send_card_version_rows() -> None:
+    page = OnlineDatasetPage.__new__(OnlineDatasetPage)
+    page.dataset = "envelopes"
+    page.card_business = ""
+    page._enable_card_version_filter = False
+    page._enable_activity_filter = False
+    page._enable_address_envelope_filter = False
+    page._enable_envelope_destination_filter = False
+
+    assert page._matches_queue_rule(
+        {"spec": {"sceneType": "QSO", "cardVersion": "不发卡", "envelopePrinted": False}}
+    ) is False
+
+
 def test_envelope_confirm_keeps_all_unpacked_card_rows() -> None:
     page = OnlineManualConfirmPage.__new__(OnlineManualConfirmPage)
     page.dataset = "envelopes"
@@ -209,6 +223,15 @@ def test_envelope_confirm_keeps_all_unpacked_card_rows() -> None:
     assert page._matches_queue_rule({"spec": {"sceneType": "EYEBALL", "envelopePrinted": False}}) is True
     assert page._matches_queue_rule({"spec": {"sceneType": "QSO", "cardType": "QSO", "envelopePrinted": False}}) is True
     assert page._matches_queue_rule({"spec": {"sceneType": "QSO", "cardType": "QSO", "envelopePrinted": True}}) is False
+
+
+def test_envelope_confirm_skips_no_send_card_version_rows() -> None:
+    page = OnlineManualConfirmPage.__new__(OnlineManualConfirmPage)
+    page.dataset = "envelopes"
+
+    assert page._matches_queue_rule(
+        {"spec": {"sceneType": "QSO", "cardVersion": "不发卡", "envelopePrinted": False}}
+    ) is False
 
 
 def test_envelope_destination_filter_splits_domestic_and_international_rows() -> None:

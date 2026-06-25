@@ -233,7 +233,7 @@ python -m cardprint.cli ui online
 
 1. 默认地址为 `http://localhost:8090`，但配置中可传入其他 `base_url`。
 2. 读取 `card-records` 生成卡片/信封队列，卡片打印会按 `CardRecord.spec.qsoRecordName` 额外读取 `qso-records` 并注入 `qsoInfo`；通联业务制卡的发射地址字段优先使用 `QsoRecord.spec.myQth`，旧预设字段 `qth` 与新预设字段 `my_qth` 均按此规则取值，缺失时才兜底到对方 `qth`；线下换卡制卡仍优先使用关联活动的 `OfflineActivity.spec.activityLocation`；`CardRecord.spec.cardReceived` 为空或缺失时按未收卡处理，打印互斥项默认勾选“请回卡片”。
-3. 信封打印纳入所有未打包（`envelopePrinted=false`）的卡片记录，并额外读取 `station-profiles`、`address-book-entries`、`bureau-entries` 做本台地址和收件地址补全；封面打印页提供去向类型下拉筛选，去向国为空按国内卡片处理，存在去向国内容按国际卡片处理；打包确认使用同一未打包口径回写 `envelopePrinted`。
+3. 信封打印纳入未打包（`envelopePrinted=false`）且卡片版本不是“不发卡”的卡片记录，并额外读取 `station-profiles`、`address-book-entries`、`bureau-entries` 做本台地址和收件地址补全；封面打印页提供去向类型下拉筛选，去向国为空按国内卡片处理，存在去向国内容按国际卡片处理；打包确认使用同一未打包且非“不发卡”口径回写 `envelopePrinted`。
 4. 补打信封页位于打包确认后，读取 `address-book-entries` 与 `bureau-entries` 生成独立队列，复用信封预设，支持按呼号、地址编号或卡片局编号筛选，支持当前行打印、勾选批量打印与全部打印，不回写业务状态。
 5. 补打眼球卡片页位于在线打印工具内，使用 `bridge_config.json` 的 `presets.eyeball_reprint_card` 持久化保存专用补卡预设；手工输入呼号与日期时间，支持实时取当前日期时间，生成打印行时固定 `cardType=EYEBALL`、“发出卡片”状态与“请回卡片”状态，不读取或回写后台业务记录。
 6. 卡片版本以 `station-cards` 为准；本地打印工具通过公开接口 `GET /apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` 拉取版本列表，并按 `sortOrder` 与版本号排序，不从 `card-records` 反推。
