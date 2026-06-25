@@ -82,6 +82,58 @@ class QslPublicApiEndpointRouteTest {
     }
 
     @Test
+    void shouldListPublicQsoGridsByPublicPath() {
+        var publicApiService = mock(QslPublicApiService.class);
+        var rateLimitService = mock(QslPublicRateLimitService.class);
+
+        when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
+        when(publicApiService.listPublicGridRecords(anyString(), anyString(), anyString(), anyString(), anyString()))
+            .thenReturn(Mono.just(new QslPublicApiService.PublicQsoGridResult(
+                List.of(new QslPublicApiService.PublicQsoGridItem(
+                    "OM89",
+                    List.of("BG7AAA", "BI1BBB"),
+                    List.of(
+                        new QslPublicApiService.PublicQsoGridRecord(
+                            "BG7AAA",
+                            "2026-06-07",
+                            "074600",
+                            "UTC",
+                            "FT8",
+                            "14.074938",
+                            "20M"
+                        ),
+                        new QslPublicApiService.PublicQsoGridRecord(
+                            "BI1BBB",
+                            "2026-06-08",
+                            "101500",
+                            "UTC+8",
+                            "SSB",
+                            "7.050",
+                            "40M"
+                        )
+                    )
+                )),
+                1,
+                2
+            )));
+
+        var client = WebTestClient.bindToRouterFunction(
+            new QslPublicApiEndpoint(publicApiService, rateLimitService).endpoint()
+        ).build();
+
+        client.get()
+            .uri("/qso-public/grids?sceneType=QSO&dateFrom=2026-06-01&dateTo=2026-06-30&grid=OM89&limit=10")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("QSL-0000")
+            .jsonPath("$.data.total").isEqualTo(1)
+            .jsonPath("$.data.recordTotal").isEqualTo(2)
+            .jsonPath("$.data.items[0].grid").isEqualTo("OM89")
+            .jsonPath("$.data.items[0].records[1].band").isEqualTo("40M");
+    }
+
+    @Test
     void shouldListOnlineBureausBySubresourceGetPath() {
         var publicApiService = mock(QslPublicApiService.class);
         var rateLimitService = mock(QslPublicRateLimitService.class);

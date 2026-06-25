@@ -14,6 +14,7 @@ import static org.mockito.Mockito.never;
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
+import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import com.bi1kbu.qslmanagement.extension.model.StationCard;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
@@ -75,6 +76,36 @@ class QslPublicApiServiceValidationTest {
         var error = assertThrows(QslApiException.class, () -> service.listPublicRecords("!@#", "").block());
         assertEquals("QSL-400-0001", error.getCode());
         assertEquals(400, error.getStatus().value());
+    }
+
+    @Test
+    void shouldGroupPublicQsoRecordsByFourCharGrid() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var first = qsoRecord("QSO001", "BG7AAA", "OM89AB", "2026-06-07", "074600", "UTC", "FT8", "14.074938", "QSO");
+        var second = qsoRecord("QSO002", "BI1BBB", "OM89AB12", "2026-06-08", "101500", "UTC+8", "SSB", "7.050", "QSO");
+        var third = qsoRecord("QSO003", "BG7CCC", "ON80", "2026-06-06", "092000", "UTC", "CW", "{20M} BAND", "QSO");
+        var skipped = qsoRecord("QSO004", "BG7DDD", "北京市海淀区", "2026-06-05", "083000", "UTC+8", "FT8", "21.074", "QSO");
+
+        when(client.listAll(eq(QsoRecord.class), any(), any())).thenReturn(Flux.just(first, second, third, skipped));
+
+        var service = new QslPublicApiService(
+            client,
+            Mockito.mock(QslAuditService.class),
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
+        );
+
+        var result = service.listPublicGridRecords("", "", "", "", "10").block();
+
+        assertEquals(2, result.total());
+        assertEquals(3, result.recordTotal());
+        assertEquals("OM89", result.items().get(0).grid());
+        assertEquals(2, result.items().get(0).records().size());
+        assertEquals(2, result.items().get(0).callSigns().size());
+        assertEquals("40M", result.items().get(0).records().get(0).band());
+        assertEquals("ON80", result.items().get(1).grid());
+        assertEquals("20M", result.items().get(1).records().get(0).band());
+        assertEquals("", result.items().get(1).records().get(0).frequency());
     }
 
     @Test
@@ -665,5 +696,31 @@ class QslPublicApiServiceValidationTest {
         assertEquals(Boolean.TRUE, temporaryCard.getSpec().getCardReceived());
         verify(client, times(1)).update(any(CardRecord.class));
         verify(client, times(0)).delete(any(CardRecord.class));
+    }
+
+    private QsoRecord qsoRecord(
+        String name,
+        String callSign,
+        String qth,
+        String date,
+        String time,
+        String timezone,
+        String mode,
+        String freq,
+        String sceneType
+    ) {
+        var record = new QsoRecord();
+        record.setMetadata(QslApiSupport.createMetadata(name));
+        var spec = new QsoRecord.QsoRecordSpec();
+        spec.setCallSign(callSign);
+        spec.setQth(qth);
+        spec.setDate(date);
+        spec.setTime(time);
+        spec.setTimezone(timezone);
+        spec.setMyRigMode(mode);
+        spec.setFreq(freq);
+        spec.setSceneType(sceneType);
+        record.setSpec(spec);
+        return record;
     }
 }

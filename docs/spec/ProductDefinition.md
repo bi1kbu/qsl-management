@@ -172,15 +172,18 @@ Halo 官方资料核验日期：2026-06-24
 当前公开数据接口：
 
 1. `GET /qso-public/records`
-2. `GET /overview-public/summary`
-3. `GET /exchange-online/-/bureaus`
-4. `GET /exchange-online/-/station-cards`
-5. `GET /exchange-offline/-/activities`
-6. `POST /exchange-online/-/requests`
-7. `POST /exchange-offline/-/confirm`
-8. `POST /receipt-public/-/confirm`
+2. `GET /qso-public/grids`
+3. `GET /overview-public/summary`
+4. `GET /exchange-online/-/bureaus`
+5. `GET /exchange-online/-/station-cards`
+6. `GET /exchange-offline/-/activities`
+7. `POST /exchange-online/-/requests`
+8. `POST /exchange-offline/-/confirm`
+9. `POST /receipt-public/-/confirm`
 
-公开接口允许匿名访问，但必须通过输入校验与限流。限流维度为 `endpoint + clientIp`，阈值来自 `SystemSetting.spec.guestQueryPerMinute`，未配置时使用默认值 `30`。`POST /receipt-public/-/confirm` 使用 `receipt-public-confirm` 限流键，`POST /exchange-offline/-/confirm` 使用 `exchange-offline-confirm` 限流键。
+`GET /qso-public/grids` 返回通联记录中的公开网格清单，按对方四位 Maidenhead 网格聚合。接口从 `QsoRecord.spec.qth` 读取对方 QTH；仅当 QTH 整体为 4/6/8 位网格编号时纳入清单，6 位或 8 位截取前四位，地区文字、地址或混合文本跳过。同一四位网格下保留多条通联明细，并返回去重后的呼号集合；明细字段仅包含呼号、日期、时间、时区、模式、频率和频段，不返回地址、备注、本台信息等敏感内容。接口支持 `sceneType/dateFrom/dateTo/grid/limit` 查询参数，`sceneType` 仅允许 `QSO/SWL`，`limit` 表示最多返回的通联明细数量，默认 500、最大 2000。
+
+公开接口允许匿名访问，但必须通过输入校验与限流。限流维度为 `endpoint + clientIp`，阈值来自 `SystemSetting.spec.guestQueryPerMinute`，未配置时使用默认值 `30`。`GET /qso-public/grids` 使用 `qso-public-grids` 限流键，`POST /receipt-public/-/confirm` 使用 `receipt-public-confirm` 限流键，`POST /exchange-offline/-/confirm` 使用 `exchange-offline-confirm` 限流键。
 
 ## 5. 角色模型与权限节点
 

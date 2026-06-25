@@ -10,9 +10,11 @@ import com.bi1kbu.qslmanagement.extension.model.StationCard;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -44,11 +46,17 @@ public class QslPublicApiService {
     private static final Pattern TELEPHONE_PATTERN = Pattern.compile("^[0-9+\\-\\s]{0,30}$");
     private static final Pattern POSTAL_CODE_PATTERN = Pattern.compile("^[A-Za-z0-9\\-]{0,20}$");
     private static final Pattern EXCHANGE_REQUEST_NAME_PATTERN = Pattern.compile("^EX(\\d{4,})$");
+    private static final Pattern GRID_SQUARE_PATTERN = Pattern.compile("^([A-R]{2}[0-9]{2})(?:[A-X]{2}(?:[0-9]{2})?)?$");
+    private static final Pattern ISO_DATE_PATTERN = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$");
+    private static final Pattern NUMERIC_FREQUENCY_PATTERN = Pattern.compile("^\\d+(?:\\.\\d+)?$");
+    private static final Pattern BAND_PLACEHOLDER_PATTERN = Pattern.compile("^\\{?([0-9]+(?:\\.[0-9]+)?[A-Z]+)\\}?\\s*BAND$");
     private static final List<String> ALLOWED_SCENE_TYPES = List.of("QSO", "SWL", "ONLINE_EYEBALL", "EYEBALL");
     private static final String ONLINE_EXCHANGE_DISABLED = "DISABLED";
     private static final String ONLINE_EXCHANGE_MANUAL = "MANUAL";
     private static final String ONLINE_EXCHANGE_AUTO_APPROVE = "AUTO_APPROVE";
     private static final int DEFAULT_ONLINE_EXCHANGE_REQUEST_COOLDOWN_MINUTES = 5;
+    private static final int DEFAULT_PUBLIC_GRID_RECORD_LIMIT = 500;
+    private static final int MAX_PUBLIC_GRID_RECORD_LIMIT = 2000;
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
@@ -135,6 +143,49 @@ public class QslPublicApiService {
                 tuple.getT2(),
                 tuple.getT1().size() + tuple.getT2().size()
             ));
+    }
+
+    public Mono<PublicQsoGridResult> listPublicGridRecords(
+        String sceneType,
+        String dateFrom,
+        String dateTo,
+        String grid,
+        String limit
+    ) {
+        String normalizedSceneType;
+        String normalizedDateFrom;
+        String normalizedDateTo;
+        String normalizedGrid;
+        int recordLimit;
+        try {
+            normalizedSceneType = normalizeSceneType(sceneType);
+            normalizedDateFrom = normalizeOptionalDate(dateFrom, "开始日期格式不合法");
+            normalizedDateTo = normalizeOptionalDate(dateTo, "结束日期格式不合法");
+            normalizedGrid = normalizeGridFilter(grid);
+            recordLimit = normalizePublicGridRecordLimit(limit);
+        } catch (QslApiException error) {
+            return Mono.error(error);
+        }
+        if (!normalizedSceneType.isBlank() && !List.of("QSO", "SWL").contains(normalizedSceneType)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "场景类型不合法"));
+        }
+        if (!normalizedDateFrom.isBlank() && !normalizedDateTo.isBlank()
+            && normalizedDateFrom.compareTo(normalizedDateTo) > 0) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "开始日期不能晚于结束日期"));
+        }
+
+        return client.listAll(QsoRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .filter(qsoRecord -> qsoRecord.getMetadata() != null && qsoRecord.getSpec() != null)
+            .flatMap(qsoRecord -> {
+                var item = toPublicQsoGridRecord(qsoRecord.getSpec());
+                return item == null ? Mono.empty() : Mono.just(item);
+            })
+            .filter(item -> normalizedSceneType.isBlank() || normalizedSceneType.equals(item.sceneType()))
+            .filter(item -> normalizedDateFrom.isBlank() || item.date().compareTo(normalizedDateFrom) >= 0)
+            .filter(item -> normalizedDateTo.isBlank() || item.date().compareTo(normalizedDateTo) <= 0)
+            .filter(item -> normalizedGrid.isBlank() || item.grid().startsWith(normalizedGrid))
+            .collectList()
+            .map(items -> buildPublicQsoGridResult(items, recordLimit));
     }
 
     public Mono<PublicExchangeSubmitResult> submitExchangeRequest(PublicExchangeSubmitCommand command, String clientIp) {
@@ -808,6 +859,194 @@ public class QslPublicApiService {
         return reviewStatus.isBlank() || "待审核".equals(reviewStatus);
     }
 
+    private PublicQsoGridFlatRecord toPublicQsoGridRecord(QsoRecord.QsoRecordSpec spec) {
+        var grid = extractPublicFourCharGrid(spec.getQth());
+        if (grid.isBlank()) {
+            return null;
+        }
+        var callSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
+        if (callSign.isBlank()) {
+            return null;
+        }
+        var frequency = normalizePublicFrequency(spec.getFreq());
+        return new PublicQsoGridFlatRecord(
+            grid,
+            callSign,
+            nullToEmpty(spec.getDate()).trim(),
+            nullToEmpty(spec.getTime()).trim(),
+            nullToEmpty(spec.getTimezone()).trim(),
+            nullToEmpty(spec.getMyRigMode()).trim(),
+            frequency,
+            resolvePublicBand(spec.getFreq(), frequency),
+            normalizeSceneType(spec.getSceneType())
+        );
+    }
+
+    private PublicQsoGridResult buildPublicQsoGridResult(List<PublicQsoGridFlatRecord> rawItems, int recordLimit) {
+        var limitedItems = rawItems.stream()
+            .sorted(Comparator.comparing(PublicQsoGridFlatRecord::date, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(PublicQsoGridFlatRecord::time, String.CASE_INSENSITIVE_ORDER)
+                .reversed()
+                .thenComparing(PublicQsoGridFlatRecord::grid, String.CASE_INSENSITIVE_ORDER)
+                .thenComparing(PublicQsoGridFlatRecord::callSign, String.CASE_INSENSITIVE_ORDER))
+            .limit(recordLimit)
+            .toList();
+        Map<String, List<PublicQsoGridFlatRecord>> grouped = new LinkedHashMap<>();
+        for (var item : limitedItems) {
+            grouped.computeIfAbsent(item.grid(), key -> new ArrayList<>()).add(item);
+        }
+
+        var gridItems = grouped.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
+            .map(entry -> {
+                var records = entry.getValue().stream()
+                    .map(item -> new PublicQsoGridRecord(
+                        item.callSign(),
+                        item.date(),
+                        item.time(),
+                        item.timezone(),
+                        item.mode(),
+                        item.frequency(),
+                        item.band()
+                    ))
+                    .toList();
+                var callSigns = entry.getValue().stream()
+                    .map(PublicQsoGridFlatRecord::callSign)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new))
+                    .stream()
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .toList();
+                return new PublicQsoGridItem(entry.getKey(), callSigns, records);
+            })
+            .toList();
+
+        return new PublicQsoGridResult(gridItems, gridItems.size(), limitedItems.size());
+    }
+
+    private String extractPublicFourCharGrid(String qth) {
+        var normalized = nullToEmpty(qth).trim().toUpperCase(Locale.ROOT);
+        if (normalized.length() < 4 || normalized.length() > 8) {
+            return "";
+        }
+        var matcher = GRID_SQUARE_PATTERN.matcher(normalized);
+        if (!matcher.matches()) {
+            return "";
+        }
+        return matcher.group(1);
+    }
+
+    private String normalizeGridFilter(String value) {
+        var normalized = nullToEmpty(value).trim().toUpperCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return "";
+        }
+        if (normalized.length() > 4) {
+            normalized = normalized.substring(0, 4);
+        }
+        if (!GRID_SQUARE_PATTERN.matcher(normalized).matches()) {
+            throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "网格编号格式不合法");
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalDate(String value, String message) {
+        var normalized = nullToEmpty(value).trim();
+        if (normalized.isBlank()) {
+            return "";
+        }
+        if (!ISO_DATE_PATTERN.matcher(normalized).matches()) {
+            throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", message);
+        }
+        return normalized;
+    }
+
+    private int normalizePublicGridRecordLimit(String value) {
+        var normalized = nullToEmpty(value).trim();
+        if (normalized.isBlank()) {
+            return DEFAULT_PUBLIC_GRID_RECORD_LIMIT;
+        }
+        try {
+            var parsed = Integer.parseInt(normalized);
+            if (parsed <= 0) {
+                return DEFAULT_PUBLIC_GRID_RECORD_LIMIT;
+            }
+            return Math.min(parsed, MAX_PUBLIC_GRID_RECORD_LIMIT);
+        } catch (NumberFormatException error) {
+            throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "返回数量上限格式不合法");
+        }
+    }
+
+    private String normalizePublicFrequency(String value) {
+        var normalized = nullToEmpty(value).trim().toUpperCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return "";
+        }
+        if (BAND_PLACEHOLDER_PATTERN.matcher(normalized).matches()) {
+            return "";
+        }
+        return normalized;
+    }
+
+    private String resolvePublicBand(String rawFrequency, String normalizedFrequency) {
+        var raw = nullToEmpty(rawFrequency).trim().toUpperCase(Locale.ROOT);
+        var placeholderMatcher = BAND_PLACEHOLDER_PATTERN.matcher(raw);
+        if (placeholderMatcher.matches()) {
+            return placeholderMatcher.group(1);
+        }
+        if (!NUMERIC_FREQUENCY_PATTERN.matcher(normalizedFrequency).matches()) {
+            return "";
+        }
+        try {
+            var mhz = Double.parseDouble(normalizedFrequency);
+            return bandFromMhz(mhz);
+        } catch (NumberFormatException error) {
+            return "";
+        }
+    }
+
+    private String bandFromMhz(double mhz) {
+        if (mhz >= 1.8 && mhz <= 2.0) {
+            return "160M";
+        }
+        if (mhz >= 3.5 && mhz <= 4.0) {
+            return "80M";
+        }
+        if (mhz >= 5.0 && mhz <= 5.5) {
+            return "60M";
+        }
+        if (mhz >= 7.0 && mhz <= 7.3) {
+            return "40M";
+        }
+        if (mhz >= 10.1 && mhz <= 10.15) {
+            return "30M";
+        }
+        if (mhz >= 14.0 && mhz <= 14.35) {
+            return "20M";
+        }
+        if (mhz >= 18.068 && mhz <= 18.168) {
+            return "17M";
+        }
+        if (mhz >= 21.0 && mhz <= 21.45) {
+            return "15M";
+        }
+        if (mhz >= 24.89 && mhz <= 24.99) {
+            return "12M";
+        }
+        if (mhz >= 28.0 && mhz <= 29.7) {
+            return "10M";
+        }
+        if (mhz >= 50.0 && mhz <= 54.0) {
+            return "6M";
+        }
+        if (mhz >= 144.0 && mhz <= 148.0) {
+            return "2M";
+        }
+        if (mhz >= 430.0 && mhz <= 440.0) {
+            return "70CM";
+        }
+        return "";
+    }
+
     private boolean isValidCallSign(String callSign) {
         return CALL_SIGN_PATTERN.matcher(callSign).matches();
     }
@@ -960,6 +1199,44 @@ public class QslPublicApiService {
         String time,
         String freq,
         String qth
+    ) {
+    }
+
+    public record PublicQsoGridResult(
+        List<PublicQsoGridItem> items,
+        int total,
+        int recordTotal
+    ) {
+    }
+
+    public record PublicQsoGridItem(
+        String grid,
+        List<String> callSigns,
+        List<PublicQsoGridRecord> records
+    ) {
+    }
+
+    public record PublicQsoGridRecord(
+        String callSign,
+        String date,
+        String time,
+        String timezone,
+        String mode,
+        String frequency,
+        String band
+    ) {
+    }
+
+    private record PublicQsoGridFlatRecord(
+        String grid,
+        String callSign,
+        String date,
+        String time,
+        String timezone,
+        String mode,
+        String frequency,
+        String band,
+        String sceneType
     ) {
     }
 

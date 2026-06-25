@@ -33,6 +33,7 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
     @Override
     public RouterFunction<ServerResponse> endpoint() {
         return route(GET("/qso-public/records"), this::listPublicQso)
+            .andRoute(GET("/qso-public/grids"), this::listPublicQsoGrids)
             .andRoute(GET("/exchange-online/-/bureaus"), this::listOnlineBureaus)
             .andRoute(GET("/exchange-online/-/station-cards"), this::listOnlineStationCards)
             .andRoute(GET("/exchange-offline/-/activities"), this::listOfflineActivities)
@@ -52,6 +53,19 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
         var sceneType = request.queryParam("sceneType").orElse("");
         return publicRateLimitService.checkLimit("qso-public-records", clientIp)
             .then(publicApiService.listPublicRecords(callSign, sceneType))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> listPublicQsoGrids(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        var sceneType = request.queryParam("sceneType").orElse("");
+        var dateFrom = request.queryParam("dateFrom").orElse("");
+        var dateTo = request.queryParam("dateTo").orElse("");
+        var grid = request.queryParam("grid").orElse("");
+        var limit = request.queryParam("limit").orElse("");
+        return publicRateLimitService.checkLimit("qso-public-grids", clientIp)
+            .then(publicApiService.listPublicGridRecords(sceneType, dateFrom, dateTo, grid, limit))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }
