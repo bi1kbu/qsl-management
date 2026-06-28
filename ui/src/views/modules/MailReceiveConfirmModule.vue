@@ -146,6 +146,7 @@ const props = withDefaults(
     hideReceivedMailActions?: boolean
     showReceivedRecordMigration?: boolean
     hideNoSendCardRecords?: boolean
+    showClosedReceiveRows?: boolean
   }>(),
   {
     sceneTypes: () => ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL'],
@@ -154,6 +155,7 @@ const props = withDefaults(
     hideReceivedMailActions: false,
     showReceivedRecordMigration: false,
     hideNoSendCardRecords: false,
+    showClosedReceiveRows: false,
   },
 )
 
@@ -335,6 +337,7 @@ const availableCardTypes = computed<CardRecordSpec['cardType'][]>(() => {
 const filteredResults = computed(() => {
   const actionableResults = results.value.filter(
     (item) =>
+      props.showClosedReceiveRows ||
       !isCardReceivedForDisplay(item) ||
       !['SENT', 'SKIPPED'].includes(item.spec.receivedMailStatus || ''),
   )
