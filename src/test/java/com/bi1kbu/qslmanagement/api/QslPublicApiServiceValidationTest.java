@@ -19,6 +19,7 @@ import com.bi1kbu.qslmanagement.extension.model.StationCard;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -95,7 +96,7 @@ class QslPublicApiServiceValidationTest {
             Mockito.mock(QslNotificationMailService.class)
         );
 
-        var result = service.listPublicGridRecords("", "", "", "", "10").block();
+        var result = service.listPublicGridRecords("", "", "", "", "").block();
 
         assertEquals(2, result.total());
         assertEquals(3, result.recordTotal());
@@ -106,6 +107,29 @@ class QslPublicApiServiceValidationTest {
         assertEquals("ON80", result.items().get(1).grid());
         assertEquals("20M", result.items().get(1).records().get(0).band());
         assertEquals("", result.items().get(1).records().get(0).frequency());
+    }
+
+    @Test
+    void shouldHidePublicQsoGridRecordsInBriefMode() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var first = qsoRecord("QSO001", "BG7AAA", "OM89AB", "2026-06-07", "074600", "UTC", "FT8", "14.074938", "QSO");
+        var second = qsoRecord("QSO002", "BI1BBB", "OM89AB12", "2026-06-08", "101500", "UTC+8", "SSB", "7.050", "QSO");
+
+        when(client.listAll(eq(QsoRecord.class), any(), any())).thenReturn(Flux.just(first, second));
+
+        var service = new QslPublicApiService(
+            client,
+            Mockito.mock(QslAuditService.class),
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
+        );
+
+        var result = service.listPublicGridRecords("", "", "", "", "简略").block();
+
+        assertEquals(1, result.total());
+        assertEquals(2, result.recordTotal());
+        assertEquals(List.of("BG7AAA", "BI1BBB"), result.items().get(0).callSigns());
+        assertEquals(null, result.items().get(0).records());
     }
 
     @Test

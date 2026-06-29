@@ -9,6 +9,7 @@ import com.bi1kbu.qslmanagement.extension.model.ReceiveRecord;
 import com.bi1kbu.qslmanagement.extension.model.StationCard;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,8 +56,6 @@ public class QslPublicApiService {
     private static final String ONLINE_EXCHANGE_MANUAL = "MANUAL";
     private static final String ONLINE_EXCHANGE_AUTO_APPROVE = "AUTO_APPROVE";
     private static final int DEFAULT_ONLINE_EXCHANGE_REQUEST_COOLDOWN_MINUTES = 5;
-    private static final int DEFAULT_PUBLIC_GRID_RECORD_LIMIT = 500;
-    private static final int MAX_PUBLIC_GRID_RECORD_LIMIT = 2000;
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
@@ -150,19 +149,19 @@ public class QslPublicApiService {
         String dateFrom,
         String dateTo,
         String grid,
-        String limit
+        String detailLevel
     ) {
         String normalizedSceneType;
         String normalizedDateFrom;
         String normalizedDateTo;
         String normalizedGrid;
-        int recordLimit;
+        boolean includeRecords;
         try {
             normalizedSceneType = normalizeSceneType(sceneType);
             normalizedDateFrom = normalizeOptionalDate(dateFrom, "开始日期格式不合法");
             normalizedDateTo = normalizeOptionalDate(dateTo, "结束日期格式不合法");
             normalizedGrid = normalizeGridFilter(grid);
-            recordLimit = normalizePublicGridRecordLimit(limit);
+            includeRecords = normalizePublicGridDetailLevel(detailLevel);
         } catch (QslApiException error) {
             return Mono.error(error);
         }
@@ -185,7 +184,7 @@ public class QslPublicApiService {
             .filter(item -> normalizedDateTo.isBlank() || item.date().compareTo(normalizedDateTo) <= 0)
             .filter(item -> normalizedGrid.isBlank() || item.grid().startsWith(normalizedGrid))
             .collectList()
-            .map(items -> buildPublicQsoGridResult(items, recordLimit));
+            .map(items -> buildPublicQsoGridResult(items, includeRecords));
     }
 
     public Mono<PublicExchangeSubmitResult> submitExchangeRequest(PublicExchangeSubmitCommand command, String clientIp) {
@@ -882,17 +881,16 @@ public class QslPublicApiService {
         );
     }
 
-    private PublicQsoGridResult buildPublicQsoGridResult(List<PublicQsoGridFlatRecord> rawItems, int recordLimit) {
-        var limitedItems = rawItems.stream()
+    private PublicQsoGridResult buildPublicQsoGridResult(List<PublicQsoGridFlatRecord> rawItems, boolean includeRecords) {
+        var sortedItems = rawItems.stream()
             .sorted(Comparator.comparing(PublicQsoGridFlatRecord::date, String.CASE_INSENSITIVE_ORDER)
                 .thenComparing(PublicQsoGridFlatRecord::time, String.CASE_INSENSITIVE_ORDER)
                 .reversed()
                 .thenComparing(PublicQsoGridFlatRecord::grid, String.CASE_INSENSITIVE_ORDER)
                 .thenComparing(PublicQsoGridFlatRecord::callSign, String.CASE_INSENSITIVE_ORDER))
-            .limit(recordLimit)
             .toList();
         Map<String, List<PublicQsoGridFlatRecord>> grouped = new LinkedHashMap<>();
-        for (var item : limitedItems) {
+        for (var item : sortedItems) {
             grouped.computeIfAbsent(item.grid(), key -> new ArrayList<>()).add(item);
         }
 
@@ -916,11 +914,11 @@ public class QslPublicApiService {
                     .stream()
                     .sorted(String.CASE_INSENSITIVE_ORDER)
                     .toList();
-                return new PublicQsoGridItem(entry.getKey(), callSigns, records);
+                return new PublicQsoGridItem(entry.getKey(), callSigns, includeRecords ? records : null);
             })
             .toList();
 
-        return new PublicQsoGridResult(gridItems, gridItems.size(), limitedItems.size());
+        return new PublicQsoGridResult(gridItems, gridItems.size(), sortedItems.size());
     }
 
     private String extractPublicFourCharGrid(String qth) {
@@ -960,20 +958,19 @@ public class QslPublicApiService {
         return normalized;
     }
 
-    private int normalizePublicGridRecordLimit(String value) {
+    private boolean normalizePublicGridDetailLevel(String value) {
         var normalized = nullToEmpty(value).trim();
         if (normalized.isBlank()) {
-            return DEFAULT_PUBLIC_GRID_RECORD_LIMIT;
+            return true;
         }
-        try {
-            var parsed = Integer.parseInt(normalized);
-            if (parsed <= 0) {
-                return DEFAULT_PUBLIC_GRID_RECORD_LIMIT;
-            }
-            return Math.min(parsed, MAX_PUBLIC_GRID_RECORD_LIMIT);
-        } catch (NumberFormatException error) {
-            throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "返回数量上限格式不合法");
+        var upper = normalized.toUpperCase(Locale.ROOT);
+        if (List.of("FULL", "完整").contains(upper)) {
+            return true;
         }
+        if (List.of("BRIEF", "SUMMARY", "SIMPLE", "简略").contains(upper)) {
+            return false;
+        }
+        throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001", "返回详情级别不合法");
     }
 
     private String normalizePublicFrequency(String value) {
@@ -1212,6 +1209,7 @@ public class QslPublicApiService {
     public record PublicQsoGridItem(
         String grid,
         List<String> callSigns,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
         List<PublicQsoGridRecord> records
     ) {
     }

@@ -2,7 +2,9 @@ package com.bi1kbu.qslmanagement.api.publicapi;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bi1kbu.qslmanagement.api.QslPublicApiService;
@@ -92,26 +94,7 @@ class QslPublicApiEndpointRouteTest {
                 List.of(new QslPublicApiService.PublicQsoGridItem(
                     "OM89",
                     List.of("BG7AAA", "BI1BBB"),
-                    List.of(
-                        new QslPublicApiService.PublicQsoGridRecord(
-                            "BG7AAA",
-                            "2026-06-07",
-                            "074600",
-                            "UTC",
-                            "FT8",
-                            "14.074938",
-                            "20M"
-                        ),
-                        new QslPublicApiService.PublicQsoGridRecord(
-                            "BI1BBB",
-                            "2026-06-08",
-                            "101500",
-                            "UTC+8",
-                            "SSB",
-                            "7.050",
-                            "40M"
-                        )
-                    )
+                    null
                 )),
                 1,
                 2
@@ -122,7 +105,7 @@ class QslPublicApiEndpointRouteTest {
         ).build();
 
         client.get()
-            .uri("/qso-public/grids?sceneType=QSO&dateFrom=2026-06-01&dateTo=2026-06-30&grid=OM89&limit=10")
+            .uri("/qso-public/grids?sceneType=QSO&dateFrom=2026-06-01&dateTo=2026-06-30&grid=OM89&detailLevel=brief&limit=10")
             .exchange()
             .expectStatus().isOk()
             .expectBody()
@@ -130,7 +113,15 @@ class QslPublicApiEndpointRouteTest {
             .jsonPath("$.data.total").isEqualTo(1)
             .jsonPath("$.data.recordTotal").isEqualTo(2)
             .jsonPath("$.data.items[0].grid").isEqualTo("OM89")
-            .jsonPath("$.data.items[0].records[1].band").isEqualTo("40M");
+            .jsonPath("$.data.items[0].callSigns[1]").isEqualTo("BI1BBB")
+            .jsonPath("$.data.items[0].records").doesNotExist();
+        verify(publicApiService).listPublicGridRecords(
+            eq("QSO"),
+            eq("2026-06-01"),
+            eq("2026-06-30"),
+            eq("OM89"),
+            eq("brief")
+        );
     }
 
     @Test

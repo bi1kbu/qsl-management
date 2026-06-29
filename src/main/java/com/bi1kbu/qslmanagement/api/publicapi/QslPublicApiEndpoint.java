@@ -63,9 +63,11 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
         var dateFrom = request.queryParam("dateFrom").orElse("");
         var dateTo = request.queryParam("dateTo").orElse("");
         var grid = request.queryParam("grid").orElse("");
-        var limit = request.queryParam("limit").orElse("");
+        var detailLevel = request.queryParam("detailLevel")
+            .or(() -> request.queryParam("detail"))
+            .orElse("");
         return publicRateLimitService.checkLimit("qso-public-grids", clientIp)
-            .then(publicApiService.listPublicGridRecords(sceneType, dateFrom, dateTo, grid, limit))
+            .then(publicApiService.listPublicGridRecords(sceneType, dateFrom, dateTo, grid, detailLevel))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

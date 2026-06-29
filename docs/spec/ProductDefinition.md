@@ -2,7 +2,7 @@
 
 更新时间：2026-06-24
 代码核验范围：`插件工程根目录` 后端、控制台前端、RBAC 模板与 `tools/CardPrint` 在线打印桥接
-Halo 官方资料核验日期：2026-06-24
+Halo 官方资料核验日期：2026-06-29
 
 ## 1. 产品一句话定义
 
@@ -181,7 +181,7 @@ Halo 官方资料核验日期：2026-06-24
 8. `POST /exchange-offline/-/confirm`
 9. `POST /receipt-public/-/confirm`
 
-`GET /qso-public/grids` 返回通联记录中的公开网格清单，按对方四位 Maidenhead 网格聚合。接口从 `QsoRecord.spec.qth` 读取对方 QTH；仅当 QTH 整体为 4/6/8 位网格编号时纳入清单，6 位或 8 位截取前四位，地区文字、地址或混合文本跳过。同一四位网格下保留多条通联明细，并返回去重后的呼号集合；明细字段仅包含呼号、日期、时间、时区、模式、频率和频段，不返回地址、备注、本台信息等敏感内容。接口支持 `sceneType/dateFrom/dateTo/grid/limit` 查询参数，`sceneType` 仅允许 `QSO/SWL`，`limit` 表示最多返回的通联明细数量，默认 500、最大 2000。
+`GET /qso-public/grids` 返回通联记录中的公开网格清单，按对方四位 Maidenhead 网格聚合。接口从 `QsoRecord.spec.qth` 读取对方 QTH；仅当 QTH 整体为 4/6/8 位网格编号时纳入清单，6 位或 8 位截取前四位，地区文字、地址或混合文本跳过。同一四位网格下保留多条通联明细，并返回去重后的呼号集合；明细字段仅包含呼号、日期、时间、时区、模式、频率和频段，不返回地址、备注、本台信息等敏感内容。接口支持 `sceneType（场景类型）/dateFrom（开始日期）/dateTo（结束日期）/grid（网格编号）/detailLevel（详情级别）` 查询参数，`sceneType（场景类型）` 仅允许 `QSO/SWL`，`detailLevel（详情级别）` 可选 `full（完整）` 或 `brief（简略）`，不传默认为完整；简略模式只返回网格和呼号清单，不返回通联明细。接口不再设置返回数量上限，历史 `limit（返回数量上限）` 参数会被忽略。
 
 公开接口允许匿名访问，但必须通过输入校验与限流。限流维度为 `endpoint + clientIp`，阈值来自 `SystemSetting.spec.guestQueryPerMinute`，未配置时使用默认值 `30`。`GET /qso-public/grids` 使用 `qso-public-grids` 限流键，`POST /receipt-public/-/confirm` 使用 `receipt-public-confirm` 限流键，`POST /exchange-offline/-/confirm` 使用 `exchange-offline-confirm` 限流键。
 
