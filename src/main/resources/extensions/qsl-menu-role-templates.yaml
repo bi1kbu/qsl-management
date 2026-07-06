@@ -71,6 +71,44 @@ rules:
 apiVersion: v1alpha1
 kind: Role
 metadata:
+  name: qsl-management-migration-state-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "数据迁移状态（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:migration-state:view"]'
+    rbac.authorization.halo.run/dependencies: '[]'
+rules:
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
+    resources: [ "qsl-migration-states" ]
+    verbs: [ "get", "list" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
+    resources: [ "migration-state", "migrations" ]
+    verbs: [ "get", "list", "create" ]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-migration-state-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "数据迁移状态（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:migration-state:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-migration-state-view"]'
+rules:
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
+    resources: [ "qsl-migration-states" ]
+    verbs: [ "get", "list", "create", "update", "patch" ]
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
+    resources: [ "migration-state", "migrations" ]
+    verbs: [ "get", "list", "create" ]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
   name: qsl-management-station-profile-view
   labels:
     halo.run/role-template: "true"
@@ -545,13 +583,13 @@ metadata:
     rbac.authorization.halo.run/module: "QSL 菜单权限"
     rbac.authorization.halo.run/display-name: "导入导出（只读）"
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:import-export:view"]'
-    rbac.authorization.halo.run/dependencies: '["qsl-management-qso-query-view","qsl-management-card-query-view","qsl-management-exchange-request-review-view","qsl-management-address-bureau-view","qsl-management-equipment-catalog-view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-qso-query-view","qsl-management-card-query-view","qsl-management-exchange-request-review-view","qsl-management-address-bureau-view","qsl-management-equipment-catalog-view","qsl-management-migration-state-view"]'
 rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
-    resources: [ "import-export-jobs" ]
+    resources: [ "import-export-jobs", "qsl-migration-states" ]
     verbs: [ "get", "list" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
-    resources: [ "imports", "exports", "legacy-migrations" ]
+    resources: [ "imports", "exports", "legacy-migrations", "migration-state", "migrations" ]
     verbs: [ "get", "list" ]
 ---
 apiVersion: v1alpha1
@@ -564,13 +602,13 @@ metadata:
     rbac.authorization.halo.run/module: "QSL 菜单权限"
     rbac.authorization.halo.run/display-name: "导入导出（编辑）"
     rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:import-export:edit"]'
-    rbac.authorization.halo.run/dependencies: '["qsl-management-import-export-view","qsl-management-qso-record-edit","qsl-management-card-record-edit","qsl-management-exchange-request-review-edit","qsl-management-address-bureau-edit","qsl-management-equipment-catalog-edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-import-export-view","qsl-management-qso-record-edit","qsl-management-card-record-edit","qsl-management-exchange-request-review-edit","qsl-management-address-bureau-edit","qsl-management-equipment-catalog-edit","qsl-management-migration-state-edit"]'
 rules:
   - apiGroups: [ "qsl-management.bi1kbu.com" ]
-    resources: [ "import-export-jobs" ]
+    resources: [ "import-export-jobs", "qsl-migration-states" ]
     verbs: [ "create", "update", "patch" ]
   - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
-    resources: [ "imports", "exports", "legacy-migrations" ]
+    resources: [ "imports", "exports", "legacy-migrations", "migration-state", "migrations" ]
     verbs: [ "create", "get", "list" ]
 ---
 apiVersion: v1alpha1

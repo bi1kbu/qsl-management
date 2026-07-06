@@ -10,6 +10,7 @@ import com.bi1kbu.qslmanagement.api.QslAiService;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
+import com.bi1kbu.qslmanagement.api.QslMigrationStateService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
 import com.bi1kbu.qslmanagement.api.QslQrzAddressLookupService;
@@ -29,6 +30,7 @@ class QslConsoleApiEndpointForbiddenTest {
     private final QslConsoleActionService actionService = mock(QslConsoleActionService.class);
     private final QslImportExportJobService importExportJobService = mock(QslImportExportJobService.class);
     private final QslLegacyMigrationService legacyMigrationService = mock(QslLegacyMigrationService.class);
+    private final QslMigrationStateService migrationStateService = mock(QslMigrationStateService.class);
     private final QslNotificationMailService notificationMailService = mock(QslNotificationMailService.class);
     private final QslAiService aiService = mock(QslAiService.class);
     private final QslQrzAddressLookupService qrzAddressLookupService = mock(QslQrzAddressLookupService.class);
@@ -255,6 +257,7 @@ class QslConsoleApiEndpointForbiddenTest {
             actionService,
             importExportJobService,
             legacyMigrationService,
+            migrationStateService,
             notificationMailService,
             aiService,
             qrzAddressLookupService

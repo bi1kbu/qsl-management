@@ -9,6 +9,7 @@ import com.bi1kbu.qslmanagement.api.QslAiService;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
+import com.bi1kbu.qslmanagement.api.QslMigrationStateService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
 import com.bi1kbu.qslmanagement.api.ReportSummary;
@@ -24,6 +25,7 @@ class QslConsoleApiEndpointAuthTest {
     private final QslConsoleActionService actionService = mock(QslConsoleActionService.class);
     private final QslImportExportJobService importExportJobService = mock(QslImportExportJobService.class);
     private final QslLegacyMigrationService legacyMigrationService = mock(QslLegacyMigrationService.class);
+    private final QslMigrationStateService migrationStateService = mock(QslMigrationStateService.class);
     private final QslNotificationMailService notificationMailService = mock(QslNotificationMailService.class);
     private final QslAiService aiService = mock(QslAiService.class);
 
@@ -229,6 +231,16 @@ class QslConsoleApiEndpointAuthTest {
     }
 
     @Test
+    void shouldRejectMigrationStateWhenUnauthenticated() {
+        unauthorizedGet("/migration-state");
+    }
+
+    @Test
+    void shouldRejectMigrationPrecheckWhenUnauthenticated() {
+        unauthorizedPost("/migrations/precheck", "{}");
+    }
+
+    @Test
     void shouldRejectLegacyMigrationPrecheckWhenUnauthenticated() {
         unauthorizedPost("/legacy-migrations/precheck", "{}");
     }
@@ -304,11 +316,52 @@ class QslConsoleApiEndpointAuthTest {
                 "application/zip",
                 new byte[] {1}
             )));
+        when(migrationStateService.getMigrationState(anyString()))
+            .thenReturn(Mono.just(new QslMigrationStateService.MigrationStateView(
+                "0.0.0",
+                "0.0.0",
+                "1",
+                "",
+                true,
+                false,
+                List.of(),
+                List.of(),
+                "SUCCESS",
+                "0.0.0",
+                "0.0.0",
+                "",
+                "",
+                "",
+                new QslMigrationStateService.MigrationPrecheckResult(
+                    "0.0.0",
+                    "0.0.0",
+                    "1",
+                    "SUCCESS",
+                    "当前版本无需执行数据迁移",
+                    List.of(),
+                    0,
+                    false,
+                    false
+                )
+            )));
+        when(migrationStateService.precheckMigrations(anyString()))
+            .thenReturn(Mono.just(new QslMigrationStateService.MigrationPrecheckResult(
+                "0.0.0",
+                "0.0.0",
+                "1",
+                "SUCCESS",
+                "当前版本无需执行数据迁移",
+                List.of(),
+                0,
+                false,
+                false
+            )));
         var endpoint = new QslConsoleApiEndpoint(
             overviewService,
             actionService,
             importExportJobService,
             legacyMigrationService,
+            migrationStateService,
             notificationMailService,
             aiService
         );

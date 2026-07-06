@@ -4,6 +4,7 @@ import com.bi1kbu.qslmanagement.api.QslApiSupport;
 import com.bi1kbu.qslmanagement.api.QslAiService;
 import com.bi1kbu.qslmanagement.api.QslAiPromptDefaults;
 import com.bi1kbu.qslmanagement.api.QslAuditService;
+import com.bi1kbu.qslmanagement.api.QslMigrationStateService;
 import com.bi1kbu.qslmanagement.api.QslQrzAddressLookupService;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
@@ -24,10 +25,17 @@ public class QslManagementPlugin extends BasePlugin {
     private static final String DEFAULT_STATION_PROFILE_NAME = "qsl-station-profile-default";
 
     private final ReactiveExtensionClient client;
+    private final QslMigrationStateService migrationStateService;
 
     public QslManagementPlugin(PluginContext pluginContext, ReactiveExtensionClient client) {
         super(pluginContext);
         this.client = client;
+        this.migrationStateService = new QslMigrationStateService(client);
+    }
+
+    @Bean
+    public QslMigrationStateService qslMigrationStateService(ReactiveExtensionClient client) {
+        return migrationStateService;
     }
 
     @Bean
@@ -46,7 +54,10 @@ public class QslManagementPlugin extends BasePlugin {
 
     @Override
     public void start() {
-        ensureDefaultResources().subscribe(
+        ensureDefaultResources()
+            .then(migrationStateService.ensureMigrationState(context.getVersion()))
+            .then()
+            .subscribe(
             ignored -> {
             },
             error -> LOGGER.warn("初始化默认资源失败：{}", error.getMessage())

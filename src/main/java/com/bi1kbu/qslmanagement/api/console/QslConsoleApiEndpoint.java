@@ -11,6 +11,7 @@ import com.bi1kbu.qslmanagement.api.QslAiService;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
+import com.bi1kbu.qslmanagement.api.QslMigrationStateService;
 import com.bi1kbu.qslmanagement.api.QslNotificationMailService;
 import com.bi1kbu.qslmanagement.api.QslOverviewService;
 import com.bi1kbu.qslmanagement.api.QslQrzAddressLookupService;
@@ -28,6 +29,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.endpoint.CustomEndpoint;
 import run.halo.app.extension.GroupVersion;
+import run.halo.app.plugin.PluginContext;
 
 @Component
 public class QslConsoleApiEndpoint implements CustomEndpoint {
@@ -36,9 +38,11 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private final QslConsoleActionService actionService;
     private final QslImportExportJobService importExportJobService;
     private final QslLegacyMigrationService legacyMigrationService;
+    private final QslMigrationStateService migrationStateService;
     private final QslNotificationMailService notificationMailService;
     private final QslAiService aiService;
     private final QslQrzAddressLookupService qrzAddressLookupService;
+    private final PluginContext pluginContext;
 
     @Autowired
     public QslConsoleApiEndpoint(
@@ -46,17 +50,21 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         QslConsoleActionService actionService,
         QslImportExportJobService importExportJobService,
         QslLegacyMigrationService legacyMigrationService,
+        QslMigrationStateService migrationStateService,
         QslNotificationMailService notificationMailService,
         QslAiService aiService,
-        QslQrzAddressLookupService qrzAddressLookupService
+        QslQrzAddressLookupService qrzAddressLookupService,
+        PluginContext pluginContext
     ) {
         this.overviewService = overviewService;
         this.actionService = actionService;
         this.importExportJobService = importExportJobService;
         this.legacyMigrationService = legacyMigrationService;
+        this.migrationStateService = migrationStateService;
         this.notificationMailService = notificationMailService;
         this.aiService = aiService;
         this.qrzAddressLookupService = qrzAddressLookupService;
+        this.pluginContext = pluginContext;
     }
 
     QslConsoleApiEndpoint(
@@ -64,6 +72,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         QslConsoleActionService actionService,
         QslImportExportJobService importExportJobService,
         QslLegacyMigrationService legacyMigrationService,
+        QslMigrationStateService migrationStateService,
         QslNotificationMailService notificationMailService,
         QslAiService aiService
     ) {
@@ -72,9 +81,34 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             actionService,
             importExportJobService,
             legacyMigrationService,
+            migrationStateService,
             notificationMailService,
             aiService,
-            null
+            null,
+            PluginContext.builder().name("qsl-management").version("0.0.0").build()
+        );
+    }
+
+    QslConsoleApiEndpoint(
+        QslOverviewService overviewService,
+        QslConsoleActionService actionService,
+        QslImportExportJobService importExportJobService,
+        QslLegacyMigrationService legacyMigrationService,
+        QslMigrationStateService migrationStateService,
+        QslNotificationMailService notificationMailService,
+        QslAiService aiService,
+        QslQrzAddressLookupService qrzAddressLookupService
+    ) {
+        this(
+            overviewService,
+            actionService,
+            importExportJobService,
+            legacyMigrationService,
+            migrationStateService,
+            notificationMailService,
+            aiService,
+            qrzAddressLookupService,
+            PluginContext.builder().name("qsl-management").version("0.0.0").build()
         );
     }
 
@@ -115,6 +149,8 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(GET("/imports/jobs/{jobName}"), this::getImportJob)
             .andRoute(GET("/imports/jobs/{jobName}/errors"), this::getImportJobErrors)
             .andRoute(GET("/imports/jobs/{jobName}/errors/download"), this::downloadImportJobErrors)
+            .andRoute(GET("/migration-state"), this::getMigrationState)
+            .andRoute(POST("/migrations/precheck"), this::precheckMigrations)
             .andRoute(POST("/legacy-migrations/precheck"), this::precheckLegacyMigration)
             .andRoute(POST("/legacy-migrations/execute"), this::executeLegacyMigration)
             .andRoute(POST("/exports/jobs"), this::createExportJob)
@@ -624,6 +660,20 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                 .contentType(MediaType.parseMediaType(payload.contentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + payload.fileName() + "\"")
                 .bodyValue(payload.content()))
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> getMigrationState(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .then(migrationStateService.getMigrationState(pluginContext.getVersion()))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> precheckMigrations(ServerRequest request) {
+        return ensureAuthenticated(request)
+            .then(migrationStateService.precheckMigrations(pluginContext.getVersion()))
+            .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }
 

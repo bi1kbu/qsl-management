@@ -139,6 +139,8 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 | GET | `/imports/jobs/{jobName}` | 查询导入任务 | `import-export:view` |
 | GET | `/imports/jobs/{jobName}/errors` | 查询导入错误明细 | `import-export:view` |
 | GET | `/imports/jobs/{jobName}/errors/download` | 下载导入错误 CSV | `import-export:view` |
+| GET | `/migration-state` | 查询插件运行版本、数据模型版本、迁移状态与迁移预检摘要 | `migration-state:view` |
+| POST | `/migrations/precheck` | 计算当前版本差异和待迁移项，不写入业务数据 | `migration-state:view` |
 | POST | `/legacy-migrations/precheck` | 旧版本数据模型原地迁移预检，不写入数据 | `import-export:edit` |
 | POST | `/legacy-migrations/execute` | 旧版本数据模型原地迁移，将旧卡片收卡字段拆分为 `ReceiveRecord`，并清理旧临时记录 | `import-export:edit` |
 | POST | `/exports/jobs` | 创建导出任务 | `import-export:edit` |
@@ -296,6 +298,8 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 ```
 
 当前导入导出数据集：`qso-record`、`card-record`、`receive-record`、`exchange-request-review`、`offline-activity`、`offline-exchange-card`、`address-management`、`bureau-management`、`equipment-catalog`、`system-setting`、`station-profile`、`station-equipment`、`station-card`。`all` 仅用于导出聚合，覆盖业务数据、收卡事实、线下换卡活动卡与配置菜单数据。2.0.0 前导出包需要先转换：从旧 `card-record.receivedRecordCodes` 聚合生成 `receive-record.csv`，从旧线下 `card-record.offlineActivityName` 聚合生成 `offline-exchange-card.csv`，并清理旧卡片记录中已迁出的收卡字段，过滤旧导出中误写入 `card-record.csv` 的 `qsl-station-card-*` 本台卡片版本占位记录，避免同一收卡事实或非业务卡片在新模型中重复统计。
+
+`QslMigrationState` 是插件数据版本与迁移状态单例，资源名固定为 `qsl-migration-state-default`。插件启动时读取 `PluginContext.version` 作为 `runtimePluginVersion` 并初始化或刷新迁移状态；首次安装只建立基线，不执行历史迁移。`GET /migration-state` 返回运行插件版本、最后一次数据状态确认成功的插件版本、数据模型版本、已执行迁移、待迁移项和最近迁移结果；`POST /migrations/precheck` 只计算迁移计划，不写入业务数据。后续自动迁移必须基于迁移项 ID 去重和幂等校验，大版本或破坏性迁移未完成时，后续依赖迁移项必须保持阻塞状态。
 
 旧版本一键迁移用于处理“卸载插件后 Extension 数据仍保留”的场景。迁移范围为当前 Halo 存储中的旧版 QSL 数据，执行前必须先导出全部数据备份；执行接口要求请求体 `confirmText` 固定为“确认迁移旧版本数据”。迁移过程按旧版 `CardRecord.spec.receivedRecordCodes` 聚合创建 `ReceiveRecord`，按旧版线下 `CardRecord.spec.offlineActivityName` 创建 `OfflineExchangeCard`，删除 `qsl-station-card-*` 本台卡片版本占位记录和旧版自动收卡临时卡片，清空已迁出的收卡字段，并修正 `SystemSetting.spec.cardRecordSequence/receiveRecordSequence`。迁移接口具备幂等性：同名 `ReceiveRecord` 或 `OfflineExchangeCard` 已存在时跳过创建。
 
