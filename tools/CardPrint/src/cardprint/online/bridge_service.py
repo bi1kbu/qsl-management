@@ -333,6 +333,7 @@ def default_bridge_config() -> dict[str, Any]:
             "envelopes": "",
             ADDRESS_ENVELOPE_DATASET: "",
             "eyeball_reprint_card": "",
+            "custom_single_print": "",
             "card_version_map_by_business": {key: {} for key in CARD_BUSINESS_KEYS},
         },
         "qrcode": {
@@ -467,6 +468,9 @@ def normalize_bridge_config(raw: dict[str, Any]) -> dict[str, Any]:
         cfg["presets"][dataset] = preset_path
     cfg["presets"]["eyeball_reprint_card"] = str(
         cfg.get("presets", {}).get("eyeball_reprint_card", "")
+    ).strip()
+    cfg["presets"]["custom_single_print"] = str(
+        cfg.get("presets", {}).get("custom_single_print", "")
     ).strip()
     cfg["presets"]["card_version_map_by_business"] = normalized_map_by_business
 

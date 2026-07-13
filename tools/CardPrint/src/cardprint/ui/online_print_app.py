@@ -2213,6 +2213,286 @@ class EyeballReprintPage(QWidget):
             self._show_error("打印失败", str(exc), details)
 
 
+class CustomSinglePrintPage(QWidget):
+    def __init__(
+        self,
+        *,
+        get_config: Callable[[], dict[str, Any]],
+        set_config: Callable[[dict[str, Any]], None],
+        get_config_path: Callable[[], str],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._get_config = get_config
+        self._set_config = set_config
+        self._get_config_path = get_config_path
+        self._preset_path = ""
+        self._preset_data: dict[str, Any] = {}
+        self._input_widgets: dict[str, QWidget] = {}
+
+        self.preset_edit = QLineEdit(self)
+        self.preset_edit.setReadOnly(True)
+        self.btn_choose_preset = QPushButton("选择模板...", self)
+        self.lbl_preset_name = QLabel("未选择模板", self)
+        self.lbl_device = QLabel("打印机（预设指定）：-\n纸张（预设指定）：-", self)
+        self.lbl_device.setWordWrap(True)
+        self.lbl_device.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.input_group = QGroupBox("打印内容", self)
+        self.input_form = QFormLayout(self.input_group)
+        self.input_form.addRow(QLabel("请先选择打印模板。", self.input_group))
+        self.btn_preview = QPushButton("刷新预览", self)
+        self.btn_clear = QPushButton("清空内容", self)
+        self.btn_print = QPushButton("打印当前内容", self)
+        self.lbl_result = QLabel("未执行打印。", self)
+        self.lbl_result.setWordWrap(True)
+        self.preview = PreviewCanvas(self)
+        self.preview.set_editable(False)
+
+        self._build_ui()
+        self._bind_events()
+
+    def _build_ui(self) -> None:
+        splitter = QSplitter(Qt.Horizontal, self)
+        left_scroll = QScrollArea(splitter)
+        left_scroll.setWidgetResizable(True)
+        left = QWidget(left_scroll)
+        left_scroll.setWidget(left)
+        left_layout = QVBoxLayout(left)
+
+        preset_group = QGroupBox("打印模板", left)
+        preset_layout = QFormLayout(preset_group)
+        preset_row = QWidget(preset_group)
+        preset_row_layout = QHBoxLayout(preset_row)
+        preset_row_layout.setContentsMargins(0, 0, 0, 0)
+        preset_row_layout.addWidget(self.preset_edit, 1)
+        preset_row_layout.addWidget(self.btn_choose_preset)
+        preset_layout.addRow("模板文件（JSON）", preset_row)
+        preset_layout.addRow("模板名称（预设名称）", self.lbl_preset_name)
+        preset_layout.addRow("输出设置（来自预设）", self.lbl_device)
+        left_layout.addWidget(preset_group)
+        left_layout.addWidget(self.input_group)
+
+        action_row = QHBoxLayout()
+        action_row.addWidget(self.btn_preview)
+        action_row.addWidget(self.btn_clear)
+        action_row.addWidget(self.btn_print)
+        left_layout.addLayout(action_row)
+        left_layout.addWidget(self.lbl_result)
+        left_layout.addStretch(1)
+
+        splitter.addWidget(left_scroll)
+        splitter.addWidget(self.preview)
+        splitter.setSizes([560, 860])
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.addWidget(splitter, 1)
+
+    def _bind_events(self) -> None:
+        self.btn_choose_preset.clicked.connect(self.choose_preset)
+        self.btn_preview.clicked.connect(self.preview_current)
+        self.btn_clear.clicked.connect(self.clear_inputs)
+        self.btn_print.clicked.connect(self.print_current)
+
+    def _show_error(self, title: str, message: str, details: Any | None = None) -> None:
+        detail_text = "" if details is None else _json_text(details)
+        QMessageBox.critical(self, title, f"{message}\n{detail_text}")
+
+    def _status(self, text: str) -> None:
+        window = self.window()
+        if isinstance(window, QMainWindow):
+            window.statusBar().showMessage(text, 3000)
+
+    def set_config(self, config: dict[str, Any]) -> None:
+        cfg = normalize_bridge_config(config)
+        path = str(cfg.get("presets", {}).get("custom_single_print", "")).strip()
+        if not path or path == self._preset_path:
+            return
+        try:
+            self._load_preset(path, persist=False)
+        except Exception:
+            self._preset_path = path
+            self.preset_edit.setText(path)
+            self.lbl_preset_name.setText("已保存的模板无法加载")
+            self.lbl_device.setText("打印机（预设指定）：-\n纸张（预设指定）：-")
+
+    def choose_preset(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "选择自定义打印模板", str(Path.cwd()), "JSON Files (*.json)")
+        if not path:
+            return
+        try:
+            self._load_preset(path, persist=True)
+            self.preview_current()
+        except Exception as exc:
+            details = exc.details if isinstance(exc, CardPrintError) else None
+            self._show_error("加载模板失败", str(exc), details)
+
+    def _load_preset(self, path: str, *, persist: bool) -> None:
+        run_cli_json(["preset", "validate", "--preset", path])
+        preset_data = json.loads(Path(path).read_text(encoding="utf-8"))
+        self._preset_path = path
+        self._preset_data = preset_data
+        self.preset_edit.setText(path)
+        self.lbl_preset_name.setText(str(preset_data.get("name", "")).strip() or "未命名模板")
+        printer_name, paper_name = self._resolve_output_settings()
+        self.lbl_device.setText(
+            f"打印机（预设指定）：{printer_name or '未指定'}\n纸张（预设指定）：{paper_name or '未指定'}"
+        )
+        self._build_inputs_from_preset()
+        self.lbl_result.setText("模板已加载，请填写单条打印内容。")
+        if persist:
+            self._persist_preset_path(path)
+
+    def _persist_preset_path(self, path: str) -> None:
+        cfg = normalize_bridge_config(self._get_config())
+        cfg.setdefault("presets", {})
+        cfg["presets"]["custom_single_print"] = path.strip()
+        persist_cfg = copy.deepcopy(cfg)
+        persist_cfg.setdefault("auth", {})
+        persist_cfg["auth"]["password"] = ""
+        config_path = self._get_config_path().strip() or str((Path.cwd() / "bridge_config.json").resolve())
+        save_bridge_config(config_path, persist_cfg)
+        self._set_config(cfg)
+        self._status(f"自定义打印模板已保存：{config_path}")
+
+    def _clear_input_form(self) -> None:
+        while self.input_form.rowCount() > 0:
+            self.input_form.removeRow(0)
+        self._input_widgets.clear()
+
+    def _build_inputs_from_preset(self) -> None:
+        self._clear_input_form()
+        schema_by_key = {
+            str(item.get("key", "")).strip(): item
+            for item in self._preset_data.get("ui_schema", [])
+            if isinstance(item, dict) and str(item.get("key", "")).strip()
+        }
+        for field in self._preset_data.get("fields", []):
+            if not isinstance(field, dict) or str(field.get("fixed_text", "")).strip():
+                continue
+            key = str(field.get("key", "")).strip()
+            if not key:
+                continue
+            schema = schema_by_key.get(key, {})
+            label = str(schema.get("label_zh", field.get("label_zh", key))).strip() or key
+            ui_type = str(schema.get("type", "text")).strip().lower()
+            if ui_type == "select":
+                widget = QComboBox(self.input_group)
+                for option in schema.get("options", []):
+                    if not isinstance(option, dict):
+                        continue
+                    value = str(option.get("value", ""))
+                    widget.addItem(str(option.get("label", value)), value)
+                widget.currentIndexChanged.connect(lambda _=0: self.preview_current(silent=True))
+            elif ui_type == "checkbox":
+                widget = QCheckBox(self.input_group)
+                widget.stateChanged.connect(lambda _=0: self.preview_current(silent=True))
+            else:
+                widget = QLineEdit(self.input_group)
+                widget.textChanged.connect(lambda _="": self.preview_current(silent=True))
+            self.input_form.addRow(f"{key}（{label}）", widget)
+            self._input_widgets[key] = widget
+
+        if not self._input_widgets:
+            self.input_form.addRow(QLabel("该模板只有固定文本，无需填写内容。", self.input_group))
+
+    def _collect_row(self) -> dict[str, Any]:
+        row: dict[str, Any] = {}
+        for key, widget in self._input_widgets.items():
+            if isinstance(widget, QLineEdit):
+                row[key] = widget.text()
+            elif isinstance(widget, QComboBox):
+                row[key] = widget.currentData()
+            elif isinstance(widget, QCheckBox):
+                row[key] = widget.isChecked()
+        return row
+
+    def clear_inputs(self) -> None:
+        for widget in self._input_widgets.values():
+            if isinstance(widget, QLineEdit):
+                widget.clear()
+            elif isinstance(widget, QComboBox):
+                widget.setCurrentIndex(0 if widget.count() else -1)
+            elif isinstance(widget, QCheckBox):
+                widget.setChecked(False)
+        self.preview_current(silent=True)
+        self.lbl_result.setText("打印内容已清空。")
+
+    def _resolve_preset_path(self) -> str:
+        if not self._preset_path:
+            raise CardPrintError(code="MISSING_PRESET", message="请先选择自定义打印模板。")
+        if not Path(self._preset_path).exists():
+            raise CardPrintError(
+                code="MISSING_PRESET",
+                message="自定义打印模板文件不存在。",
+                details={"path": self._preset_path},
+            )
+        return self._preset_path
+
+    def _resolve_output_settings(self) -> tuple[str, str]:
+        printer_name = str(self._preset_data.get("preferred_printer", "")).strip()
+        paper_name = str(self._preset_data.get("paper", {}).get("name", "")).strip()
+        return printer_name, paper_name
+
+    def preview_current(self, *, silent: bool = False) -> None:
+        if not self._preset_path:
+            return
+        try:
+            payload = run_cli_json(
+                [
+                    "render",
+                    "preview",
+                    "--preset",
+                    self._resolve_preset_path(),
+                    "--row",
+                    json.dumps(self._collect_row(), ensure_ascii=False),
+                ]
+            )
+            self.preview.set_scene(payload.get("scene", {}))
+            if not silent:
+                self.lbl_result.setText("预览已更新。")
+        except Exception as exc:
+            if silent:
+                return
+            details = exc.details if isinstance(exc, CardPrintError) else None
+            self._show_error("预览失败", str(exc), details)
+
+    def print_current(self) -> None:
+        try:
+            preset_path = self._resolve_preset_path()
+            printer_name, paper_name = self._resolve_output_settings()
+            if not printer_name:
+                raise CardPrintError(code="MISSING_PRESET_PRINTER", message="模板未指定 preferred_printer（首选打印机）。")
+            if not paper_name:
+                raise CardPrintError(code="MISSING_PRESET_PAPER", message="模板未指定 paper.name（纸张名称）。")
+            run_cli_json(["preset", "validate", "--preset", preset_path])
+            job = {
+                "preset_path": preset_path,
+                "rows": [self._collect_row()],
+                "printer_name": printer_name,
+                "paper_name": paper_name,
+            }
+            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
+                json.dump(job, f, ensure_ascii=False, indent=2)
+                job_path = f.name
+            try:
+                payload = run_cli_json(["print", "run", "--job", job_path], timeout_s=180.0)
+            finally:
+                try:
+                    Path(job_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            adapter = payload["data"]["adapter"]
+            rows = list(adapter.get("rows", []))
+            success_count = sum(1 for item in rows if str(item.get("status", "")).lower() == "success")
+            result_text = f"自定义单条打印完成：成功 {success_count} / 总计 {len(rows)}。不回写业务状态。"
+            self.lbl_result.setText(result_text)
+            self._status(result_text)
+        except Exception as exc:
+            details = exc.details if isinstance(exc, CardPrintError) else None
+            self._show_error("打印失败", str(exc), details)
+
+
 class OnlinePrintWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -2258,6 +2538,12 @@ class OnlinePrintWindow(QMainWindow):
             get_config_path=self._get_config_path,
             parent=self,
         )
+        self.custom_single_print_page = CustomSinglePrintPage(
+            get_config=self._get_config_copy,
+            set_config=self._set_config_from_dataset,
+            get_config_path=self._get_config_path,
+            parent=self,
+        )
         self.envelopes_page = OnlineDatasetPage(
             dataset="envelopes",
             title="封面打印",
@@ -2293,6 +2579,7 @@ class OnlinePrintWindow(QMainWindow):
         self.tabs.addTab(self.online_cards_page, "线上换卡业务制卡")
         self.tabs.addTab(self.offline_cards_page, "线下换卡业务制卡")
         self.tabs.addTab(self.eyeball_reprint_page, "补打眼球卡片")
+        self.tabs.addTab(self.custom_single_print_page, "自定义打印")
         self.tabs.addTab(self.card_confirm_page, "确认制卡")
         self.tabs.addTab(self.envelopes_page, "封面打印")
         self.tabs.addTab(self.envelope_confirm_page, "打包确认")
@@ -2336,6 +2623,7 @@ class OnlinePrintWindow(QMainWindow):
         self.online_cards_page.set_config(self.config)
         self.offline_cards_page.set_config(self.config)
         self.eyeball_reprint_page.set_config(self.config)
+        self.custom_single_print_page.set_config(self.config)
         self.envelopes_page.set_config(self.config)
         self.address_envelopes_page.set_config(self.config)
         self.card_confirm_page.set_config(self.config)
@@ -2375,6 +2663,7 @@ class OnlinePrintWindow(QMainWindow):
         self.online_cards_page.set_config(self.config)
         self.offline_cards_page.set_config(self.config)
         self.eyeball_reprint_page.set_config(self.config)
+        self.custom_single_print_page.set_config(self.config)
         self.envelopes_page.set_config(self.config)
         self.address_envelopes_page.set_config(self.config)
         map_by_business = self.config.get("presets", {}).get("card_version_map_by_business", {}) or {}
