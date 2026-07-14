@@ -164,8 +164,8 @@ def test_normalize_bridge_config_includes_qrcode_path_mappings() -> None:
     )
 
     mappings = cfg["qrcode"]["path_mappings"]
-    assert mappings["/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL"] == "/EYEBALL"
-    assert mappings["/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL"] == "/ONLINE_EYEBALL"
+    assert mappings["/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL"] == "/eyeball"
+    assert mappings["/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL"] == "/online_eyeball"
     assert mappings["/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public"] == "/receipt-short"
 
 

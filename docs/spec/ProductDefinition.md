@@ -163,11 +163,15 @@ Halo 官方资料核验日期：2026-07-06
 | 能力 | 公开页面 | 短码 |
 | --- | --- | --- |
 | 公开查询 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/cards/page` | `[qsl-card]` |
-| 线上换卡申请 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL/{cardId}` | `[qsl-online-exchange-card]` |
-| 线下换卡确认 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL/{cardId}` | `[qsl-offline-exchange-card]` |
-| 公开签收 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public/{cardId}` | `[qsl-receipt-card]` |
+| 线上换卡申请 | `/online_eyeball`、`/online_eyeball/{cardId}` | `[qsl-online-exchange-card]` |
+| 线下换卡确认 | `/eyeball`、`/eyeball/{cardId}` | `[qsl-offline-exchange-card]` |
+| 公开签收 | `/receipt_public`、`/receipt_public/{cardId}` | `[qsl-receipt-card]` |
 
-线上换卡与线下换卡公开页面的服务端 endpoint 与渲染服务必须分离实现；两者路径可同属 `api.qsl-management.bi1kbu.com/v1alpha1`，但页面字段、脚本、提交逻辑不再通过同一个模板的场景开关复用。
+线上换卡与线下换卡公开页面的服务端 endpoint 与渲染服务必须分离实现；页面字段、脚本、提交逻辑不再通过同一个模板的场景开关复用。根路径通过 Halo `AdditionalWebFilter` 内部改写到原有 `api.qsl-management.bi1kbu.com/v1alpha1` 页面 Endpoint，不使用 HTTP 重定向，不复制页面源码。新根路径属于非资源型 API，只允许匿名 `GET`，权限必须使用精确 `nonResourceURLs` 配置。
+
+极简别名 `/eb`、`/oe`、`/rp` 分别等价于 `/eyeball`、`/online_eyeball`、`/receipt_public`，并支持单段 `/{cardId}`。极简路径用于手工分享、长度敏感的二维码等场景；短码继续生成语义清晰的推荐路径，CardPrint 的收卡回执二维码默认使用 `/rp` 以缩短二维码内容，其他页面映射仍默认使用推荐路径。
+
+自插件 2.4.0 起，`/eyeball`、`/online_eyeball`、`/receipt_public` 为推荐公开页面路径；原 `/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL`、`ONLINE_EYEBALL`、`receipt-public` 页面路由作为兼容入口保留并进入弃用期，计划在插件 3.0.0 移除。移除前必须先将推荐路径和极简路径改为直接调用公共页面处理服务，解除其对原 CustomEndpoint 路由的依赖。原公开提交与查询 API 不在此次页面路由弃用范围内。
 
 当前公开数据接口：
 
@@ -241,7 +245,7 @@ python -m cardprint.cli ui online
 4. 补打信封页位于打包确认后，读取 `address-book-entries` 与 `bureau-entries` 生成独立队列，复用信封预设，支持按呼号、地址编号或卡片局编号筛选，支持当前行打印、勾选批量打印与全部打印，不回写业务状态。
 5. 补打眼球卡片页位于在线打印工具内，使用 `bridge_config.json` 的 `presets.eyeball_reprint_card` 持久化保存专用补卡预设；手工输入呼号与日期时间，支持实时取当前日期时间，生成打印行时固定 `cardType=EYEBALL`、“发出卡片”状态与“请回卡片”状态，不读取或回写后台业务记录。
 6. 卡片版本以 `station-cards` 为准；本地打印工具通过公开接口 `GET /apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` 拉取版本列表，并按 `sortOrder` 与版本号排序，不从 `card-records` 反推。
-7. 卡片二维码拼接支持 `qrcode.path_mappings` 短路径映射，在线打印配置页可在站点地址下方配置线下换卡、线上换卡、签收确认三类短路径；默认将公开页面长路径映射为 `/EYEBALL`、`/ONLINE_EYEBALL`、`/rp` 后再追加卡片 ID 与 `cs` 参数。
+7. 卡片二维码拼接支持 `qrcode.path_mappings` 短路径映射，在线打印配置页可在站点地址下方配置线下换卡、线上换卡、签收确认三类短路径；新配置默认将线下换卡、线上换卡、签收确认长路径分别映射为 `/eyeball`、`/online_eyeball`、`/rp` 后再追加卡片 ID 与 `cs` 参数，其中收卡回执使用极简 `/rp` 以缩短二维码内容，已有配置中的自定义映射保持不变。
 8. 在线打印工具登录并拉取卡片版本时使用后台线程执行网络请求，只补齐空白本台通信地址字段，不覆盖已有本台姓名、电话、邮编、地址；受保护接口返回登录页或 HTML 时明确提示认证或权限问题，不静默解析为空数据。
 9. 打印状态通过人工确认回写 `CardRecord.spec.cardIssued/cardIssuedAt` 或 `envelopePrinted`，`cardIssuedAt` 使用 `yyyy-MM-dd HH:mm:ss` 文本格式；回写会同步刷新 `CardRecord.status.flowStatus`，并按后台状态联动规则补齐或清理相关状态字段。
 10. 打印预设字段支持 `fixed_text` 固定文本，用于固定辅助说明、提示语或版面标识；固定文本字段由标定工具维护，打印工具和在线打印工具不要求录入该字段，预览与打印时优先输出固定文本。

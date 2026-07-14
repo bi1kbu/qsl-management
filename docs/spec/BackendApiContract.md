@@ -325,15 +325,37 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 
 ### 7.2 公开页面
 
+除既有 `/cards/page` 外，以下三个根路径族为推荐公开页面入口，属于匿名只读非资源型 API，由 `AdditionalWebFilter` 在服务端内部改写到现有 Halo CustomEndpoint；查询参数保持不变，浏览器地址不跳转。
+
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/cards/page` | 公开查询页面，支持 `callSign`、`sceneType`、`embed`、`embedId` |
-| GET | `/receipt-public` | 公开签收页面，支持查询参数预填 |
-| GET | `/receipt-public/{cardId}` | 公开签收页面，按卡片编号与呼号二次校验后预填 |
-| GET | `/ONLINE_EYEBALL` | 线上换卡申请页面 |
-| GET | `/ONLINE_EYEBALL/{cardId}` | 线上换卡申请页面，按卡片编号与呼号二次校验后预填 |
-| GET | `/EYEBALL` | 线下换卡确认页面 |
-| GET | `/EYEBALL/{cardId}` | 线下换卡确认页面，按卡片编号预填 |
+| GET | `/receipt_public` | 公开签收页面，支持查询参数预填 |
+| GET | `/receipt_public/{cardId}` | 公开签收页面，按卡片编号与呼号二次校验后预填 |
+| GET | `/online_eyeball` | 线上换卡申请页面 |
+| GET | `/online_eyeball/{cardId}` | 线上换卡申请页面，按卡片编号与呼号二次校验后预填 |
+| GET | `/eyeball` | 线下换卡确认页面 |
+| GET | `/eyeball/{cardId}` | 线下换卡确认页面，按卡片编号预填 |
+
+极简别名：
+
+| 方法 | 极简路径 | 等价推荐路径 | 认证 |
+| --- | --- | --- | --- |
+| GET | `/eb`、`/eb/{cardId}` | `/eyeball`、`/eyeball/{cardId}` | 匿名 |
+| GET | `/oe`、`/oe/{cardId}` | `/online_eyeball`、`/online_eyeball/{cardId}` | 匿名 |
+| GET | `/rp`、`/rp/{cardId}` | `/receipt_public`、`/receipt_public/{cardId}` | 匿名 |
+
+极简别名与推荐路径均只接受基础路径或一个 `cardId` 子路径，查询参数原样保留。短码和 CardPrint 默认值继续使用推荐路径。
+
+兼容页面路由仍位于 `/apis/api.qsl-management.bi1kbu.com/v1alpha1`：
+
+| 方法 | 兼容路径 | 生命周期 |
+| --- | --- | --- |
+| GET | `/receipt-public`、`/receipt-public/{cardId}` | 2.4.0 起弃用，计划 3.0.0 移除 |
+| GET | `/ONLINE_EYEBALL`、`/ONLINE_EYEBALL/{cardId}` | 2.4.0 起弃用，计划 3.0.0 移除 |
+| GET | `/EYEBALL`、`/EYEBALL/{cardId}` | 2.4.0 起弃用，计划 3.0.0 移除 |
+
+兼容期内极简、推荐和旧页面入口复用同一渲染、限流、输入校验和错误处理逻辑。公开提交 API 保持原路径，不纳入本次弃用。计划在 3.0.0 删除旧 CustomEndpoint 页面路由前，必须先把极简与推荐路径切换为直接调用公共页面处理服务，不能继续依赖内部改写到待删除的旧路由。
 
 线下换卡页面 HTML 不直接包含本站通信地址、收件人、电话或邮箱；本站联系信息只在 `POST /exchange-offline/-/confirm` 成功写入后随响应返回，用于页面展示提交成功后的寄送提示。线下换卡卡片不绑定通信地址或卡片局地址，服务端不得为线下换卡卡片写入 `CardRecord.spec.addressEntryName`。
 
@@ -410,7 +432,7 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 
 1. 菜单已按 `通联业务/线上换卡业务/线下换卡业务/收卡业务` 场景拆分。
 2. `CardRecord` 已承担制卡、信封打印、发信、签收、收卡编号、邮件状态等核心状态字段。
-3. 换卡公开页面当前使用 `/ONLINE_EYEBALL`、`/EYEBALL`，与 `sceneType` 保持一致；签收公开页面使用 `/receipt-public`。
+3. 换卡公开页面推荐使用根路径 `/online_eyeball`、`/eyeball`，签收公开页面推荐使用 `/receipt_public`；长度敏感场景可使用 `/oe`、`/eb`、`/rp`；原 CustomEndpoint 页面路径兼容至 3.0.0，删除前必须先解除新路径对旧路由的内部改写依赖。
 4. 线下活动使用 `OfflineActivity` 持久化。
 5. 通知邮件接口已落地在 `/notification-mails/send` 与 `/notification-mails/batch-send`。
 6. RBAC 模板已覆盖控制台 CustomEndpoint、扩展资源 CRUD 与公开匿名接口。

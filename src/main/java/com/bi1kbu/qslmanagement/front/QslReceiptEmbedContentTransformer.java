@@ -68,10 +68,10 @@ public class QslReceiptEmbedContentTransformer {
         UriComponentsBuilder uriBuilder;
         if (!cardId.isBlank()) {
             uriBuilder = UriComponentsBuilder
-                .fromPath("/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public")
+                .fromPath("/receipt_public")
                 .pathSegment(cardId);
         } else {
-            uriBuilder = UriComponentsBuilder.fromPath("/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public");
+            uriBuilder = UriComponentsBuilder.fromPath("/receipt_public");
         }
         uriBuilder.queryParam("embed", "1").queryParam("eid", embedId);
         if (!callSign.isBlank()) {

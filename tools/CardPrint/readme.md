@@ -41,7 +41,8 @@
   - 启动行为：程序启动后会自动读取当前目录 `bridge_config.json` 并回填配置项（密码除外）；若读取失败则自动回退默认配置。
   - 卡片打印页：字段映射使用程序内置规则（不可编辑），基于已拉取源拼接队列、预览、打印（不自动回写）；卡片数据从 `card-records` 读取，并按 `spec.qsoRecordName` 补读 `qso-records` 注入 `qsoInfo`；通联业务制卡的发射地址字段优先使用 `QsoRecord.spec.myQth`，旧预设字段 `qth` 与新预设字段 `my_qth` 均按此规则取值，缺失时才兜底到对方 `qth`；线下换卡业务制卡页支持按 `spec.offlineActivityName` 选择关联活动筛选队列，并按关联活动的 `spec.activityLocation` 填充 QTH；`spec.cardReceived` 为空或缺失时按未收卡处理，打印互斥项默认勾选“请回卡片”。
   - 卡片版本：登录并拉取卡片版本时，版本列表通过公开接口 `/apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` 获取；本台通信地址仍通过受保护接口读取。若受保护接口返回登录页或 HTML，工具会明确提示认证或权限问题，不再静默显示为空。
-  - 卡片二维码：配置页在“站点地址”下方提供二维码短路径输入项，保存到 `bridge_config.json` 的 `qrcode.path_mappings`；默认映射为 `/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL -> /EYEBALL`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL -> /ONLINE_EYEBALL`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public -> /rp`。通联业务与线上换卡业务制卡二维码统一使用签收确认地址；线下换卡业务制卡二维码仍使用线下换卡地址。
+  - 卡片二维码：配置页在“站点地址”下方提供二维码短路径输入项，保存到 `bridge_config.json` 的 `qrcode.path_mappings`；新配置默认映射为 `/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL -> /eyeball`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL -> /online_eyeball`、`/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public -> /rp`，已有配置中的自定义映射不会被覆盖。通联业务与线上换卡业务制卡二维码统一使用极简签收确认地址 `/rp`，用于缩短内容并减小二维码；线下换卡业务制卡二维码仍使用 `/eyeball`。
+  - 极简页面别名：Halo 同时支持 `/eb`、`/oe`、`/rp`，分别对应线下换卡、线上换卡和公开签收，并支持追加卡片 ID。CardPrint 的签收回执二维码默认使用 `/rp`；线下换卡和线上换卡页面映射仍默认使用语义更清晰的 `/eyeball`、`/online_eyeball`。
   - 本台通信地址：登录并拉取卡片版本时仅补齐空白字段，已有本台姓名、电话、邮编、地址不会被远端资料覆盖。
   - 封面打印页：字段映射使用程序内置规则（不可编辑），显示未打包（`envelopePrinted=false`）且卡片版本不是“不发卡”的卡片封面记录，支持按去向类型筛选“全部卡片 / 国内卡片 / 国际卡片”；去向国为空按国内卡片处理，存在去向国内容按国际卡片处理；基于已拉取源拼接队列、预览、打印（不自动回写）。
   - 制卡确认页：从已拉取源生成“未制卡”清单，勾选条目后手动回写 `cardIssued/cardIssuedAt`，时间格式为 `yyyy-MM-dd HH:mm:ss`。

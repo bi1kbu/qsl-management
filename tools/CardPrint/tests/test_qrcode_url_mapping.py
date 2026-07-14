@@ -36,7 +36,7 @@ def test_build_qrcode_url_uses_short_path_mapping_for_offline_eyeball() -> None:
         cfg,
     )
 
-    assert url == "https://example.test/EYEBALL/C1001"
+    assert url == "https://example.test/eyeball/C1001"
 
 
 def test_build_qrcode_url_uses_receipt_path_mapping_for_online_eyeball() -> None:

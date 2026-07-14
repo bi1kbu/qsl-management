@@ -47,11 +47,15 @@
 | 能力 | 默认路径 | 短码 |
 | --- | --- | --- |
 | 公开查询 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/cards/page` | `[qsl-card]` |
-| 线上换卡申请 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL` | `[qsl-online-exchange-card]` |
-| 线下换卡确认 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL` | `[qsl-offline-exchange-card]` |
-| 公开签收 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public` | `[qsl-receipt-card]` |
+| 线上换卡申请 | `/online_eyeball` | `[qsl-online-exchange-card]` |
+| 线下换卡确认 | `/eyeball` | `[qsl-offline-exchange-card]` |
+| 公开签收 | `/receipt_public` | `[qsl-receipt-card]` |
 
 公开接口允许匿名访问，但服务端仍会执行输入校验、限流和业务规则校验。
+
+长度敏感场景还可以使用极简别名：线下换卡 `/eb`、线上换卡 `/oe`、公开签收 `/rp`，并支持对应的 `/{cardId}` 子路径。短码仍生成上表中语义更清晰的推荐路径；CardPrint 的收卡回执二维码默认使用 `/rp`，以缩短内容并生成更小的二维码。
+
+自插件 2.4.0 起，以上根路径作为推荐页面入口，服务器内部复用原有 Halo CustomEndpoint，不产生浏览器重定向。原 `/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL`、`ONLINE_EYEBALL` 和 `receipt-public` 页面路由进入弃用期，计划在插件 3.0.0 移除；移除前必须先将推荐路径和极简路径改为直接调用公共页面处理服务，解除其对原 CustomEndpoint 路由的依赖。公开数据提交 API 不在本次弃用范围内。
 
 ### 数据与安全
 

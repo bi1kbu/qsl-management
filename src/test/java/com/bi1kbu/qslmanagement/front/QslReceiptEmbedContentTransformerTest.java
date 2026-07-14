@@ -24,7 +24,7 @@ class QslReceiptEmbedContentTransformerTest {
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("/apis/api.qsl-management.bi1kbu.com/v1alpha1/receipt-public?embed=1&eid=qsl-receipt-card-"));
+        assertTrue(transformed.contains("/receipt_public?embed=1&eid=qsl-receipt-card-"));
         assertTrue(transformed.contains("data-qsl-embed-id=\"qsl-receipt-card-"));
         assertTrue(transformed.contains("window.__qslCardEmbedResizeBound"));
     }
@@ -44,6 +44,6 @@ class QslReceiptEmbedContentTransformerTest {
 
         var transformed = transformer.transform(content);
 
-        assertTrue(transformed.contains("/receipt-public/card-record-001?embed=1&eid=qsl-receipt-card-"));
+        assertTrue(transformed.contains("/receipt_public/card-record-001?embed=1&eid=qsl-receipt-card-"));
     }
 }

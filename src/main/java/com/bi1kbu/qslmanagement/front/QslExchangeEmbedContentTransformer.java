@@ -80,10 +80,10 @@ public class QslExchangeEmbedContentTransformer {
         if (offlineMode) {
             if (!cardId.isBlank()) {
                 uriBuilder = UriComponentsBuilder
-                    .fromPath("/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL")
+                    .fromPath("/eyeball")
                     .pathSegment(cardId);
             } else {
-                uriBuilder = UriComponentsBuilder.fromPath("/apis/api.qsl-management.bi1kbu.com/v1alpha1/EYEBALL");
+                uriBuilder = UriComponentsBuilder.fromPath("/eyeball");
                 if (!callSign.isBlank()) {
                     uriBuilder.queryParam("cs", callSign);
                 }
@@ -94,11 +94,10 @@ public class QslExchangeEmbedContentTransformer {
         } else {
             if (!cardId.isBlank()) {
                 uriBuilder = UriComponentsBuilder
-                    .fromPath("/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL")
+                    .fromPath("/online_eyeball")
                     .pathSegment(cardId);
             } else {
-                uriBuilder = UriComponentsBuilder
-                    .fromPath("/apis/api.qsl-management.bi1kbu.com/v1alpha1/ONLINE_EYEBALL");
+                uriBuilder = UriComponentsBuilder.fromPath("/online_eyeball");
             }
             if (!callSign.isBlank()) {
                 uriBuilder.queryParam("cs", callSign);

@@ -57,6 +57,14 @@ rules:
 
 ## 4. 待核查路由
 
+### 4.1 已明确采用非资源型权限的公开短路径
+
+自插件 2.4.0 起新增推荐路径 `/eyeball`、`/online_eyeball`、`/receipt_public`，以及极简别名 `/eb`、`/oe`、`/rp`，均支持各自的 `/{cardId}` 页面入口。这些根路径按官方定义明确属于非资源型 API，已使用精确 `nonResourceURLs` 和 `get` 权限聚合到 `anonymous`，不属于本问题的待核查候选。
+
+这些路径通过 `QslPublicShortPathWebFilter` 在服务端内部改写到原有公开页面 CustomEndpoint，不使用浏览器重定向。原资源型页面路由进入弃用期，计划在 3.0.0 移除；删除前必须先让推荐路径与极简别名直接调用公共页面处理服务，解除内部改写依赖。
+
+### 4.2 仍待核查的深层控制台路由
+
 以下路由在 `group/version` 后超过 `resource/resourceName/subresource` 三层结构，存在被 Halo 判断为非资源型 API 的可能：
 
 | 方法 | 完整路由 | 当前相关资源权限 | 待核查点 |

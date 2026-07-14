@@ -354,8 +354,8 @@ class OnlineConfigPage(QWidget):
         self.qrcode_offline_eyeball_path_edit = QLineEdit(self)
         self.qrcode_online_eyeball_path_edit = QLineEdit(self)
         self.qrcode_receipt_path_edit = QLineEdit(self)
-        self.qrcode_offline_eyeball_path_edit.setPlaceholderText("/EYEBALL")
-        self.qrcode_online_eyeball_path_edit.setPlaceholderText("/ONLINE_EYEBALL")
+        self.qrcode_offline_eyeball_path_edit.setPlaceholderText("/eyeball")
+        self.qrcode_online_eyeball_path_edit.setPlaceholderText("/online_eyeball")
         self.qrcode_receipt_path_edit.setPlaceholderText("/rp")
         self.remote_hint = QLabel(
             "远程接口路径与筛选规则已内置固定（卡片接口、封面接口、过滤器）；站点地址、二维码短路径与超时可配置。",
@@ -693,9 +693,9 @@ class OnlineConfigPage(QWidget):
         mappings = cfg.get("qrcode", {}).get("path_mappings", {})
         if not isinstance(mappings, dict):
             mappings = {}
-        self.qrcode_offline_eyeball_path_edit.setText(str(mappings.get(PUBLIC_EYEBALL_ENDPOINT, "/EYEBALL")))
+        self.qrcode_offline_eyeball_path_edit.setText(str(mappings.get(PUBLIC_EYEBALL_ENDPOINT, "/eyeball")))
         self.qrcode_online_eyeball_path_edit.setText(
-            str(mappings.get(PUBLIC_ONLINE_EYEBALL_ENDPOINT, "/ONLINE_EYEBALL"))
+            str(mappings.get(PUBLIC_ONLINE_EYEBALL_ENDPOINT, "/online_eyeball"))
         )
         self.qrcode_receipt_path_edit.setText(str(mappings.get(PUBLIC_RECEIPT_ENDPOINT, "/rp")))
 
