@@ -57,12 +57,20 @@ def test_vertical_layout_rotates_every_glyph_and_forced_break_moves_left() -> No
     assert items[2].logical_y_mm == items[0].logical_y_mm
 
 
-def test_mixed_vertical_only_rotates_ascii_letters_and_digits() -> None:
+def test_mixed_vertical_rotates_ascii_letters_digits_colon_and_space() -> None:
     preset = _preset(layout_mode="mixed_vertical")
-    items = build_layout_items(preset, {"text": "中A1。b"})
+    items = build_layout_items(preset, {"text": "中A1: b：。"})
 
-    assert [item.text for item in items] == ["中", "A", "1", "。", "b"]
-    assert [item.glyph_rotation_degree for item in items] == [0, 90, 90, 0, 90]
+    assert [item.text for item in items] == ["中", "A", "1", ":", " ", "b", "：", "。"]
+    assert [item.glyph_rotation_degree for item in items] == [0, 90, 90, 90, 90, 90, 0, 0]
+
+
+def test_rotated_ascii_colon_and_space_use_compact_spacing() -> None:
+    preset = _preset(layout_mode="mixed_vertical")
+    items = build_layout_items(preset, {"text": ": A"})
+
+    assert all(item.glyph_rotation_degree == 90 for item in items)
+    assert all(item.cell_height_mm < item.line_height_mm for item in items)
 
 
 def test_rotated_ascii_glyphs_use_compact_width_based_spacing() -> None:

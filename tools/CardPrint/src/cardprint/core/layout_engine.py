@@ -171,7 +171,7 @@ def _wrap_field_text(field: FieldDefinition, text: str) -> tuple[list[str], floa
 
 
 def _mixed_vertical_rotation(ch: str) -> int:
-    return 90 if ch.isascii() and ch.isalnum() else 0
+    return 90 if ch.isascii() and (ch.isalnum() or ch in {":", " "}) else 0
 
 
 def _vertical_glyph_rotation(field: FieldDefinition, ch: str) -> int:
