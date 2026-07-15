@@ -99,11 +99,13 @@ class FieldDefinition:
     y_mm: float
     print_width_mm: float = 0.0
     print_height_mm: float = 0.0
+    print_border: bool = False
     font_family: str = "SimSun"
     font_size_pt: int = 11
     bold: bool = False
     italic: bool = False
     text_align: str = "left"
+    layout_mode: str = "horizontal"
     distribute_align: bool = False
     max_len: int = 0
     digit_raise_ratio: float = 0.0
@@ -140,11 +142,48 @@ class FieldDefinition:
                 message="print_height_mm 不能为负数。",
                 details={"key": self.key, "print_height_mm": self.print_height_mm},
             )
-        if self.text_align not in {"left", "right"}:
+        if self.text_align not in {"left", "center", "right"}:
             raise CardPrintError(
                 code="INVALID_TEXT_ALIGN",
-                message="text_align 仅支持 left/right。",
+                message="text_align 仅支持 left/center/right。",
                 details={"key": self.key, "text_align": self.text_align},
+            )
+        if self.text_align == "center" and self.print_width_mm <= 0:
+            raise CardPrintError(
+                code="CENTER_ALIGN_WIDTH_REQUIRED",
+                message="居中对齐字段的打印宽度必须大于 0。",
+                details={"key": self.key, "print_width_mm": self.print_width_mm},
+            )
+        if self.layout_mode not in {"horizontal", "vertical", "mixed_vertical"}:
+            raise CardPrintError(
+                code="INVALID_LAYOUT_MODE",
+                message="layout_mode 仅支持 horizontal/vertical/mixed_vertical。",
+                details={"key": self.key, "layout_mode": self.layout_mode},
+            )
+        if (
+            self.key.strip().upper() != "QRCODE"
+            and self.layout_mode in {"vertical", "mixed_vertical"}
+            and (self.print_width_mm <= 0 or self.print_height_mm <= 0)
+        ):
+            raise CardPrintError(
+                code="VERTICAL_LAYOUT_AREA_REQUIRED",
+                message="纵向排版字段的打印宽度和打印高度必须大于 0。",
+                details={
+                    "key": self.key,
+                    "layout_mode": self.layout_mode,
+                    "print_width_mm": self.print_width_mm,
+                    "print_height_mm": self.print_height_mm,
+                },
+            )
+        if self.print_border and (self.print_width_mm <= 0 or self.print_height_mm <= 0):
+            raise CardPrintError(
+                code="PRINT_BORDER_AREA_REQUIRED",
+                message="打印边框字段的打印宽度和打印高度必须大于 0。",
+                details={
+                    "key": self.key,
+                    "print_width_mm": self.print_width_mm,
+                    "print_height_mm": self.print_height_mm,
+                },
             )
         if self.digit_raise_ratio < 0 or self.digit_raise_ratio > 1:
             raise CardPrintError(
@@ -286,9 +325,19 @@ class Preset:
 
         def _to_text_align(raw: Any) -> str:
             text = str(raw or "").strip().lower()
+            if text in {"center", "中", "居中", "居中对齐"}:
+                return "center"
             if text in {"right", "右", "右对齐"}:
                 return "right"
             return "left"
+
+        def _to_layout_mode(raw: Any) -> str:
+            text = str(raw or "").strip().lower()
+            if text in {"vertical", "纵向", "竖向"}:
+                return "vertical"
+            if text in {"mixed_vertical", "mixed-vertical", "混合纵向", "混合竖向"}:
+                return "mixed_vertical"
+            return "horizontal"
 
         paper_data = data.get("paper", {})
         calibration_data = data.get("calibration", {})
@@ -320,6 +369,7 @@ class Preset:
                         field_name="print_height_mm",
                         key=key_name,
                     ),
+                    print_border=_to_bool(item.get("print_border", False)),
                     font_family=str(item.get("font_family", "SimSun") or "SimSun"),
                     font_size_pt=_to_int(
                         item.get("font_size_pt", 11),
@@ -330,6 +380,7 @@ class Preset:
                     bold=_to_bool(item.get("bold", False)),
                     italic=_to_bool(item.get("italic", False)),
                     text_align=_to_text_align(item.get("text_align", "left")),
+                    layout_mode=_to_layout_mode(item.get("layout_mode", "horizontal")),
                     distribute_align=_to_bool(item.get("distribute_align", False)),
                     max_len=_to_int(item.get("max_len", 0), field_name="max_len", key=key_name, default=0),
                     digit_raise_ratio=_to_float(

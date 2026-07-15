@@ -2579,11 +2579,11 @@ class OnlinePrintWindow(QMainWindow):
         self.tabs.addTab(self.online_cards_page, "线上换卡业务制卡")
         self.tabs.addTab(self.offline_cards_page, "线下换卡业务制卡")
         self.tabs.addTab(self.eyeball_reprint_page, "补打眼球卡片")
-        self.tabs.addTab(self.custom_single_print_page, "自定义打印")
         self.tabs.addTab(self.card_confirm_page, "确认制卡")
         self.tabs.addTab(self.envelopes_page, "封面打印")
         self.tabs.addTab(self.envelope_confirm_page, "打包确认")
         self.tabs.addTab(self.address_envelopes_page, "补打信封")
+        self.tabs.addTab(self.custom_single_print_page, "自定义打印")
         self.setCentralWidget(self.tabs)
 
         self._load_initial_config()

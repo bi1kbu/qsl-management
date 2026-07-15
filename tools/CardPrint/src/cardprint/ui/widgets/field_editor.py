@@ -26,11 +26,13 @@ class FieldEditor(QWidget):
         "y_mm",
         "print_width_mm",
         "print_height_mm",
+        "print_border",
         "font_family",
         "font_size_pt",
         "bold",
         "italic",
         "text_align",
+        "layout_mode",
         "distribute_align",
         "max_len",
         "digit_raise_ratio",
@@ -43,9 +45,11 @@ class FieldEditor(QWidget):
     BOOL_COLS = {
         COLUMNS.index("bold"),
         COLUMNS.index("italic"),
+        COLUMNS.index("print_border"),
         COLUMNS.index("distribute_align"),
     }
     ALIGN_COL = COLUMNS.index("text_align")
+    LAYOUT_MODE_COL = COLUMNS.index("layout_mode")
     HEADER_LABELS = [
         "字段Key",
         "字段名称",
@@ -53,11 +57,13 @@ class FieldEditor(QWidget):
         "Y坐标(mm)",
         "打印宽度(mm)",
         "打印高度(mm)",
+        "打印边框",
         "字体",
         "字号(pt)",
         "加粗",
         "斜体",
-        "左右对齐",
+        "文本对齐",
+        "排版方式",
         "分散对齐",
         "最大长度",
         "数字上移比例",
@@ -123,11 +129,13 @@ class FieldEditor(QWidget):
             f"{y_default:.2f}",
             "0",
             "0",
+            "false",
             "SimSun",
             "11",
             "false",
             "false",
             "left",
+            "horizontal",
             "false",
             "0",
             "0",
@@ -207,10 +215,28 @@ class FieldEditor(QWidget):
             if not isinstance(combo, QComboBox):
                 combo = QComboBox(self.table)
                 combo.addItem("left")
+                combo.addItem("center")
                 combo.addItem("right")
                 combo.currentTextChanged.connect(self._on_bool_combo_changed)
                 self.table.setCellWidget(row, col, combo)
             normalized = self._normalize_align_text(value)
+            idx = combo.findText(normalized)
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+            if self.table.item(row, col) is None:
+                self.table.setItem(row, col, QTableWidgetItem(normalized))
+            else:
+                self.table.item(row, col).setText(normalized)
+            return
+        if col == self.LAYOUT_MODE_COL:
+            combo = self.table.cellWidget(row, col)
+            if not isinstance(combo, QComboBox):
+                combo = QComboBox(self.table)
+                combo.addItem("horizontal")
+                combo.addItem("vertical")
+                combo.addItem("mixed_vertical")
+                combo.currentTextChanged.connect(self._on_bool_combo_changed)
+                self.table.setCellWidget(row, col, combo)
+            normalized = self._normalize_layout_mode_text(value)
             idx = combo.findText(normalized)
             combo.setCurrentIndex(idx if idx >= 0 else 0)
             if self.table.item(row, col) is None:
@@ -234,6 +260,10 @@ class FieldEditor(QWidget):
             combo = self.table.cellWidget(row, col)
             if isinstance(combo, QComboBox):
                 return self._normalize_align_text(combo.currentText())
+        if col == self.LAYOUT_MODE_COL:
+            combo = self.table.cellWidget(row, col)
+            if isinstance(combo, QComboBox):
+                return self._normalize_layout_mode_text(combo.currentText())
         item = self.table.item(row, col)
         return item.text().strip() if item else ""
 
@@ -242,9 +272,19 @@ class FieldEditor(QWidget):
 
     def _normalize_align_text(self, value: Any) -> str:
         text = str(value).strip().lower()
+        if text in {"center", "中", "居中", "居中对齐"}:
+            return "center"
         if text in {"right", "右", "右对齐"}:
             return "right"
         return "left"
+
+    def _normalize_layout_mode_text(self, value: Any) -> str:
+        text = str(value).strip().lower()
+        if text in {"vertical", "纵向", "竖向"}:
+            return "vertical"
+        if text in {"mixed_vertical", "mixed-vertical", "混合纵向", "混合竖向"}:
+            return "mixed_vertical"
+        return "horizontal"
 
     def _on_bool_combo_changed(self, _: str) -> None:
         if self._updating:
@@ -396,11 +436,13 @@ class FieldEditor(QWidget):
                     "y_mm": float(values["y_mm"] or 0),
                     "print_width_mm": float(values["print_width_mm"] or 0),
                     "print_height_mm": float(values["print_height_mm"] or 0),
+                    "print_border": str(values["print_border"]).lower() == "true",
                     "font_family": values["font_family"] or "SimSun",
                     "font_size_pt": int(values["font_size_pt"] or 11),
                     "bold": str(values["bold"]).lower() == "true",
                     "italic": str(values["italic"]).lower() == "true",
                     "text_align": self._normalize_align_text(values["text_align"]),
+                    "layout_mode": self._normalize_layout_mode_text(values["layout_mode"]),
                     "distribute_align": str(values["distribute_align"]).lower() == "true",
                     "max_len": int(values["max_len"] or 0),
                     "digit_raise_ratio": float(values["digit_raise_ratio"] or 0),

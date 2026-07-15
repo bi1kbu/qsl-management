@@ -185,6 +185,39 @@ class Win32PrinterAdapter:
         except Exception:
             return int(max(1, len(text)) * pt_to_pixels(item.font_size_pt, dpi_x) * 0.55)
 
+    @staticmethod
+    def _text_extent_px(dc: Any, text: str, item: LayoutItem, dpi_x: int, dpi_y: int) -> tuple[int, int]:
+        try:
+            text_w_px, text_h_px = dc.GetTextExtent(text)
+            return int(text_w_px), int(text_h_px)
+        except Exception:
+            return (
+                int(max(1, len(text)) * pt_to_pixels(item.font_size_pt, dpi_x) * 0.55),
+                max(1, pt_to_pixels(item.font_size_pt, dpi_y)),
+            )
+
+    def _build_font_spec(self, item: LayoutItem, dpi_y: int) -> dict[str, Any]:
+        font_height = max(1, pt_to_pixels(item.font_size_pt, dpi_y))
+        text_value = str(getattr(item, "text", "") or "")
+        default_charset = int(getattr(win32con, "DEFAULT_CHARSET", 1))
+        cjk_charset = int(getattr(win32con, "GB2312_CHARSET", 134))
+        out_tt_only = int(getattr(win32con, "OUT_TT_ONLY_PRECIS", 7))
+        proof_quality = int(getattr(win32con, "PROOF_QUALITY", 2))
+        rotation_degree = int(getattr(item, "glyph_rotation_degree", 0) or 0) % 360
+        # GDI 使用逆时针角度；2700（十分之一度）对应视觉上的顺时针 90°。
+        gdi_angle = ((360 - rotation_degree) % 360) * 10
+        return {
+            "name": item.font_family,
+            "height": -font_height,
+            "weight": 700 if item.bold else 400,
+            "italic": int(item.italic),
+            "charset": cjk_charset if self._contains_cjk_text(text_value) else default_charset,
+            "out precision": out_tt_only,
+            "quality": proof_quality,
+            "escapement": gdi_angle,
+            "orientation": gdi_angle,
+        }
+
     def _draw_text_with_digit_raise(
         self,
         dc: Any,
@@ -218,14 +251,41 @@ class Win32PrinterAdapter:
         px = mm_to_dots(item.physical_x_mm, dpi_x) - physical_offset_x_px
         py = mm_to_dots(item.physical_y_mm, dpi_y) - physical_offset_y_px
         text = item.text or ""
+        layout_mode = str(getattr(item, "layout_mode", "horizontal") or "horizontal").strip().lower()
+
+        # 纵向布局已由布局引擎拆成单字单元；这里只负责在单元格内定位字形。
+        if layout_mode in {"vertical", "mixed_vertical"}:
+            try:
+                dc.SetBkMode(win32con.TRANSPARENT)
+            except Exception:
+                pass
+            if not text:
+                return
+            cell_width_px = mm_to_dots(float(getattr(item, "cell_width_mm", 0.0) or 0.0), dpi_x)
+            cell_height_px = mm_to_dots(float(getattr(item, "cell_height_mm", 0.0) or 0.0), dpi_y)
+            rotation_degree = int(getattr(item, "glyph_rotation_degree", 0) or 0) % 360
+            if rotation_degree:
+                rotated_width_px = max(1, pt_to_pixels(item.font_size_pt, dpi_y))
+                # 顺时针旋转字体从参考点向左展开，因此参考 X 需位于单元格右半侧。
+                px += max(0, (cell_width_px + rotated_width_px) // 2)
+            else:
+                text_w_px, text_h_px = self._text_extent_px(dc, text, item, dpi_x, dpi_y)
+                px += max(0, (cell_width_px - text_w_px) // 2)
+                py += max(0, (cell_height_px - text_h_px) // 2)
+            dc.TextOut(px, py, text)
+            return
+
         align_mode = str(getattr(item, "text_align", "left") or "left").strip().lower()
-        if align_mode not in {"left", "right"}:
+        if align_mode not in {"left", "center", "right"}:
             align_mode = "left"
         width_px = mm_to_dots(float(item.print_width_mm), dpi_x) if float(item.print_width_mm) > 0 else 0
 
-        if align_mode == "right" and width_px > 0 and text:
+        if not item.distribute_align and align_mode in {"center", "right"} and width_px > 0 and text:
             text_w_px = self._text_width_px(dc, text, item, dpi_x)
-            px = max(px, px + width_px - int(text_w_px))
+            if align_mode == "center":
+                px = max(px, px + int(round((width_px - text_w_px) / 2.0)))
+            else:
+                px = max(px, px + width_px - int(text_w_px))
 
         # 文本背景改为透明，避免驱动在 OPAQUE 模式下对字符框做底色填充，
         # 导致与二维码区域叠加时出现“黑块/白块”假象。
@@ -256,6 +316,37 @@ class Win32PrinterAdapter:
             char_x = int(round(px + cursor_units * step_px))
             dc.TextOut(char_x, py - digit_raise_px if digit_raise_px > 0 and ch.isdigit() else py, ch)
             cursor_units += float(units[index])
+
+    def _draw_border(
+        self,
+        dc: Any,
+        item: LayoutItem,
+        dpi_x: int,
+        dpi_y: int,
+        physical_offset_x_px: int,
+        physical_offset_y_px: int,
+    ) -> None:
+        if not bool(getattr(item, "print_border", False)):
+            return
+        width_px = mm_to_dots(float(item.print_width_mm), dpi_x)
+        height_px = mm_to_dots(float(item.print_height_mm), dpi_y)
+        if width_px <= 0 or height_px <= 0:
+            return
+        anchor_x_mm = getattr(item, "physical_anchor_x_mm", None)
+        anchor_y_mm = getattr(item, "physical_anchor_y_mm", None)
+        if anchor_x_mm is None:
+            anchor_x_mm = item.physical_x_mm
+        if anchor_y_mm is None:
+            anchor_y_mm = item.physical_y_mm
+        left = mm_to_dots(float(anchor_x_mm), dpi_x) - physical_offset_x_px
+        top = mm_to_dots(float(anchor_y_mm), dpi_y) - physical_offset_y_px
+        right = left + width_px
+        bottom = top + height_px
+        dc.MoveTo((left, top))
+        dc.LineTo((right, top))
+        dc.LineTo((right, bottom))
+        dc.LineTo((left, bottom))
+        dc.LineTo((left, top))
 
     def _draw_qrcode(
         self,
@@ -759,26 +850,27 @@ class Win32PrinterAdapter:
                                 physical_offset_x_px=physical_offset_x_px,
                                 physical_offset_y_px=physical_offset_y_px,
                             )
+                            self._draw_border(
+                                dc=dc,
+                                item=item,
+                                dpi_x=dpi_x,
+                                dpi_y=dpi_y,
+                                physical_offset_x_px=physical_offset_x_px,
+                                physical_offset_y_px=physical_offset_y_px,
+                            )
                         else:
-                            font_height = max(1, pt_to_pixels(item.font_size_pt, dpi_y))
-                            text_value = str(getattr(item, "text", "") or "")
-                            contains_cjk = self._contains_cjk_text(text_value)
-                            default_charset = int(getattr(win32con, "DEFAULT_CHARSET", 1))
-                            cjk_charset = int(getattr(win32con, "GB2312_CHARSET", 134))
-                            out_tt_only = int(getattr(win32con, "OUT_TT_ONLY_PRECIS", 7))
-                            proof_quality = int(getattr(win32con, "PROOF_QUALITY", 2))
-                            font_spec = {
-                                "name": item.font_family,
-                                "height": -font_height,
-                                "weight": 700 if item.bold else 400,
-                                "italic": int(item.italic),
-                                "charset": cjk_charset if contains_cjk else default_charset,
-                                "out precision": out_tt_only,
-                                "quality": proof_quality,
-                            }
+                            font_spec = self._build_font_spec(item, dpi_y)
                             font = win32ui.CreateFont(font_spec)
                             dc.SelectObject(font)
                             self._draw_text(
+                                dc=dc,
+                                item=item,
+                                dpi_x=dpi_x,
+                                dpi_y=dpi_y,
+                                physical_offset_x_px=physical_offset_x_px,
+                                physical_offset_y_px=physical_offset_y_px,
+                            )
+                            self._draw_border(
                                 dc=dc,
                                 item=item,
                                 dpi_x=dpi_x,

@@ -80,6 +80,77 @@ def test_field_value_string_types_are_normalized(tmp_path: Path) -> None:
     assert field.bold is True
     assert field.italic is False
     assert field.max_len == 30
+    assert field.print_border is False
+
+
+def test_center_alignment_and_print_border_round_trip(tmp_path: Path) -> None:
+    data = sample_preset_dict()
+    data["fields"][0].update(
+        {
+            "print_width_mm": 30,
+            "print_height_mm": 12,
+            "text_align": "center",
+            "print_border": "true",
+        }
+    )
+    file_path = tmp_path / "preset.json"
+    file_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    loaded = load_preset(file_path)
+    assert loaded.fields[0].text_align == "center"
+    assert loaded.fields[0].print_border is True
+
+    save_preset(file_path, loaded)
+    saved = json.loads(file_path.read_text(encoding="utf-8"))
+    assert saved["fields"][0]["text_align"] == "center"
+    assert saved["fields"][0]["print_border"] is True
+
+
+def test_layout_mode_round_trip_and_chinese_normalization(tmp_path: Path) -> None:
+    data = sample_preset_dict()
+    data["fields"][0].update(
+        {
+            "print_width_mm": 30,
+            "print_height_mm": 20,
+            "layout_mode": "混合纵向",
+        }
+    )
+    file_path = tmp_path / "preset.json"
+    file_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    loaded = load_preset(file_path)
+    assert loaded.fields[0].layout_mode == "mixed_vertical"
+
+    save_preset(file_path, loaded)
+    saved = json.loads(file_path.read_text(encoding="utf-8"))
+    assert saved["fields"][0]["layout_mode"] == "mixed_vertical"
+
+
+def test_vertical_layout_requires_width_and_height() -> None:
+    data = sample_preset_dict()
+    data["fields"][0]["layout_mode"] = "vertical"
+
+    with pytest.raises(CardPrintError) as exc_info:
+        Preset.from_dict(data)
+    assert exc_info.value.code == "VERTICAL_LAYOUT_AREA_REQUIRED"
+
+
+def test_center_alignment_requires_print_width() -> None:
+    data = sample_preset_dict()
+    data["fields"][0]["text_align"] = "center"
+
+    with pytest.raises(CardPrintError) as exc_info:
+        Preset.from_dict(data)
+    assert exc_info.value.code == "CENTER_ALIGN_WIDTH_REQUIRED"
+
+
+def test_print_border_requires_width_and_height() -> None:
+    data = sample_preset_dict()
+    data["fields"][0]["print_border"] = True
+
+    with pytest.raises(CardPrintError) as exc_info:
+        Preset.from_dict(data)
+    assert exc_info.value.code == "PRINT_BORDER_AREA_REQUIRED"
 
 
 def test_fixed_text_field_round_trip(tmp_path: Path) -> None:

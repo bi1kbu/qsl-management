@@ -35,14 +35,22 @@ class LayoutItem:
     italic: bool
     text_align: str
     distribute_align: bool
+    layout_mode: str = "horizontal"
+    glyph_rotation_degree: int = 0
     digit_raise_ratio: float = 0.0
     line_index: int = 0
     line_count: int = 1
     anchor_x_mm: float = 0.0
     anchor_y_mm: float = 0.0
+    physical_anchor_x_mm: float | None = None
+    physical_anchor_y_mm: float | None = None
     print_width_mm: float = 0.0
     print_height_mm: float = 0.0
+    print_border: bool = False
     line_height_mm: float = 0.0
+    cell_width_mm: float = 0.0
+    cell_height_mm: float = 0.0
+    column_index: int = 0
     render_type: str = "text"
     qr_payload: str = ""
 
@@ -70,11 +78,32 @@ def validate_deadzone(paper: Paper, deadzone: Deadzone) -> list[str]:
     return errors
 
 
-def _format_field_text(field: FieldDefinition, row: dict[str, Any]) -> str:
+def _format_field_text(
+    field: FieldDefinition,
+    row: dict[str, Any],
+    *,
+    enable_forced_line_breaks: bool = True,
+) -> str:
     value = field.fixed_text if field.fixed_text else row.get(field.key, "")
     text = "" if value is None else str(value)
+    if enable_forced_line_breaks:
+        # 用户输入中的字面量 /n 与真实换行统一为换行符；仅识别小写 /n。
+        text = text.replace("\r\n", "\n").replace("\r", "\n").replace("/n", "\n")
     if field.max_len > 0:
-        text = text[: field.max_len]
+        if not enable_forced_line_breaks:
+            return text[: field.max_len]
+        visible_count = 0
+        truncated: list[str] = []
+        for ch in text:
+            if ch == "\n":
+                if visible_count < field.max_len:
+                    truncated.append(ch)
+                continue
+            if visible_count >= field.max_len:
+                break
+            truncated.append(ch)
+            visible_count += 1
+        text = "".join(truncated)
     return text
 
 
@@ -104,13 +133,14 @@ def _max_units_per_line(field: FieldDefinition) -> int | None:
     return max(1, int(width_mm // unit_width_mm))
 
 
-def _split_text_by_units(text: str, max_units: int) -> list[str]:
-    if max_units <= 0:
-        return [text]
+def _split_text_by_units(text: str, max_units: int | None) -> list[str]:
     lines: list[str] = []
-    for part in (text.splitlines() or [""]):
+    for part in text.split("\n"):
         if part == "":
             lines.append("")
+            continue
+        if max_units is None or max_units <= 0:
+            lines.append(part)
             continue
         current_chars: list[str] = []
         current_units = 0
@@ -131,9 +161,6 @@ def _split_text_by_units(text: str, max_units: int) -> list[str]:
 def _wrap_field_text(field: FieldDefinition, text: str) -> tuple[list[str], float]:
     line_height_mm = _line_height_mm(field)
     max_units = _max_units_per_line(field)
-    if max_units is None:
-        return [text], line_height_mm
-
     lines = _split_text_by_units(text, max_units=max_units)
 
     if field.print_height_mm > 0:
@@ -141,6 +168,159 @@ def _wrap_field_text(field: FieldDefinition, text: str) -> tuple[list[str], floa
         max_lines = max(1, int(available_for_next_line // line_height_mm) + 1)
         lines = lines[:max_lines]
     return lines, line_height_mm
+
+
+def _mixed_vertical_rotation(ch: str) -> int:
+    return 90 if ch.isascii() and ch.isalnum() else 0
+
+
+def _vertical_glyph_rotation(field: FieldDefinition, ch: str) -> int:
+    if field.layout_mode == "vertical":
+        return 90
+    return _mixed_vertical_rotation(ch)
+
+
+def _vertical_glyph_extent_mm(field: FieldDefinition, ch: str) -> float:
+    glyph_height_mm = _glyph_height_mm(field)
+    if _vertical_glyph_rotation(field, ch) == 0:
+        return glyph_height_mm
+    # 旋转后，纵向占用长度等于原字形宽度。半角字母/数字通常约为字号高度的 50%~65%。
+    if _char_display_units(ch) == 1:
+        return max(0.1, glyph_height_mm * 0.62)
+    return glyph_height_mm
+
+
+def _vertical_glyph_gap_mm(field: FieldDefinition) -> float:
+    return max(0.1, _glyph_height_mm(field) * 0.08)
+
+
+def _split_vertical_columns(field: FieldDefinition, text: str) -> list[list[str]]:
+    columns: list[list[str]] = []
+    height_mm = float(field.print_height_mm)
+    gap_mm = _vertical_glyph_gap_mm(field)
+    for part in text.split("\n"):
+        chars = list(part)
+        if not chars:
+            columns.append([])
+            continue
+        current: list[str] = []
+        used_height_mm = 0.0
+        for ch in chars:
+            extent_mm = _vertical_glyph_extent_mm(field, ch)
+            required_mm = extent_mm if not current else gap_mm + extent_mm
+            if current and (used_height_mm + required_mm) > height_mm:
+                columns.append(current)
+                current = [ch]
+                used_height_mm = extent_mm
+            else:
+                current.append(ch)
+                used_height_mm += required_mm
+        if current:
+            columns.append(current)
+    return columns or [[]]
+
+
+def _vertical_y_offsets(field: FieldDefinition, chars: list[str]) -> tuple[list[float], list[float]]:
+    if not chars:
+        return [0.0], [_glyph_height_mm(field)]
+    extents_mm = [_vertical_glyph_extent_mm(field, ch) for ch in chars]
+    gap_mm = _vertical_glyph_gap_mm(field)
+    height_mm = float(field.print_height_mm)
+    used_height_mm = sum(extents_mm) + (gap_mm * max(0, len(chars) - 1))
+    remaining_mm = max(0.0, height_mm - used_height_mm)
+    if field.distribute_align and len(chars) > 1:
+        gap_mm += remaining_mm / float(len(chars) - 1)
+        start_mm = 0.0
+    elif field.text_align == "center":
+        start_mm = remaining_mm / 2.0
+    elif field.text_align == "right":
+        start_mm = remaining_mm
+    else:
+        start_mm = 0.0
+    offsets_mm: list[float] = []
+    cursor_mm = start_mm
+    for index, extent_mm in enumerate(extents_mm):
+        offsets_mm.append(cursor_mm)
+        cursor_mm += extent_mm
+        if index < len(extents_mm) - 1:
+            cursor_mm += gap_mm
+    return offsets_mm, extents_mm
+
+
+def _build_vertical_field_items(
+    preset: Preset,
+    field: FieldDefinition,
+    text: str,
+) -> list[LayoutItem]:
+    cell_advance_mm = _line_height_mm(field)
+    field_width_mm = float(field.print_width_mm)
+    cell_width_mm = min(cell_advance_mm, field_width_mm)
+    columns = _split_vertical_columns(field, text)
+    max_columns = max(1, int(field_width_mm // cell_advance_mm))
+    columns = columns[:max_columns]
+
+    total_items = sum(max(1, len(column)) for column in columns)
+    anchor_point = transform_logical_to_physical(
+        x_mm=float(field.x_mm),
+        y_mm=float(field.y_mm),
+        paper_width_mm=preset.paper.width_mm,
+        paper_height_mm=preset.paper.height_mm,
+        calibration=preset.calibration,
+    )
+    first_column_x = float(field.x_mm) + field_width_mm - cell_width_mm
+    items: list[LayoutItem] = []
+    global_index = 0
+    for column_index, chars in enumerate(columns):
+        column_x = max(float(field.x_mm), first_column_x - (column_index * cell_advance_mm))
+        cell_chars = chars or [""]
+        y_offsets, glyph_extents = _vertical_y_offsets(field, chars)
+        for cell_index, ch in enumerate(cell_chars):
+            logical_y = float(field.y_mm) + y_offsets[cell_index]
+            point = transform_logical_to_physical(
+                x_mm=column_x,
+                y_mm=logical_y,
+                paper_width_mm=preset.paper.width_mm,
+                paper_height_mm=preset.paper.height_mm,
+                calibration=preset.calibration,
+            )
+            rotation_degree = _vertical_glyph_rotation(field, ch)
+            items.append(
+                LayoutItem(
+                    key=field.key,
+                    label_zh=field.label_zh,
+                    text=ch,
+                    logical_x_mm=column_x,
+                    logical_y_mm=logical_y,
+                    physical_x_mm=point.x,
+                    physical_y_mm=point.y,
+                    font_family=field.font_family,
+                    font_size_pt=field.font_size_pt,
+                    bold=field.bold,
+                    italic=field.italic,
+                    text_align=field.text_align,
+                    distribute_align=field.distribute_align,
+                    layout_mode=field.layout_mode,
+                    glyph_rotation_degree=rotation_degree,
+                    digit_raise_ratio=0.0,
+                    line_index=global_index,
+                    line_count=total_items,
+                    anchor_x_mm=float(field.x_mm),
+                    anchor_y_mm=float(field.y_mm),
+                    physical_anchor_x_mm=anchor_point.x,
+                    physical_anchor_y_mm=anchor_point.y,
+                    print_width_mm=field_width_mm,
+                    print_height_mm=float(field.print_height_mm),
+                    print_border=bool(field.print_border and global_index == 0),
+                    line_height_mm=cell_advance_mm,
+                    cell_width_mm=cell_width_mm,
+                    cell_height_mm=glyph_extents[cell_index],
+                    column_index=column_index,
+                    render_type="text",
+                    qr_payload="",
+                )
+            )
+            global_index += 1
+    return items
 
 
 def validate_fields_in_printable_area(preset: Preset) -> list[dict[str, Any]]:
@@ -215,15 +395,16 @@ def build_layout_items(preset: Preset, row: dict[str, Any]) -> list[LayoutItem]:
     validate_preset_layout(preset)
     items: list[LayoutItem] = []
     for field in preset.fields:
-        text = _format_field_text(field, row)
-        if field.key.strip().upper() == "QRCODE":
-            point = transform_logical_to_physical(
-                x_mm=float(field.x_mm),
-                y_mm=float(field.y_mm),
-                paper_width_mm=preset.paper.width_mm,
-                paper_height_mm=preset.paper.height_mm,
-                calibration=preset.calibration,
-            )
+        is_qrcode = field.key.strip().upper() == "QRCODE"
+        text = _format_field_text(field, row, enable_forced_line_breaks=not is_qrcode)
+        anchor_point = transform_logical_to_physical(
+            x_mm=float(field.x_mm),
+            y_mm=float(field.y_mm),
+            paper_width_mm=preset.paper.width_mm,
+            paper_height_mm=preset.paper.height_mm,
+            calibration=preset.calibration,
+        )
+        if is_qrcode:
             items.append(
                 LayoutItem(
                     key=field.key,
@@ -231,26 +412,34 @@ def build_layout_items(preset: Preset, row: dict[str, Any]) -> list[LayoutItem]:
                     text="",
                     logical_x_mm=float(field.x_mm),
                     logical_y_mm=float(field.y_mm),
-                    physical_x_mm=point.x,
-                    physical_y_mm=point.y,
+                    physical_x_mm=anchor_point.x,
+                    physical_y_mm=anchor_point.y,
                     font_family=field.font_family,
                     font_size_pt=field.font_size_pt,
                     bold=field.bold,
                     italic=field.italic,
                     text_align=field.text_align,
                     distribute_align=field.distribute_align,
+                    layout_mode="horizontal",
+                    glyph_rotation_degree=0,
                     digit_raise_ratio=float(field.digit_raise_ratio),
                     line_index=0,
                     line_count=1,
                     anchor_x_mm=float(field.x_mm),
                     anchor_y_mm=float(field.y_mm),
+                    physical_anchor_x_mm=anchor_point.x,
+                    physical_anchor_y_mm=anchor_point.y,
                     print_width_mm=float(field.print_width_mm),
                     print_height_mm=float(field.print_height_mm),
+                    print_border=bool(field.print_border),
                     line_height_mm=_line_height_mm(field),
                     render_type="qrcode",
                     qr_payload=text.strip(),
                 )
             )
+            continue
+        if field.layout_mode in {"vertical", "mixed_vertical"}:
+            items.extend(_build_vertical_field_items(preset, field, text))
             continue
         lines, line_height_mm = _wrap_field_text(field, text)
         total_lines = max(1, len(lines))
@@ -278,13 +467,18 @@ def build_layout_items(preset: Preset, row: dict[str, Any]) -> list[LayoutItem]:
                     italic=field.italic,
                     text_align=field.text_align,
                     distribute_align=field.distribute_align,
+                    layout_mode=field.layout_mode,
+                    glyph_rotation_degree=0,
                     digit_raise_ratio=float(field.digit_raise_ratio),
                     line_index=idx,
                     line_count=total_lines,
                     anchor_x_mm=float(field.x_mm),
                     anchor_y_mm=float(field.y_mm),
+                    physical_anchor_x_mm=anchor_point.x,
+                    physical_anchor_y_mm=anchor_point.y,
                     print_width_mm=float(field.print_width_mm),
                     print_height_mm=float(field.print_height_mm),
+                    print_border=bool(field.print_border and idx == 0),
                     line_height_mm=line_height_mm,
                     render_type="text",
                     qr_payload="",

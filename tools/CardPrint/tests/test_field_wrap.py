@@ -51,6 +51,62 @@ def test_no_wrap_width_keeps_single_line() -> None:
     assert len(items) == 1
 
 
+def test_literal_slash_n_forces_line_break_without_print_width() -> None:
+    preset = _build_preset(print_width_mm=0.0)
+    items = build_layout_items(preset, {"name": "第一行/n/n第三行"})
+
+    assert [item.text for item in items] == ["第一行", "", "第三行"]
+    assert [item.line_index for item in items] == [0, 1, 2]
+
+
+def test_real_line_break_and_auto_wrap_can_be_combined() -> None:
+    preset = _build_preset(print_width_mm=12.0)
+    items = build_layout_items(preset, {"name": "ABCD\nEFGHIJKL"})
+
+    assert items[0].text == "ABCD"
+    assert "".join(item.text for item in items[1:]) == "EFGHIJKL"
+
+
+def test_uppercase_slash_n_is_not_a_line_break() -> None:
+    preset = _build_preset(print_width_mm=0.0)
+    items = build_layout_items(preset, {"name": "第一行/N第二行"})
+
+    assert [item.text for item in items] == ["第一行/N第二行"]
+
+
+def test_qrcode_payload_does_not_interpret_slash_n_as_line_break() -> None:
+    preset = _build_preset(print_width_mm=0.0)
+    preset.fields[0].key = "QRCODE"
+    payload = "https://example.test/n/value"
+    items = build_layout_items(preset, {"QRCODE": payload})
+
+    assert len(items) == 1
+    assert items[0].qr_payload == payload
+
+
+def test_max_len_ignores_forced_line_break_marker() -> None:
+    preset = _build_preset(print_width_mm=0.0)
+    preset.fields[0].max_len = 3
+    items = build_layout_items(preset, {"name": "AB/nCD"})
+
+    assert [item.text for item in items] == ["AB", "C"]
+
+
+def test_max_len_does_not_leave_trailing_empty_line() -> None:
+    preset = _build_preset(print_width_mm=0.0)
+    preset.fields[0].max_len = 2
+    items = build_layout_items(preset, {"name": "AB/nCD"})
+
+    assert [item.text for item in items] == ["AB"]
+
+
+def test_height_limit_applies_to_forced_lines_without_print_width() -> None:
+    preset = _build_preset(print_width_mm=0.0, print_height_mm=4.0)
+    items = build_layout_items(preset, {"name": "第一行/n第二行/n第三行"})
+
+    assert [item.text for item in items] == ["第一行"]
+
+
 def test_fixed_text_overrides_row_value() -> None:
     preset = _build_preset(print_width_mm=0.0)
     preset.fields[0].fixed_text = "固定辅助说明"
@@ -65,6 +121,16 @@ def test_digit_raise_ratio_is_carried_to_layout_item() -> None:
     items = build_layout_items(preset, {"name": "BI1KBU"})
     assert len(items) == 1
     assert items[0].digit_raise_ratio == 0.5
+
+
+def test_print_border_is_only_carried_by_first_text_line() -> None:
+    preset = _build_preset(print_width_mm=20.0, print_height_mm=20.0)
+    preset.fields[0].print_border = True
+    items = build_layout_items(preset, {"name": "第一行/n第二行"})
+
+    assert len(items) == 2
+    assert items[0].print_border is True
+    assert items[1].print_border is False
 
 
 def test_cjk_wrap_uses_fullwidth_estimation() -> None:

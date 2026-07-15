@@ -68,6 +68,35 @@ class PreviewCanvas(QWidget):
             painter.drawText(QPointF(cursor_x, y - digit_raise_px if ch.isdigit() else y), ch)
             cursor_x += float(metrics.horizontalAdvance(ch))
 
+    def _draw_vertical_preview_glyph(
+        self,
+        painter: QPainter,
+        x: float,
+        y: float,
+        text: str,
+        rotation_degree: int,
+        cell_width_px: float,
+        cell_height_px: float,
+    ) -> None:
+        if not text:
+            return
+        cell_rect = QRectF(x, y, max(1.0, cell_width_px), max(1.0, cell_height_px))
+        painter.save()
+        if rotation_degree:
+            center = cell_rect.center()
+            painter.translate(center)
+            painter.rotate(float(rotation_degree))
+            rotated_rect = QRectF(
+                -cell_rect.height() / 2.0,
+                -cell_rect.width() / 2.0,
+                cell_rect.height(),
+                cell_rect.width(),
+            )
+            painter.drawText(rotated_rect, Qt.AlignCenter, text)
+        else:
+            painter.drawText(cell_rect, Qt.AlignCenter, text)
+        painter.restore()
+
     def _to_px(self, mm_x: float, mm_y: float) -> tuple[float, float]:
         return self._page_left + (mm_x * self._scale), self._page_top + (mm_y * self._scale)
 
@@ -141,9 +170,11 @@ class PreviewCanvas(QWidget):
         page_top = (self.height() - page_h) / 2
 
         page_rect = QRectF(page_left, page_top, page_w, page_h)
+        painter.save()
         painter.setPen(QPen(QColor("#1F2937"), 1.0))
         painter.setBrush(QColor("#FFFFFF"))
         painter.drawRect(page_rect)
+        painter.restore()
 
         self._page_left = page_left
         self._page_top = page_top
@@ -160,7 +191,10 @@ class PreviewCanvas(QWidget):
 
         self._draw_deadzone(painter, page_left, page_top, scale, width_mm, height_mm)
         self._draw_items(painter, page_left, page_top, scale)
-        self._draw_field_boxes(painter, page_left, page_top, scale)
+        if self._editable:
+            self._draw_field_boxes(painter, page_left, page_top, scale)
+        else:
+            self._field_geometries = []
 
     def _draw_deadzone(
         self,
@@ -179,6 +213,7 @@ class PreviewCanvas(QWidget):
         if top == 0 and right == 0 and bottom == 0 and left == 0:
             return
 
+        painter.save()
         dead_color = QColor(220, 38, 38, 65)
         painter.setPen(Qt.NoPen)
         painter.setBrush(dead_color)
@@ -197,10 +232,13 @@ class PreviewCanvas(QWidget):
             painter.drawRect(
                 QRectF(page_left + page_w - right * scale, page_top, right * scale, page_h)
             )
+        painter.restore()
 
     def _draw_items(self, painter: QPainter, page_left: float, page_top: float, scale: float) -> None:
         items = self._scene.get("items") or []
+        painter.save()
         painter.setPen(QPen(QColor("#0F172A"), 1.0))
+        painter.setBrush(Qt.NoBrush)
         for item in items:
             x = float(item.get("logical_x_mm", 0)) * scale + page_left
             y = float(item.get("logical_y_mm", 0)) * scale + page_top
@@ -208,32 +246,83 @@ class PreviewCanvas(QWidget):
             label = str(item.get("label_zh") or item.get("key") or "").strip()
             line_index = int(item.get("line_index", 0))
             text = str(item.get("text", ""))
+            width_mm = float(item.get("print_width_mm", 0.0))
+            height_mm = float(item.get("print_height_mm", 0.0))
+            print_border = bool(item.get("print_border", False))
+            layout_mode = str(item.get("layout_mode", "horizontal") or "horizontal").strip().lower()
+            anchor_x = float(item.get("anchor_x_mm", item.get("logical_x_mm", 0))) * scale + page_left
+            anchor_y = float(item.get("anchor_y_mm", item.get("logical_y_mm", 0))) * scale + page_top
             if render_type == "qrcode":
-                width_mm = float(item.get("print_width_mm", 0.0))
-                height_mm = float(item.get("print_height_mm", 0.0))
                 if width_mm > 0 and height_mm > 0:
                     rect = QRectF(x, y, width_mm * scale, height_mm * scale)
                     painter.setPen(QPen(QColor("#2563EB"), 1.0, Qt.DashLine))
                     painter.drawRect(rect)
                     painter.setPen(QPen(QColor("#0F172A"), 1.0))
                     painter.drawText(QPointF(x + 4, y + 14), f"{label}: 二维码")
+                    if print_border:
+                        painter.setPen(QPen(QColor("#000000"), 1.0, Qt.SolidLine))
+                        painter.setBrush(Qt.NoBrush)
+                        painter.drawRect(rect)
                     continue
-            if line_index == 0:
+            font_size_pt = float(item.get("font_size_pt", 11) or 11)
+            preview_font = painter.font()
+            preview_font.setFamily(str(item.get("font_family", "SimSun") or "SimSun"))
+            preview_font.setPointSizeF(font_size_pt)
+            preview_font.setBold(bool(item.get("bold", False)))
+            preview_font.setItalic(bool(item.get("italic", False)))
+            painter.setFont(preview_font)
+            if layout_mode in {"vertical", "mixed_vertical"}:
+                if self._editable and line_index == 0:
+                    painter.drawEllipse(QPointF(anchor_x, anchor_y), 2, 2)
+                    painter.drawText(QPointF(anchor_x + 4, anchor_y - 3), label)
+                self._draw_vertical_preview_glyph(
+                    painter,
+                    x,
+                    y,
+                    text,
+                    int(item.get("glyph_rotation_degree", 0) or 0),
+                    float(item.get("cell_width_mm", 0.0) or 0.0) * scale,
+                    float(item.get("cell_height_mm", 0.0) or 0.0) * scale,
+                )
+                if print_border and width_mm > 0 and height_mm > 0:
+                    painter.setPen(QPen(QColor("#000000"), 1.0, Qt.SolidLine))
+                    painter.setBrush(Qt.NoBrush)
+                    painter.drawRect(
+                        QRectF(anchor_x, anchor_y, width_mm * scale, height_mm * scale)
+                    )
+                    painter.setPen(QPen(QColor("#0F172A"), 1.0))
+                continue
+            if self._editable and line_index == 0:
                 display_text = f"{label}: {text}" if text.strip() else label
+                painter.drawEllipse(QPointF(x, y), 2, 2)
             else:
                 display_text = text
-            painter.drawEllipse(QPointF(x, y), 2, 2)
             digit_raise_ratio = float(item.get("digit_raise_ratio", 0.0) or 0.0)
-            font_size_pt = float(item.get("font_size_pt", 11) or 11)
+            text_x = x + 4
+            align_mode = str(item.get("text_align", "left") or "left").strip().lower()
+            distribute_align = bool(item.get("distribute_align", False))
+            if not distribute_align and width_mm > 0 and align_mode in {"center", "right"}:
+                text_width_px = float(painter.fontMetrics().horizontalAdvance(display_text))
+                available_width_px = width_mm * scale
+                if align_mode == "center":
+                    text_x = x + max(0.0, (available_width_px - text_width_px) / 2.0)
+                else:
+                    text_x = x + max(0.0, available_width_px - text_width_px)
             self._draw_preview_text(
                 painter,
-                x + 4,
+                text_x,
                 y - 3,
                 display_text,
                 font_size_pt,
                 digit_raise_ratio,
                 scale,
             )
+            if print_border and width_mm > 0 and height_mm > 0:
+                painter.setPen(QPen(QColor("#000000"), 1.0, Qt.SolidLine))
+                painter.setBrush(Qt.NoBrush)
+                painter.drawRect(QRectF(anchor_x, anchor_y, width_mm * scale, height_mm * scale))
+                painter.setPen(QPen(QColor("#0F172A"), 1.0))
+        painter.restore()
 
     def _draw_field_boxes(self, painter: QPainter, page_left: float, page_top: float, scale: float) -> None:
         self._field_geometries = []
@@ -243,7 +332,9 @@ class PreviewCanvas(QWidget):
 
         border_pen = QPen(QColor("#2563EB"), 1.0, Qt.DashLine)
         handle_brush = QColor("#2563EB")
+        painter.save()
         painter.setPen(border_pen)
+        painter.setBrush(Qt.NoBrush)
         for field in fields:
             key = str(field.get("key", "")).strip()
             if not key:
@@ -276,6 +367,7 @@ class PreviewCanvas(QWidget):
                     "handle_px": handle_px,
                 }
             )
+        painter.restore()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if not self._editable or event.button() != Qt.LeftButton:
