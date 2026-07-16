@@ -4,6 +4,7 @@ import com.bi1kbu.qslmanagement.api.QslApiSupport;
 import com.bi1kbu.qslmanagement.api.QslAiService;
 import com.bi1kbu.qslmanagement.api.QslAiPromptDefaults;
 import com.bi1kbu.qslmanagement.api.QslAuditService;
+import com.bi1kbu.qslmanagement.api.QslCardRequestService;
 import com.bi1kbu.qslmanagement.api.QslMigrationStateService;
 import com.bi1kbu.qslmanagement.api.QslQrzAddressLookupService;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
@@ -26,11 +27,17 @@ public class QslManagementPlugin extends BasePlugin {
 
     private final ReactiveExtensionClient client;
     private final QslMigrationStateService migrationStateService;
+    private final QslCardRequestService qslCardRequestService;
 
-    public QslManagementPlugin(PluginContext pluginContext, ReactiveExtensionClient client) {
+    public QslManagementPlugin(
+        PluginContext pluginContext,
+        ReactiveExtensionClient client,
+        QslCardRequestService qslCardRequestService
+    ) {
         super(pluginContext);
         this.client = client;
         this.migrationStateService = new QslMigrationStateService(client);
+        this.qslCardRequestService = qslCardRequestService;
     }
 
     @Bean
@@ -56,11 +63,16 @@ public class QslManagementPlugin extends BasePlugin {
     public void start() {
         ensureDefaultResources()
             .then(migrationStateService.ensureMigrationState(context.getVersion()))
+            .then(qslCardRequestService.reconcileReservations())
+            .doOnNext(result -> LOGGER.info(
+                "实体卡申请QSO占用修复完成：扫描={}，释放={}，保留={}",
+                result.scanned(), result.released(), result.kept()
+            ))
             .then()
             .subscribe(
             ignored -> {
             },
-            error -> LOGGER.warn("初始化默认资源失败：{}", error.getMessage())
+            error -> LOGGER.warn("初始化默认资源或修复实体卡申请占用失败：{}", error.getMessage())
         );
         LOGGER.info("QSL 管理插件启动成功。");
     }

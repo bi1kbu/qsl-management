@@ -109,6 +109,22 @@ export interface ExchangeReviewMailSendResult {
   sentAt: string
 }
 
+export interface QslCardRequestCreatedCardItem {
+  qsoRecordName: string
+  cardVersion: string
+  cardRecordName: string
+  creationStatus: '成功' | '失败'
+  lastError: string
+}
+
+export interface QslCardRequestReviewResult {
+  requestName: string
+  reviewStatus: '待处理' | '通过' | '拒绝'
+  cardCreationStatus: '未创建' | '创建中' | '全部成功' | '部分失败'
+  createdCards: QslCardRequestCreatedCardItem[]
+  reviewReason: string
+}
+
 export type NotificationMailScene = 'created' | 'sent' | 'received'
 export type NotificationMailTestScene = NotificationMailScene | 'exchange-reviewed'
 
@@ -564,6 +580,37 @@ export async function notifyExchangeRequest(
 ): Promise<ExchangeReviewMailSendResult> {
   const response = await axiosInstance.post<ApiResult<ExchangeReviewMailSendResult>>(
     `${consoleApiBase}/exchange-requests/${encodeURIComponent(requestName)}/notify`,
+  )
+  return response.data.data
+}
+
+export async function approveQslCardRequest(
+  requestName: string,
+  reason = '',
+): Promise<QslCardRequestReviewResult> {
+  const response = await axiosInstance.post<ApiResult<QslCardRequestReviewResult>>(
+    `${consoleApiBase}/qsl-card-requests/${encodeURIComponent(requestName)}/approve`,
+    { reason },
+  )
+  return response.data.data
+}
+
+export async function rejectQslCardRequest(
+  requestName: string,
+  reason: string,
+): Promise<QslCardRequestReviewResult> {
+  const response = await axiosInstance.post<ApiResult<QslCardRequestReviewResult>>(
+    `${consoleApiBase}/qsl-card-requests/${encodeURIComponent(requestName)}/reject`,
+    { reason },
+  )
+  return response.data.data
+}
+
+export async function retryQslCardRequestCards(
+  requestName: string,
+): Promise<QslCardRequestReviewResult> {
+  const response = await axiosInstance.post<ApiResult<QslCardRequestReviewResult>>(
+    `${consoleApiBase}/qsl-card-requests/${encodeURIComponent(requestName)}/retry-card-creation`,
   )
   return response.data.data
 }

@@ -39,6 +39,51 @@ spec:
 apiVersion: notification.halo.run/v1alpha1
 kind: ReasonType
 metadata:
+  name: qsl-card-request-reviewed
+  labels:
+    halo.run/hidden: "true"
+spec:
+  displayName: "实体QSL卡申请审核通知"
+  description: "实体QSL卡申请完成审核后触发，用于发送审核和自动建卡结果。"
+  properties:
+    - name: stationCallSign
+      type: string
+    - name: stationEmail
+      type: string
+      optional: true
+    - name: callSign
+      type: string
+    - name: reviewStatus
+      type: string
+    - name: reviewResultText
+      type: string
+    - name: reviewReason
+      type: string
+      optional: true
+    - name: requestName
+      type: string
+    - name: qsoCount
+      type: string
+    - name: cardCreationStatus
+      type: string
+    - name: createdCardsText
+      type: string
+      optional: true
+    - name: remarks
+      type: string
+      optional: true
+    - name: targetEmail
+      type: string
+    - name: triggerAt
+      type: string
+    - name: dateText
+      type: string
+    - name: operator
+      type: string
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: ReasonType
+metadata:
   name: qsl-exchange-reviewed
   labels:
     halo.run/hidden: "true"

@@ -100,6 +100,24 @@ export const qslMenuModules: QslMenuModule[] = [
     editDependencies: [toViewPermission('card-record'), toViewPermission('qso-record')],
   },
   {
+    key: 'qsl-card-request',
+    title: '实体卡申请审核',
+    group: '通联业务',
+    priority: 30,
+    viewPermission: toViewPermission('qsl-card-request'),
+    editPermission: toEditPermission('qsl-card-request'),
+    viewDependencies: [
+      toViewPermission('qso-record'),
+      toViewPermission('card-record'),
+      addressBureauViewPermission,
+    ],
+    editDependencies: [
+      toViewPermission('qsl-card-request'),
+      toEditPermission('card-record'),
+      addressBureauViewPermission,
+    ],
+  },
+  {
     key: 'card-issue',
     title: '制卡签发',
     group: '通联业务',

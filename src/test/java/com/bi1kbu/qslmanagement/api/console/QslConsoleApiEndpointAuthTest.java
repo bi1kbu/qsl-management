@@ -117,6 +117,13 @@ class QslConsoleApiEndpointAuthTest {
     }
 
     @Test
+    void shouldRejectQslCardRequestActionsWhenUnauthenticated() {
+        unauthorizedPost("/qsl-card-requests/QCR0001/approve", "{}");
+        unauthorizedPost("/qsl-card-requests/QCR0001/reject", "{}");
+        unauthorizedPost("/qsl-card-requests/QCR0001/retry-card-creation", "{}");
+    }
+
+    @Test
     void shouldRejectNotificationMailPolicyApplyWhenUnauthenticated() {
         unauthorizedPost("/notification-mails/apply-policy", """
             {

@@ -19,6 +19,7 @@ import OverviewDashboardModule from './modules/OverviewDashboardModule.vue'
 import OfflineActivityModule from './modules/OfflineActivityModule.vue'
 import OnlineImportDataModule from './modules/OnlineImportDataModule.vue'
 import QsoQueryModule from './modules/QsoQueryModule.vue'
+import QslCardRequestReviewModule from './modules/QslCardRequestReviewModule.vue'
 import ReceiveRecordQueryModule from './modules/ReceiveRecordQueryModule.vue'
 import ReceiptConfirmModule from './modules/ReceiptConfirmModule.vue'
 import QsoRecordModule from './modules/QsoRecordModule.vue'
@@ -70,6 +71,8 @@ const renderer = computed<ModuleRenderer>(() => {
           defaultSceneType: 'QSO' as SceneType,
         },
       }
+    case 'qsl-card-request':
+      return { component: QslCardRequestReviewModule }
     case 'online-card-record':
       return {
         component: CardRecordModule,

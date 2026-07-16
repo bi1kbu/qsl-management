@@ -1,12 +1,12 @@
 # QSL 卡片管理系统产品定义
 
-更新时间：2026-06-24
+更新时间：2026-07-16
 代码核验范围：`插件工程根目录` 后端、控制台前端、RBAC 模板与 `tools/CardPrint` 在线打印桥接
-Halo 官方资料核验日期：2026-07-06
+Halo 官方资料核验日期：2026-07-16
 
 ## 1. 产品一句话定义
 
-面向业余无线电场景的 QSO/SWL、线上换卡、线下换卡与收卡闭环管理产品，覆盖“记录、制卡、发卡、送达确认、收卡编号、查询、申请、审计、统计、打印桥接”的可持久化业务流，并提供公开查询、换卡与签收页面。
+面向业余无线电场景的 QSO/SWL、实体 QSL 卡申请、线上换卡、线下换卡与收卡闭环管理产品，覆盖“记录、申请、审核、制卡、发卡、送达确认、收卡编号、查询、审计、统计、打印桥接”的可持久化业务流，并提供公开查询、实体卡申请、换卡与签收页面。
 
 ## 2. 菜单组织
 
@@ -45,6 +45,7 @@ Halo 官方资料核验日期：2026-07-06
 | 配置 | 本台卡片 | `/qsl/settings/station-card` | `station-profile` |
 | 通联业务 | 通联日志 | `/qsl/traffic-business/qso-record` | `qso-record` |
 | 通联业务 | 创建卡片 | `/qsl/traffic-business/card-record` | `card-record` |
+| 通联业务 | 实体卡申请审核 | `/qsl/traffic-business/qsl-card-request` | `qsl-card-request` |
 | 通联业务 | 制卡签发 | `/qsl/traffic-business/card-issue` | `card-issue` |
 | 通联业务 | 发信确认 | `/qsl/traffic-business/mail-send-confirm` | `mail-send-confirm` |
 | 通联业务 | 送达确认 | `/qsl/traffic-business/mail-receive-confirm` | `mail-receive-confirm` |
@@ -107,7 +108,7 @@ Halo 官方资料核验日期：2026-07-06
 
 ### 3.4 通联业务
 
-通联业务包含通联日志、创建卡片、制卡签发、发信确认、送达确认。
+通联业务包含通联日志、创建卡片、实体卡申请审核、制卡签发、发信确认、送达确认。
 
 1. 通联日志支持 `QSO/SWL` 场景切换，字段落在 `QsoRecord.spec`。通联日志清单支持按呼号和通联日期范围筛选，日期范围按 `QsoRecord.spec.date` 做闭区间匹配，并影响当前筛选导出范围。通联日志提供 `ADIF格式导入`、`ADIF格式导出`、`Cabrillo格式导入` 与 `Cabrillo格式导出` 功能页签；手工新增记录默认使用 `UTC+8`，启用 UTC 实时填充、ADIF 导入与 Cabrillo 导入保留 `UTC`。ADIF 导入先解析预览，再通过现有通联记录保存能力创建 `QsoRecord`，`CALL/QSO_DATE/TIME_ON/MODE/FREQ/BAND/RST/QTH/COMMENT/MY_RIG/MY_ANTENNA/TX_PWR/OPERATOR/MY_SIG/MY_SIG_INFO/SWL` 等可落入现有模型的字段直接写入；当 `FREQ` 为空且 `BAND` 有值时，将频率写为 `{BAND} BAND`；当 `QTH` 缺失且 `GRIDSQUARE` 有值时，将 `GRIDSQUARE` 兼容写入对方位置；当 `MY_SIG=POTA` 时，将 `MY_SIG_INFO` 视为本台 QTH，若本台 QTH 仍为空则兼容使用 `MY_GRIDSQUARE`；`TX_PWR` 作为我台发射功率写入，缺失时才回落到设备默认功率。其余 ADIF 字段按 `字段名称：字段内容；` 追加到备注，避免导入时丢失标准内容之外的数据。ADIF 导入预览默认跳过重复记录：本站导出的 `APP_QSLMS_RECORD_ID` 已存在时按本站记录编号判重，外部 ADIF 或缺少本站记录编号时按 `sceneType/callSign/date/time/timezone/myRigMode/freq` 组成业务键判重；文件内部重复和与现有通联日志重复均不写入。ADIF 导入页提供“导入可用记录”和“覆盖导入”：前者只创建非重复记录，后者需二次确认，仅对已匹配到现有资源名或业务判重键的重复记录执行批量更新；同一业务判重键下存在多条现有记录时全部覆盖更新，不处理文件内部重复和无效记录。ADIF 导出范围优先使用已勾选记录，未勾选时导出当前筛选结果；导出内容使用 ADIF 文本格式，按记录时区换算为 UTC 后写入 `QSO_DATE` 与 `TIME_ON`，并兼容 `UTC+8/UTC+08:00/GMT+8/北京时间/Asia/Shanghai` 等等价时区写法；`FREQ` 仅在存在 ADIF `Number` 类型的 MHz 数值时导出，`{BAND} BAND` 占位按 ADIF 3.1.7 波段枚举导出为 `BAND` 字段，不写入非数值 `FREQ`，备注中由导入保留的 `MY_STATE/STATE/GRIDSQUARE/MY_GRIDSQUARE/SIG/SIG_INFO/QSO_DATE_OFF/TIME_OFF` 等标准 ADIF 字段会恢复为独立字段；`TX_PWR` 导出时按 ADIF `Number` 类型规范化为瓦特数值。导出页支持 `MY_SIG` 下拉与 `MY_SIG_INFO` 输入，`MY_SIG` 为空时表示“不添加”，且 `OPERATOR` 仅导出呼号，不再回退为姓名。Cabrillo 导入先解析 `START-OF-LOG/CALLSIGN/CONTEST/OPERATORS/CATEGORY-*` 等头字段与 `QSO:` 行，再预览确认后写入 `QsoRecord`；频率、模式、日期、时间、本台呼号、对方呼号和信号报告直接落入模型，比赛交换信息、未映射头字段和 QSO 行尾扩展按 `字段名称：字段内容；` 追加到备注。Cabrillo 导出使用 Cabrillo 3.0 文本格式，导出日期和时间按记录时区换算为 UTC，支持配置 `CONTEST/OPERATORS/CATEGORY-OPERATOR/CATEGORY-BAND/CATEGORY-MODE/CATEGORY-POWER`，范围同样优先使用已勾选记录，未勾选时导出当前筛选结果。
 2. 创建卡片必须关联 QSO/SWL 记录，候选列表排除已写入 `CardRecord.spec.qsoRecordName` 的记录；若选择“不创建卡片”，写入不占用 `C{序号}` 的占位 `CardRecord`，该记录后续不再出现在候选列表中。通联业务创建卡片页下方展示“待创建记录”，数据来源为尚未创建卡片且未标记“不创建卡片”的 QSO/SWL 记录；页面默认不选中卡片版本，操作栏提供“创建卡片”按钮，一键生成正式 `CardRecord` 时必须先人工选择卡片版本，用户可手动选择系统内置“不发卡”，业务备注为空。通联业务创建卡片默认 `CardRecord.spec.cardRemarks` 为“通联愉快，期待空中常见。\nNice QSO，Hope to catch you on the air often.”。
@@ -115,6 +116,7 @@ Halo 官方资料核验日期：2026-07-06
 4. 制卡签发只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，不显示“不创建卡片”的无编号占位记录；确认制卡更新 `CardRecord.spec.cardIssued/cardIssuedAt`，信封打印或打包状态使用 `envelopePrinted`。制卡签发完成打包后按当前制卡邮件策略自动处理邮件状态：自动不发送写入 `createdMailStatus=SKIPPED`，自动发送调用通知接口，手动则保留按钮。
 5. 发信确认只处理正式卡片编号为 `C{序号}` 的 `CardRecord`，调用控制台接口更新 `cardSent/sentAt`，并可触发发卡邮件通知；通联业务只要 `cardSent=true`，系统会联动补齐 `cardIssued/cardIssuedAt/envelopePrinted`。
 6. 送达确认只处理正式卡片编号为 `C{序号}` 的 `CardRecord`；2.0.0 起调用控制台接口创建 `ReceiveRecord` 并尝试关联已有发卡记录，未匹配时保留未匹配收卡事实，不再自动补建发卡记录。同一发卡卡片 ID 可连续关联多条收卡事实，确认收卡只新增 `ReceiveRecord` 并保持本轮收卡打开，不触发收卡邮件自动策略；只有人工点击“结束收卡”进入回执处理状态后才关闭该发卡记录的继续收卡入口。
+7. 实体 QSL 卡申请使用独立 `QslCardRequest（实体卡申请）`，不复用 `ExchangeRequest（线上换卡申请）`。匿名用户通过 `/qsl_card` 输入呼号查询 QSO，已有卡片或存在待处理申请的记录显示但禁选；每条已选 QSO 单独选择卡片版本。页面全部面向用户的标题、说明、表头、字段标签、按钮、状态、校验、加载、错误和结果文案使用中英双语，不展示内部字段名，并按中文在上、英文在下布局；仅原生下拉选项允许受浏览器限制采用“中文 / English”单行形式。个人地址每次重新填写，公开页面不得读取历史个人地址；其中邮政编码、通信地址和通知电子邮箱必填，收件人姓名、联系电话和备注选填，前端与服务端执行一致校验。提交后服务端按完整联系方式精确复用或创建 `AddressBookEntry（地址簿条目）`，通知邮箱同时保存在申请中。卡片局仅允许选择公开的现有 `BureauEntry（卡片局条目）`，每个候选按“去向国｜卡片局名称｜邮编｜地址”显示，未配置去向国时明确显示未设置；页面每次切换到卡片局收件方式时自动刷新公开清单，不提供手动刷新按钮，请求失败时在表单底部显示错误，已成功加载的清单不因后续刷新失败而清空。新增卡片局通过页面返回的本台邮箱由用户主动邮件联系。审核通过后立即为全部申请项目创建一对一 `CardRecord（卡片记录）`，部分失败保留逐条结果并支持幂等重试；插件启动时修复孤立 QSO 占用。
 
 ### 3.5 线上换卡业务
 
@@ -163,11 +165,12 @@ Halo 官方资料核验日期：2026-07-06
 | 能力 | 公开页面 | 短码 |
 | --- | --- | --- |
 | 公开查询 | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/cards/page` | `[qsl-card]` |
+| 实体 QSL 卡申请 | `/qsl_card` | 无 |
 | 线上换卡申请 | `/online_eyeball`、`/online_eyeball/{cardId}` | `[qsl-online-exchange-card]` |
 | 线下换卡确认 | `/eyeball`、`/eyeball/{cardId}` | `[qsl-offline-exchange-card]` |
 | 公开签收 | `/receipt_public`、`/receipt_public/{cardId}` | `[qsl-receipt-card]` |
 
-线上换卡与线下换卡公开页面的服务端 endpoint 与渲染服务必须分离实现；页面字段、脚本、提交逻辑不再通过同一个模板的场景开关复用。根路径通过 Halo `AdditionalWebFilter` 内部改写到原有 `api.qsl-management.bi1kbu.com/v1alpha1` 页面 Endpoint，不使用 HTTP 重定向，不复制页面源码。新根路径属于非资源型 API，只允许匿名 `GET`，权限必须使用精确 `nonResourceURLs` 配置。
+线上换卡与线下换卡公开页面的服务端 endpoint 与渲染服务必须分离实现；页面字段、脚本、提交逻辑不再通过同一个模板的场景开关复用。根路径通过 Halo `AdditionalWebFilter` 内部改写到原有 `api.qsl-management.bi1kbu.com/v1alpha1` 页面 Endpoint，不使用 HTTP 重定向，不复制页面源码。实体卡申请 `/qsl_card` 由独立 `AdditionalWebFilter` 与渲染服务直接输出 HTML，不创建对应 `/apis` HTML 页面路由，也不提供极简别名。上述根路径属于非资源型 API，只允许匿名 `GET`，权限必须使用精确 `nonResourceURLs` 配置。
 
 极简别名 `/eb`、`/oe`、`/rp` 分别等价于 `/eyeball`、`/online_eyeball`、`/receipt_public`，并支持单段 `/{cardId}`。极简路径用于手工分享、长度敏感的二维码等场景；短码继续生成语义清晰的推荐路径，CardPrint 的收卡回执二维码默认使用 `/rp` 以缩短二维码内容，其他页面映射仍默认使用推荐路径。
 
@@ -184,10 +187,13 @@ Halo 官方资料核验日期：2026-07-06
 7. `POST /exchange-online/-/requests`
 8. `POST /exchange-offline/-/confirm`
 9. `POST /receipt-public/-/confirm`
+10. `GET /qsl-card/-/qsos?callSign=...`
+11. `GET /qsl-card/-/station-contact`
+12. `POST /qsl-card/-/requests`
 
 `GET /qso-public/grids` 返回通联记录中的公开网格清单，按对方四位 Maidenhead 网格聚合。接口从 `QsoRecord.spec.qth` 读取对方 QTH；仅当 QTH 整体为 4/6/8 位网格编号时纳入清单，6 位或 8 位截取前四位，地区文字、地址或混合文本跳过。同一四位网格下保留多条通联明细，并返回去重后的呼号集合；明细字段仅包含呼号、日期、时间、时区、模式、频率和频段，不返回地址、备注、本台信息等敏感内容。接口支持 `sceneType（场景类型）/dateFrom（开始日期）/dateTo（结束日期）/grid（网格编号）/detailLevel（详情级别）` 查询参数，`sceneType（场景类型）` 仅允许 `QSO/SWL`，`detailLevel（详情级别）` 可选 `full（完整）` 或 `brief（简略）`，不传默认为完整；简略模式只返回网格和呼号清单，不返回通联明细。接口不再设置返回数量上限，历史 `limit（返回数量上限）` 参数会被忽略。
 
-公开接口允许匿名访问，但必须通过输入校验与限流。限流维度为 `endpoint + clientIp`，阈值来自 `SystemSetting.spec.guestQueryPerMinute`，未配置时使用默认值 `30`。`GET /qso-public/grids` 使用 `qso-public-grids` 限流键，`POST /receipt-public/-/confirm` 使用 `receipt-public-confirm` 限流键，`POST /exchange-offline/-/confirm` 使用 `exchange-offline-confirm` 限流键。
+公开接口允许匿名访问，但必须通过输入校验与限流。限流维度为 `endpoint + clientIp`，阈值来自 `SystemSetting.spec.guestQueryPerMinute`，未配置时使用默认值 `30`。`GET /qso-public/grids` 使用 `qso-public-grids` 限流键，`POST /receipt-public/-/confirm` 使用 `receipt-public-confirm` 限流键，`POST /exchange-offline/-/confirm` 使用 `exchange-offline-confirm` 限流键；实体卡申请查询、本台邮箱读取和提交分别使用 `qsl-card-qsos`、`qsl-card-station-contact`、`qsl-card-requests` 限流键。实体卡申请公开接口不得返回个人历史地址或地址内部资源名称。
 
 ## 5. 角色模型与权限节点
 

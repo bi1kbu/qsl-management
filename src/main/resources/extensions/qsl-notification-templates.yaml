@@ -40,6 +40,45 @@ spec:
 apiVersion: notification.halo.run/v1alpha1
 kind: NotificationTemplate
 metadata:
+  name: template-qsl-card-request-reviewed
+spec:
+  reasonSelector:
+    reasonType: qsl-card-request-reviewed
+    language: default
+  template:
+    title: "【QSL】实体卡申请审核通知：[(${requestName})] [(${reviewResultText})]"
+    rawBody: |
+      [(${callSign})]：
+          您的实体QSL卡申请[(${requestName})][(${reviewResultText})]。
+          审核状态：[(${reviewStatus})]
+          审核说明：[(${reviewReason})]
+          QSO数量：[(${qsoCount})]
+          卡片创建状态：[(${cardCreationStatus})]
+          已创建卡片：[(${createdCardsText})]
+          申请备注：[(${remarks})]
+
+      如需联系本站，请发送邮件至：[(${stationEmail})]
+
+      [(${stationCallSign})]
+      [(${dateText})]
+    htmlBody: |
+      <div class="notification-content">
+        <p th:text="|${callSign}：|"></p>
+        <p th:text="|您的实体QSL卡申请${requestName}${reviewResultText}。|"></p>
+        <p th:text="|审核状态：${reviewStatus}|"></p>
+        <p th:text="|审核说明：${reviewReason}|"></p>
+        <p th:text="|QSO数量：${qsoCount}|"></p>
+        <p th:text="|卡片创建状态：${cardCreationStatus}|"></p>
+        <p th:text="|已创建卡片：${createdCardsText}|"></p>
+        <p th:text="|申请备注：${remarks}|"></p>
+        <p th:text="|如需联系本站，请发送邮件至：${stationEmail}|"></p>
+        <p th:text="${stationCallSign}"></p>
+        <p th:text="${dateText}"></p>
+      </div>
+---
+apiVersion: notification.halo.run/v1alpha1
+kind: NotificationTemplate
+metadata:
   name: template-qsl-exchange-reviewed
 spec:
   reasonSelector:

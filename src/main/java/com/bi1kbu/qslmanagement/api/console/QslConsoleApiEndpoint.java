@@ -8,6 +8,7 @@ import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslApiResponses;
 import com.bi1kbu.qslmanagement.api.QslApiSupport;
 import com.bi1kbu.qslmanagement.api.QslAiService;
+import com.bi1kbu.qslmanagement.api.QslCardRequestService;
 import com.bi1kbu.qslmanagement.api.QslConsoleActionService;
 import com.bi1kbu.qslmanagement.api.QslImportExportJobService;
 import com.bi1kbu.qslmanagement.api.QslLegacyMigrationService;
@@ -42,6 +43,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
     private final QslNotificationMailService notificationMailService;
     private final QslAiService aiService;
     private final QslQrzAddressLookupService qrzAddressLookupService;
+    private final QslCardRequestService qslCardRequestService;
     private final PluginContext pluginContext;
 
     @Autowired
@@ -54,6 +56,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         QslNotificationMailService notificationMailService,
         QslAiService aiService,
         QslQrzAddressLookupService qrzAddressLookupService,
+        QslCardRequestService qslCardRequestService,
         PluginContext pluginContext
     ) {
         this.overviewService = overviewService;
@@ -64,6 +67,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
         this.notificationMailService = notificationMailService;
         this.aiService = aiService;
         this.qrzAddressLookupService = qrzAddressLookupService;
+        this.qslCardRequestService = qslCardRequestService;
         this.pluginContext = pluginContext;
     }
 
@@ -84,6 +88,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             migrationStateService,
             notificationMailService,
             aiService,
+            null,
             null,
             PluginContext.builder().name("qsl-management").version("0.0.0").build()
         );
@@ -108,6 +113,7 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             notificationMailService,
             aiService,
             qrzAddressLookupService,
+            null,
             PluginContext.builder().name("qsl-management").version("0.0.0").build()
         );
     }
@@ -133,6 +139,9 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
             .andRoute(POST("/exchange-requests/{name}/create-card"), this::createExchangeRequestCard)
             .andRoute(POST("/exchange-requests/{name}/mark-card-created"), this::markExchangeRequestCardCreated)
             .andRoute(POST("/exchange-requests/{name}/notify"), this::notifyExchangeRequest)
+            .andRoute(POST("/qsl-card-requests/{name}/approve"), this::approveQslCardRequest)
+            .andRoute(POST("/qsl-card-requests/{name}/reject"), this::rejectQslCardRequest)
+            .andRoute(POST("/qsl-card-requests/{name}/retry-card-creation"), this::retryQslCardRequestCards)
             .andRoute(POST("/online-card-imports"), this::importOnlineCards)
             .andRoute(POST("/ai-config-tests"), this::testAiConfig)
             .andRoute(POST("/ai-address-normalizations/preview"), this::previewAiAddressNormalizations)
@@ -390,6 +399,48 @@ public class QslConsoleApiEndpoint implements CustomEndpoint {
                 authenticatedOperator.name(),
                 authenticatedOperator.clientIp(),
                 "换卡申请审核-手动发送"
+            ))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> approveQslCardRequest(ServerRequest request) {
+        var requestName = request.pathVariable("name");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(ExchangeRejectRequest.class)
+                .defaultIfEmpty(new ExchangeRejectRequest(""))
+                .flatMap(payload -> qslCardRequestService.approve(
+                    requestName,
+                    payload.reason(),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> rejectQslCardRequest(ServerRequest request) {
+        var requestName = request.pathVariable("name");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> request.bodyToMono(ExchangeRejectRequest.class)
+                .defaultIfEmpty(new ExchangeRejectRequest("审批拒绝"))
+                .flatMap(payload -> qslCardRequestService.reject(
+                    requestName,
+                    payload.reason(),
+                    authenticatedOperator.name(),
+                    authenticatedOperator.clientIp()
+                )))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> retryQslCardRequestCards(ServerRequest request) {
+        var requestName = request.pathVariable("name");
+        return ensureAuthenticated(request)
+            .flatMap(authenticatedOperator -> qslCardRequestService.retryCardCreation(
+                requestName,
+                authenticatedOperator.name(),
+                authenticatedOperator.clientIp()
             ))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);

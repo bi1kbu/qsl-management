@@ -3,8 +3,10 @@ package com.bi1kbu.qslmanagement;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.bi1kbu.qslmanagement.api.QslCardRequestService;
 import com.bi1kbu.qslmanagement.extension.model.QslMigrationState;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
@@ -26,6 +28,9 @@ class QslManagementPluginTest {
     @Mock
     ReactiveExtensionClient client;
 
+    @Mock
+    QslCardRequestService qslCardRequestService;
+
     @InjectMocks
     QslManagementPlugin plugin;
 
@@ -35,8 +40,12 @@ class QslManagementPluginTest {
         when(client.fetch(eq(StationProfile.class), anyString())).thenReturn(Mono.empty());
         when(client.fetch(eq(QslMigrationState.class), anyString())).thenReturn(Mono.empty());
         when(client.create(any())).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(qslCardRequestService.reconcileReservations()).thenReturn(Mono.just(
+            new QslCardRequestService.ReservationReconcileResult(0, 0, 0)
+        ));
         when(context.getVersion()).thenReturn("2.3.22");
         plugin.start();
+        verify(qslCardRequestService).reconcileReservations();
         plugin.stop();
     }
 }

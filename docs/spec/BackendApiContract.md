@@ -1,8 +1,8 @@
 # QSL 管理插件后端 API 合同
 
-更新时间：2026-06-25
+更新时间：2026-07-16
 适用插件：`qsl-management`
-目标 Halo 版本：插件声明 `>=2.23.0`，当前按 Halo 2.25 官方文档核验
+目标 Halo 版本：插件声明并按 Halo `>=2.23.0` 实现
 API 版本：`v1alpha1`
 代码核验范围：`src/main/java`、`src/main/resources/extensions/qsl-menu-role-templates.yaml`
 
@@ -12,7 +12,7 @@ API 版本：`v1alpha1`
 
 ## 2. 官方依据
 
-核验日期：2026-06-25
+核验日期：2026-07-16
 
 1. Halo Extension、自定义模型与自动 CRUD
    https://docs.halo.run/developer-guide/plugin/api-reference/server/extension
@@ -68,6 +68,8 @@ API 版本：`v1alpha1`
 | 线下换卡卡片 | `OfflineExchangeCard` | `offline-exchange-cards` | `exchange-request-review`、后续独立 `offline-exchange-card` |
 | 收卡记录 | `ReceiveRecord` | `receive-records` | `mail-receive-confirm`、`card-query`、后续独立 `receive-record` |
 | 换卡申请 | `ExchangeRequest` | `exchange-requests` | `exchange-request-review` |
+| 实体 QSL 卡申请 | `QslCardRequest` | `qsl-card-requests` | `qsl-card-request` |
+| 实体卡申请 QSO 占用 | `QslCardRequestQsoReservation` | `qsl-card-request-qso-reservations` | 内部持久化与导入导出，不授予匿名 CRUD |
 | 线下活动 | `OfflineActivity` | `offline-activities` | `exchange-request-review` |
 | 地址管理 | `AddressBookEntry` | `address-book-entries` | `address-bureau` |
 | 卡片局管理 | `BureauEntry` | `bureau-entries` | `address-bureau` |
@@ -109,6 +111,9 @@ API 版本：`v1alpha1`
 | POST | `/exchange-requests/{name}/create-card` | 已通过的换卡申请显式创建线上换卡卡片；服务端校验状态、场景和呼号并防止重复创建 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/mark-card-created` | 将已通过的换卡申请强制标记为已创建卡片；只写入 `ExchangeRequest.status.cardCreated/cardCreatedAt/cardCreatedBy`，不创建卡片记录 | `exchange-request-review:edit` |
 | POST | `/exchange-requests/{name}/notify` | 发送线上换卡申请审核结果邮件 | `exchange-request-review:edit` |
+| POST | `/qsl-card-requests/{name}/approve` | 审核通过实体卡申请并立即创建全部卡片，保存逐条 QSO 与卡片编号映射 | `qsl-card-request:edit` |
+| POST | `/qsl-card-requests/{name}/reject` | 拒绝实体卡申请并释放 QSO 占用 | `qsl-card-request:edit` |
+| POST | `/qsl-card-requests/{name}/retry-card-creation` | 对部分失败项目重新校验 QSO、已有卡片、卡片版本和实时库存后幂等重试 | `qsl-card-request:edit` |
 | POST | `/online-card-imports` | 导入手工文本解析后的线上换卡数据，直接创建 `ONLINE_EYEBALL` 卡片记录并按需创建/绑定地址簿 | `online-bh6syx-import:edit` |
 | POST | `/notification-mails/send` | 单条发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
 | POST | `/notification-mails/apply-policy` | 按当前邮件策略自动处理单条邮件场景；`AUTO_SKIP` 只写入跳过状态，`AUTO_SEND` 才触发发送，`MANUAL` 不改数据 | `card-record:edit` 或相关业务编辑权限 |
@@ -297,9 +302,9 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 }
 ```
 
-当前导入导出数据集：`qso-record`、`card-record`、`receive-record`、`exchange-request-review`、`offline-activity`、`offline-exchange-card`、`address-management`、`bureau-management`、`equipment-catalog`、`system-setting`、`station-profile`、`station-equipment`、`station-card`。`all` 仅用于导出聚合，覆盖业务数据、收卡事实、线下换卡活动卡与配置菜单数据。2.0.0 前导出包需要先转换：从旧 `card-record.receivedRecordCodes` 聚合生成 `receive-record.csv`，从旧线下 `card-record.offlineActivityName` 聚合生成 `offline-exchange-card.csv`，并清理旧卡片记录中已迁出的收卡字段，过滤旧导出中误写入 `card-record.csv` 的 `qsl-station-card-*` 本台卡片版本占位记录，避免同一收卡事实或非业务卡片在新模型中重复统计。
+当前导入导出数据集：`qso-record`、`card-record`、`receive-record`、`exchange-request-review`、`qsl-card-request`、`qsl-card-request-qso-reservation`、`offline-activity`、`offline-exchange-card`、`address-management`、`bureau-management`、`equipment-catalog`、`system-setting`、`station-profile`、`station-equipment`、`station-card`。`all` 仅用于导出聚合，覆盖业务数据、实体卡申请及有效 QSO 占用、收卡事实、线下换卡活动卡与配置菜单数据。2.0.0 前导出包需要先转换：从旧 `card-record.receivedRecordCodes` 聚合生成 `receive-record.csv`，从旧线下 `card-record.offlineActivityName` 聚合生成 `offline-exchange-card.csv`，并清理旧卡片记录中已迁出的收卡字段，过滤旧导出中误写入 `card-record.csv` 的 `qsl-station-card-*` 本台卡片版本占位记录，避免同一收卡事实或非业务卡片在新模型中重复统计。
 
-`QslMigrationState` 是插件数据版本与迁移状态单例，资源名固定为 `qsl-migration-state-default`。插件启动时读取 `PluginContext.version` 作为 `runtimePluginVersion` 并初始化或刷新迁移状态；首次安装只建立基线，不执行历史迁移。`GET /migration-state` 返回运行插件版本、最后一次数据状态确认成功的插件版本、数据模型版本、已执行迁移、待迁移项和最近迁移结果；`POST /migrations/precheck` 只计算迁移计划，不写入业务数据。后续自动迁移必须基于迁移项 ID 去重和幂等校验，大版本或破坏性迁移未完成时，后续依赖迁移项必须保持阻塞状态。
+`QslMigrationState` 是插件数据版本与迁移状态单例，资源名固定为 `qsl-migration-state-default`。插件启动时读取 `PluginContext.version` 作为 `runtimePluginVersion` 并初始化或刷新迁移状态；首次安装只建立基线，不执行历史迁移。当前数据模型版本为 `2`，迁移清单包含 `schema-2-qsl-card-request`。迁移状态确认后，插件扫描 `QslCardRequestQsoReservation`，释放不存在申请、申请已拒绝、申请与 QSO 不匹配，以及已通过且已有卡片的孤立占用。`GET /migration-state` 返回运行插件版本、最后一次数据状态确认成功的插件版本、数据模型版本、已执行迁移、待迁移项和最近迁移结果；`POST /migrations/precheck` 只计算迁移计划，不写入业务数据。后续自动迁移必须基于迁移项 ID 去重和幂等校验，大版本或破坏性迁移未完成时，后续依赖迁移项必须保持阻塞状态。
 
 旧版本一键迁移用于处理“卸载插件后 Extension 数据仍保留”的场景。迁移范围为当前 Halo 存储中的旧版 QSL 数据，执行前必须先导出全部数据备份；执行接口要求请求体 `confirmText` 固定为“确认迁移旧版本数据”。迁移过程按旧版 `CardRecord.spec.receivedRecordCodes` 聚合创建 `ReceiveRecord`，按旧版线下 `CardRecord.spec.offlineActivityName` 创建 `OfflineExchangeCard`，删除 `qsl-station-card-*` 本台卡片版本占位记录和旧版自动收卡临时卡片，清空已迁出的收卡字段，并修正 `SystemSetting.spec.cardRecordSequence/receiveRecordSequence`。迁移接口具备幂等性：同名 `ReceiveRecord` 或 `OfflineExchangeCard` 已存在时跳过创建。
 
@@ -314,14 +319,17 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 | GET | `/qso-public/records` | 按呼号查询公开通联/卡片信息，可带 `sceneType` | 是 |
 | GET | `/qso-public/grids` | 查询公开通联网格清单，按对方四位 Maidenhead 网格聚合，可带 `sceneType/dateFrom/dateTo/grid/detailLevel` | 是 |
 | GET | `/overview-public/summary` | 公开总览 | 是 |
-| GET | `/exchange-online/-/bureaus` | 公开线上换卡卡片局候选，只返回卡片局名称、邮编、地址 | 是 |
+| GET | `/exchange-online/-/bureaus` | 公开线上换卡与实体卡申请的卡片局候选，只返回去向国、卡片局名称、邮编、地址及选择所需内部名称 | 是 |
 | GET | `/exchange-online/-/station-cards` | 公开线上换卡本台卡片版本候选，按配置顺序返回图案、版本号、版本总量、库存余量 | 是 |
 | GET | `/exchange-offline/-/activities` | 公开线下活动列表 | 是 |
+| GET | `/qsl-card/-/qsos?callSign=...` | 查询实体卡可申请 QSO，并返回“待审核/已有卡片”禁选原因 | 是 |
+| GET | `/qsl-card/-/station-contact` | 仅返回本台公开邮箱，用于新增卡片局邮件联系 | 是 |
 | POST | `/exchange-online/-/requests` | 匿名提交线上换卡申请；同呼号存在待审核申请时返回 `409/QSL-409-0001`；同呼号上一条申请仍处于冷却期时返回 `429/QSL-429-0001`；提交写入成功后返回本站通信地址用于寄送提示 | 是 |
+| POST | `/qsl-card/-/requests` | 匿名提交实体 QSL 卡申请；个人地址模式要求邮政编码、通信地址和通知电子邮箱必填，收件人姓名与联系电话选填；服务端创建或复用地址、持久化 QSO 占用和申请 | 是 |
 | POST | `/exchange-offline/-/confirm` | 匿名确认线下换卡；提交校验通过并写入卡片后才返回本站通信地址 | 是 |
 | POST | `/receipt-public/-/confirm` | 匿名签收确认 | 是 |
 
-公开 `GET /qso-public/grids`、`POST /exchange-online/-/requests`、`POST /exchange-offline/-/confirm` 和 `POST /receipt-public/-/confirm` 均受 `QslPublicRateLimitService` 限制，限流键分别为 `qso-public-grids`、`exchange-online-requests`、`exchange-offline-confirm` 与 `receipt-public-confirm`。`GET /qso-public/grids` 从 `QsoRecord.spec.qth` 读取对方 QTH，仅当 QTH 整体为 4/6/8 位 Maidenhead 网格时纳入清单，6 位或 8 位统一截取前四位；地区文字、地址或混合文本跳过。同一四位网格下保留多条通联明细，返回去重呼号集合与通联日期、时间、时区、模式、频率、频段，不返回地址、备注、本台信息等敏感字段。`detailLevel（详情级别）` 可选 `full（完整）` 或 `brief（简略）`，不传默认为完整；简略模式只返回网格和呼号清单，不返回通联明细。接口不再设置返回数量上限，历史 `limit（返回数量上限）` 参数会被忽略。线上换卡申请额外按同呼号执行服务端冷却校验，冷却时间来自 `SystemSetting.spec.onlineExchangeRequestCooldownMinutes`，默认 5 分钟，填 0 表示关闭冷却；待审核申请直接拒绝重复提交，已通过或已拒绝申请仍需等待冷却期结束。线上换卡申请资源名由服务端扫描现有 `EX####` 并生成下一号，例如 `EX0001`、`EX0002`；历史 `exchange-request-*` 名称不参与新序列计算。前端“不创建卡片”占位记录使用 `NC####` 递增资源名，后台可持久化，前台作为空白卡片 ID 展示。
+公开 `GET /qso-public/grids`、实体卡申请三个数据接口、`POST /exchange-online/-/requests`、`POST /exchange-offline/-/confirm` 和 `POST /receipt-public/-/confirm` 均受 `QslPublicRateLimitService` 限制。实体卡查询、本台邮箱读取、申请提交的限流键分别为 `qsl-card-qsos`、`qsl-card-station-contact`、`qsl-card-requests`。实体卡 QSO 查询只返回申请所需字段，不返回个人地址；个人地址每次重新填写，提交后服务端按呼号、姓名、电话、邮编、地址和邮箱完整匹配复用或创建 `AddressBookEntry`，成功响应不返回地址内部资源名。卡片局只允许引用公开清单中的现有 `BureauEntry.metadata.name`，新增卡片局通过本台邮箱线下联系，不开放匿名卡片局写入。`GET /qso-public/grids` 从 `QsoRecord.spec.qth` 读取对方 QTH，仅当 QTH 整体为 4/6/8 位 Maidenhead 网格时纳入清单，6 位或 8 位统一截取前四位；地区文字、地址或混合文本跳过。同一四位网格下保留多条通联明细，返回去重呼号集合与通联日期、时间、时区、模式、频率、频段，不返回地址、备注、本台信息等敏感字段。`detailLevel（详情级别）` 可选 `full（完整）` 或 `brief（简略）`，不传默认为完整；简略模式只返回网格和呼号清单，不返回通联明细。接口不再设置返回数量上限，历史 `limit（返回数量上限）` 参数会被忽略。线上换卡申请额外按同呼号执行服务端冷却校验，冷却时间来自 `SystemSetting.spec.onlineExchangeRequestCooldownMinutes`，默认 5 分钟，填 0 表示关闭冷却；待审核申请直接拒绝重复提交，已通过或已拒绝申请仍需等待冷却期结束。线上换卡申请资源名由服务端扫描现有 `EX####` 并生成下一号，例如 `EX0001`、`EX0002`；历史 `exchange-request-*` 名称不参与新序列计算。前端“不创建卡片”占位记录使用 `NC####` 递增资源名，后台可持久化，前台作为空白卡片 ID 展示。
 
 ### 7.2 公开页面
 
@@ -330,6 +338,7 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/cards/page` | 公开查询页面，支持 `callSign`、`sceneType`、`embed`、`embedId` |
+| GET | `/qsl_card`、`/qsl_card/` | 实体 QSL 卡申请页面；直接由独立过滤器输出，不创建 `/apis` HTML 页面，不提供极简别名 |
 | GET | `/receipt_public` | 公开签收页面，支持查询参数预填 |
 | GET | `/receipt_public/{cardId}` | 公开签收页面，按卡片编号与呼号二次校验后预填 |
 | GET | `/online_eyeball` | 线上换卡申请页面 |
@@ -419,6 +428,15 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 | `QSL-422-0001` | 业务规则不满足 |
 | `QSL-429-0001` | 请求过于频繁 |
 | `QSL-500-0001` | 服务端内部错误 |
+| `QSL-400-QCR-0001` | 实体卡申请参数、呼号、地址或通知邮箱不合法 |
+| `QSL-404-QCR-0001` | 实体卡申请不存在 |
+| `QSL-409-QCR-0001` | QSO 已被待处理申请占用 |
+| `QSL-409-QCR-0002` | QSO 已存在卡片 |
+| `QSL-409-QCR-0003` | 申请已处理或正在处理 |
+| `QSL-422-QCR-0001` | 卡片版本不存在、停用或库存不足 |
+| `QSL-422-QCR-0002` | 地址或卡片局引用失效 |
+| `QSL-422-QCR-0003` | 审核、重试或邮件通知状态不满足业务规则 |
+| `QSL-429-QCR-0001` | 实体卡申请查询或提交超过限流/正在提交 |
 
 ## 9. 安全与审计
 
@@ -427,6 +445,8 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 3. 关键写操作追加 `QslAuditLog`。
 4. 审计日志不提供业务删除能力。
 5. 导入任务由服务端执行，记录预检/执行结果与错误明细，避免前端静默写入脏数据。
+6. 匿名角色仅获得 `/qsl_card` 精确 `GET` 权限和 `qsl-card/qsos`、`qsl-card/station-contact`、`qsl-card/requests` 所需最小权限，不获得申请、地址、卡片局或卡片 Extension CRUD。
+7. 实体卡申请后台权限独立区分 `qsl-card-request:view` 与 `qsl-card-request:edit`；审核、拒绝、重试和自动建卡均执行服务端鉴权。
 
 ## 10. 当前实现说明
 
@@ -439,5 +459,6 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 7. 线上换卡业务的“导入数据”菜单包含单条导入、批量导入、BH6SYX卡片广场导入。服务端直接创建线上换卡卡片记录，不创建 `ExchangeRequest`；普通文本导入写入“手工文本导入”来源，BH6SYX导入写入“BH6SYX卡片广场”来源。
 8. 2.0.0 起新增 `ReceiveRecord` 与 `OfflineExchangeCard`，收卡事实与线下换卡活动卡开始从 `CardRecord` 中解耦。
 9. 审计卡片记录查询和收卡记录查询按业务场景 tab 展示；卡片记录查询聚合 `CardRecord`，收卡记录查询聚合 `ReceiveRecord`，收卡编号以 `ReceiveRecord.metadata.name` 为准。
+10. 实体 QSL 卡申请公开入口为 `/qsl_card`，后台入口为“通联业务 → 实体卡申请审核”；审核通过立即创建全部卡片，部分失败允许幂等重试，审核结果邮件固定发送到申请保存的通知邮箱。
 
 

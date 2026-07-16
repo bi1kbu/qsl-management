@@ -3,6 +3,7 @@ package com.bi1kbu.qslmanagement.api;
 import com.bi1kbu.qslmanagement.extension.model.AddressBookEntry;
 import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
+import com.bi1kbu.qslmanagement.extension.model.QslCardRequest;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import java.util.LinkedHashSet;
@@ -33,7 +34,9 @@ public class QslNotificationMailService {
     private static final String QSL_API_VERSION = "qsl-management.bi1kbu.com/v1alpha1";
     private static final String CARD_RECORD_KIND = "CardRecord";
     private static final String EXCHANGE_REQUEST_KIND = "ExchangeRequest";
+    private static final String QSL_CARD_REQUEST_KIND = "QslCardRequest";
     private static final String EXCHANGE_REVIEW_REASON_TYPE = "qsl-exchange-reviewed";
+    private static final String QSL_CARD_REQUEST_REVIEW_REASON_TYPE = "qsl-card-request-reviewed";
     private static final String ONLINE_AUTO_APPROVED_REQUEST_REASON_TYPE = "qsl-online-auto-approved-request";
     private static final String MAIL_POLICY_AUTO_SKIP = "AUTO_SKIP";
     private static final String MAIL_POLICY_MANUAL = "MANUAL";
@@ -430,6 +433,56 @@ public class QslNotificationMailService {
             });
     }
 
+    public Mono<QslCardRequestReviewMailSendResult> sendQslCardRequestReviewMail(
+        String requestName,
+        String operator,
+        String clientIp,
+        String source
+    ) {
+        if (StringUtils.isBlank(requestName)) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST,
+                "QSL-400-QCR-0001", "实体卡申请名称不能为空"));
+        }
+        return fetchOr404(QslCardRequest.class, requestName.trim())
+            .flatMap(request -> {
+                var spec = request.getSpec() == null
+                    ? new QslCardRequest.QslCardRequestSpec() : request.getSpec();
+                var status = ensureQslCardRequestStatus(request);
+                var reviewStatus = StringUtils.defaultString(status.getReviewStatus()).trim();
+                if (reviewStatus.isBlank() || "待处理".equals(reviewStatus)) {
+                    return Mono.error(new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "QSL-422-QCR-0003", "实体卡申请尚未审核，不能发送审核通知"));
+                }
+                if (MAIL_STATUS_SENT.equalsIgnoreCase(StringUtils.defaultString(status.getReviewMailStatus()))) {
+                    return Mono.just(new QslCardRequestReviewMailSendResult(
+                        request.getMetadata().getName(),
+                        MAIL_STATUS_SKIPPED,
+                        "审核通知邮件已发送，已跳过。",
+                        StringUtils.defaultString(status.getReviewMailTargetEmail()),
+                        StringUtils.defaultString(status.getReviewMailSentAt())
+                    ));
+                }
+                var targetEmail = StringUtils.defaultString(spec.getNotificationEmail()).trim();
+                if (targetEmail.isBlank()) {
+                    return persistQslCardRequestReviewMailStatus(
+                        request, MAIL_STATUS_SKIPPED, "申请未配置通知电子邮箱，已跳过。",
+                        "", "", operator, clientIp, source
+                    );
+                }
+                var sentAt = QslApiSupport.nowText();
+                return subscribeTarget(targetEmail, QSL_CARD_REQUEST_REVIEW_REASON_TYPE, QSL_CARD_REQUEST_KIND)
+                    .then(emitQslCardRequestReviewReason(request, targetEmail, safeOperator(operator), sentAt))
+                    .then(persistQslCardRequestReviewMailStatus(
+                        request, MAIL_STATUS_SENT, "发送成功。", targetEmail, sentAt,
+                        operator, clientIp, source
+                    ))
+                    .onErrorResume(error -> persistQslCardRequestReviewMailStatus(
+                        request, MAIL_STATUS_FAILED, "发送失败：" + shortError(error), targetEmail, "",
+                        operator, clientIp, source
+                    ));
+            });
+    }
+
     private Mono<Void> sendOnlineAutoApprovedRequestMail(
         String requestName,
         String operator,
@@ -723,6 +776,52 @@ public class QslNotificationMailService {
             });
     }
 
+    private Mono<Void> emitQslCardRequestReviewReason(
+        QslCardRequest request,
+        String targetEmail,
+        String operator,
+        String sentAt
+    ) {
+        var spec = request.getSpec() == null
+            ? new QslCardRequest.QslCardRequestSpec() : request.getSpec();
+        var status = ensureQslCardRequestStatus(request);
+        return loadStationProfile().flatMap(stationProfile -> {
+            var callSign = QslApiSupport.normalizeCallSign(spec.getCallSign());
+            var reviewStatus = StringUtils.defaultString(status.getReviewStatus());
+            var createdCardsText = status.getCreatedCards() == null ? "" : status.getCreatedCards().stream()
+                .filter(item -> "成功".equals(StringUtils.defaultString(item.getCreationStatus())))
+                .map(item -> StringUtils.defaultString(item.getQsoRecordName())
+                    + " → " + StringUtils.defaultString(item.getCardRecordName()))
+                .collect(java.util.stream.Collectors.joining("；"));
+            var anonymousIdentity = UserIdentity.anonymousWithEmail(targetEmail).name();
+            var subject = Reason.Subject.builder()
+                .apiVersion(QSL_API_VERSION)
+                .kind(QSL_CARD_REQUEST_KIND)
+                .name(anonymousIdentity)
+                .title("实体QSL卡申请审核：" + callSign + " " + reviewStatus)
+                .build();
+            return notificationReasonEmitter.emit(QSL_CARD_REQUEST_REVIEW_REASON_TYPE, builder -> builder
+                .subject(subject)
+                .author(UserIdentity.of(operator))
+                .attribute("stationCallSign", stationCallSign(stationProfile))
+                .attribute("stationEmail", StringUtils.defaultString(stationProfile.getMyEmail()))
+                .attribute("callSign", callSign)
+                .attribute("reviewStatus", reviewStatus)
+                .attribute("reviewResultText", "拒绝".equals(reviewStatus) ? "已被拒绝" : "已通过")
+                .attribute("reviewReason", StringUtils.defaultString(status.getReviewReason()))
+                .attribute("requestName", StringUtils.defaultString(request.getMetadata().getName()))
+                .attribute("qsoCount", Integer.toString(spec.getQsoItems() == null ? 0 : spec.getQsoItems().size()))
+                .attribute("cardCreationStatus", StringUtils.defaultString(status.getCardCreationStatus()))
+                .attribute("createdCardsText", createdCardsText)
+                .attribute("remarks", StringUtils.defaultString(spec.getRemarks()))
+                .attribute("targetEmail", targetEmail)
+                .attribute("triggerAt", sentAt)
+                .attribute("dateText", dateText(sentAt))
+                .attribute("operator", operator)
+            ).then();
+        });
+    }
+
     private Mono<Void> emitOnlineAutoApprovedRequestReason(
         ExchangeRequest exchangeRequest,
         StationProfile.StationProfileSpec stationProfile,
@@ -865,6 +964,57 @@ public class QslNotificationMailService {
                     StringUtils.defaultString(updatedStatus.getReviewMailSentAt())
                 );
             });
+    }
+
+    private Mono<QslCardRequestReviewMailSendResult> persistQslCardRequestReviewMailStatus(
+        QslCardRequest request,
+        String status,
+        String message,
+        String targetEmail,
+        String sentAt,
+        String operator,
+        String clientIp,
+        String source
+    ) {
+        var requestStatus = ensureQslCardRequestStatus(request);
+        requestStatus.setReviewMailStatus(status);
+        requestStatus.setReviewMailSentAt(MAIL_STATUS_SENT.equals(status) ? sentAt : "");
+        requestStatus.setReviewMailLastError(MAIL_STATUS_FAILED.equals(status) ? message : "");
+        if (StringUtils.isNotBlank(targetEmail)) {
+            requestStatus.setReviewMailTargetEmail(targetEmail);
+        }
+        request.setStatus(requestStatus);
+        var requestName = request.getMetadata().getName();
+        var detail = "来源=" + StringUtils.defaultIfBlank(source, "自动触发")
+            + "；状态=" + status
+            + "；目标邮箱=" + (StringUtils.isBlank(targetEmail) ? "未配置" : targetEmail)
+            + "；消息=" + message;
+        return client.update(request)
+            .flatMap(updated -> qslAuditService.appendAuditLog(
+                "实体QSL卡申请审核邮件通知",
+                "qsl-card-request",
+                requestName,
+                detail,
+                safeOperator(operator),
+                clientIp
+            ).thenReturn(updated))
+            .map(updated -> new QslCardRequestReviewMailSendResult(
+                requestName,
+                status,
+                message,
+                StringUtils.defaultString(updated.getStatus().getReviewMailTargetEmail()),
+                StringUtils.defaultString(updated.getStatus().getReviewMailSentAt())
+            ));
+    }
+
+    private QslCardRequest.QslCardRequestStatus ensureQslCardRequestStatus(QslCardRequest request) {
+        if (request.getStatus() == null) {
+            request.setStatus(new QslCardRequest.QslCardRequestStatus());
+        }
+        if (request.getStatus().getCreatedCards() == null) {
+            request.getStatus().setCreatedCards(new java.util.ArrayList<>());
+        }
+        return request.getStatus();
     }
 
     private Mono<String> resolveTargetEmailByBindingAddress(String addressEntryName) {
@@ -1205,6 +1355,15 @@ public class QslNotificationMailService {
     }
 
     public record ExchangeReviewMailSendResult(
+        String requestName,
+        String status,
+        String message,
+        String targetEmail,
+        String sentAt
+    ) {
+    }
+
+    public record QslCardRequestReviewMailSendResult(
         String requestName,
         String status,
         String message,

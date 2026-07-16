@@ -5,6 +5,8 @@ export type DatasetValue =
   | 'card-record'
   | 'receive-record'
   | 'exchange-request-review'
+  | 'qsl-card-request'
+  | 'qsl-card-request-qso-reservation'
   | 'offline-activity'
   | 'offline-exchange-card'
   | 'address-management'
@@ -52,6 +54,38 @@ const parseNumber = (value: string): number => {
   const parsed = Number.parseFloat(normalized)
   return Number.isFinite(parsed) ? parsed : 0
 }
+
+const encodeBackupValue = (value: unknown): string => {
+  const bytes = new TextEncoder().encode(String(value ?? ''))
+  let binary = ''
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+const encodeQslCardRequestQsoItems = (items: unknown): string =>
+  (Array.isArray(items) ? items : [])
+    .map(
+      (item) =>
+        `${encodeBackupValue(item?.qsoRecordName)}.${encodeBackupValue(item?.cardVersion)}`,
+    )
+    .join(',')
+
+const encodeQslCardRequestCreatedCards = (items: unknown): string =>
+  (Array.isArray(items) ? items : [])
+    .map((item) =>
+      [
+        item?.qsoRecordName,
+        item?.cardVersion,
+        item?.cardRecordName,
+        item?.creationStatus,
+        item?.lastError,
+      ]
+        .map(encodeBackupValue)
+        .join('.'),
+    )
+    .join(',')
 
 const parseList = (value: string): string[] => {
   return value
@@ -416,6 +450,101 @@ const datasetConfigs: DatasetConfig[] = [
         cardCreatedBy: row.cardCreatedBy ?? '',
         createdCardRecordName: row.createdCardRecordName ?? '',
       },
+    }),
+  },
+  {
+    value: 'qsl-card-request',
+    label: '实体QSL卡申请',
+    plural: 'qsl-card-requests',
+    kind: 'QslCardRequest',
+    idPrefix: 'qsl-card-request',
+    headers: [
+      'id',
+      'callSign',
+      'qsoItems',
+      'addressType',
+      'addressEntryName',
+      'notificationEmail',
+      'remarks',
+      'submittedAt',
+      'reviewStatus',
+      'reviewReason',
+      'reviewedBy',
+      'reviewedAt',
+      'cardCreationStatus',
+      'createdCards',
+      'reviewMailStatus',
+      'reviewMailSentAt',
+      'reviewMailLastError',
+      'reviewMailTargetEmail',
+    ],
+    keywords: ['qsl-card-request', 'qsl-card-requests', '实体QSL卡申请', '实体卡申请'],
+    toRow: (item) => ({
+      id: item.metadata.name,
+      callSign: String(item.spec?.callSign ?? ''),
+      qsoItems: encodeQslCardRequestQsoItems(item.spec?.qsoItems),
+      addressType: String(item.spec?.addressType ?? ''),
+      addressEntryName: String(item.spec?.addressEntryName ?? ''),
+      notificationEmail: String(item.spec?.notificationEmail ?? ''),
+      remarks: String(item.spec?.remarks ?? ''),
+      submittedAt: String(item.spec?.submittedAt ?? ''),
+      reviewStatus: String(item.status?.reviewStatus ?? ''),
+      reviewReason: String(item.status?.reviewReason ?? ''),
+      reviewedBy: String(item.status?.reviewedBy ?? ''),
+      reviewedAt: String(item.status?.reviewedAt ?? ''),
+      cardCreationStatus: String(item.status?.cardCreationStatus ?? ''),
+      createdCards: encodeQslCardRequestCreatedCards(item.status?.createdCards),
+      reviewMailStatus: String(item.status?.reviewMailStatus ?? ''),
+      reviewMailSentAt: String(item.status?.reviewMailSentAt ?? ''),
+      reviewMailLastError: String(item.status?.reviewMailLastError ?? ''),
+      reviewMailTargetEmail: String(item.status?.reviewMailTargetEmail ?? ''),
+    }),
+    fromRow: (row) => ({
+      spec: {
+        callSign: row.callSign ?? '',
+        qsoItems: [],
+        addressType: row.addressType ?? '',
+        addressEntryName: row.addressEntryName ?? '',
+        notificationEmail: row.notificationEmail ?? '',
+        remarks: row.remarks ?? '',
+        submittedAt: row.submittedAt ?? '',
+      },
+      status: {
+        reviewStatus: row.reviewStatus || '待处理',
+        reviewReason: row.reviewReason ?? '',
+        reviewedBy: row.reviewedBy ?? '',
+        reviewedAt: row.reviewedAt ?? '',
+        cardCreationStatus: row.cardCreationStatus || '未创建',
+        createdCards: [],
+        reviewMailStatus: row.reviewMailStatus ?? '',
+        reviewMailSentAt: row.reviewMailSentAt ?? '',
+        reviewMailLastError: row.reviewMailLastError ?? '',
+        reviewMailTargetEmail: row.reviewMailTargetEmail ?? '',
+      },
+    }),
+  },
+  {
+    value: 'qsl-card-request-qso-reservation',
+    label: '实体卡申请QSO占用',
+    plural: 'qsl-card-request-qso-reservations',
+    kind: 'QslCardRequestQsoReservation',
+    idPrefix: 'qsl-card-request-qso-reservation',
+    headers: ['id', 'requestName', 'qsoRecordName', 'createdAt', 'state'],
+    keywords: ['qsl-card-request-qso-reservation', '实体卡申请QSO占用'],
+    toRow: (item) => ({
+      id: item.metadata.name,
+      requestName: String(item.spec?.requestName ?? ''),
+      qsoRecordName: String(item.spec?.qsoRecordName ?? ''),
+      createdAt: String(item.spec?.createdAt ?? ''),
+      state: String(item.status?.state ?? ''),
+    }),
+    fromRow: (row) => ({
+      spec: {
+        requestName: row.requestName ?? '',
+        qsoRecordName: row.qsoRecordName ?? '',
+        createdAt: row.createdAt ?? '',
+      },
+      status: { state: row.state || 'ACTIVE' },
     }),
   },
   {

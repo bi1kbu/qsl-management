@@ -13,7 +13,8 @@ import run.halo.app.extension.ReactiveExtensionClient;
 public class QslMigrationStateService {
 
     public static final String MIGRATION_STATE_NAME = "qsl-migration-state-default";
-    private static final String DATA_SCHEMA_VERSION = "1";
+    private static final String DATA_SCHEMA_VERSION = "2";
+    private static final String QSL_CARD_REQUEST_SCHEMA_MIGRATION_ID = "schema-2-qsl-card-request";
     private static final String STATUS_BOOTSTRAPPED = "BOOTSTRAPPED";
     private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String STATUS_PENDING = "PENDING";
@@ -90,6 +91,22 @@ public class QslMigrationStateService {
         }
         if (nullToEmpty(spec.getDataSchemaVersion()).isBlank()) {
             spec.setDataSchemaVersion(DATA_SCHEMA_VERSION);
+            changed = true;
+        } else if (!DATA_SCHEMA_VERSION.equals(spec.getDataSchemaVersion())) {
+            var previousSchemaVersion = spec.getDataSchemaVersion();
+            spec.setDataSchemaVersion(DATA_SCHEMA_VERSION);
+            if (spec.getAppliedMigrations().stream()
+                .noneMatch(item -> QSL_CARD_REQUEST_SCHEMA_MIGRATION_ID.equals(item.getId()))) {
+                var appliedMigrations = new ArrayList<>(spec.getAppliedMigrations());
+                appliedMigrations.add(schemaUpgradeRecord(previousSchemaVersion, DATA_SCHEMA_VERSION));
+                spec.setAppliedMigrations(List.copyOf(appliedMigrations));
+            }
+            status.setLastMigrationStatus(STATUS_SUCCESS);
+            status.setLastMigrationFromVersion(nullToEmpty(spec.getLastSuccessfulPluginVersion()));
+            status.setLastMigrationToVersion(runtimePluginVersion);
+            status.setLastMigrationAt(QslApiSupport.nowText());
+            status.setLastMigrationMessage("已确认实体 QSL 卡申请数据模型");
+            status.setLastMigrationError("");
             changed = true;
         }
         if (spec.getAppliedMigrations() == null) {
@@ -215,6 +232,21 @@ public class QslMigrationStateService {
         record.setStartedAt("");
         record.setFinishedAt("");
         record.setMessage(item.description());
+        record.setChecksum("");
+        return record;
+    }
+
+    private QslMigrationState.MigrationRecord schemaUpgradeRecord(String fromSchemaVersion, String toSchemaVersion) {
+        var now = QslApiSupport.nowText();
+        var record = new QslMigrationState.MigrationRecord();
+        record.setId(QSL_CARD_REQUEST_SCHEMA_MIGRATION_ID);
+        record.setFromVersion(nullToEmpty(fromSchemaVersion));
+        record.setToVersion(toSchemaVersion);
+        record.setType(TYPE_AUTOMATIC);
+        record.setStatus(STATUS_SUCCESS);
+        record.setStartedAt(now);
+        record.setFinishedAt(now);
+        record.setMessage("注册实体 QSL 卡申请与 QSO 持久化占用模型");
         record.setChecksum("");
         return record;
     }

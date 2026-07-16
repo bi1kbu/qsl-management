@@ -365,6 +365,7 @@ public class QslPublicApiService {
                 var spec = bureau.getSpec();
                 return new PublicBureauItem(
                     nullToEmpty(bureau.getMetadata().getName()),
+                    nullToEmpty(spec.getDestinationCountry()).trim(),
                     nullToEmpty(spec.getBureauName()).trim(),
                     nullToEmpty(spec.getPostalCode()).trim(),
                     nullToEmpty(spec.getAddress()).trim()
@@ -1274,6 +1275,7 @@ public class QslPublicApiService {
 
     public record PublicBureauItem(
         String bureauId,
+        String destinationCountry,
         String bureauName,
         String postalCode,
         String address

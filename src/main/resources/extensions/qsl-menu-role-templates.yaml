@@ -341,6 +341,38 @@ rules:
 apiVersion: v1alpha1
 kind: Role
 metadata:
+  name: qsl-management-qsl-card-request-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "实体卡申请审核（只读）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:qsl-card-request:view"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-qso-record-view","qsl-management-card-record-view","qsl-management-address-bureau-view"]'
+rules:
+  - apiGroups: [ "qsl-management.bi1kbu.com" ]
+    resources: [ "qsl-card-requests" ]
+    verbs: [ "get", "list" ]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: qsl-management-qsl-card-request-edit
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "QSL 菜单权限"
+    rbac.authorization.halo.run/display-name: "实体卡申请审核（编辑）"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:qsl-management:qsl-card-request:edit"]'
+    rbac.authorization.halo.run/dependencies: '["qsl-management-qsl-card-request-view","qsl-management-card-record-edit"]'
+rules:
+  - apiGroups: [ "console.api.qsl-management.bi1kbu.com" ]
+    resources: [ "qsl-card-requests" ]
+    verbs: [ "create" ]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
   name: qsl-management-exchange-request-review-edit
   labels:
     halo.run/role-template: "true"
@@ -652,9 +684,9 @@ metadata:
     rbac.authorization.halo.run/display-name: "QSL 公共查询（匿名）"
 rules:
   - apiGroups: [ "api.qsl-management.bi1kbu.com" ]
-    resources: [ "qso-public", "overview-public", "cards", "receipt-public", "ONLINE_EYEBALL", "EYEBALL", "exchange-online/bureaus", "exchange-online/station-cards", "exchange-offline/activities" ]
+    resources: [ "qso-public", "overview-public", "cards", "receipt-public", "ONLINE_EYEBALL", "EYEBALL", "exchange-online/bureaus", "exchange-online/station-cards", "exchange-offline/activities", "qsl-card/qsos", "qsl-card/station-contact" ]
     verbs: [ "get", "list" ]
-  - nonResourceURLs: [ "/eb", "/eb/*", "/eyeball", "/eyeball/*", "/oe", "/oe/*", "/online_eyeball", "/online_eyeball/*", "/rp", "/rp/*", "/receipt_public", "/receipt_public/*" ]
+  - nonResourceURLs: [ "/eb", "/eb/*", "/eyeball", "/eyeball/*", "/oe", "/oe/*", "/online_eyeball", "/online_eyeball/*", "/rp", "/rp/*", "/receipt_public", "/receipt_public/*", "/qsl_card", "/qsl_card/" ]
     verbs: [ "get" ]
 ---
 apiVersion: v1alpha1
@@ -670,7 +702,7 @@ metadata:
     rbac.authorization.halo.run/display-name: "QSL 公共提交（匿名）"
 rules:
   - apiGroups: [ "api.qsl-management.bi1kbu.com" ]
-    resources: [ "exchange-online/requests", "exchange-offline/confirm", "receipt-public/confirm" ]
+    resources: [ "exchange-online/requests", "exchange-offline/confirm", "receipt-public/confirm", "qsl-card/requests" ]
     verbs: [ "create" ]
 
 

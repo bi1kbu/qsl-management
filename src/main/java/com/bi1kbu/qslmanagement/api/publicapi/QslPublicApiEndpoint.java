@@ -5,9 +5,11 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
 import com.bi1kbu.qslmanagement.api.QslApiResponses;
+import com.bi1kbu.qslmanagement.api.QslCardRequestService;
 import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
@@ -21,13 +23,24 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
 
     private final QslPublicApiService publicApiService;
     private final QslPublicRateLimitService publicRateLimitService;
+    private final QslCardRequestService qslCardRequestService;
 
+    @Autowired
     public QslPublicApiEndpoint(
         QslPublicApiService publicApiService,
-        QslPublicRateLimitService publicRateLimitService
+        QslPublicRateLimitService publicRateLimitService,
+        QslCardRequestService qslCardRequestService
     ) {
         this.publicApiService = publicApiService;
         this.publicRateLimitService = publicRateLimitService;
+        this.qslCardRequestService = qslCardRequestService;
+    }
+
+    QslPublicApiEndpoint(
+        QslPublicApiService publicApiService,
+        QslPublicRateLimitService publicRateLimitService
+    ) {
+        this(publicApiService, publicRateLimitService, null);
     }
 
     @Override
@@ -37,7 +50,10 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
             .andRoute(GET("/exchange-online/-/bureaus"), this::listOnlineBureaus)
             .andRoute(GET("/exchange-online/-/station-cards"), this::listOnlineStationCards)
             .andRoute(GET("/exchange-offline/-/activities"), this::listOfflineActivities)
+            .andRoute(GET("/qsl-card/-/qsos"), this::listQslCardRequestQso)
+            .andRoute(GET("/qsl-card/-/station-contact"), this::getQslCardStationContact)
             .andRoute(POST("/exchange-online/-/requests"), this::submitExchangeRequest)
+            .andRoute(POST("/qsl-card/-/requests"), this::submitQslCardRequest)
             .andRoute(POST("/exchange-offline/-/confirm"), this::confirmOfflineExchange)
             .andRoute(POST("/receipt-public/-/confirm"), this::confirmReceipt);
     }
@@ -53,6 +69,35 @@ public class QslPublicApiEndpoint implements CustomEndpoint {
         var sceneType = request.queryParam("sceneType").orElse("");
         return publicRateLimitService.checkLimit("qso-public-records", clientIp)
             .then(publicApiService.listPublicRecords(callSign, sceneType))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> listQslCardRequestQso(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        var callSign = request.queryParam("callSign").orElse("");
+        return publicRateLimitService.checkLimit("qsl-card-qsos", clientIp)
+            .then(qslCardRequestService.listEligibleQso(callSign))
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> getQslCardStationContact(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        return publicRateLimitService.checkLimit("qsl-card-station-contact", clientIp)
+            .then(qslCardRequestService.getPublicStationContact())
+            .flatMap(QslApiResponses::ok)
+            .onErrorResume(QslApiResponses::handleError);
+    }
+
+    private Mono<ServerResponse> submitQslCardRequest(ServerRequest request) {
+        var clientIp = QslRequestIdentitySupport.resolveClientIp(request);
+        return publicRateLimitService.checkLimit("qsl-card-requests", clientIp)
+            .then(request.bodyToMono(QslCardRequestService.SubmitCommand.class)
+                .defaultIfEmpty(new QslCardRequestService.SubmitCommand(
+                    "", java.util.List.of(), "", "", "", "", "", "", "", ""
+                ))
+                .flatMap(payload -> qslCardRequestService.submit(payload, clientIp)))
             .flatMap(QslApiResponses::ok)
             .onErrorResume(QslApiResponses::handleError);
     }

@@ -31,6 +31,7 @@ class QslRoleTemplateContractTest {
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "mail-receive-confirms", "create");
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "receive-records", "create");
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "exchange-requests", "create");
+        assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "qsl-card-requests", "create");
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "online-card-imports", "create");
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "ai-config-tests", "create");
         assertHasRule(rules, "console.api.qsl-management.bi1kbu.com", "ai-address-normalizations", "create");
@@ -57,6 +58,9 @@ class QslRoleTemplateContractTest {
         assertHasRule(rules, "api.qsl-management.bi1kbu.com", "exchange-online/station-cards", "get");
         assertHasRule(rules, "api.qsl-management.bi1kbu.com", "exchange-offline/activities", "get");
         assertHasRule(rules, "api.qsl-management.bi1kbu.com", "exchange-online/requests", "create");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "qsl-card/qsos", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "qsl-card/station-contact", "get");
+        assertHasRule(rules, "api.qsl-management.bi1kbu.com", "qsl-card/requests", "create");
         assertHasRule(rules, "api.qsl-management.bi1kbu.com", "exchange-offline/confirm", "create");
         assertHasRule(rules, "api.qsl-management.bi1kbu.com", "receipt-public/confirm", "create");
         assertHasRule(rules, "api.qsl-management.bi1kbu.com", "receipt-public", "get");

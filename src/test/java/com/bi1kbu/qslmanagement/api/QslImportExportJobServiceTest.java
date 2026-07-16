@@ -11,6 +11,7 @@ import com.bi1kbu.qslmanagement.extension.model.CardRecord;
 import com.bi1kbu.qslmanagement.extension.model.ImportExportJob;
 import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.OfflineExchangeCard;
+import com.bi1kbu.qslmanagement.extension.model.QslCardRequest;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import com.bi1kbu.qslmanagement.extension.model.ReceiveRecord;
 import com.bi1kbu.qslmanagement.extension.model.StationEquipment;
@@ -157,6 +158,45 @@ class QslImportExportJobServiceTest {
         var csv = new String(payload.content(), StandardCharsets.UTF_8);
         assertEquals(true, csv.contains("id#offline-activity,activityName,activityLocation,activityDate,activityTime,cardRemarks,workflowStatus"));
         assertEquals(true, csv.contains("20260502ACT01,五月线下换卡,北京,2026-05-02,0900,活动卡,进行中"));
+    }
+
+    @Test
+    void shouldExportQslCardRequestWithQsoAndCreatedCardMappings() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var service = new QslImportExportJobService(client, Mockito.mock(QslAuditService.class));
+        var job = buildExportJob("export-job-qcr", "qsl-card-request", "csv");
+        var request = new QslCardRequest();
+        request.setMetadata(QslApiSupport.createMetadata("QCR0001"));
+        var spec = new QslCardRequest.QslCardRequestSpec();
+        spec.setCallSign("BI1KBU");
+        var qsoItem = new QslCardRequest.QsoItem();
+        qsoItem.setQsoRecordName("QSO0001");
+        qsoItem.setCardVersion("2026版");
+        spec.setQsoItems(List.of(qsoItem));
+        spec.setAddressType("PERSONAL");
+        spec.setAddressEntryName("BI1KBU-1");
+        spec.setNotificationEmail("user@example.com");
+        request.setSpec(spec);
+        var status = new QslCardRequest.QslCardRequestStatus();
+        status.setReviewStatus("通过");
+        status.setCardCreationStatus("全部成功");
+        var created = new QslCardRequest.CreatedCardItem();
+        created.setQsoRecordName("QSO0001");
+        created.setCardVersion("2026版");
+        created.setCardRecordName("C1001");
+        created.setCreationStatus("成功");
+        status.setCreatedCards(List.of(created));
+        request.setStatus(status);
+
+        when(client.fetch(eq(ImportExportJob.class), eq("export-job-qcr"))).thenReturn(Mono.just(job));
+        when(client.listAll(eq(QslCardRequest.class), any(), any())).thenReturn(Flux.just(request));
+
+        var payload = service.buildExportDownload("export-job-qcr").block();
+        var csv = new String(payload.content(), StandardCharsets.UTF_8);
+
+        assertEquals(true, csv.contains("id#qsl-card-request,callSign,qsoItems,addressType"));
+        assertEquals(true, csv.contains("QCR0001,BI1KBU"));
+        assertEquals(true, csv.contains("user@example.com"));
     }
 
     @Test

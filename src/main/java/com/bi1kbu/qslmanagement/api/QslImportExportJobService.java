@@ -8,6 +8,8 @@ import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.ImportExportJob;
 import com.bi1kbu.qslmanagement.extension.model.OfflineActivity;
 import com.bi1kbu.qslmanagement.extension.model.OfflineExchangeCard;
+import com.bi1kbu.qslmanagement.extension.model.QslCardRequest;
+import com.bi1kbu.qslmanagement.extension.model.QslCardRequestQsoReservation;
 import com.bi1kbu.qslmanagement.extension.model.QsoRecord;
 import com.bi1kbu.qslmanagement.extension.model.ReceiveRecord;
 import com.bi1kbu.qslmanagement.extension.model.StationCard;
@@ -18,6 +20,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -55,6 +58,8 @@ public class QslImportExportJobService {
         "card-record",
         "receive-record",
         "exchange-request-review",
+        "qsl-card-request",
+        "qsl-card-request-qso-reservation",
         "offline-activity",
         "offline-exchange-card",
         "address-management",
@@ -536,6 +541,53 @@ public class QslImportExportJobService {
                     record.setStatus(status);
                 }
             );
+            case "qsl-card-request" -> importRows(
+                dataset, rows, strategy, "qsl-card-request", QslCardRequest.class, QslCardRequest::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null
+                        ? new QslCardRequest.QslCardRequestSpec() : record.getSpec();
+                    spec.setCallSign(value(row, "callSign"));
+                    spec.setQsoItems(parseQslCardRequestQsoItems(value(row, "qsoItems")));
+                    spec.setAddressType(value(row, "addressType"));
+                    spec.setAddressEntryName(value(row, "addressEntryName"));
+                    spec.setNotificationEmail(value(row, "notificationEmail"));
+                    spec.setRemarks(value(row, "remarks"));
+                    spec.setSubmittedAt(value(row, "submittedAt"));
+                    record.setSpec(spec);
+
+                    var status = record.getStatus() == null
+                        ? new QslCardRequest.QslCardRequestStatus() : record.getStatus();
+                    status.setReviewStatus(defaultIfBlank(value(row, "reviewStatus"), "待处理"));
+                    status.setReviewReason(value(row, "reviewReason"));
+                    status.setReviewedBy(value(row, "reviewedBy"));
+                    status.setReviewedAt(value(row, "reviewedAt"));
+                    status.setCardCreationStatus(defaultIfBlank(value(row, "cardCreationStatus"), "未创建"));
+                    status.setCreatedCards(parseQslCardRequestCreatedCards(value(row, "createdCards")));
+                    status.setReviewMailStatus(value(row, "reviewMailStatus"));
+                    status.setReviewMailSentAt(value(row, "reviewMailSentAt"));
+                    status.setReviewMailLastError(value(row, "reviewMailLastError"));
+                    status.setReviewMailTargetEmail(value(row, "reviewMailTargetEmail"));
+                    record.setStatus(status);
+                }
+            );
+            case "qsl-card-request-qso-reservation" -> importRows(
+                dataset, rows, strategy, "qsl-card-request-qso-reservation",
+                QslCardRequestQsoReservation.class, QslCardRequestQsoReservation::new, dryRun,
+                (record, row) -> {
+                    var spec = record.getSpec() == null
+                        ? new QslCardRequestQsoReservation.QslCardRequestQsoReservationSpec()
+                        : record.getSpec();
+                    spec.setRequestName(value(row, "requestName"));
+                    spec.setQsoRecordName(value(row, "qsoRecordName"));
+                    spec.setCreatedAt(value(row, "createdAt"));
+                    record.setSpec(spec);
+                    var status = record.getStatus() == null
+                        ? new QslCardRequestQsoReservation.QslCardRequestQsoReservationStatus()
+                        : record.getStatus();
+                    status.setState(defaultIfBlank(value(row, "state"), "ACTIVE"));
+                    record.setStatus(status);
+                }
+            );
             case "offline-activity" -> importRows(
                 dataset, rows, strategy, "offline-activity", OfflineActivity.class, OfflineActivity::new, dryRun,
                 (record, row) -> {
@@ -1009,6 +1061,9 @@ public class QslImportExportJobService {
                 .defaultIfEmpty(0L);
             case "receive-record" -> client.countBy(ReceiveRecord.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "exchange-request-review" -> client.countBy(ExchangeRequest.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+            case "qsl-card-request" -> client.countBy(QslCardRequest.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
+            case "qsl-card-request-qso-reservation" ->
+                client.countBy(QslCardRequestQsoReservation.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "offline-activity" -> client.countBy(OfflineActivity.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "offline-exchange-card" -> client.countBy(OfflineExchangeCard.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
             case "address-management" -> client.countBy(AddressBookEntry.class, EMPTY_OPTIONS).defaultIfEmpty(0L);
@@ -1264,6 +1319,54 @@ public class QslImportExportJobService {
                     "cardCreatedBy",
                     "createdCardRecordName"
                 ), rows));
+            case "qsl-card-request" -> client.listAll(QslCardRequest.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .map(record -> {
+                    var spec = record.getSpec();
+                    var status = record.getStatus();
+                    return csvRow(
+                        record.getMetadata().getName(),
+                        spec == null ? "" : nullToEmpty(spec.getCallSign()),
+                        spec == null ? "" : qslCardRequestQsoItemsToText(spec.getQsoItems()),
+                        spec == null ? "" : nullToEmpty(spec.getAddressType()),
+                        spec == null ? "" : nullToEmpty(spec.getAddressEntryName()),
+                        spec == null ? "" : nullToEmpty(spec.getNotificationEmail()),
+                        spec == null ? "" : nullToEmpty(spec.getRemarks()),
+                        spec == null ? "" : nullToEmpty(spec.getSubmittedAt()),
+                        status == null ? "" : nullToEmpty(status.getReviewStatus()),
+                        status == null ? "" : nullToEmpty(status.getReviewReason()),
+                        status == null ? "" : nullToEmpty(status.getReviewedBy()),
+                        status == null ? "" : nullToEmpty(status.getReviewedAt()),
+                        status == null ? "" : nullToEmpty(status.getCardCreationStatus()),
+                        status == null ? "" : qslCardRequestCreatedCardsToText(status.getCreatedCards()),
+                        status == null ? "" : nullToEmpty(status.getReviewMailStatus()),
+                        status == null ? "" : nullToEmpty(status.getReviewMailSentAt()),
+                        status == null ? "" : nullToEmpty(status.getReviewMailLastError()),
+                        status == null ? "" : nullToEmpty(status.getReviewMailTargetEmail())
+                    );
+                })
+                .collectList()
+                .map(rows -> renderCsv(dataset, List.of(
+                    "id", "callSign", "qsoItems", "addressType", "addressEntryName",
+                    "notificationEmail", "remarks", "submittedAt", "reviewStatus", "reviewReason",
+                    "reviewedBy", "reviewedAt", "cardCreationStatus", "createdCards",
+                    "reviewMailStatus", "reviewMailSentAt", "reviewMailLastError", "reviewMailTargetEmail"
+                ), rows));
+            case "qsl-card-request-qso-reservation" ->
+                client.listAll(QslCardRequestQsoReservation.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                    .map(record -> {
+                        var spec = record.getSpec();
+                        var status = record.getStatus();
+                        return csvRow(
+                            record.getMetadata().getName(),
+                            spec == null ? "" : nullToEmpty(spec.getRequestName()),
+                            spec == null ? "" : nullToEmpty(spec.getQsoRecordName()),
+                            spec == null ? "" : nullToEmpty(spec.getCreatedAt()),
+                            status == null ? "" : nullToEmpty(status.getState())
+                        );
+                    })
+                    .collectList()
+                    .map(rows -> renderCsv(dataset,
+                        List.of("id", "requestName", "qsoRecordName", "createdAt", "state"), rows));
             case "offline-activity" -> client.listAll(OfflineActivity.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .map(record -> {
                     var spec = record.getSpec();
@@ -1920,6 +2023,84 @@ public class QslImportExportJobService {
             return "";
         }
         return String.join("、", values);
+    }
+
+    private String qslCardRequestQsoItemsToText(List<QslCardRequest.QsoItem> items) {
+        if (items == null || items.isEmpty()) {
+            return "";
+        }
+        return items.stream()
+            .map(item -> encodeBackupValue(item.getQsoRecordName()) + "." + encodeBackupValue(item.getCardVersion()))
+            .collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private List<QslCardRequest.QsoItem> parseQslCardRequestQsoItems(String value) {
+        if (isBlank(value)) {
+            return List.of();
+        }
+        return Arrays.stream(value.split(","))
+            .filter(item -> !item.isBlank())
+            .map(item -> {
+                var parts = item.split("\\.", -1);
+                if (parts.length != 2) {
+                    throw new IllegalArgumentException("实体卡申请QSO清单格式不合法");
+                }
+                var qsoItem = new QslCardRequest.QsoItem();
+                qsoItem.setQsoRecordName(decodeBackupValue(parts[0]));
+                qsoItem.setCardVersion(decodeBackupValue(parts[1]));
+                return qsoItem;
+            })
+            .toList();
+    }
+
+    private String qslCardRequestCreatedCardsToText(List<QslCardRequest.CreatedCardItem> items) {
+        if (items == null || items.isEmpty()) {
+            return "";
+        }
+        return items.stream()
+            .map(item -> String.join(".",
+                encodeBackupValue(item.getQsoRecordName()),
+                encodeBackupValue(item.getCardVersion()),
+                encodeBackupValue(item.getCardRecordName()),
+                encodeBackupValue(item.getCreationStatus()),
+                encodeBackupValue(item.getLastError())
+            ))
+            .collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private List<QslCardRequest.CreatedCardItem> parseQslCardRequestCreatedCards(String value) {
+        if (isBlank(value)) {
+            return List.of();
+        }
+        return Arrays.stream(value.split(","))
+            .filter(item -> !item.isBlank())
+            .map(item -> {
+                var parts = item.split("\\.", -1);
+                if (parts.length != 5) {
+                    throw new IllegalArgumentException("实体卡申请建卡结果格式不合法");
+                }
+                var result = new QslCardRequest.CreatedCardItem();
+                result.setQsoRecordName(decodeBackupValue(parts[0]));
+                result.setCardVersion(decodeBackupValue(parts[1]));
+                result.setCardRecordName(decodeBackupValue(parts[2]));
+                result.setCreationStatus(decodeBackupValue(parts[3]));
+                result.setLastError(decodeBackupValue(parts[4]));
+                return result;
+            })
+            .toList();
+    }
+
+    private String encodeBackupValue(String value) {
+        return Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(nullToEmpty(value).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String decodeBackupValue(String value) {
+        try {
+            return new String(Base64.getUrlDecoder().decode(value), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException error) {
+            throw new IllegalArgumentException("实体卡申请备份字段编码不合法", error);
+        }
     }
 
     private String nullToEmpty(String value) {

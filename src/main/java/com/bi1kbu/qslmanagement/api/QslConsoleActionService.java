@@ -44,6 +44,8 @@ public class QslConsoleActionService {
     private static final Set<String> BH6SYX_ALLOWED_STATUSES = Set.of("对方已寄出，待我签收", "待双方寄出");
     private static final String DEFAULT_ONLINE_EXCHANGE_CARD_REMARKS =
         "期待与您空中相遇。\nLooking forward to meeting you on the air.";
+    private static final String DEFAULT_QSO_CARD_REMARKS =
+        "通联愉快，期待空中常见。\nNice QSO，Hope to catch you on the air often.";
 
     private final ReactiveExtensionClient client;
     private final QslAuditService qslAuditService;
@@ -92,6 +94,57 @@ public class QslConsoleActionService {
                 operator,
                 clientIp
             ).thenReturn(updated));
+    }
+
+    public Mono<CardRecord> createCardForQslCardRequest(
+        String requestName,
+        String callSign,
+        String qsoRecordName,
+        String cardVersion,
+        String addressEntryName,
+        String mailTargetEmail,
+        String requestRemarks
+    ) {
+        var normalizedCallSign = QslApiSupport.normalizeCallSign(callSign);
+        var normalizedQsoRecordName = defaultIfBlank(qsoRecordName, "").trim();
+        var normalizedRequestName = defaultIfBlank(requestName, "").trim();
+        if (normalizedCallSign.isBlank() || normalizedQsoRecordName.isBlank() || normalizedRequestName.isBlank()) {
+            return Mono.error(new QslApiException(HttpStatus.BAD_REQUEST,
+                "QSL-400-QCR-0001", "实体卡申请缺少呼号、QSO记录编号或申请编号"));
+        }
+        return client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+            .filter(cardRecord -> cardRecord.getMetadata() != null && cardRecord.getSpec() != null)
+            .filter(cardRecord -> normalizedQsoRecordName.equals(
+                defaultIfBlank(cardRecord.getSpec().getQsoRecordName(), "").trim()))
+            .next()
+            .flatMap(existing -> {
+                var remarks = defaultIfBlank(existing.getSpec().getBusinessRemarks(), "");
+                if (remarks.contains("申请编号：" + normalizedRequestName)) {
+                    return Mono.just(existing);
+                }
+                return Mono.error(new QslApiException(HttpStatus.CONFLICT,
+                    "QSL-409-QCR-0002", "QSO已存在卡片：" + normalizedQsoRecordName));
+            })
+            .switchIfEmpty(Mono.defer(() -> {
+                var businessRemarks = "实体QSL卡申请审核通过自动创建。申请编号：" + normalizedRequestName;
+                if (requestRemarks != null && !requestRemarks.isBlank()) {
+                    businessRemarks += "；申请备注：" + requestRemarks.trim();
+                }
+                return createCardRecord(
+                    normalizedCallSign,
+                    "QSO",
+                    normalizedQsoRecordName,
+                    businessRemarks,
+                    "QSO",
+                    false,
+                    "",
+                    cardVersion,
+                    addressEntryName,
+                    mailTargetEmail,
+                    false,
+                    DEFAULT_QSO_CARD_REMARKS
+                );
+            }));
     }
 
     public Mono<CardRecord> confirmReceipt(String cardRecordName, String receiptRemarks, String operator,

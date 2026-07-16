@@ -133,6 +133,7 @@ class QslPublicApiEndpointRouteTest {
         when(publicApiService.listPublicBureaus()).thenReturn(Mono.just(List.of(
             new QslPublicApiService.PublicBureauItem(
                 "BURO-1",
+                "中国",
                 "北京卡片局",
                 "100000",
                 "北京市某区某路"
@@ -149,6 +150,7 @@ class QslPublicApiEndpointRouteTest {
             .expectStatus().isOk()
             .expectBody()
             .jsonPath("$.code").isEqualTo("QSL-0000")
+            .jsonPath("$.data[0].destinationCountry").isEqualTo("中国")
             .jsonPath("$.data[0].bureauName").isEqualTo("北京卡片局")
             .jsonPath("$.data[0].postalCode").isEqualTo("100000")
             .jsonPath("$.data[0].address").isEqualTo("北京市某区某路");

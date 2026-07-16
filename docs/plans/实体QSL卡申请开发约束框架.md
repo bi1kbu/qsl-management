@@ -1,7 +1,7 @@
 # 实体 QSL 卡申请开发约束框架（V1）
 
 更新时间：2026-07-16  
-状态：已确认，作为本次开发的编码闸门与验收基线  
+状态：已实现，继续作为功能维护与回归验收基线
 适用版本：Halo 2.23.0、QSL 管理插件当前开发版本  
 功能入口：`/qsl_card`
 
@@ -65,6 +65,7 @@ GET /qsl_card
 4. 页面不得依赖同功能的 `/apis/...` HTML 页面 Endpoint。
 5. 推荐新增独立 `AdditionalWebFilter`，在 Halo 授权完成后由专用页面渲染服务输出 HTML。
 6. 页面渲染服务、公开数据 Endpoint 和业务服务必须分离，不得把 HTML、数据查询和提交写入同一个大类。
+7. 面向用户的整个页面必须使用中英双语，不展示 `addressType`、`postalCode` 等内部字段名；标题、说明、分区标题、表头、字段标签、按钮、状态、校验提示、加载提示、错误提示和提交结果均采用中文在上、英文在下的两行布局。原生下拉选项受浏览器控件限制时，允许在同一选项内使用“中文 / English”，但对应字段标签和辅助说明仍必须使用上下两行。
 
 ### 5.2 Halo 扩展点偏差记录
 
@@ -125,22 +126,23 @@ GET /qsl_card
 1. 前台不得从后台获取任何个人地址。
 2. 每次申请必须重新填写个人地址，不提供历史地址下拉框。
 3. 必填字段为：
-   - `name（收件人姓名）`
-   - `telephone（联系电话）`
    - `postalCode（邮政编码）`
    - `address（通信地址）`
    - `notificationEmail（通知电子邮箱）`
-4. 提交后由服务端按标准化字段精确查重，复用或创建 `AddressBookEntry（地址簿条目）`。
-5. 地址资源保存姓名、电话、邮编、地址和电子邮箱等联系方式。
-6. 申请记录不复制姓名、电话、邮编和地址，只保存 `addressEntryName（地址内部资源名称）`。
-7. `notificationEmail（通知电子邮箱）` 必须在申请记录中额外保留一份，作为本次申请生命周期内固定的邮件通知目标。
-8. 页面和提交响应不得返回地址内部资源名称，也不得提示后台是否复用了已有地址。
-9. 无论最终审核通过或拒绝，提交时已创建或复用的地址资源均保留，不因申请拒绝而自动删除。
+4. 选填字段为：
+   - `name（收件人姓名）`
+   - `telephone（联系电话）`
+5. 提交后由服务端按标准化字段精确查重，复用或创建 `AddressBookEntry（地址簿条目）`；选填字段为空时按空值参与精确匹配。
+6. 地址资源保存姓名、电话、邮编、地址和电子邮箱等联系方式。
+7. 申请记录不复制姓名、电话、邮编和地址，只保存 `addressEntryName（地址内部资源名称）`。
+8. `notificationEmail（通知电子邮箱）` 必须在申请记录中额外保留一份，作为本次申请生命周期内固定的邮件通知目标。
+9. 页面和提交响应不得返回地址内部资源名称，也不得提示后台是否复用了已有地址。
+10. 无论最终审核通过或拒绝，提交时已创建或复用的地址资源均保留，不因申请拒绝而自动删除。
 
 ### 6.6 现有卡片局流程
 
 1. 卡片局清单属于公开数据，可以从现有公开 API 获取。
-2. 页面显示卡片局名称、邮编和地址，不展示电话、备注、同步状态等后台字段。
+2. 页面显示去向国、卡片局名称、邮编和地址，选项顺序固定为“去向国｜卡片局名称｜邮编｜地址”；去向国未配置时显示“未设置去向国 / Country Not Set”。不展示电话、备注、同步状态等后台字段。
 3. 前端提交现有 `BureauEntry.metadata.name（卡片局内部资源名称）`，不得以页面提交的名称、邮编和地址直接覆盖后台卡片局数据。
 4. 服务端必须根据内部资源名称重新读取并验证卡片局存在。
 5. 不新增卡片局业务编号字段；内部仍沿用现有 `BureauEntry.metadata.name`。
@@ -366,9 +368,9 @@ qsl-card/requests
 | --- | --- | --- | --- |
 | GET | `/apis/qsl-management.bi1kbu.com/v1alpha1/qsl-card-requests` | 查询申请 Extension | `qsl-card-request:view` |
 | GET | `/apis/qsl-management.bi1kbu.com/v1alpha1/qsl-card-requests/{name}` | 查询单个申请 | `qsl-card-request:view` |
-| POST | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/qsl-card-requests/{name}/approve` | 审核通过并自动创建全部卡片 | `qsl-card-request:edit` |
-| POST | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/qsl-card-requests/{name}/reject` | 拒绝申请 | `qsl-card-request:edit` |
-| POST | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/qsl-card-requests/{name}/retry-card-creation` | 重试失败卡片 | `qsl-card-request:edit` |
+| POST | `/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/qsl-card-requests/{name}/approve` | 审核通过并自动创建全部卡片 | `qsl-card-request:edit` |
+| POST | `/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/qsl-card-requests/{name}/reject` | 拒绝申请 | `qsl-card-request:edit` |
+| POST | `/apis/console.api.qsl-management.bi1kbu.com/v1alpha1/qsl-card-requests/{name}/retry-card-creation` | 重试失败卡片 | `qsl-card-request:edit` |
 
 ### 10.3 稳定错误码
 
@@ -544,7 +546,7 @@ plugin:qsl-management:qsl-card-request:edit
 6. 项目 README 中的公开页面入口和功能说明
 7. 如本功能改变长期协作规则，再更新 `agents.md`
 
-在代码尚未实现前，输出性文档不得把本功能描述为“已实现”；应明确标注为“已冻结待开发”。
+本功能已实现；后续输出性文档必须持续与代码、运行态和本约束框架保持一致。
 
 ## 18. 验收判定
 
