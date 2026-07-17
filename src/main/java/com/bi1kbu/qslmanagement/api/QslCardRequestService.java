@@ -317,7 +317,6 @@ public class QslCardRequestService {
         return Mono.zip(
             client.listAll(StationCard.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .filter(item -> item.getSpec() != null && item.getMetadata() != null)
-                .filter(item -> item.getStatus() == null || !Boolean.FALSE.equals(item.getStatus().getActive()))
                 .collectList(),
             loadCardVersionUsedCounts()
         ).map(tuple -> {
@@ -335,7 +334,7 @@ public class QslCardRequestService {
                 var stationCard = cards.get(key);
                 if (stationCard == null) {
                     throw new QslApiException(HttpStatus.UNPROCESSABLE_ENTITY,
-                        "QSL-422-QCR-0001", "卡片版本不存在或已停用：" + item.cardVersion());
+                        "QSL-422-QCR-0001", "卡片版本不存在：" + item.cardVersion());
                 }
                 var canonicalVersion = normalize(stationCard.getSpec().getCardVersion());
                 requestedCounts.merge(key, 1, Integer::sum);

@@ -731,7 +731,8 @@ public class QslPublicApiService {
             availableInventory,
             usedCount,
             Math.max(availableInventory - usedCount, 0),
-            safeSortOrder(spec.getSortOrder())
+            safeSortOrder(spec.getSortOrder()),
+            stationCard.getStatus() != null && Boolean.TRUE.equals(stationCard.getStatus().getActive())
         );
     }
 
@@ -749,6 +750,10 @@ public class QslPublicApiService {
                     if (item == null) {
                         throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001",
                             "卡片版本不存在：" + requestedVersion);
+                    }
+                    if (item.qsoOnly()) {
+                        throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001",
+                            "卡片版本仅支持实体QSL通联卡，不支持线上换卡：" + item.cardVersion());
                     }
                     if (item.remainingInventory() <= 0) {
                         throw new QslApiException(HttpStatus.BAD_REQUEST, "QSL-400-0001",
@@ -1290,7 +1295,8 @@ public class QslPublicApiService {
         int availableInventory,
         int usedCount,
         int remainingInventory,
-        int sortOrder
+        int sortOrder,
+        boolean qsoOnly
     ) {
     }
 

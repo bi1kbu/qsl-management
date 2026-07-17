@@ -100,6 +100,7 @@ GET /qsl_card
 4. 取消勾选时必须清除该行已选择的卡片版本，提交载荷不得包含未勾选记录。
 5. 同一个卡片版本可以用于多条 QSO，但服务端必须按本次申请的合计数量检查库存。
 6. 前端库存提示只用于交互，最终有效性和库存必须由服务端重新校验。
+7. `StationCard.status.active=true` 表示“仅支持实体 QSL 通联卡”，不限制本页面选择和提交；`false/null` 表示通用版本。该字段只限制线上换卡，普通通联和线下换卡与实体 QSL 卡申请保持一致，均允许使用。
 
 ### 6.3 不可选择状态
 
@@ -349,7 +350,7 @@ api.qsl-management.bi1kbu.com/v1alpha1
 | --- | --- | --- | --- |
 | GET | `/qsl_card` | 实体 QSL 卡申请页面 | 匿名，精确非资源型权限 |
 | GET | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/qsl-card/-/qsos?callSign=...` | 查询 QSO 和禁选原因 | 匿名、限流 |
-| GET | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` | 获取公开卡片版本 | 复用现有匿名接口 |
+| GET | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` | 获取公开卡片版本及 `qsoOnly（是否仅限实体 QSL 通联卡）`；实体卡申请允许使用全部版本 | 复用现有匿名接口 |
 | GET | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/bureaus` | 获取公开卡片局 | 复用现有匿名接口 |
 | GET | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/qsl-card/-/station-contact` | 仅获取本台公开邮箱 | 匿名、限流 |
 | POST | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/qsl-card/-/requests` | 提交申请 | 匿名、限流、完整服务端校验 |

@@ -37,6 +37,7 @@ interface StationCardVersion {
   availableInventory: number
   versionTotal: number
   sortOrder: number
+  qsoOnly: boolean
   createdAt: string
 }
 
@@ -86,6 +87,10 @@ interface StationCardSpec {
   versionTotal: number
   sortOrder: number
   remarks: string
+}
+
+interface StationCardStatus {
+  active: boolean
 }
 
 interface CardRecordSpec {
@@ -306,7 +311,10 @@ const isAttachmentSelected = (attachment: AttachmentOption): boolean => {
   return selectedAttachment.value?.name === attachment.name
 }
 
-const toCard = (extension: QslExtension<StationCardSpec>, index: number): StationCardVersion => {
+const toCard = (
+  extension: QslExtension<StationCardSpec, StationCardStatus>,
+  index: number,
+): StationCardVersion => {
   const spec = extension.spec
   const previewUrl = spec?.imageThumbnailUrl || spec?.imagePermalink || ''
   return {
@@ -323,6 +331,7 @@ const toCard = (extension: QslExtension<StationCardSpec>, index: number): Statio
     availableInventory: safeInventoryTotal(spec?.availableInventory),
     versionTotal: safeInventoryTotal(spec?.versionTotal),
     sortOrder: safeInventoryTotal(spec?.sortOrder) || index + 1,
+    qsoOnly: extension.status?.active === true,
     createdAt: extension.metadata.creationTimestamp
       ? new Date(extension.metadata.creationTimestamp).toLocaleString('zh-CN', { hour12: false })
       : nowText(),
@@ -334,7 +343,7 @@ const loadStationCards = async () => {
   feedback.value = ''
   editingInventoryCardId.value = null
   try {
-    const extensions = await listExtensions<StationCardSpec>(resourcePlural)
+    const extensions = await listExtensions<StationCardSpec, StationCardStatus>(resourcePlural)
     await refreshCardUsageCounter()
     const cards = extensions
       .map((extension, index) => toCard(extension, index))
@@ -397,6 +406,7 @@ const addStationCard = () => {
     availableInventory,
     versionTotal,
     sortOrder: 1,
+    qsoOnly: false,
     createdAt: nowText(),
   }
   applyAttachmentToCard(nextCard, selectedAttachment.value)
@@ -509,14 +519,14 @@ const saveStationCard = async () => {
   try {
     let createdCount = 0
     let updatedCount = 0
-    const currentRemote = await listExtensions<StationCardSpec>(resourcePlural)
+    const currentRemote = await listExtensions<StationCardSpec, StationCardStatus>(resourcePlural)
     const remoteMap = new Map(currentRemote.map((item) => [item.metadata.name, item]))
     const keepNames = new Set<string>()
 
     for (const card of stationCards.value) {
       const name = card.resourceName || createResourceName('qsl-station-card')
       const current = remoteMap.get(name)
-      const payload: QslExtension<StationCardSpec> = {
+      const payload: QslExtension<StationCardSpec, StationCardStatus> = {
         apiVersion: qslApiVersion,
         kind: resourceKind,
         metadata: {
@@ -535,6 +545,9 @@ const saveStationCard = async () => {
           versionTotal: card.versionTotal,
           sortOrder: card.sortOrder,
           remarks: `附件：${card.attachmentDisplayName || card.attachmentName}`,
+        },
+        status: {
+          active: card.qsoOnly,
         },
       }
 
@@ -678,10 +691,22 @@ onMounted(() => {
             <p><strong>版本总量：</strong>{{ card.versionTotal }}</p>
             <p><strong>已使用：</strong>{{ getUsedCount(card.versionName) }}</p>
             <p><strong>库存余量：</strong>{{ getRemainingCount(card) }}</p>
+            <p><strong>使用范围：</strong>{{ card.qsoOnly ? '仅限实体 QSL 通联卡' : '全部业务' }}</p>
             <p><strong>排序：</strong>{{ card.sortOrder }}（可上下拖动）</p>
             <p><strong>创建时间：</strong>{{ card.createdAt }}</p>
           </div>
           <div class="qsl-card-list__actions">
+            <label class="qsl-card-request-toggle">
+              <input
+                v-model="card.qsoOnly"
+                type="checkbox"
+                :disabled="loading || saving"
+              />
+              <span>
+                <strong>仅支持实体 QSL 通联卡</strong>
+                <small>开启后线上换卡仍显示但不可选择；实体卡、普通通联和线下换卡仍可使用。</small>
+              </span>
+            </label>
             <template v-if="editingInventoryCardId === card.id">
               <div class="qsl-inventory-edit">
                 <p class="qsl-inventory-edit__title">编辑库存</p>
@@ -1019,6 +1044,34 @@ onMounted(() => {
   justify-self: end;
   width: 260px;
   margin-top: 6px;
+}
+
+.qsl-card-request-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: #111827;
+  cursor: pointer;
+}
+
+.qsl-card-request-toggle input {
+  margin-top: 3px;
+}
+
+.qsl-card-request-toggle span,
+.qsl-card-request-toggle small {
+  display: block;
+}
+
+.qsl-card-request-toggle small {
+  margin-top: 2px;
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 16px;
 }
 
 .qsl-card-list__button-row {

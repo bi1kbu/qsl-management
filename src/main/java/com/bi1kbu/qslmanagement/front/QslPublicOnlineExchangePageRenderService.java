@@ -176,7 +176,8 @@ public class QslPublicOnlineExchangePageRenderService {
                   const maxSelected = selected.length >= 2;
                   cardVersionList.querySelectorAll("input[name='cardVersion']").forEach((input) => {
                     const remaining = Number(input.dataset.remaining || "0");
-                    input.disabled = remaining <= 0 || (!input.checked && maxSelected);
+                    const qsoOnly = input.dataset.qsoOnly === "true";
+                    input.disabled = qsoOnly || remaining <= 0 || (!input.checked && maxSelected);
                     input.closest(".qsl-card-version-option")?.classList.toggle("disabled", input.disabled);
                   });
                   if (!onlineStationCards.length) {
@@ -206,6 +207,7 @@ public class QslPublicOnlineExchangePageRenderService {
                     input.name = "cardVersion";
                     input.value = version;
                     input.dataset.remaining = String(remaining);
+                    input.dataset.qsoOnly = String(item.qsoOnly === true);
                     input.addEventListener("change", refreshCardVersionState);
                     label.appendChild(input);
 
@@ -228,7 +230,9 @@ public class QslPublicOnlineExchangePageRenderService {
                     titleText.textContent = `${index + 1}. ${version}`;
                     const meta = document.createElement("p");
                     meta.className = "qsl-card-version-meta";
-                    meta.textContent = `版本总量：${Number(item.versionTotal || 0)}；库存余量：${remaining}`;
+                    meta.textContent = item.qsoOnly === true
+                      ? `版本总量：${Number(item.versionTotal || 0)}；库存余量：${remaining}；仅支持实体 QSL 通联卡`
+                      : `版本总量：${Number(item.versionTotal || 0)}；库存余量：${remaining}`;
                     info.appendChild(titleText);
                     info.appendChild(meta);
                     label.appendChild(info);

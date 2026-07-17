@@ -320,7 +320,7 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 | GET | `/qso-public/grids` | 查询公开通联网格清单，按对方四位 Maidenhead 网格聚合，可带 `sceneType/dateFrom/dateTo/grid/detailLevel` | 是 |
 | GET | `/overview-public/summary` | 公开总览 | 是 |
 | GET | `/exchange-online/-/bureaus` | 公开线上换卡与实体卡申请的卡片局候选，只返回去向国、卡片局名称、邮编、地址及选择所需内部名称 | 是 |
-| GET | `/exchange-online/-/station-cards` | 公开线上换卡本台卡片版本候选，按配置顺序返回图案、版本号、版本总量、库存余量 | 是 |
+| GET | `/exchange-online/-/station-cards` | 公开线上换卡与实体卡申请的本台卡片版本候选，返回全部版本及 `qsoOnly（是否仅限实体 QSL 通联卡）`，并按配置顺序返回图案、版本号、版本总量、库存余量；线上换卡必须禁选并拒绝 `qsoOnly=true` 的版本 | 是 |
 | GET | `/exchange-offline/-/activities` | 公开线下活动列表 | 是 |
 | GET | `/qsl-card/-/qsos?callSign=...` | 查询实体卡可申请 QSO，并返回“待审核/已有卡片”禁选原因 | 是 |
 | GET | `/qsl-card/-/station-contact` | 仅返回本台公开邮箱，用于新增卡片局邮件联系 | 是 |

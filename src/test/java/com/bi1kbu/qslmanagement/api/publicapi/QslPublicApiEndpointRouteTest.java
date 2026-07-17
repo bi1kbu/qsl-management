@@ -171,7 +171,8 @@ class QslPublicApiEndpointRouteTest {
                 300,
                 12,
                 288,
-                1
+                1,
+                false
             )
         )));
 
@@ -188,6 +189,7 @@ class QslPublicApiEndpointRouteTest {
             .jsonPath("$.data[0].cardVersion").isEqualTo("2026春季版")
             .jsonPath("$.data[0].previewUrl").isEqualTo("/upload/card-thumbnail.png")
             .jsonPath("$.data[0].versionTotal").isEqualTo(500)
+            .jsonPath("$.data[0].qsoOnly").isEqualTo(false)
             .jsonPath("$.data[0].remainingInventory").isEqualTo(288);
     }
 

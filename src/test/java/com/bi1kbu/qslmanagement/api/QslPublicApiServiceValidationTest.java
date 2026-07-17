@@ -1,6 +1,7 @@
 package com.bi1kbu.qslmanagement.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -62,7 +63,82 @@ class QslPublicApiServiceValidationTest {
 
         assertEquals(1, first.size());
         assertEquals("2026春季版", second.get(0).cardVersion());
+        assertFalse(second.get(0).qsoOnly());
         verify(client, times(1)).listAll(Mockito.eq(StationCard.class), any(), any());
+    }
+
+    @Test
+    void shouldExposeCardUsageScopeInPublicList() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var qsoOnly = stationCard("station-card-qso-only", "2026通联专用版", true);
+        var general = stationCard("station-card-general", "2026通用版", false);
+
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty());
+        when(client.listAll(eq(StationCard.class), any(), any()))
+            .thenReturn(Flux.just(qsoOnly, general));
+
+        var service = new QslPublicApiService(
+            client,
+            Mockito.mock(QslAuditService.class),
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
+        );
+
+        var items = service.listPublicStationCards().block();
+
+        assertEquals(2, items.size());
+        var qsoOnlyItem = items.stream()
+            .filter(item -> "2026通联专用版".equals(item.cardVersion()))
+            .findFirst()
+            .orElseThrow();
+        var generalItem = items.stream()
+            .filter(item -> "2026通用版".equals(item.cardVersion()))
+            .findFirst()
+            .orElseThrow();
+        assertTrue(qsoOnlyItem.qsoOnly());
+        assertFalse(generalItem.qsoOnly());
+    }
+
+    @Test
+    void shouldRejectQsoOnlyCardVersionOnOnlineExchangeSubmit() {
+        var client = Mockito.mock(ReactiveExtensionClient.class);
+        var restrictedCard = stationCard("station-card-qso-only", "2026通联专用版", true);
+        var systemSetting = new SystemSetting();
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setOnlineExchangeRequestPolicy("MANUAL");
+        settingSpec.setOnlineExchangeRequestCooldownMinutes(0);
+        systemSetting.setSpec(settingSpec);
+
+        when(client.fetch(eq(SystemSetting.class), anyString())).thenReturn(Mono.just(systemSetting));
+        when(client.listAll(eq(ExchangeRequest.class), any(), any())).thenReturn(Flux.empty());
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty());
+        when(client.listAll(eq(StationCard.class), any(), any())).thenReturn(Flux.just(restrictedCard));
+
+        var service = new QslPublicApiService(
+            client,
+            Mockito.mock(QslAuditService.class),
+            Mockito.mock(QslConsoleActionService.class),
+            Mockito.mock(QslNotificationMailService.class)
+        );
+        var command = new QslPublicApiService.PublicExchangeSubmitCommand(
+            "BI1KBU",
+            Boolean.FALSE,
+            "",
+            "",
+            "测试台",
+            "010-00000000",
+            "510000",
+            "广东省某市",
+            "测试",
+            "2026通联专用版"
+        );
+
+        var error = assertThrows(QslApiException.class,
+            () -> service.submitExchangeRequest(command, "127.0.0.1").block());
+
+        assertEquals("QSL-400-0001", error.getCode());
+        assertEquals("卡片版本仅支持实体QSL通联卡，不支持线上换卡：2026通联专用版", error.getMessage());
+        verify(client, never()).create(any(ExchangeRequest.class));
     }
 
     @Test
@@ -746,5 +822,28 @@ class QslPublicApiServiceValidationTest {
         spec.setSceneType(sceneType);
         record.setSpec(spec);
         return record;
+    }
+
+    private StationCard stationCard(String name, String cardVersion, boolean active) {
+        var stationCard = new StationCard();
+        stationCard.setMetadata(QslApiSupport.createMetadata(name));
+
+        var spec = new StationCard.StationCardSpec();
+        spec.setCardVersion(cardVersion);
+        spec.setImageAttachmentName(name + "-attachment");
+        spec.setImageAttachmentDisplayName(cardVersion + "图案.png");
+        spec.setImagePermalink("/upload/" + name + ".png");
+        spec.setImageThumbnailUrl("/upload/" + name + "-thumbnail.png");
+        spec.setImageMediaType("image/png");
+        spec.setImageSize(1024);
+        spec.setVersionTotal(100);
+        spec.setAvailableInventory(100);
+        spec.setSortOrder(1);
+        stationCard.setSpec(spec);
+
+        var status = new StationCard.StationCardStatus();
+        status.setActive(active);
+        stationCard.setStatus(status);
+        return stationCard;
     }
 }
