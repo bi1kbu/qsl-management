@@ -64,13 +64,30 @@ public class QslPublicCardRequestPageRenderService {
               button:disabled { opacity: .55; cursor: not-allowed; }
               .query-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
               .table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
-              table { width: 100%; border-collapse: collapse; min-width: 820px; }
+              table { width: 100%; border-collapse: collapse; min-width: 980px; }
               th, td { padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 13px; vertical-align: middle; }
               th { background: #f8fafc; color: #475569; }
               tr:last-child td { border-bottom: 0; }
               tr.disabled { color: #94a3b8; background: #f8fafc; }
               .row-check { width: 17px; height: 17px; }
-              .card-select { min-width: 180px; }
+              .card-version-row td { padding: 0; background: #f8fafc; }
+              .card-version-panel { padding: 14px; border-bottom: 1px solid #e2e8f0; }
+              .card-version-panel-title { margin: 0 0 10px; color: #334155; font-size: 13px; font-weight: 700; }
+              .card-version-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+              .card-version-option { display: grid; grid-template-columns: 18px 92px minmax(0, 1fr); gap: 10px; align-items: center; min-height: 114px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; color: #111827; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
+              .card-version-option:hover { border-color: #60a5fa; background: #f8fbff; }
+              .card-version-option.selected { border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 1px #2563eb; }
+              .card-version-radio { width: 17px; height: 17px; margin: 0; padding: 0; accent-color: #2563eb; }
+              .card-version-preview { display: flex; width: 92px; height: 92px; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 8px; background: #eef2f7; }
+              .card-version-preview img { width: 100%; height: 100%; object-fit: contain; }
+              .card-version-preview-empty { color: #64748b; font-size: 11px; line-height: 1.35; text-align: center; }
+              .card-version-meta { min-width: 0; }
+              .card-version-name { display: block; margin-bottom: 7px; font-size: 15px; font-weight: 700; line-height: 1.4; word-break: break-word; }
+              .card-version-remaining { color: #475569; font-size: 12px; line-height: 1.45; }
+              .card-version-empty { margin: 0; padding: 14px; border: 1px dashed #cbd5e1; border-radius: 9px; background: #fff; color: #b45309; font-size: 13px; }
+              .qso-action { width: 164px; }
+              .select-qso-button { width: 154px; min-height: 44px; padding: 6px 10px; font-size: 12px; line-height: 1.25; }
+              .select-qso-button.selected, .select-qso-button.selected:disabled { border-color: #16a34a; background: #f0fdf4; color: #166534; opacity: 1; }
               .reason { color: #b45309; font-weight: 600; }
               .status-text > .en { color: inherit; }
               .hidden { display: none !important; }
@@ -80,7 +97,7 @@ public class QslPublicCardRequestPageRenderService {
               .feedback.error { border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
               .feedback.success { border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; }
               .actions { margin-top: 14px; display: flex; gap: 10px; }
-              @media (max-width: 700px) { .page { padding: 12px; } .grid { grid-template-columns: 1fr; } .full { grid-column: auto; } .query-row { grid-template-columns: 1fr; } .actions button { width: 100%; } }
+              @media (max-width: 700px) { .page { padding: 12px; } .grid { grid-template-columns: 1fr; } .full { grid-column: auto; } .query-row { grid-template-columns: 1fr; } .actions button { width: 100%; } .card-version-grid { grid-template-columns: 1fr; } .card-version-option { grid-template-columns: 18px 76px minmax(0, 1fr); min-height: 98px; } .card-version-preview { width: 76px; height: 76px; } }
             </style>
           </head>
           <body>
@@ -107,8 +124,8 @@ public class QslPublicCardRequestPageRenderService {
                         <th><span class="table-label bilingual"><span class="zh">通联时间</span><span class="en" lang="en">Time</span></span></th>
                         <th><span class="table-label bilingual"><span class="zh">通联频率</span><span class="en" lang="en">Frequency</span></span></th>
                         <th><span class="table-label bilingual"><span class="zh">对方位置</span><span class="en" lang="en">Location</span></span></th>
-                        <th><span class="table-label bilingual"><span class="zh">卡片版本</span><span class="en" lang="en">Card Version</span></span></th>
                         <th><span class="table-label bilingual"><span class="zh">状态</span><span class="en" lang="en">Status</span></span></th>
+                        <th><span class="table-label bilingual"><span class="zh">操作</span><span class="en" lang="en">Action</span></span></th>
                       </tr></thead>
                       <tbody id="qsoRows"></tbody>
                     </table>
@@ -174,28 +191,72 @@ public class QslPublicCardRequestPageRenderService {
                   el('callSign').value = value;
                   return value;
                 };
-                const cardOptions = () => state.stationCards
-                  .filter((item) => Number(item.remainingInventory || 0) > 0)
-                  .map((item) => `<option value="${escapeHtml(item.cardVersion)}">${escapeHtml(item.cardVersion)}（余量 ${Number(item.remainingInventory || 0)} / Remaining ${Number(item.remainingInventory || 0)}）</option>`)
-                  .join('');
+                const availableStationCards = () => state.stationCards
+                  .filter((item) => String(item.cardVersion || '').trim() && Number(item.remainingInventory || 0) > 0);
+                const cardCandidatesHtml = (qsoRecordName) => {
+                  const cards = availableStationCards();
+                  if (!cards.length) {
+                    return `<p class="card-version-empty bilingual"><span class="zh">暂无有库存余量的卡片版本。</span><span class="en" lang="en">No card version with remaining inventory is currently available.</span></p>`;
+                  }
+                  return `<div class="card-version-grid">${cards.map((item) => {
+                    const version = String(item.cardVersion || '').trim();
+                    const remaining = Number(item.remainingInventory || 0);
+                    const previewUrl = String(item.previewUrl || '').trim();
+                    const preview = previewUrl
+                      ? `<img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(version)} 卡片预览 / Card Preview" loading="lazy" />`
+                      : `<span class="card-version-preview-empty bilingual"><span class="zh">暂无图片</span><span class="en" lang="en">No Preview</span></span>`;
+                    return `<label class="card-version-option">
+                      <input class="card-version-radio" type="radio" name="card-version-${escapeHtml(qsoRecordName)}" data-version-for="${escapeHtml(qsoRecordName)}" value="${escapeHtml(version)}" aria-label="选择卡片版本 ${escapeHtml(version)} / Select Card Version ${escapeHtml(version)}" />
+                      <span class="card-version-preview">${preview}</span>
+                      <span class="card-version-meta"><strong class="card-version-name">${escapeHtml(version)}</strong><span class="card-version-remaining bilingual"><span class="zh">剩余可用：${remaining}</span><span class="en" lang="en">Remaining: ${remaining}</span></span></span>
+                    </label>`;
+                  }).join('')}</div>`;
+                };
                 const renderQsoRows = () => {
                   const body = el('qsoRows');
                   body.innerHTML = '';
                   for (const item of state.qsoItems) {
                     const row = document.createElement('tr');
-                    if (!item.selectable) row.className = 'disabled';
+                    row.className = item.selectable ? 'qso-row' : 'qso-row disabled';
                     row.innerHTML = `
                       <td><input class="row-check" type="checkbox" data-qso="${escapeHtml(item.qsoRecordName)}" aria-label="选择 ${escapeHtml(item.qsoRecordName)} / Select ${escapeHtml(item.qsoRecordName)}" ${item.selectable ? '' : 'disabled'} /></td>
                       <td>${escapeHtml(item.qsoRecordName)}</td><td>${escapeHtml(item.date)}</td><td>${escapeHtml(item.time)}</td>
                       <td>${escapeHtml(item.freq)}</td><td>${escapeHtml(item.qth)}</td>
-                      <td><select class="card-select" data-version-for="${escapeHtml(item.qsoRecordName)}" aria-label="卡片版本 / Card Version" disabled><option value="">请选择卡片版本 / Select Card Version</option>${cardOptions()}</select></td>
-                      <td class="${item.selectable ? '' : 'reason'}">${qsoStatusHtml(item)}</td>`;
+                      <td class="${item.selectable ? '' : 'reason'}">${qsoStatusHtml(item)}</td>
+                      <td class="qso-action"><button class="select-qso-button" type="button" data-select-qso="${escapeHtml(item.qsoRecordName)}" ${item.selectable ? '' : 'disabled'}><span class="zh">申请此记录的卡片</span><span class="en" lang="en">Request Card for This QSO</span></button></td>`;
                     body.appendChild(row);
+                    if (item.selectable) {
+                      const cardRow = document.createElement('tr');
+                      cardRow.className = 'card-version-row hidden';
+                      cardRow.dataset.cardRowFor = item.qsoRecordName || '';
+                      cardRow.innerHTML = `<td colspan="8"><div class="card-version-panel"><p class="card-version-panel-title bilingual"><span class="zh">为 ${escapeHtml(item.qsoRecordName)} 选择卡片版本</span><span class="en" lang="en">Choose a card version for ${escapeHtml(item.qsoRecordName)}</span></p>${cardCandidatesHtml(item.qsoRecordName)}</div></td>`;
+                      body.appendChild(cardRow);
+                    }
                   }
                   body.querySelectorAll('.row-check').forEach((box) => box.addEventListener('change', () => {
-                    const select = body.querySelector(`[data-version-for="${CSS.escape(box.dataset.qso)}"]`);
-                    select.disabled = !box.checked;
-                    if (!box.checked) select.value = '';
+                    const cardRow = body.querySelector(`[data-card-row-for="${CSS.escape(box.dataset.qso)}"]`);
+                    const actionButton = body.querySelector(`[data-select-qso="${CSS.escape(box.dataset.qso)}"]`);
+                    cardRow?.classList.toggle('hidden', !box.checked);
+                    if (actionButton) {
+                      actionButton.disabled = box.checked;
+                      actionButton.classList.toggle('selected', box.checked);
+                      actionButton.querySelector('.zh').textContent = box.checked ? '已选择此记录' : '申请此记录的卡片';
+                      actionButton.querySelector('.en').textContent = box.checked ? 'Selected' : 'Request Card for This QSO';
+                    }
+                    if (!box.checked && cardRow) {
+                      cardRow.querySelectorAll('.card-version-radio').forEach((radio) => { radio.checked = false; });
+                      cardRow.querySelectorAll('.card-version-option').forEach((option) => option.classList.remove('selected'));
+                    }
+                  }));
+                  body.querySelectorAll('.select-qso-button').forEach((button) => button.addEventListener('click', () => {
+                    const box = body.querySelector(`.row-check[data-qso="${CSS.escape(button.dataset.selectQso)}"]`);
+                    if (!box || box.disabled || box.checked) return;
+                    box.checked = true;
+                    box.dispatchEvent(new Event('change', { bubbles: true }));
+                  }));
+                  body.querySelectorAll('.card-version-radio').forEach((radio) => radio.addEventListener('change', () => {
+                    const grid = radio.closest('.card-version-grid');
+                    grid?.querySelectorAll('.card-version-option').forEach((option) => option.classList.toggle('selected', option.querySelector('.card-version-radio')?.checked === true));
                   }));
                   el('qsoTableWrap').classList.toggle('hidden', state.qsoItems.length === 0);
                 };
@@ -323,8 +384,8 @@ public class QslPublicCardRequestPageRenderService {
                 };
                 const selectedQsoItems = () => Array.from(document.querySelectorAll('.row-check:checked')).map((box) => {
                   const qsoRecordName = box.dataset.qso || '';
-                  const select = document.querySelector(`[data-version-for="${CSS.escape(qsoRecordName)}"]`);
-                  return { qsoRecordName, cardVersion: (select?.value || '').trim() };
+                  const radio = document.querySelector(`.card-version-radio[data-version-for="${CSS.escape(qsoRecordName)}"]:checked`);
+                  return { qsoRecordName, cardVersion: (radio?.value || '').trim() };
                 });
                 const submit = async (event) => {
                   event.preventDefault();
