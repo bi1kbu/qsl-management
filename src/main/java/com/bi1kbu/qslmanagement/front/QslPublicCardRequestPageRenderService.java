@@ -89,7 +89,12 @@ public class QslPublicCardRequestPageRenderService {
               .select-qso-button { width: 154px; min-height: 44px; padding: 6px 10px; font-size: 12px; line-height: 1.25; }
               .select-qso-button.selected, .select-qso-button.selected:disabled { border-color: #16a34a; background: #f0fdf4; color: #166534; opacity: 1; }
               .reason { color: #b45309; font-weight: 600; }
+              .status-text { display: inline-block; padding: 5px 8px; border-radius: 8px; font-weight: 700; }
               .status-text > .en { color: inherit; }
+              .status-available, .status-rejected-reapply { background: #f0fdf4; color: #166534; }
+              .status-review-pending, .status-card-creating, .status-card-creation-failed { background: #fff7ed; color: #9a3412; }
+              .status-card-pending-issue, .status-card-issued, .status-card-packed { background: #eff6ff; color: #1d4ed8; }
+              .status-card-sent, .status-card-signed { background: #ecfdf5; color: #047857; }
               .hidden { display: none !important; }
               .contact { margin-top: 10px; padding: 13px; border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff; color: #1e3a8a; line-height: 1.7; }
               .contact a { color: #1d4ed8; font-weight: 700; }
@@ -170,9 +175,11 @@ public class QslPublicCardRequestPageRenderService {
                 const optionText = (zh, en) => `${zh} / ${en}`;
                 const statusEnglish = (status) => ({'待处理':'Pending','通过':'Approved','拒绝':'Rejected'}[status] || status || 'Unknown');
                 const qsoStatusHtml = (item) => {
-                  const zh = item.unselectableReason || '可申请';
-                  const en = ({'已有卡片':'Card already exists','待审核':'Pending review','可申请':'Available'}[zh] || 'Unavailable');
-                  return `<span class="status-text bilingual"><span class="zh">${escapeHtml(zh)}</span><span class="en" lang="en">${escapeHtml(en)}</span></span>`;
+                  const zh = item.statusText || item.unselectableReason || '可申请';
+                  const en = item.statusTextEn || ({'已有卡片':'Card already exists','待审核':'Pending review','可申请':'Available'}[zh] || 'Unavailable');
+                  const code = String(item.statusCode || (item.selectable ? 'AVAILABLE' : 'UNKNOWN'))
+                    .toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                  return `<span class="status-text status-${code} bilingual"><span class="zh">${escapeHtml(zh)}</span><span class="en" lang="en">${escapeHtml(en)}</span></span>`;
                 };
                 const setFeedback = (message, error = false) => {
                   const node = el('feedback');

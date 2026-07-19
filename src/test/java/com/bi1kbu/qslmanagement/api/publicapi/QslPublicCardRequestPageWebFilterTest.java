@@ -70,6 +70,10 @@ class QslPublicCardRequestPageWebFilterTest {
         assertTrue(body.contains("box.dispatchEvent(new Event('change'"));
         assertTrue(body.contains("box.checked ? '已选择此记录'"));
         assertTrue(body.contains("colspan=\"8\""));
+        assertTrue(body.contains("item.statusText || item.unselectableReason || '可申请'"));
+        assertTrue(body.contains("item.statusTextEn"));
+        assertTrue(body.contains("status-card-sent"));
+        assertTrue(body.contains("status-card-signed"));
         assertTrue(body.contains("id=\"postalCode\" maxlength=\"20\" autocomplete=\"postal-code\" required"));
         assertTrue(body.contains("id=\"address\" maxlength=\"200\" autocomplete=\"street-address\" required"));
         assertFalse(body.contains("id=\"name\" maxlength=\"60\" autocomplete=\"name\" required"));

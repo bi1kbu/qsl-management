@@ -1,6 +1,6 @@
 # 实体 QSL 卡申请开发约束框架（V1）
 
-更新时间：2026-07-16  
+更新时间：2026-07-19
 状态：已实现，继续作为功能维护与回归验收基线
 适用版本：Halo 2.23.0、QSL 管理插件当前开发版本  
 功能入口：`/qsl_card`
@@ -15,12 +15,13 @@
 
 ## 2. 官方资料基线
 
-Halo 官方资料核验日期：2026-07-16。
+Halo 官方资料核验日期：2026-07-19。
 
-1. [Web 过滤器](https://docs.halo.run/developer-guide/plugin/extension-points/server/additional-webfilter)
-2. [基于角色的权限控制](https://docs.halo.run/developer-guide/plugin/security/rbac)
-3. [API 权限控制与角色模板](https://docs.halo.run/developer-guide/plugin/security/role-template)
-4. [API 变更日志](https://docs.halo.run/developer-guide/plugin/api-changelog)
+1. [Web 过滤器](https://docs.halo.run/2.23/developer-guide/plugin/extension-points/server/additional-webfilter)
+2. [与自定义模型交互](https://docs.halo.run/2.23/developer-guide/plugin/api-reference/server/extension-client)
+3. [基于角色的权限控制](https://docs.halo.run/2.23/developer-guide/plugin/security/rbac)
+4. [API 权限控制与角色模板](https://docs.halo.run/2.23/developer-guide/plugin/security/role-template)
+5. [API 变更日志](https://docs.halo.run/2.23/developer-guide/plugin/api-changelog)
 
 实现完成后必须再次核对目标 Halo 版本的上述文档和 API 变更记录。如果 Halo 官方扩展点行为发生变化，应先更新本文档再继续编码。
 
@@ -90,6 +91,9 @@ GET /qsl_card
    - `qth（对方位置）`
    - `selectable（是否可选择）`
    - `unselectableReason（不可选择原因）`
+   - `statusCode（公开状态码）`
+   - `statusText（中文状态文字）`
+   - `statusTextEn（英文状态文字）`
 5. 公开结果不得包含本台设备、完整备注、个人地址、联系方式、邮件状态或其他无关敏感字段。
 
 ### 6.2 QSO 选择与卡片版本
@@ -102,18 +106,32 @@ GET /qsl_card
 6. 前端库存提示只用于交互，最终有效性和库存必须由服务端重新校验。
 7. `StationCard.status.active=true` 表示“仅支持实体 QSL 通联卡”，不限制本页面选择和提交；`false/null` 表示通用版本。该字段只限制线上换卡，普通通联和线下换卡与实体 QSL 卡申请保持一致，均允许使用。
 8. 勾选可申请 QSO 后，页面必须在该记录下方展开可视化卡片版本候选区，不使用仅显示文字的原生下拉框。每个候选项左侧使用固定正方形图片框，以 `object-fit: contain` 完整显示横版或竖版卡面；右侧显示卡片版本名称和剩余可用数量。每条 QSO 使用独立单选状态，取消勾选时收起候选区并清除已选版本。
-9. QSO 表格最右侧必须提供“申请此记录的卡片”按钮。可申请记录点击该按钮时只激活同一行左侧复选框并展开卡片版本候选区，不直接提交申请；勾选后按钮显示“已选择此记录”并禁用，取消复选框后恢复。待审核或已有卡片的记录保留按钮位置但必须禁用。
+9. QSO 表格最右侧必须提供“申请此记录的卡片”按钮。可申请记录点击该按钮时只激活同一行左侧复选框并展开卡片版本候选区，不直接提交申请；勾选后按钮显示“已选择此记录”并禁用，取消复选框后恢复。审核中、建卡中、建卡异常、待制卡、已制卡、已打包、已发卡、已签收或已有卡片的记录保留按钮位置但必须禁用；申请未通过且没有卡片的记录允许重新申请。
 
-### 6.3 不可选择状态
+### 6.3 前台申请与发卡进度状态
 
-下列 QSO 必须显示但禁用复选框：
+公开查询必须根据实体卡申请和关联卡片的实时事实计算状态，不得把展示状态重复写入 QSO 或申请记录：
 
-| 场景 | 页面原因 | 服务端判断依据 |
-| --- | --- | --- |
-| QSO 位于其他待处理实体卡申请中 | `待审核` | 存在有效的待处理申请占用记录 |
-| QSO 已存在卡片 | `已有卡片` | 任意 `CardRecord.spec.qsoRecordName` 已指向该 QSO |
+| `statusCode（状态码）` | 页面中文状态 | 页面英文状态 | 是否可选择 | 服务端判断依据 |
+| --- | --- | --- | --- | --- |
+| `AVAILABLE` | 可申请 | Available | 是 | 无有效占用、申请或关联卡片 |
+| `REJECTED_REAPPLY` | 申请未通过，可重新申请 | Not Approved, Reapplication Available | 是 | 最近申请已拒绝且没有关联卡片或有效占用 |
+| `REVIEW_PENDING` | 审核中 | Pending Review | 否 | 存在有效占用，或申请审核状态为待处理 |
+| `CARD_CREATING` | 审核通过，正在创建卡片 | Approved, Creating Card | 否 | 审核通过且建卡状态为创建中 |
+| `CARD_CREATION_FAILED` | 审核通过，建卡异常 | Approved, Card Creation Issue | 否 | 审核通过且该申请存在建卡失败 |
+| `CARD_PENDING_ISSUE` | 审核通过，待制卡 | Approved, Awaiting Card Production | 否 | 审核通过且卡片已创建、尚未制卡 |
+| `CARD_ISSUED` | 已制卡，待打包 | Card Produced, Awaiting Packing | 否 | `CardRecord.spec.cardIssued=true` |
+| `CARD_PACKED` | 已打包，待寄出 | Packed, Awaiting Dispatch | 否 | `CardRecord.spec.envelopePrinted=true` |
+| `CARD_SENT` | 已发卡 | Card Sent | 否 | `CardRecord.spec.cardSent=true` |
+| `CARD_SIGNED` | 已签收 | Delivered | 否 | `CardRecord.spec.receiptConfirmed=true` |
 
-“已有卡片”包括正式卡片以及“不创建卡片”等已经占用 QSO 的持久化卡片记录，不得仅判断 `C{序号}` 正式卡片。
+补充约束：
+
+1. 后台直接创建或旧数据无法关联到实体卡申请时，尚未制卡的卡片显示“已有卡片，待制卡 / Card Exists, Awaiting Production”，状态码仍为 `CARD_PENDING_ISSUE`，不得错误宣称已经通过申请审核。
+2. “已有卡片”只作为无法进一步判断的旧数据兜底，不再作为正常业务流程的唯一状态。
+3. “已收卡片”表示本站收到对方卡片，不属于用户申请实体卡的寄送进度，不进入本状态链。
+4. 同一 QSO 存在多张历史卡片时，按“已签收→已发卡→已打包→已制卡→待制卡”的最高完成度展示。
+5. `unselectableReason（不可选择原因）` 为兼容字段；不可选择时使用中文状态文字，可重新申请或可申请时保持为空。
 
 ### 6.4 地址类型
 
@@ -351,7 +369,7 @@ api.qsl-management.bi1kbu.com/v1alpha1
 | 方法 | 完整路径 | 用途 | 认证要求 |
 | --- | --- | --- | --- |
 | GET | `/qsl_card` | 实体 QSL 卡申请页面 | 匿名，精确非资源型权限 |
-| GET | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/qsl-card/-/qsos?callSign=...` | 查询 QSO 和禁选原因 | 匿名、限流 |
+| GET | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/qsl-card/-/qsos?callSign=...` | 查询 QSO、是否可申请及审核/制卡/寄送进度 | 匿名、限流 |
 | GET | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/station-cards` | 获取公开卡片版本及 `qsoOnly（是否仅限实体 QSL 通联卡）`；实体卡申请允许使用全部版本 | 复用现有匿名接口 |
 | GET | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/exchange-online/-/bureaus` | 获取公开卡片局 | 复用现有匿名接口 |
 | GET | `/apis/api.qsl-management.bi1kbu.com/v1alpha1/qsl-card/-/station-contact` | 仅获取本台公开邮箱 | 匿名、限流 |
@@ -364,6 +382,23 @@ qsl-card/qsos
 qsl-card/station-contact
 qsl-card/requests
 ```
+
+QSO 查询结果的每条记录必须包含：
+
+```text
+qsoRecordName（QSO记录编号）
+date（通联日期）
+time（通联时间）
+freq（通联频率）
+qth（对方位置）
+selectable（是否可选择）
+unselectableReason（不可选择原因，兼容字段）
+statusCode（公开状态码）
+statusText（中文状态文字）
+statusTextEn（英文状态文字）
+```
+
+不得返回申请备注、审核说明、审核人、内部建卡错误、地址、电子邮箱或邮件状态。
 
 ### 10.2 后台数据与动作 API
 
@@ -503,7 +538,7 @@ plugin:qsl-management:qsl-card-request:edit
 
 1. 页面路由仅允许 `/qsl_card` 和可选末尾 `/`。
 2. 不存在同功能 `/apis` HTML 页面路由和极简别名。
-3. QSO 待审核、已有卡片和可申请三种状态。
+3. QSO 可申请、可重新申请、审核中、建卡中、建卡异常、待制卡、已制卡、已打包、已发卡和已签收状态及其优先级。
 4. 已有“不创建卡片”占位记录时 QSO 也不可申请。
 5. 前台无法查询个人地址。
 6. 个人地址每次提交后由服务端复用或创建。
@@ -521,7 +556,7 @@ plugin:qsl-management:qsl-card-request:edit
 
 至少覆盖：
 
-1. 不可申请 QSO 显示原因且复选框禁用。
+1. 页面使用服务端返回的中英状态文字；不可申请 QSO 显示具体进度且复选框禁用，可重新申请状态保持可选。
 2. 已选 QSO 必须逐条选择卡片版本。
 3. 取消勾选会清除卡片版本。
 4. 地址类型切换清除另一类型字段。
@@ -558,7 +593,7 @@ plugin:qsl-management:qsl-card-request:edit
 1. 用户只能通过 `/qsl_card` 访问申请页面。
 2. 前台没有任何个人地址读取能力。
 3. 卡片局公开可选，新增卡片局只能通过邮件联系本台。
-4. 两类禁选规则在前端展示和服务端提交中均生效。
+4. 待处理占用和已有卡片两类禁选规则在前端展示和服务端提交中均生效，前台进一步展示审核、建卡、制卡、打包、发卡和签收进度。
 5. 每条已选 QSO 都有独立卡片版本。
 6. 同一 QSO 不会因并发产生多个待处理申请或多张卡片。
 7. 点击“审核通过”立即尝试创建全部卡片。
@@ -573,7 +608,7 @@ plugin:qsl-management:qsl-card-request:edit
 3. 数据交互继续使用 `/apis` 下的公开或后台资源型 API。
 4. 不复用 `ExchangeRequest`。
 5. 前台选择多个 QSO，并为每条已选 QSO 单独选择一个卡片版本。
-6. 待处理申请和已有卡片的 QSO 均显示但不可选择，原因分别为“待审核”和“已有卡片”。
+6. 待处理申请和已有卡片的 QSO 均显示但不可选择；前台根据申请与卡片事实显示审核中、建卡中、建卡异常、待制卡、已制卡、已打包、已发卡和已签收，拒绝且无卡片时显示可重新申请。
 7. 前台不得从后台获取个人地址，每次必须重新填写。
 8. 个人地址提交后立即复用或创建地址资源，无论审核结果均保留。
 9. 卡片局公开，沿用现有地址绑定方式，不新增业务编号。

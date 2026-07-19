@@ -47,6 +47,16 @@ public class QslCardRequestService {
     private static final String CARD_STATUS_CREATING = "创建中";
     private static final String CARD_STATUS_SUCCESS = "全部成功";
     private static final String CARD_STATUS_PARTIAL = "部分失败";
+    private static final String PUBLIC_STATUS_AVAILABLE = "AVAILABLE";
+    private static final String PUBLIC_STATUS_REVIEW_PENDING = "REVIEW_PENDING";
+    private static final String PUBLIC_STATUS_CARD_CREATING = "CARD_CREATING";
+    private static final String PUBLIC_STATUS_CARD_CREATION_FAILED = "CARD_CREATION_FAILED";
+    private static final String PUBLIC_STATUS_CARD_PENDING_ISSUE = "CARD_PENDING_ISSUE";
+    private static final String PUBLIC_STATUS_CARD_ISSUED = "CARD_ISSUED";
+    private static final String PUBLIC_STATUS_CARD_PACKED = "CARD_PACKED";
+    private static final String PUBLIC_STATUS_CARD_SENT = "CARD_SENT";
+    private static final String PUBLIC_STATUS_CARD_SIGNED = "CARD_SIGNED";
+    private static final String PUBLIC_STATUS_REJECTED_REAPPLY = "REJECTED_REAPPLY";
     private static final int MAX_QSO_ITEMS = 20;
 
     private final ReactiveExtensionClient client;
@@ -75,21 +85,45 @@ public class QslCardRequestService {
                 .filter(item -> callSign.equals(QslApiSupport.normalizeCallSign(item.getSpec().getCallSign())))
                 .filter(item -> "QSO".equals(normalizeQsoSceneType(item.getSpec().getSceneType())))
                 .collectList(),
-            occupiedQsoRecordNames(),
+            client.listAll(CardRecord.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .filter(item -> item.getSpec() != null)
+                .collectList(),
             client.listAll(QslCardRequestQsoReservation.class, EMPTY_OPTIONS, DEFAULT_SORT)
                 .filter(item -> item.getSpec() != null)
+                .collectList(),
+            client.listAll(QslCardRequest.class, EMPTY_OPTIONS, DEFAULT_SORT)
+                .filter(item -> item.getMetadata() != null && item.getSpec() != null)
+                .collectList()
+        ).map(tuple -> {
+            var cardsByQso = indexCardProgressByQso(tuple.getT2());
+            var pendingOccupied = tuple.getT3().stream()
                 .map(item -> normalize(item.getSpec().getQsoRecordName()))
                 .filter(item -> !item.isBlank())
-                .collect(LinkedHashSet::new, Set::add)
-        ).map(tuple -> {
-            var cardOccupied = tuple.getT2();
-            var pendingOccupied = tuple.getT3();
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            var latestRequestsByQso = indexLatestRequestsByQso(tuple.getT4());
             var items = tuple.getT1().stream()
                 .map(qso -> {
                     var name = normalize(qso.getMetadata().getName());
-                    var reason = cardOccupied.contains(name)
-                        ? "已有卡片"
-                        : pendingOccupied.contains(name) ? "待审核" : "";
+                    var request = latestRequestsByQso.get(name);
+                    var progress = cardsByQso.get(name);
+                    if (progress != null && PUBLIC_STATUS_CARD_PENDING_ISSUE.equals(progress.statusCode())) {
+                        progress = isApprovedRequest(request)
+                            ? publicProgress(PUBLIC_STATUS_CARD_PENDING_ISSUE,
+                                "审核通过，待制卡", "Approved, Awaiting Card Production", false, 50)
+                            : publicProgress(PUBLIC_STATUS_CARD_PENDING_ISSUE,
+                                "已有卡片，待制卡", "Card Exists, Awaiting Production", false, 50);
+                    }
+                    if (progress == null && pendingOccupied.contains(name)) {
+                        progress = publicProgress(PUBLIC_STATUS_REVIEW_PENDING,
+                            "审核中", "Pending Review", false, 20);
+                    }
+                    if (progress == null) {
+                        progress = resolveRequestProgress(request);
+                    }
+                    if (progress == null) {
+                        progress = publicProgress(PUBLIC_STATUS_AVAILABLE,
+                            "可申请", "Available", true, 0);
+                    }
                     var spec = qso.getSpec();
                     return new PublicQsoEligibilityItem(
                         name,
@@ -97,13 +131,108 @@ public class QslCardRequestService {
                         normalize(spec.getTime()),
                         normalize(spec.getFreq()),
                         normalize(spec.getQth()),
-                        reason.isBlank(),
-                        reason
+                        progress.selectable(),
+                        progress.selectable() ? "" : progress.statusText(),
+                        progress.statusCode(),
+                        progress.statusText(),
+                        progress.statusTextEn()
                     );
                 })
                 .toList();
             return new PublicQsoEligibilityResult(callSign, items, items.size());
         });
+    }
+
+    private Map<String, PublicQsoProgress> indexCardProgressByQso(List<CardRecord> cards) {
+        Map<String, PublicQsoProgress> result = new LinkedHashMap<>();
+        for (var card : cards) {
+            var qsoRecordName = normalize(card.getSpec().getQsoRecordName());
+            if (qsoRecordName.isBlank()) {
+                continue;
+            }
+            var progress = resolveCardProgress(card);
+            result.merge(qsoRecordName, progress,
+                (current, candidate) -> candidate.rank() > current.rank() ? candidate : current);
+        }
+        return result;
+    }
+
+    private Map<String, QslCardRequest> indexLatestRequestsByQso(List<QslCardRequest> requests) {
+        Map<String, QslCardRequest> result = new LinkedHashMap<>();
+        for (var request : requests) {
+            for (var item : safeQsoItems(request)) {
+                var qsoRecordName = normalize(item.getQsoRecordName());
+                if (!qsoRecordName.isBlank()) {
+                    result.putIfAbsent(qsoRecordName, request);
+                }
+            }
+        }
+        return result;
+    }
+
+    private PublicQsoProgress resolveCardProgress(CardRecord card) {
+        var spec = card.getSpec();
+        var flowStatus = card.getStatus() == null ? "" : normalize(card.getStatus().getFlowStatus());
+        if (Boolean.TRUE.equals(spec.getReceiptConfirmed()) || "已签收".equals(flowStatus)) {
+            return publicProgress(PUBLIC_STATUS_CARD_SIGNED, "已签收", "Delivered", false, 90);
+        }
+        if (Boolean.TRUE.equals(spec.getCardSent()) || "已发信".equals(flowStatus)) {
+            return publicProgress(PUBLIC_STATUS_CARD_SENT, "已发卡", "Card Sent", false, 80);
+        }
+        if (Boolean.TRUE.equals(spec.getEnvelopePrinted()) || "已打包".equals(flowStatus)) {
+            return publicProgress(PUBLIC_STATUS_CARD_PACKED,
+                "已打包，待寄出", "Packed, Awaiting Dispatch", false, 70);
+        }
+        if (Boolean.TRUE.equals(spec.getCardIssued()) || "已制卡".equals(flowStatus)) {
+            return publicProgress(PUBLIC_STATUS_CARD_ISSUED,
+                "已制卡，待打包", "Card Produced, Awaiting Packing", false, 60);
+        }
+        return publicProgress(PUBLIC_STATUS_CARD_PENDING_ISSUE,
+            "已有卡片，待制卡", "Card Exists, Awaiting Production", false, 50);
+    }
+
+    private PublicQsoProgress resolveRequestProgress(QslCardRequest request) {
+        if (request == null) {
+            return null;
+        }
+        var status = ensureStatus(request);
+        var reviewStatus = normalize(status.getReviewStatus());
+        if (REVIEW_REJECTED.equals(reviewStatus)) {
+            return publicProgress(PUBLIC_STATUS_REJECTED_REAPPLY,
+                "申请未通过，可重新申请", "Not Approved, Reapplication Available", true, 10);
+        }
+        if (REVIEW_PENDING.equals(reviewStatus) || "待审核".equals(reviewStatus)) {
+            return publicProgress(PUBLIC_STATUS_REVIEW_PENDING,
+                "审核中", "Pending Review", false, 20);
+        }
+        if (!REVIEW_APPROVED.equals(reviewStatus)) {
+            return null;
+        }
+        var cardCreationStatus = normalize(status.getCardCreationStatus());
+        if (CARD_STATUS_CREATING.equals(cardCreationStatus)) {
+            return publicProgress(PUBLIC_STATUS_CARD_CREATING,
+                "审核通过，正在创建卡片", "Approved, Creating Card", false, 30);
+        }
+        if (CARD_STATUS_PARTIAL.equals(cardCreationStatus)) {
+            return publicProgress(PUBLIC_STATUS_CARD_CREATION_FAILED,
+                "审核通过，建卡异常", "Approved, Card Creation Issue", false, 40);
+        }
+        return publicProgress(PUBLIC_STATUS_CARD_PENDING_ISSUE,
+            "审核通过，待制卡", "Approved, Awaiting Card Production", false, 50);
+    }
+
+    private boolean isApprovedRequest(QslCardRequest request) {
+        return request != null && REVIEW_APPROVED.equals(normalize(ensureStatus(request).getReviewStatus()));
+    }
+
+    private PublicQsoProgress publicProgress(
+        String statusCode,
+        String statusText,
+        String statusTextEn,
+        boolean selectable,
+        int rank
+    ) {
+        return new PublicQsoProgress(statusCode, statusText, statusTextEn, selectable, rank);
     }
 
     public Mono<PublicStationContact> getPublicStationContact() {
@@ -901,7 +1030,10 @@ public class QslCardRequestService {
         String freq,
         String qth,
         boolean selectable,
-        String unselectableReason
+        String unselectableReason,
+        String statusCode,
+        String statusText,
+        String statusTextEn
     ) {
     }
 
@@ -950,5 +1082,14 @@ public class QslCardRequestService {
     }
 
     private record AddressBinding(String resourceName) {
+    }
+
+    private record PublicQsoProgress(
+        String statusCode,
+        String statusText,
+        String statusTextEn,
+        boolean selectable,
+        int rank
+    ) {
     }
 }

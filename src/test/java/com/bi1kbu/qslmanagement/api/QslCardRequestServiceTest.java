@@ -44,15 +44,83 @@ class QslCardRequestServiceTest {
         when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.just(card));
         when(client.listAll(eq(QslCardRequestQsoReservation.class), any(), any()))
             .thenReturn(Flux.just(reservation));
+        when(client.listAll(eq(QslCardRequest.class), any(), any())).thenReturn(Flux.empty());
 
         var result = service(client).listEligibleQso("bi1kbu").block();
 
         assertEquals(3, result.total());
         assertFalse(result.items().get(0).selectable());
-        assertEquals("已有卡片", result.items().get(0).unselectableReason());
+        assertEquals("已有卡片，待制卡", result.items().get(0).unselectableReason());
+        assertEquals("CARD_PENDING_ISSUE", result.items().get(0).statusCode());
         assertFalse(result.items().get(1).selectable());
-        assertEquals("待审核", result.items().get(1).unselectableReason());
+        assertEquals("审核中", result.items().get(1).unselectableReason());
+        assertEquals("REVIEW_PENDING", result.items().get(1).statusCode());
         assertTrue(result.items().get(2).selectable());
+        assertEquals("AVAILABLE", result.items().get(2).statusCode());
+    }
+
+    @Test
+    void shouldExposeCardLifecycleStatuses() {
+        var client = mock(ReactiveExtensionClient.class);
+        var pending = card("C1001", "QSO0001");
+        var issued = card("C1002", "QSO0002");
+        issued.getSpec().setCardIssued(Boolean.TRUE);
+        var packed = card("C1003", "QSO0003");
+        packed.getSpec().setEnvelopePrinted(Boolean.TRUE);
+        var sent = card("C1004", "QSO0004");
+        sent.getSpec().setCardSent(Boolean.TRUE);
+        var signed = card("C1005", "QSO0005");
+        signed.getSpec().setReceiptConfirmed(Boolean.TRUE);
+        var approved = request("QCR0001", "BI1KBU", "QSO0001", "2026版");
+        approved.getStatus().setReviewStatus("通过");
+        approved.getStatus().setCardCreationStatus("全部成功");
+
+        when(client.listAll(eq(QsoRecord.class), any(), any())).thenReturn(Flux.just(
+            qso("QSO0001", "BI1KBU"), qso("QSO0002", "BI1KBU"), qso("QSO0003", "BI1KBU"),
+            qso("QSO0004", "BI1KBU"), qso("QSO0005", "BI1KBU")
+        ));
+        when(client.listAll(eq(CardRecord.class), any(), any()))
+            .thenReturn(Flux.just(pending, issued, packed, sent, signed));
+        when(client.listAll(eq(QslCardRequestQsoReservation.class), any(), any())).thenReturn(Flux.empty());
+        when(client.listAll(eq(QslCardRequest.class), any(), any())).thenReturn(Flux.just(approved));
+
+        var result = service(client).listEligibleQso("BI1KBU").block();
+
+        assertEquals("审核通过，待制卡", result.items().get(0).statusText());
+        assertEquals("CARD_ISSUED", result.items().get(1).statusCode());
+        assertEquals("CARD_PACKED", result.items().get(2).statusCode());
+        assertEquals("CARD_SENT", result.items().get(3).statusCode());
+        assertEquals("已发卡", result.items().get(3).statusText());
+        assertEquals("CARD_SIGNED", result.items().get(4).statusCode());
+    }
+
+    @Test
+    void shouldExposeApprovedCreationProblemsAndRejectedReapplication() {
+        var client = mock(ReactiveExtensionClient.class);
+        var creating = request("QCR0001", "BI1KBU", "QSO0001", "2026版");
+        creating.getStatus().setReviewStatus("通过");
+        creating.getStatus().setCardCreationStatus("创建中");
+        var failed = request("QCR0002", "BI1KBU", "QSO0002", "2026版");
+        failed.getStatus().setReviewStatus("通过");
+        failed.getStatus().setCardCreationStatus("部分失败");
+        var rejected = request("QCR0003", "BI1KBU", "QSO0003", "2026版");
+        rejected.getStatus().setReviewStatus("拒绝");
+
+        when(client.listAll(eq(QsoRecord.class), any(), any())).thenReturn(Flux.just(
+            qso("QSO0001", "BI1KBU"), qso("QSO0002", "BI1KBU"), qso("QSO0003", "BI1KBU")
+        ));
+        when(client.listAll(eq(CardRecord.class), any(), any())).thenReturn(Flux.empty());
+        when(client.listAll(eq(QslCardRequestQsoReservation.class), any(), any())).thenReturn(Flux.empty());
+        when(client.listAll(eq(QslCardRequest.class), any(), any()))
+            .thenReturn(Flux.just(creating, failed, rejected));
+
+        var result = service(client).listEligibleQso("BI1KBU").block();
+
+        assertEquals("CARD_CREATING", result.items().get(0).statusCode());
+        assertEquals("CARD_CREATION_FAILED", result.items().get(1).statusCode());
+        assertEquals("REJECTED_REAPPLY", result.items().get(2).statusCode());
+        assertTrue(result.items().get(2).selectable());
+        assertEquals("", result.items().get(2).unselectableReason());
     }
 
     @Test
