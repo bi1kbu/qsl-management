@@ -18,6 +18,16 @@ import QslConfirmActionButton from '../../components/QslConfirmActionButton.vue'
 import QslDetailTable from '../../components/QslDetailTable.vue'
 import QslExpandableHistoryTable from '../../components/QslExpandableHistoryTable.vue'
 import QslPaginationBar from '../../components/QslPaginationBar.vue'
+import {
+  buildAdiField,
+  buildAdiContent,
+  buildAdxApplicationField,
+  buildAdxContent,
+  buildAdxField,
+  buildAdxTextField,
+  containsNonAscii,
+  resolveAdifModeFields,
+} from '../../utils/adif-export'
 import { buildQsoResourceName } from '../../utils/resource-name'
 import {
   applySortDirection,
@@ -240,8 +250,7 @@ const adifImportOverwriteCount = computed(
 const adifImportInvalidCount = computed(
   () =>
     adifImportPreview.value.filter(
-      (item) =>
-        !item.valid && !item.message.includes('重复') && !item.message.includes('已存在'),
+      (item) => !item.valid && !item.message.includes('重复') && !item.message.includes('已存在'),
     ).length,
 )
 
@@ -901,11 +910,7 @@ const getTimezoneOffsetMinutes = (timezone?: string): number => {
   if (!normalizedTimezone) {
     return 8 * 60
   }
-  if (
-    normalizedTimezone === 'UTC' ||
-    normalizedTimezone === 'GMT' ||
-    normalizedTimezone === 'Z'
-  ) {
+  if (normalizedTimezone === 'UTC' || normalizedTimezone === 'GMT' || normalizedTimezone === 'Z') {
     return 0
   }
   if (normalizedTimezone === '北京时间' || normalizedTimezone === 'ASIA/SHANGHAI') {
@@ -918,12 +923,7 @@ const getTimezoneOffsetMinutes = (timezone?: string): number => {
   const sign = matched[1] === '-' ? -1 : 1
   const hour = Number.parseInt(matched[2] ?? '0', 10)
   const minute = Number.parseInt(matched[3] ?? '0', 10)
-  if (
-    !Number.isInteger(hour) ||
-    !Number.isInteger(minute) ||
-    hour > 14 ||
-    minute > 59
-  ) {
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour > 14 || minute > 59) {
     return 8 * 60
   }
   return sign * (hour * 60 + minute)
@@ -1028,10 +1028,6 @@ const resolveAdifBand = (freq: string): string => {
   return adifBandRanges.find((item) => mhz >= item.min && mhz <= item.max)?.band ?? ''
 }
 
-const normalizeAdifMode = (mode: string): string => {
-  return mode.trim().toUpperCase().replace(/\s+/g, '')
-}
-
 const adifRemarkExportFields = new Set([
   'GRIDSQUARE',
   'MY_GRIDSQUARE',
@@ -1081,13 +1077,7 @@ const normalizeAdifTxPower = (value?: string): string => {
   return Number.isFinite(numericValue) && numericValue >= 0 ? numericText : ''
 }
 
-const adifField = (name: string, value?: string): string => {
-  const normalizedValue = (value ?? '').trim()
-  if (!normalizedValue) {
-    return ''
-  }
-  return `<${name.toUpperCase()}:${Array.from(normalizedValue).length}>${normalizedValue}`
-}
+const adifField = buildAdiField
 
 const parseAdifFieldMap = (recordText: string): Record<string, string> => {
   const fields: Record<string, string> = {}
@@ -1303,7 +1293,9 @@ const unsupportedAdifFieldsForRemarks = (
     'SWL',
   ])
   return Object.entries(fields)
-    .filter(([name, value]) => value.trim() && !supportedFields.has(name) && !consumedFields.has(name))
+    .filter(
+      ([name, value]) => value.trim() && !supportedFields.has(name) && !consumedFields.has(name),
+    )
     .map(([name, value]) => ({ name, value }))
 }
 
@@ -1393,7 +1385,8 @@ const toAdifImportPreviewItem = (
     myRigAnt: resolvedMyRigAnt,
     myRigPwr: sceneType === 'SWL' ? '' : resolvedMyRigPwr,
     myQth: resolvedMyQth,
-    operator: fields.OPERATOR?.trim() || fields.STATION_CALLSIGN?.trim() || stationProfileCallSign.value,
+    operator:
+      fields.OPERATOR?.trim() || fields.STATION_CALLSIGN?.trim() || stationProfileCallSign.value,
     callSign,
     rig: '',
     ant: '',
@@ -1439,34 +1432,51 @@ const normalizeAdifCallSign = (value?: string): string => {
   return normalizedValue
 }
 
-const buildAdifRecord = (item: QsoRecordItem): string => {
+interface AdifExportField {
+  name: string
+  value?: string
+  intlName?: string
+}
+
+const buildAdifExportFields = (item: QsoRecordItem): AdifExportField[] => {
   const dateTime = toAdifDateTime(item)
   const stationCallSign = stationProfileCallSign.value.trim().toUpperCase()
   const operatorCallSign =
     normalizeAdifCallSign(item.operator) || normalizeAdifCallSign(stationCallSign)
   const adifRemarks = extractAdifRemarkFields(item.remarks)
-  const remarkFields = adifRemarks.fields.map((field) => adifField(field.name, field.value))
+  const modeFields = resolveAdifModeFields(item.mode)
+  return [
+    { name: 'CALL', value: item.callSign.toUpperCase() },
+    { name: 'QSO_DATE', value: dateTime.date },
+    { name: 'TIME_ON', value: dateTime.time },
+    { name: 'MODE', value: modeFields.mode },
+    { name: 'SUBMODE', value: modeFields.submode },
+    { name: 'FREQ', value: normalizeAdifFrequency(item.freq) },
+    { name: 'BAND', value: resolveAdifBand(item.freq) },
+    { name: 'RST_SENT', value: item.rstSent },
+    { name: 'RST_RCVD', value: item.rstRcvd },
+    { name: 'QTH', intlName: 'QTH_INTL', value: item.qth },
+    ...adifRemarks.fields,
+    { name: 'COMMENT', intlName: 'COMMENT_INTL', value: adifRemarks.comment },
+    { name: 'MY_RIG', intlName: 'MY_RIG_INTL', value: item.myRig },
+    { name: 'MY_ANTENNA', intlName: 'MY_ANTENNA_INTL', value: item.myRigAnt },
+    { name: 'TX_PWR', value: normalizeAdifTxPower(item.myRigPwr) },
+    { name: 'OPERATOR', value: operatorCallSign },
+    { name: 'STATION_CALLSIGN', value: stationCallSign },
+    { name: 'MY_SIG', intlName: 'MY_SIG_INTL', value: adifMySig.value },
+    {
+      name: 'MY_SIG_INFO',
+      intlName: 'MY_SIG_INFO_INTL',
+      value: adifMySig.value ? adifMySigInfo.value : '',
+    },
+    { name: 'SWL', value: item.sceneType === 'SWL' ? 'Y' : '' },
+  ]
+}
+
+const buildAdifRecord = (item: QsoRecordItem): string => {
   const fields = [
-    adifField('APP_QSLMS_RECORD_ID', item.resourceName),
-    adifField('CALL', item.callSign.toUpperCase()),
-    adifField('QSO_DATE', dateTime.date),
-    adifField('TIME_ON', dateTime.time),
-    adifField('MODE', normalizeAdifMode(item.mode)),
-    adifField('FREQ', normalizeAdifFrequency(item.freq)),
-    adifField('BAND', resolveAdifBand(item.freq)),
-    adifField('RST_SENT', item.rstSent),
-    adifField('RST_RCVD', item.rstRcvd),
-    adifField('QTH', item.qth),
-    ...remarkFields,
-    adifField('COMMENT', adifRemarks.comment),
-    adifField('MY_RIG', item.myRig),
-    adifField('MY_ANTENNA', item.myRigAnt),
-    adifField('TX_PWR', normalizeAdifTxPower(item.myRigPwr)),
-    adifField('OPERATOR', operatorCallSign),
-    adifField('STATION_CALLSIGN', stationCallSign),
-    adifField('MY_SIG', adifMySig.value),
-    adifField('MY_SIG_INFO', adifMySig.value ? adifMySigInfo.value : ''),
-    adifField('SWL', item.sceneType === 'SWL' ? 'Y' : ''),
+    adifField('APP_QSLMS_RECORD_ID', item.resourceName, 'S'),
+    ...buildAdifExportFields(item).map((field) => adifField(field.name, field.value)),
   ].filter(Boolean)
 
   return `${fields.join(' ')} <EOR>`
@@ -1474,13 +1484,45 @@ const buildAdifRecord = (item: QsoRecordItem): string => {
 
 const buildAdifContent = (items: QsoRecordItem[]): string => {
   const now = new Date().toISOString()
-  const header = [
-    adifField('ADIF_VER', '3.1.7'),
-    adifField('PROGRAMID', 'QSL Management System'),
-    adifField('CREATED_TIMESTAMP', now.replace(/\D/g, '').slice(0, 14)),
-    '<EOH>',
-  ].join('\r\n')
-  return `${header}\r\n${items.map((item) => buildAdifRecord(item)).join('\r\n')}\r\n`
+  return buildAdiContent(
+    [
+      { name: 'ADIF_VER', value: '3.1.7' },
+      { name: 'PROGRAMID', value: 'QSL Management System' },
+      { name: 'CREATED_TIMESTAMP', value: now.replace(/\D/g, '').slice(0, 14) },
+    ],
+    items.map((item) => buildAdifRecord(item)),
+  )
+}
+
+const buildAdxRecord = (item: QsoRecordItem): string[] => {
+  return [
+    buildAdxApplicationField('QSLMS', 'RECORD_ID', item.resourceName),
+    ...buildAdifExportFields(item).map((field) =>
+      field.intlName
+        ? buildAdxTextField(field.name, field.intlName, field.value)
+        : buildAdxField(field.name, field.value),
+    ),
+  ].filter(Boolean)
+}
+
+const buildAdxExportContent = (items: QsoRecordItem[]): string => {
+  const now = new Date().toISOString()
+  return buildAdxContent(
+    [
+      { name: 'ADIF_VER', value: '3.1.7' },
+      { name: 'PROGRAMID', value: 'QSL Management System' },
+      { name: 'CREATED_TIMESTAMP', value: now.replace(/\D/g, '').slice(0, 14) },
+    ],
+    items.map((item) => buildAdxRecord(item)),
+  )
+}
+
+const countAdiOmittedFields = (items: QsoRecordItem[]): number => {
+  return items.reduce(
+    (total, item) =>
+      total + buildAdifExportFields(item).filter((field) => containsNonAscii(field.value)).length,
+    0,
+  )
 }
 
 const cabrilloExportRecords = adifExportRecords
@@ -1504,8 +1546,8 @@ const normalizeCabrilloMode = (mode: string): string => {
 }
 
 const toCabrilloMode = (mode: string): string => {
-  const normalized = normalizeAdifMode(mode)
-  if (normalized === 'SSB' || normalized === 'USB' || normalized === 'LSB') {
+  const normalized = resolveAdifModeFields(mode).mode
+  if (normalized === 'SSB') {
     return 'PH'
   }
   if (normalized === 'RTTY') {
@@ -1649,7 +1691,10 @@ const toCabrilloImportPreviewItem = (
   headers: Record<string, string>,
   index: number,
 ): CabrilloImportPreviewItem => {
-  const tokens = rawLine.replace(/^QSO:\s*/i, '').trim().split(/\s+/)
+  const tokens = rawLine
+    .replace(/^QSO:\s*/i, '')
+    .trim()
+    .split(/\s+/)
   const freq = resolveCabrilloImportFreq(tokens[0])
   const mode = normalizeCabrilloMode(tokens[1] ?? '')
   const date = parseCabrilloDate(tokens[2])
@@ -1732,7 +1777,9 @@ const buildCabrilloQsoLine = (item: QsoRecordItem): string => {
     cabrilloPadded(item.callSign.toUpperCase(), 13),
     cabrilloPadded(rstRcvd, 3),
     item.qth || item.remarks || '-',
-  ].join(' ').trimEnd()
+  ]
+    .join(' ')
+    .trimEnd()
 }
 
 const buildCabrilloContent = (items: QsoRecordItem[]): string => {
@@ -1774,8 +1821,25 @@ const exportAdifRecords = () => {
   }
   const timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)
   downloadTextFile(`qso-records-${timestamp}.adi`, buildAdifContent(items))
+  const omittedCount = countAdiOmittedFields(items)
   feedback.value = ''
-  Toast.success(`已导出 ${items.length} 条 ADIF 记录。`)
+  Toast.success(
+    omittedCount
+      ? `已导出 ${items.length} 条 ADI 记录，并省略 ${omittedCount} 个非 ASCII 字段。`
+      : `已导出 ${items.length} 条 ADI 记录。`,
+  )
+}
+
+const exportAdxRecords = () => {
+  const items = adifExportRecords.value
+  if (!items.length) {
+    feedback.value = '没有可导出的通联记录。'
+    return
+  }
+  const timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)
+  downloadTextFile(`qso-records-${timestamp}.adx`, buildAdxExportContent(items))
+  feedback.value = ''
+  Toast.success(`已导出 ${items.length} 条 ADX 记录。`)
 }
 
 const exportCabrilloRecords = () => {
@@ -2654,22 +2718,26 @@ onMounted(() => {
             <label class="qsl-field qsl-field--full">
               <span class="qsl-field__label">ADIF文件（ADIF_File）</span>
               <div class="qsl-input-shell">
-                <input type="file" accept=".adi,.adif,.txt,text/plain" @change="handleAdifImportFile" />
+                <input
+                  type="file"
+                  accept=".adi,.adif,.txt,text/plain"
+                  @change="handleAdifImportFile"
+                />
               </div>
             </label>
           </div>
           <div class="qsl-actions">
-            <VButton type="secondary" :disabled="loading || adifImporting" @click="parseAdifImportText">
+            <VButton
+              type="secondary"
+              :disabled="loading || adifImporting"
+              @click="parseAdifImportText"
+            >
               解析ADIF内容
             </VButton>
             <VButton
               class="qsl-action-warning"
               type="secondary"
-              :disabled="
-                loading ||
-                adifImporting ||
-                !adifImportReadyCount
-              "
+              :disabled="loading || adifImporting || !adifImportReadyCount"
               @click="importAdifRecords"
             >
               导入可用记录
@@ -2760,6 +2828,7 @@ onMounted(() => {
             <p>导出范围：{{ selectedHistoryCount ? '已勾选记录' : '当前筛选结果' }}</p>
             <p>待导出数量：{{ adifExportRecords.length }}</p>
             <p>OPERATOR：仅导出呼号，不再使用姓名</p>
+            <p>ADI：非 ASCII 字段不导出；ADX：使用 UTF-8 保留中文</p>
           </div>
           <div class="qsl-actions">
             <VButton
@@ -2767,13 +2836,16 @@ onMounted(() => {
               :disabled="loading || !adifExportRecords.length"
               @click="exportAdifRecords"
             >
-              导出ADIF文件
+              导出ADI文件
             </VButton>
             <VButton
-              size="sm"
-              :disabled="!selectedHistoryCount"
-              @click="clearHistorySelection"
+              type="secondary"
+              :disabled="loading || !adifExportRecords.length"
+              @click="exportAdxRecords"
             >
+              导出ADX文件
+            </VButton>
+            <VButton size="sm" :disabled="!selectedHistoryCount" @click="clearHistorySelection">
               清空选择
             </VButton>
             <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
@@ -2798,7 +2870,11 @@ onMounted(() => {
             <label class="qsl-field qsl-field--full">
               <span class="qsl-field__label">Cabrillo文件（Cabrillo_File）</span>
               <div class="qsl-input-shell">
-                <input type="file" accept=".log,.txt,text/plain" @change="handleCabrilloImportFile" />
+                <input
+                  type="file"
+                  accept=".log,.txt,text/plain"
+                  @change="handleCabrilloImportFile"
+                />
               </div>
             </label>
           </div>
@@ -2814,9 +2890,7 @@ onMounted(() => {
               class="qsl-action-warning"
               type="secondary"
               :disabled="
-                loading ||
-                cabrilloImporting ||
-                !cabrilloImportPreview.some((item) => item.valid)
+                loading || cabrilloImporting || !cabrilloImportPreview.some((item) => item.valid)
               "
               @click="importCabrilloRecords"
             >
@@ -2873,7 +2947,11 @@ onMounted(() => {
             <label class="qsl-field">
               <span class="qsl-field__label">OPERATORS（操作员）</span>
               <div class="qsl-input-shell">
-                <input v-model.trim="cabrilloOperators" type="text" placeholder="留空使用本台呼号" />
+                <input
+                  v-model.trim="cabrilloOperators"
+                  type="text"
+                  placeholder="留空使用本台呼号"
+                />
               </div>
             </label>
             <label class="qsl-field">
@@ -3056,48 +3134,48 @@ onMounted(() => {
 
         <template #detail="{ row }">
           <QslDetailTable>
-              <tr>
-                <th>本台设备</th>
-                <td>{{ toHistoryItem(row).myRig || '未填' }}</td>
-                <th>本台天线</th>
-                <td>{{ toHistoryItem(row).myRigAnt || '未填' }}</td>
-              </tr>
-              <tr>
-                <th>本台功率</th>
-                <td>{{ toHistoryItem(row).myRigPwr || '未填' }}</td>
-                <th>本台QTH</th>
-                <td>{{ toHistoryItem(row).myQth || '未填' }}</td>
-              </tr>
-              <tr>
-                <th>操作员</th>
-                <td>{{ toHistoryItem(row).operator || '未填' }}</td>
-                <th>对方设备</th>
-                <td>{{ toHistoryItem(row).rig || '未填' }}</td>
-              </tr>
-              <tr>
-                <th>对方天线</th>
-                <td>{{ toHistoryItem(row).ant || '未填' }}</td>
-                <th>对方功率</th>
-                <td>{{ toHistoryItem(row).pwr || '未填' }}</td>
-              </tr>
-              <tr>
-                <th>位置</th>
-                <td>{{ toHistoryItem(row).qth || '未填' }}</td>
-                <th>信号报告</th>
-                <td>
-                  <template v-if="toHistoryItem(row).sceneType === 'SWL'">
-                    接收 {{ toHistoryItem(row).rstRcvd || '-' }}
-                  </template>
-                  <template v-else>
-                    给对方 {{ toHistoryItem(row).rstSent || '-' }} / 给我方
-                    {{ toHistoryItem(row).rstRcvd || '-' }}
-                  </template>
-                </td>
-              </tr>
-              <tr>
-                <th>备注</th>
-                <td colspan="3">{{ toHistoryItem(row).remarks || '无' }}</td>
-              </tr>
+            <tr>
+              <th>本台设备</th>
+              <td>{{ toHistoryItem(row).myRig || '未填' }}</td>
+              <th>本台天线</th>
+              <td>{{ toHistoryItem(row).myRigAnt || '未填' }}</td>
+            </tr>
+            <tr>
+              <th>本台功率</th>
+              <td>{{ toHistoryItem(row).myRigPwr || '未填' }}</td>
+              <th>本台QTH</th>
+              <td>{{ toHistoryItem(row).myQth || '未填' }}</td>
+            </tr>
+            <tr>
+              <th>操作员</th>
+              <td>{{ toHistoryItem(row).operator || '未填' }}</td>
+              <th>对方设备</th>
+              <td>{{ toHistoryItem(row).rig || '未填' }}</td>
+            </tr>
+            <tr>
+              <th>对方天线</th>
+              <td>{{ toHistoryItem(row).ant || '未填' }}</td>
+              <th>对方功率</th>
+              <td>{{ toHistoryItem(row).pwr || '未填' }}</td>
+            </tr>
+            <tr>
+              <th>位置</th>
+              <td>{{ toHistoryItem(row).qth || '未填' }}</td>
+              <th>信号报告</th>
+              <td>
+                <template v-if="toHistoryItem(row).sceneType === 'SWL'">
+                  接收 {{ toHistoryItem(row).rstRcvd || '-' }}
+                </template>
+                <template v-else>
+                  给对方 {{ toHistoryItem(row).rstSent || '-' }} / 给我方
+                  {{ toHistoryItem(row).rstRcvd || '-' }}
+                </template>
+              </td>
+            </tr>
+            <tr>
+              <th>备注</th>
+              <td colspan="3">{{ toHistoryItem(row).remarks || '无' }}</td>
+            </tr>
           </QslDetailTable>
         </template>
       </QslExpandableHistoryTable>
@@ -3189,5 +3267,4 @@ onMounted(() => {
   font-weight: 600;
   background: #f9fafb;
 }
-
 </style>
