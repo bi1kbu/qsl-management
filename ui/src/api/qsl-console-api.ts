@@ -149,6 +149,10 @@ export interface NotificationMailSendResult {
   sentAt: string
 }
 
+export interface NotificationMailPolicyResult extends Omit<NotificationMailSendResult, 'status'> {
+  status: NotificationMailSendResult['status'] | 'PENDING'
+}
+
 export interface NotificationMailBatchSendResult {
   scene: NotificationMailScene
   totalCount: number
@@ -627,8 +631,8 @@ export async function sendNotificationMail(
 
 export async function applyNotificationMailPolicy(
   payload: NotificationMailSendPayload,
-): Promise<NotificationMailSendResult> {
-  const response = await axiosInstance.post<ApiResult<NotificationMailSendResult>>(
+): Promise<NotificationMailPolicyResult> {
+  const response = await axiosInstance.post<ApiResult<NotificationMailPolicyResult>>(
     `${consoleApiBase}/notification-mails/apply-policy`,
     payload,
   )

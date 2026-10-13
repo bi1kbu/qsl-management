@@ -5,8 +5,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class QslPublicCardRequestPageRenderService {
 
-    public String render() {
-        return TEMPLATE;
+    public String render(String exampleCallSign) {
+        return TEMPLATE.replace("placeholder=\"__EXAMPLE_CALL_SIGN_HTML__\"",
+                "placeholder=\"" + QslPublicPageRenderSupport.escapeHtml(exampleCallSign) + "\"");
     }
 
     public String renderError(String message) {
@@ -116,7 +117,7 @@ public class QslPublicCardRequestPageRenderService {
                 <section class="panel">
                   <h2 class="bilingual"><span class="zh">一、查询并选择通联记录</span><span class="en" lang="en">1. Search and Select QSO Records</span></h2>
                   <div class="query-row">
-                    <label><span class="field-label bilingual"><span class="zh">呼号</span><span class="en" lang="en">Call Sign</span></span><input id="callSign" maxlength="16" autocomplete="off" placeholder="BI1KBU" required /></label>
+                    <label><span class="field-label bilingual"><span class="zh">呼号</span><span class="en" lang="en">Call Sign</span></span><input id="callSign" maxlength="16" autocomplete="off" placeholder="__EXAMPLE_CALL_SIGN_HTML__" required /></label>
                     <button id="queryButton" type="button"><span class="zh">查询通联记录</span><span class="en" lang="en">Search QSO Records</span></button>
                   </div>
                   <p id="qsoHint" class="hint">请输入呼号后查询。\nEnter a call sign to search.</p>

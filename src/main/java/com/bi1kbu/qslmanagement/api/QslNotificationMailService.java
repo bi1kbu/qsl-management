@@ -26,6 +26,7 @@ import run.halo.app.notification.UserIdentity;
 @Service
 public class QslNotificationMailService {
 
+    private static final String MAIL_STATUS_PENDING = "PENDING";
     private static final String MAIL_STATUS_SENT = "SENT";
     private static final String MAIL_STATUS_FAILED = "FAILED";
     private static final String MAIL_STATUS_SKIPPED = "SKIPPED";
@@ -157,6 +158,19 @@ public class QslNotificationMailService {
             .flatMap(cardRecord -> loadSystemSetting()
                 .flatMap(systemSetting -> {
                     var spec = ensureCardRecordSpec(cardRecord);
+                    var currentStatus = scene.currentStatus(spec);
+                    if (MAIL_STATUS_SENT.equalsIgnoreCase(currentStatus)
+                        || MAIL_STATUS_SKIPPED.equalsIgnoreCase(currentStatus)) {
+                        return Mono.just(new NotificationMailSendResult(
+                            cardRecord.getMetadata().getName(),
+                            scene.code,
+                            currentStatus.toUpperCase(Locale.ROOT),
+                            MAIL_STATUS_SENT.equalsIgnoreCase(currentStatus)
+                                ? "该场景邮件已发送。" : "该场景邮件已跳过。",
+                            StringUtils.defaultString(spec.getMailTargetEmail()),
+                            StringUtils.defaultString(scene.currentSentAt(spec))
+                        ));
+                    }
                     var policy = scene.resolveMailPolicy(systemSetting, spec);
                     if (MAIL_POLICY_AUTO_SEND.equals(policy)) {
                         return sendSceneMail(cardRecord, scene, operator, clientIp, source);
@@ -167,8 +181,8 @@ public class QslNotificationMailService {
                     return Mono.just(new NotificationMailSendResult(
                         cardRecord.getMetadata().getName(),
                         scene.code,
-                        MAIL_STATUS_SKIPPED,
-                        "邮件策略为手动，未自动处理。",
+                        MAIL_STATUS_PENDING,
+                        "等待手动发送",
                         StringUtils.defaultString(spec.getMailTargetEmail()),
                         StringUtils.defaultString(scene.currentSentAt(spec))
                     ));
@@ -191,22 +205,11 @@ public class QslNotificationMailService {
         String clientIp,
         String source
     ) {
-        var currentStatus = scene.currentStatus(spec);
-        if (MAIL_STATUS_SENT.equalsIgnoreCase(currentStatus) || MAIL_STATUS_SKIPPED.equalsIgnoreCase(currentStatus)) {
-            return Mono.just(new NotificationMailSendResult(
-                cardRecord.getMetadata().getName(),
-                scene.code,
-                MAIL_STATUS_SKIPPED,
-                "该场景邮件已处理，已跳过。",
-                StringUtils.defaultString(spec.getMailTargetEmail()),
-                StringUtils.defaultString(scene.currentSentAt(spec))
-            ));
-        }
         if (!scene.meetsBusinessState(spec)) {
             return Mono.just(new NotificationMailSendResult(
                 cardRecord.getMetadata().getName(),
                 scene.code,
-                MAIL_STATUS_SKIPPED,
+                MAIL_STATUS_PENDING,
                 "当前记录尚未满足该场景自动处理条件。",
                 StringUtils.defaultString(spec.getMailTargetEmail()),
                 StringUtils.defaultString(scene.currentSentAt(spec))

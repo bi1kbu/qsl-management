@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useStationCallSignExample } from '../../composables/use-station-call-sign-example'
 import { Toast, VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
@@ -133,6 +134,8 @@ type QsoHistorySortKey =
   | 'timezone'
   | 'freq'
   | 'mode'
+
+const exampleCallSign = useStationCallSignExample()
 
 const props = withDefaults(
   defineProps<{
@@ -2570,7 +2573,7 @@ onMounted(() => {
                 isSwlMode ? '监听呼号（Call_Sign）' : '对方呼号（Call_Sign）'
               }}</span>
               <div class="qsl-input-shell">
-                <input v-model.trim="form.callSign" type="text" placeholder="例如：BI1KBU" />
+                <input v-model.trim="form.callSign" type="text" :placeholder="`例如：${exampleCallSign}`" />
               </div>
             </label>
 

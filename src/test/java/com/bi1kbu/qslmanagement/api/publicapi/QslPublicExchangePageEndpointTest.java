@@ -26,10 +26,10 @@ class QslPublicExchangePageEndpointTest {
         var renderService = mock(QslPublicOnlineExchangePageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.render("BI1KBU", "ONLINE", true, "embed-001"))
+        when(renderService.render("BI1KBU", "ONLINE", true, "embed-001", "BG1ABC"))
             .thenReturn("<html><body>线上换卡页</body></html>");
 
-        var endpoint = new QslPublicOnlineExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicOnlineExchangePageEndpoint(rateLimitService, publicApiService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -40,7 +40,7 @@ class QslPublicExchangePageEndpointTest {
             .expectBody(String.class)
             .isEqualTo("<html><body>线上换卡页</body></html>");
 
-        verify(renderService).render("BI1KBU", "ONLINE", true, "embed-001");
+        verify(renderService).render("BI1KBU", "ONLINE", true, "embed-001", "BG1ABC");
     }
 
     @Test
@@ -52,10 +52,10 @@ class QslPublicExchangePageEndpointTest {
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
         when(publicApiService.getOnlineExchangePagePrefill("C1002", "BI1KBU"))
             .thenReturn(Mono.just(new QslPublicApiService.PublicCardPagePrefill("C1002", "BI1KBU", "后端回填")));
-        when(renderService.render("BI1KBU", "后端回填", true, "embed-004"))
+        when(renderService.render("BI1KBU", "后端回填", true, "embed-004", "BG1ABC"))
             .thenReturn("<html><body>线上换卡页-按卡片回填</body></html>");
 
-        var endpoint = new QslPublicOnlineExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicOnlineExchangePageEndpoint(rateLimitService, publicApiService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -67,7 +67,7 @@ class QslPublicExchangePageEndpointTest {
             .isEqualTo("<html><body>线上换卡页-按卡片回填</body></html>");
 
         verify(publicApiService).getOnlineExchangePagePrefill("C1002", "BI1KBU");
-        verify(renderService).render("BI1KBU", "后端回填", true, "embed-004");
+        verify(renderService).render("BI1KBU", "后端回填", true, "embed-004", "BG1ABC");
     }
 
     @Test
@@ -77,10 +77,10 @@ class QslPublicExchangePageEndpointTest {
         var renderService = mock(QslPublicOfflineExchangePageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002"))
+        when(renderService.render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002", "BG1ABC"))
             .thenReturn("<html><body>线下换卡页</body></html>");
 
-        var endpoint = new QslPublicOfflineExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicOfflineExchangePageEndpoint(rateLimitService, publicApiService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -92,7 +92,7 @@ class QslPublicExchangePageEndpointTest {
             .isEqualTo("<html><body>线下换卡页</body></html>");
 
         verify(publicApiService, never()).getPublicStationContact();
-        verify(renderService).render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002");
+        verify(renderService).render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-002", "BG1ABC");
     }
 
     @Test
@@ -104,10 +104,10 @@ class QslPublicExchangePageEndpointTest {
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
         when(publicApiService.getOfflineExchangePagePrefill("C1001"))
             .thenReturn(Mono.just(new QslPublicApiService.PublicOfflineExchangePagePrefill("C1001", "BI1KBU", "202604ACT01", "")));
-        when(renderService.render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003"))
+        when(renderService.render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003", "BG1ABC"))
             .thenReturn("<html><body>线下换卡页-按卡片回填</body></html>");
 
-        var endpoint = new QslPublicOfflineExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicOfflineExchangePageEndpoint(rateLimitService, publicApiService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -120,7 +120,7 @@ class QslPublicExchangePageEndpointTest {
 
         verify(publicApiService).getOfflineExchangePagePrefill("C1001");
         verify(publicApiService, never()).getPublicStationContact();
-        verify(renderService).render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003");
+        verify(renderService).render("BI1KBU", "C1001", "202604ACT01", "", true, "embed-003", "BG1ABC");
     }
 
     @Test
@@ -135,7 +135,7 @@ class QslPublicExchangePageEndpointTest {
         when(renderService.renderError("请求过于频繁，请稍后再试", false))
             .thenReturn("<html><body>限流</body></html>");
 
-        var endpoint = new QslPublicOnlineExchangePageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicOnlineExchangePageEndpoint(rateLimitService, publicApiService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -147,5 +147,12 @@ class QslPublicExchangePageEndpointTest {
             .isEqualTo("<html><body>限流</body></html>");
 
         verify(renderService).renderError("请求过于频繁，请稍后再试", false);
+    }
+
+    private static com.bi1kbu.qslmanagement.api.QslStationCallSignService exampleCallSignService() {
+        var service = org.mockito.Mockito.mock(com.bi1kbu.qslmanagement.api.QslStationCallSignService.class);
+        org.mockito.Mockito.when(service.getExampleCallSign())
+            .thenReturn(reactor.core.publisher.Mono.just("BG1ABC"));
+        return service;
     }
 }

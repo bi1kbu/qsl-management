@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatNotificationMailPolicyFeedback } from '../../utils/notification-mail-policy-feedback'
 import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
@@ -1933,15 +1934,7 @@ const closeReceiveForRow = async (item: ReceiveResult) => {
         scene: 'received',
         source: '收信确认-结束收卡自动策略',
       })
-      if (policyResult.status === 'SENT') {
-        policyMessage = '，收卡回执已自动发送'
-      } else if (policyResult.status === 'SKIPPED') {
-        policyMessage = '，收卡回执已自动跳过'
-      } else if (policyResult.status === 'FAILED') {
-        policyMessage = `，自动处理失败：${policyResult.message || '请手动处理'}`
-      } else if (policyResult.message) {
-        policyMessage = `，${policyResult.message}`
-      }
+      policyMessage = `，${formatNotificationMailPolicyFeedback(policyResult, '收卡回执')}`
     }
 
     await loadResults({ silent: true })

@@ -9,7 +9,8 @@ public class QslPublicOnlineExchangePageRenderService {
         String rawCallSign,
         String rawRemarks,
         boolean embed,
-        String rawEmbedId
+        String rawEmbedId,
+        String exampleCallSign
     ) {
         var callSign = QslPublicPageRenderSupport.normalizeCallSign(rawCallSign);
         var remarks = QslPublicPageRenderSupport.normalizeText(rawRemarks, 500);
@@ -20,7 +21,9 @@ public class QslPublicOnlineExchangePageRenderService {
             .replace("__REMARKS_HTML__", QslPublicPageRenderSupport.escapeHtml(remarks))
             .replace("__REMARKS_JS__", QslPublicPageRenderSupport.escapeJs(remarks))
             .replace("__EMBED_MODE__", Boolean.toString(embed))
-            .replace("__EMBED_ID__", QslPublicPageRenderSupport.escapeJs(embedId));
+            .replace("__EMBED_ID__", QslPublicPageRenderSupport.escapeJs(embedId))
+            .replace("placeholder=\"例如 __EXAMPLE_CALL_SIGN_HTML__\"",
+                "placeholder=\"例如 " + QslPublicPageRenderSupport.escapeHtml(exampleCallSign) + "\"");
     }
 
     public String renderError(String message, boolean embed) {
@@ -67,7 +70,10 @@ public class QslPublicOnlineExchangePageRenderService {
               .qsl-hint { margin: 6px 0 0; color: #6b7280; font-size: 12px; }
               .qsl-hint.error { color: #dc2626; }
               .qsl-error { margin: 8px 0 0; color: #dc2626; font-size: 12px; white-space: pre-line; }
-              .qsl-success { margin-top: 12px; border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: 10px; padding: 12px; color: #14532d; white-space: pre-line; }
+              .qsl-success { margin-top: 12px; border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: 10px; padding: 12px; color: #14532d; }
+              .qsl-success h2 { margin: 0 0 10px; font-size: 18px; }
+              .qsl-success p { margin: 8px 0; line-height: 1.7; }
+              .qsl-success-contact { white-space: pre-line; }
               .qsl-hidden { display: none !important; }
               @media (max-width: 640px) { .qsl-grid, .qsl-subgrid, .qsl-card-version-list { grid-template-columns: 1fr; } .qsl-page { padding: 12px; } .qsl-button { width: 100%; } }
             </style>
@@ -79,7 +85,7 @@ public class QslPublicOnlineExchangePageRenderService {
                 <p class="qsl-desc">请填写呼号和地址信息后提交换卡申请。建议填写电子邮箱用以接收状态变更通知。</p>
                 <form id="qsl-form">
                   <div class="qsl-grid">
-                    <label class="qsl-field full"><span class="qsl-label">呼号</span><input id="callSign" class="qsl-input" maxlength="16" value="__CALL_SIGN_HTML__" placeholder="例如 BI1KBU" /></label>
+                    <label class="qsl-field full"><span class="qsl-label">呼号</span><input id="callSign" class="qsl-input" maxlength="16" value="__CALL_SIGN_HTML__" placeholder="例如 __EXAMPLE_CALL_SIGN_HTML__" /></label>
                     <div class="qsl-field full">
                       <span class="qsl-label">卡片版本（最多选择两张）</span>
                       <div id="cardVersionList" class="qsl-card-version-list"></div>
@@ -125,7 +131,15 @@ public class QslPublicOnlineExchangePageRenderService {
                   <div class="qsl-actions"><button id="submitBtn" class="qsl-button" type="submit">提交换卡申请</button></div>
                   <p id="error" class="qsl-error"></p>
                 </form>
-                <div id="success" class="qsl-success" style="display:none;"></div>
+                <section id="success" class="qsl-success" role="status" aria-live="polite" style="display:none;">
+                  <h2>提交成功</h2>
+                  <p><strong>申请编号（本次申请）：</strong><span id="successRequestName"></span></p>
+                  <p><strong>审核状态（当前进度）：</strong><span id="successReviewStatus"></span></p>
+                  <p><strong>下一步（处理说明）：</strong><span id="successNextStep"></span></p>
+                  <p><strong>本站通信地址（向本站寄卡使用）：</strong></p>
+                  <p id="successStationAddress" class="qsl-success-contact"></p>
+                  <p>请保存申请编号，以便联系管理员核对。</p>
+                </section>
               </section>
             </main>
             <script>
@@ -138,6 +152,10 @@ public class QslPublicOnlineExchangePageRenderService {
                 const submitBtn = document.getElementById("submitBtn");
                 const error = document.getElementById("error");
                 const success = document.getElementById("success");
+                const successRequestName = document.getElementById("successRequestName");
+                const successReviewStatus = document.getElementById("successReviewStatus");
+                const successNextStep = document.getElementById("successNextStep");
+                const successStationAddress = document.getElementById("successStationAddress");
                 const addressModeInput = document.getElementById("addressMode");
                 const bureauSelect = document.getElementById("bureauSelect");
                 const bureauDisplayName = document.getElementById("bureauDisplayName");
@@ -454,9 +472,18 @@ public class QslPublicOnlineExchangePageRenderService {
                     const result = await response.json();
                     const data = parseResult(result);
                     const stationAddress = (data.stationAddress || "").trim();
-                    success.textContent = stationAddress
-                      ? `提交成功，申请编号：${data.requestName || "-"}，状态：${data.reviewStatus || "-"}\\n${stationAddress}`
-                      : `提交成功，申请编号：${data.requestName || "-"}，状态：${data.reviewStatus || "-"}`;
+                    const reviewStatus = (data.reviewStatus || "").trim();
+                    successRequestName.textContent = data.requestName || "未返回，请联系管理员确认";
+                    successReviewStatus.textContent = reviewStatus || "请联系管理员确认";
+                    successNextStep.textContent = reviewStatus === "已通过"
+                      ? "申请已通过审核，请等待管理员创建卡片并安排寄送。"
+                      : reviewStatus === "待审核"
+                        ? "请等待管理员审核；审核通过后，由管理员创建卡片。"
+                        : reviewStatus === "已拒绝"
+                          ? "申请未通过审核，请联系管理员了解原因。"
+                          : "申请已受理，请联系管理员确认后续安排。";
+                    successStationAddress.textContent = stationAddress
+                      || "本站通信地址尚未配置，请联系管理员确认寄送信息。";
                     success.style.display = "";
                   } catch (e) {
                     error.textContent = e?.message || "提交失败";

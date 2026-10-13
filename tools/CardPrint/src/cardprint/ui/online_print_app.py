@@ -312,6 +312,8 @@ def _fetch_remote_sources_payload(config: dict[str, Any]) -> dict[str, Any]:
 
 
 class OnlineConfigPage(QWidget):
+    station_call_sign_loaded = Signal(str, str)
+
     def __init__(
         self,
         on_apply: Callable[[str, dict[str, Any]], None],
@@ -553,6 +555,11 @@ class OnlineConfigPage(QWidget):
         self._fetch_thread.start()
 
     def _handle_fetch_versions_success(self, fetch_result: dict[str, Any]) -> None:
+        # 忽略旧站点的迟到响应，避免覆盖新站点配置和呼号示例。
+        source_base_url = str(fetch_result.get("base_url", "")).strip().rstrip("/")
+        current_base_url = self.base_url_edit.text().strip().rstrip("/")
+        if source_base_url != current_base_url:
+            return
         versions = fetch_result.get("versions", [])
         sender = fetch_result.get("sender", {})
         sender_error = fetch_result.get("sender_error")
@@ -572,6 +579,8 @@ class OnlineConfigPage(QWidget):
             self._fill_sender_if_blank(self.sender_address_edit, sender.get("my_address", ""))
         self._refresh_version_mapping_table()
         config_path = self._auto_save_runtime_config()
+        call_sign = str(sender.get("my_call_sign", "") or "") if isinstance(sender, dict) else ""
+        self.station_call_sign_loaded.emit(source_base_url, call_sign)
         details: dict[str, Any] = {
             "版本数量": len(self._card_versions),
             "本台姓名": self.sender_name_edit.text().strip(),
@@ -1996,10 +2005,20 @@ class EyeballReprintPage(QWidget):
 
     def set_config(self, config: dict[str, Any]) -> None:
         cfg = normalize_bridge_config(config)
+        base_url = str(cfg.get("base_url", "")).strip().rstrip("/")
+        if getattr(self, "_example_base_url", None) != base_url:
+            # 切换站点后先恢复默认，等待该站点的资料拉取结果。
+            self.set_example_call_sign("")
+        self._example_base_url = base_url
         self._preset_path = str(cfg.get("presets", {}).get("eyeball_reprint_card", "")).strip()
         self.preset_edit.setText(self._preset_path)
         self._preset_meta = _load_preset_meta(self._preset_path)
         self._apply_printer_and_paper_from_preset(self._preset_path)
+
+    def set_example_call_sign(self, call_sign: str) -> None:
+        """仅更新示例，不改动待补打的呼号输入和打印内容。"""
+        example = str(call_sign or "").strip().upper() or "BI1KBU"
+        self.call_sign_edit.setPlaceholderText(f"例如：{example}")
 
     def choose_preset(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "选择补打眼球卡片预设", str(Path.cwd()), "JSON Files (*.json)")
@@ -2585,6 +2604,7 @@ class OnlinePrintWindow(QMainWindow):
         self.tabs.addTab(self.address_envelopes_page, "补打信封")
         self.tabs.addTab(self.custom_single_print_page, "自定义打印")
         self.setCentralWidget(self.tabs)
+        self.config_page.station_call_sign_loaded.connect(self._on_station_call_sign_loaded)
 
         self._load_initial_config()
 
@@ -2635,6 +2655,12 @@ class OnlinePrintWindow(QMainWindow):
             self._available_card_versions = current_versions
         self._apply_config(config_path, config, refresh_config_page=False)
 
+    def _on_station_call_sign_loaded(self, base_url: str, call_sign: str) -> None:
+        """只接受当前站点的呼号示例。"""
+        current_base_url = str(self.config.get("base_url", "")).strip().rstrip("/")
+        if base_url == current_base_url:
+            self.eyeball_reprint_page.set_example_call_sign(call_sign)
+
     def _fetch_card_versions_for_config(self, config: dict[str, Any]) -> dict[str, Any]:
         cfg = normalize_bridge_config(config)
         versions = self._bridge.fetch_card_versions(cfg)
@@ -2648,6 +2674,7 @@ class OnlinePrintWindow(QMainWindow):
                 "details": exc.details if isinstance(exc, CardPrintError) else None,
             }
         return {
+            "base_url": str(cfg.get("base_url", "")).strip().rstrip("/"),
             "versions": versions,
             "sender": sender,
             "sender_error": sender_error,

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatNotificationMailPolicyFeedback } from '../../utils/notification-mail-policy-feedback'
+import { useStationCallSignExample } from '../../composables/use-station-call-sign-example'
 import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
@@ -97,6 +99,8 @@ type SendSortKey =
   | 'envelopePrintAt'
   | 'offlineActivityName'
   | 'cardRemarks'
+
+const exampleCallSign = useStationCallSignExample()
 
 const allSceneTypes: SceneType[] = ['QSO', 'SWL', 'ONLINE_EYEBALL', 'EYEBALL']
 
@@ -716,17 +720,8 @@ const markAsSent = async (row: SendConfirmItem) => {
     })
 
     await loadRows({ silent: true })
-    let policyMessage = ''
-    if (policyResult.status === 'SENT') {
-      policyMessage = '，发卡邮件已自动发送'
-    } else if (policyResult.status === 'SKIPPED') {
-      policyMessage = '，发卡邮件已自动跳过'
-    } else if (policyResult.status === 'FAILED') {
-      policyMessage = `，自动处理失败：${policyResult.message || '请手动处理'}`
-    } else if (policyResult.message) {
-      policyMessage = `，${policyResult.message}`
-    }
-    feedback.value = `已确认发信：${row.callSign}（${sentAt}）${policyMessage}`
+    const policyMessage = formatNotificationMailPolicyFeedback(policyResult, '发卡邮件')
+    feedback.value = `已确认发信：${row.callSign}（${sentAt}），${policyMessage}`
   } catch (error) {
     feedback.value = `确认发信失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {
@@ -1013,7 +1008,7 @@ onMounted(() => {
           <label class="qsl-field">
             <span class="qsl-field__label">对方呼号</span>
             <div class="qsl-input-shell">
-              <input v-model.trim="editForm.callSign" type="text" placeholder="例如 BI1KBU" />
+              <input v-model.trim="editForm.callSign" type="text" :placeholder="`例如 ${exampleCallSign}`" />
             </div>
           </label>
 

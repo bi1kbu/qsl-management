@@ -686,6 +686,9 @@ rules:
   - apiGroups: [ "api.qsl-management.bi1kbu.com" ]
     resources: [ "qso-public", "overview-public", "cards", "receipt-public", "ONLINE_EYEBALL", "EYEBALL", "exchange-online/bureaus", "exchange-online/station-cards", "exchange-offline/activities", "qsl-card/qsos", "qsl-card/station-contact" ]
     verbs: [ "get", "list" ]
+  - apiGroups: [ "api.qsl-management.bi1kbu.com" ]
+    resources: [ "station-call-sign" ]
+    verbs: [ "list" ]
   - nonResourceURLs: [ "/eb", "/eb/*", "/eyeball", "/eyeball/*", "/oe", "/oe/*", "/online_eyeball", "/online_eyeball/*", "/rp", "/rp/*", "/receipt_public", "/receipt_public/*", "/qsl_card", "/qsl_card/" ]
     verbs: [ "get" ]
 ---

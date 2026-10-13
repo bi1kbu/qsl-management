@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatNotificationMailPolicyFeedback } from '../../utils/notification-mail-policy-feedback'
+import { useStationCallSignExample } from '../../composables/use-station-call-sign-example'
 import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
@@ -112,6 +114,8 @@ interface QsoRecordItem {
   freq: string
   mode: string
 }
+const exampleCallSign = useStationCallSignExample()
+
 const qsoSelectorColumns = [
   { key: 'id', label: 'QSO_ID', sortable: false },
   { key: 'sceneType', label: '类型', sortable: false },
@@ -1214,25 +1218,6 @@ const loadCardVersions = async () => {
   }
 }
 
-const resolvePolicyFeedback = (
-  result: { status?: string; message?: string },
-  labels: { sent: string; skipped: string },
-): string => {
-  if (result.status === 'SENT') {
-    return `，${labels.sent}`
-  }
-  if (result.status === 'SKIPPED') {
-    return `，${labels.skipped}`
-  }
-  if (result.status === 'FAILED') {
-    return `，自动处理失败：${result.message || '请手动处理'}`
-  }
-  if (result.message) {
-    return `，${result.message}`
-  }
-  return ''
-}
-
 const applyCreatedMailPolicyForRecord = async (
   cardRecordName: string,
   source: string,
@@ -1243,10 +1228,7 @@ const applyCreatedMailPolicyForRecord = async (
       scene: 'created',
       source,
     })
-    return resolvePolicyFeedback(result, {
-      sent: '制卡邮件已自动发送',
-      skipped: '制卡邮件已自动跳过',
-    })
+    return `，${formatNotificationMailPolicyFeedback(result, '制卡邮件')}`
   } catch (error) {
     return `，邮件策略处理失败：${error instanceof Error ? error.message : '未知错误'}`
   }
@@ -2149,7 +2131,7 @@ onBeforeUnmount(() => {
           <label class="qsl-field">
             <span class="qsl-field__label">对方呼号（Call_Sign）</span>
             <div class="qsl-input-shell">
-              <input v-model.trim="form.callSign" type="text" placeholder="例如：BI1KBU" />
+              <input v-model.trim="form.callSign" type="text" :placeholder="`例如：${exampleCallSign}`" />
             </div>
           </label>
 

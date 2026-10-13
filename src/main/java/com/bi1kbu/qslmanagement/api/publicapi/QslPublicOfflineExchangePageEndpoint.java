@@ -7,6 +7,7 @@ import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
+import com.bi1kbu.qslmanagement.api.QslStationCallSignService;
 import com.bi1kbu.qslmanagement.front.QslPublicOfflineExchangePageRenderService;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -23,15 +24,18 @@ public class QslPublicOfflineExchangePageEndpoint implements CustomEndpoint {
     private final QslPublicRateLimitService publicRateLimitService;
     private final QslPublicApiService publicApiService;
     private final QslPublicOfflineExchangePageRenderService pageRenderService;
+    private final QslStationCallSignService stationCallSignService;
 
     public QslPublicOfflineExchangePageEndpoint(
         QslPublicRateLimitService publicRateLimitService,
         QslPublicApiService publicApiService,
-        QslPublicOfflineExchangePageRenderService pageRenderService
+        QslPublicOfflineExchangePageRenderService pageRenderService,
+        QslStationCallSignService stationCallSignService
     ) {
         this.publicRateLimitService = publicRateLimitService;
         this.publicApiService = publicApiService;
         this.pageRenderService = pageRenderService;
+        this.stationCallSignService = stationCallSignService;
     }
 
     @Override
@@ -54,14 +58,16 @@ public class QslPublicOfflineExchangePageEndpoint implements CustomEndpoint {
         var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("exchange-offline-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.render(
+            .then(stationCallSignService.getExampleCallSign())
+            .map(example -> pageRenderService.render(
                 callSign,
                 cardId,
                 activityId,
                 "",
                 embed,
-                embedId
-            )))
+                embedId,
+                example
+            ))
             .flatMap(this::html)
             .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
                 .contentType(MediaType.TEXT_HTML)
@@ -76,14 +82,16 @@ public class QslPublicOfflineExchangePageEndpoint implements CustomEndpoint {
 
         return publicRateLimitService.checkLimit("exchange-offline-page", clientIp)
             .then(publicApiService.getOfflineExchangePagePrefill(cardId))
-            .map(prefill -> pageRenderService.render(
-                prefill.callSign(),
-                prefill.cardId(),
-                prefill.activityId(),
-                "",
-                embed,
-                embedId
-            ))
+            .flatMap(prefill -> stationCallSignService.getExampleCallSign()
+                .map(example -> pageRenderService.render(
+                    prefill.callSign(),
+                    prefill.cardId(),
+                    prefill.activityId(),
+                    "",
+                    embed,
+                    embedId,
+                    example
+                )))
             .flatMap(this::html)
             .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
                 .contentType(MediaType.TEXT_HTML)

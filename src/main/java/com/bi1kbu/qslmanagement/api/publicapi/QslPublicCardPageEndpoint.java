@@ -6,6 +6,7 @@ import static org.springframework.web.reactive.function.server.RouterFunctions.r
 import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
+import com.bi1kbu.qslmanagement.api.QslStationCallSignService;
 import com.bi1kbu.qslmanagement.front.QslPublicCardPageRenderService;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -21,13 +22,16 @@ public class QslPublicCardPageEndpoint implements CustomEndpoint {
 
     private final QslPublicRateLimitService publicRateLimitService;
     private final QslPublicCardPageRenderService pageRenderService;
+    private final QslStationCallSignService stationCallSignService;
 
     public QslPublicCardPageEndpoint(
         QslPublicRateLimitService publicRateLimitService,
-        QslPublicCardPageRenderService pageRenderService
+        QslPublicCardPageRenderService pageRenderService,
+        QslStationCallSignService stationCallSignService
     ) {
         this.publicRateLimitService = publicRateLimitService;
         this.pageRenderService = pageRenderService;
+        this.stationCallSignService = stationCallSignService;
     }
 
     @Override
@@ -47,7 +51,8 @@ public class QslPublicCardPageEndpoint implements CustomEndpoint {
         var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("cards-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, embed, embedId)))
+            .then(stationCallSignService.getExampleCallSign())
+            .map(example -> pageRenderService.render(callSign, embed, embedId, example))
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))

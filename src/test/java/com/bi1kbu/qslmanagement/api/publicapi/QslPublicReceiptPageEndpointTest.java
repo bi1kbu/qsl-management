@@ -24,10 +24,10 @@ class QslPublicReceiptPageEndpointTest {
         var renderService = mock(QslPublicReceiptPageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.render("BI1KBU", "card-record-001", "SIGNED", true, "embed-001"))
+        when(renderService.render("BI1KBU", "card-record-001", "SIGNED", true, "embed-001", "BG1ABC"))
             .thenReturn("<html><body>签收页</body></html>");
 
-        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, publicApiService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -38,7 +38,7 @@ class QslPublicReceiptPageEndpointTest {
             .expectBody(String.class)
             .isEqualTo("<html><body>签收页</body></html>");
 
-        verify(renderService).render("BI1KBU", "card-record-001", "SIGNED", true, "embed-001");
+        verify(renderService).render("BI1KBU", "card-record-001", "SIGNED", true, "embed-001", "BG1ABC");
     }
 
     @Test
@@ -50,10 +50,10 @@ class QslPublicReceiptPageEndpointTest {
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
         when(publicApiService.getReceiptPagePrefill("C1003", "BI1KBU"))
             .thenReturn(Mono.just(new QslPublicApiService.PublicCardPagePrefill("C1003", "BI1KBU", "后端回填")));
-        when(renderService.render("BI1KBU", "C1003", "后端回填", true, "embed-005"))
+        when(renderService.render("BI1KBU", "C1003", "后端回填", true, "embed-005", "BG1ABC"))
             .thenReturn("<html><body>签收页-按卡片回填</body></html>");
 
-        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, publicApiService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -65,7 +65,7 @@ class QslPublicReceiptPageEndpointTest {
             .isEqualTo("<html><body>签收页-按卡片回填</body></html>");
 
         verify(publicApiService).getReceiptPagePrefill("C1003", "BI1KBU");
-        verify(renderService).render("BI1KBU", "C1003", "后端回填", true, "embed-005");
+        verify(renderService).render("BI1KBU", "C1003", "后端回填", true, "embed-005", "BG1ABC");
     }
 
     @Test
@@ -80,7 +80,7 @@ class QslPublicReceiptPageEndpointTest {
         when(renderService.renderError("请求过于频繁，请稍后再试", false))
             .thenReturn("<html><body>限流</body></html>");
 
-        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, publicApiService, renderService);
+        var endpoint = new QslPublicReceiptPageEndpoint(rateLimitService, publicApiService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -92,5 +92,12 @@ class QslPublicReceiptPageEndpointTest {
             .isEqualTo("<html><body>限流</body></html>");
 
         verify(renderService).renderError("请求过于频繁，请稍后再试", false);
+    }
+
+    private static com.bi1kbu.qslmanagement.api.QslStationCallSignService exampleCallSignService() {
+        var service = org.mockito.Mockito.mock(com.bi1kbu.qslmanagement.api.QslStationCallSignService.class);
+        org.mockito.Mockito.when(service.getExampleCallSign())
+            .thenReturn(reactor.core.publisher.Mono.just("BG1ABC"));
+        return service;
     }
 }

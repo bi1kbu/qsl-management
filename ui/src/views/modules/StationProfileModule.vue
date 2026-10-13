@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { updateStationCallSignExample } from '../../composables/use-station-call-sign-example'
 import { VButton, VCard } from '@halo-dev/components'
 import { onMounted, reactive, ref } from 'vue'
 import { getExtensionOrNull, type QslExtension, upsertSingleton } from '../../api/qsl-extension-api'
@@ -112,12 +113,13 @@ const saveStationProfile = async () => {
 
   saving.value = true
   try {
-    await upsertSingleton<StationProfileSpec>({
+    const submittedCallSign = stationProfileForm.myCallSign.trim().toUpperCase()
+    const savedProfile = await upsertSingleton<StationProfileSpec>({
       plural: resourcePlural,
       kind: resourceKind,
       name: resourceName,
       spec: {
-        myCallSign: stationProfileForm.myCallSign.trim().toUpperCase(),
+        myCallSign: submittedCallSign,
         myName: stationProfileForm.myName.trim(),
         myNameEn: stationProfileForm.myNameEn.trim(),
         myTelephone: stationProfileForm.myTelephone.trim(),
@@ -128,6 +130,7 @@ const saveStationProfile = async () => {
         stationRemarks: stationProfileForm.stationRemarks.trim(),
       },
     })
+    updateStationCallSignExample(savedProfile.spec?.myCallSign ?? submittedCallSign)
     await appendQslAuditLog({
       action: '更新通信地址',
       resourceType: 'station-profile',

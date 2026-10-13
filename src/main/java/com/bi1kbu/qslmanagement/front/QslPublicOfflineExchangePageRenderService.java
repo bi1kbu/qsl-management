@@ -12,7 +12,8 @@ public class QslPublicOfflineExchangePageRenderService {
         String rawActivityId,
         String rawRemarks,
         boolean embed,
-        String rawEmbedId
+        String rawEmbedId,
+        String exampleCallSign
     ) {
         var callSign = QslPublicPageRenderSupport.normalizeCallSign(rawCallSign);
         var cardId = QslPublicPageRenderSupport.normalizeText(rawCardId, 128).toUpperCase(Locale.ROOT);
@@ -27,7 +28,9 @@ public class QslPublicOfflineExchangePageRenderService {
             .replace("__REMARKS_HTML__", QslPublicPageRenderSupport.escapeHtml(remarks))
             .replace("__REMARKS_JS__", QslPublicPageRenderSupport.escapeJs(remarks))
             .replace("__EMBED_MODE__", Boolean.toString(embed))
-            .replace("__EMBED_ID__", QslPublicPageRenderSupport.escapeJs(embedId));
+            .replace("__EMBED_ID__", QslPublicPageRenderSupport.escapeJs(embedId))
+            .replace("placeholder=\"例如 __EXAMPLE_CALL_SIGN_HTML__\"",
+                "placeholder=\"例如 " + QslPublicPageRenderSupport.escapeHtml(exampleCallSign) + "\"");
     }
 
     public String renderError(String message, boolean embed) {
@@ -74,7 +77,7 @@ public class QslPublicOfflineExchangePageRenderService {
                 <p class="qsl-desc">请填写呼号、卡片ID、活动ID，并提交确认。</p>
                 <form id="qsl-form">
                   <div class="qsl-grid">
-                    <label class="qsl-field full"><span class="qsl-label">呼号</span><input id="callSign" class="qsl-input" maxlength="16" value="__CALL_SIGN_HTML__" placeholder="例如 BI1KBU" /></label>
+                    <label class="qsl-field full"><span class="qsl-label">呼号</span><input id="callSign" class="qsl-input" maxlength="16" value="__CALL_SIGN_HTML__" placeholder="例如 __EXAMPLE_CALL_SIGN_HTML__" /></label>
                     <label class="qsl-field"><span class="qsl-label">卡片ID</span><input id="cardId" class="qsl-input" maxlength="128" value="__CARD_ID_HTML__" placeholder="例如 C1001" /></label>
                     <label class="qsl-field">
                       <span class="qsl-label">活动ID</span>

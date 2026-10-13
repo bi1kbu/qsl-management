@@ -10,7 +10,7 @@ public class QslPublicCardPageRenderService {
     private static final Pattern CALL_SIGN_PATTERN = Pattern.compile("^[A-Z0-9/-]{3,16}$");
     private static final Pattern EMBED_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
-    public String render(String rawCallSign, boolean embed, String rawEmbedId) {
+    public String render(String rawCallSign, boolean embed, String rawEmbedId, String exampleCallSign) {
         var callSign = normalizeCallSign(rawCallSign);
         var embedId = normalizeEmbedId(rawEmbedId);
 
@@ -19,7 +19,9 @@ public class QslPublicCardPageRenderService {
             .replace("__CALL_SIGN_HTML__", escapeHtml(callSign))
             .replace("__CALL_SIGN_JS__", escapeJs(callSign))
             .replace("__EMBED_MODE__", Boolean.toString(embed))
-            .replace("__EMBED_ID__", escapeJs(embedId));
+            .replace("__EMBED_ID__", escapeJs(embedId))
+            .replace("placeholder=\"请输入呼号，例如 __EXAMPLE_CALL_SIGN_HTML__\"",
+                "placeholder=\"请输入呼号，例如 " + QslPublicPageRenderSupport.escapeHtml(exampleCallSign) + "\"");
     }
 
     public String renderError(String message, boolean embed) {
@@ -325,7 +327,7 @@ public class QslPublicCardPageRenderService {
                     type="text"
                     value="__CALL_SIGN_HTML__"
                     maxlength="16"
-                    placeholder="请输入呼号，例如 BI1KBU"
+                    placeholder="请输入呼号，例如 __EXAMPLE_CALL_SIGN_HTML__"
                   />
                   <button class="qsl-button" type="submit">查询</button>
                 </form>

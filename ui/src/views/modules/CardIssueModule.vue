@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatNotificationMailPolicyFeedback } from '../../utils/notification-mail-policy-feedback'
 import { VButton, VCard } from '@halo-dev/components'
 import { computed, onMounted, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
@@ -1287,10 +1288,7 @@ const confirmEnvelopePrintedForRow = async (row: CardIssueCardRow) => {
       source: '制卡签发-确认打包自动策略',
     })
     await loadSourceData()
-    feedback.value =
-      policyResult.message === '邮件策略为手动，未自动处理。'
-        ? `已确认打包：${row.id}`
-        : `已确认打包：${row.id}；制卡邮件${policyResult.status === 'SENT' ? '已自动发送' : policyResult.status === 'SKIPPED' ? '已自动跳过' : '自动处理失败'}。`
+    feedback.value = `已确认打包：${row.id}；${formatNotificationMailPolicyFeedback(policyResult, '制卡邮件')}`
   } catch (error) {
     feedback.value = `确认打包失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

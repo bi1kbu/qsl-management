@@ -120,6 +120,8 @@ API 版本：`v1alpha1`
 | POST | `/notification-mails/batch-send` | 批量发送通知邮件 | `card-record:edit` 或相关业务编辑权限 |
 | POST | `/notification-mails/test` | 向“本台电子邮件”发送测试通知邮件 | `system-settings:edit` |
 
+`POST /notification-mails/apply-policy` 的 `data.status（本次策略处理结果）` 可为 `PENDING/SENT/SKIPPED/FAILED`。`PENDING` 表示手动等待处理或自动不发送（AUTO_SKIP）策略下业务条件尚未满足，仅作为响应值，不写入卡片的持久化邮件状态；手动等待发送的说明为“等待手动发送”。已处理的场景返回其实际终态，只有已持久化跳过的场景返回 `SKIPPED`。原路由、认证及权限要求不变，手工发送与批量发送的结果合同不变。
+
 ### 6.3 AI 能力
 
 AI 能力仅在控制台登录态下可用，不提供公开接口。AI API Key 写入 Halo `Secret`，`SystemSetting.spec` 只保存供应商、接口地址、模型、超时、并发上限、功能开关、完整提示词模板等非敏感配置；前端不回显 API Key。自定义提示词不允许改变服务端指定的 JSON Schema 返回结构；服务端在调用 OpenAI 兼容接口时仍通过 `response_format=json_schema` 约束返回，并按 `aiMaxConcurrentRequests` 控制第三方 AI 调用并发，429 限流错误会短延迟重试。AI 调用可能将姓名、电话、邮箱、邮编和通信地址发送到配置的第三方模型服务，因此功能默认关闭。
@@ -310,6 +312,12 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 
 ## 7. 前台公开 API 与页面
 
+### 呼号示例读取合同（2026-10-13）
+
+`GET /apis/api.qsl-management.bi1kbu.com/v1alpha1/station-call-sign` 允许匿名只读调用，沿用 `ApiResult` 响应包装（`code（结果代码）/message（结果信息）/data（响应数据）`），其中 `data` 仅包含 `callSign（本台示例呼号）`，不返回姓名、电话、地址、邮箱或 Extension 元数据。数据源为 `StationProfile` 单例 `qsl-station-profile-default` 的 `spec.myCallSign（本台呼号）`，空白或缺失时回退 `BI1KBU`，不新增持久化模型。后台示例使用此接口，公开页面由服务端读取相同数据源并转义后写入占位文字；查询参数中的实际呼号不受影响。读取沿用公开限流，限流键为 `station-call-sign`，响应设置 `Cache-Control: no-store`；匿名角色仅授予 `station-call-sign` 资源的 `list` 动词，不增加 `station-profiles` 读取或写入权限。通信地址原有 `station-profile:view/edit` 及编辑依赖查看的关系保持不变。
+
+本次官方依据核验日期为 2026-10-13：[CustomEndpoint](https://docs.halo.run/developer-guide/plugin/api-reference/server/custom-endpoints)、[ReactiveExtensionClient](https://docs.halo.run/developer-guide/plugin/api-reference/server/extension-client)、[API 变更日志 2.23](https://docs.halo.run/developer-guide/plugin/api-changelog#2230)。目标沿用 Halo 2.23，无版本兼容分支或迁移。
+
 基础路径：`/apis/api.qsl-management.bi1kbu.com/v1alpha1`
 
 ### 7.1 公开接口
@@ -324,12 +332,15 @@ QRZ.COM 地址获取使用官方 XML 接口，配置项为用户名、Secret 名
 | GET | `/exchange-offline/-/activities` | 公开线下活动列表 | 是 |
 | GET | `/qsl-card/-/qsos?callSign=...` | 查询实体卡 QSO，返回 `selectable/unselectableReason` 兼容字段及 `statusCode/statusText/statusTextEn`；状态覆盖可申请、可重新申请、审核、建卡、制卡、打包、发卡和签收进度 | 是 |
 | GET | `/qsl-card/-/station-contact` | 仅返回本台公开邮箱，用于新增卡片局邮件联系 | 是 |
+| GET | `/station-call-sign` | 返回 `callSign（本台示例呼号）`；读取默认通信地址的持久化呼号，缺失或空白时为 `BI1KBU` | 是 |
 | POST | `/exchange-online/-/requests` | 匿名提交线上换卡申请；同呼号存在待审核申请时返回 `409/QSL-409-0001`；同呼号上一条申请仍处于冷却期时返回 `429/QSL-429-0001`；提交写入成功后返回本站通信地址用于寄送提示 | 是 |
 | POST | `/qsl-card/-/requests` | 匿名提交实体 QSL 卡申请；个人地址模式要求邮政编码、通信地址和通知电子邮箱必填，收件人姓名与联系电话选填；服务端创建或复用地址、持久化 QSO 占用和申请 | 是 |
 | POST | `/exchange-offline/-/confirm` | 匿名确认线下换卡；提交校验通过并写入卡片后才返回本站通信地址 | 是 |
 | POST | `/receipt-public/-/confirm` | 匿名签收确认 | 是 |
 
 公开 `GET /qso-public/grids`、实体卡申请三个数据接口、`POST /exchange-online/-/requests`、`POST /exchange-offline/-/confirm` 和 `POST /receipt-public/-/confirm` 均受 `QslPublicRateLimitService` 限制。实体卡查询、本台邮箱读取、申请提交的限流键分别为 `qsl-card-qsos`、`qsl-card-station-contact`、`qsl-card-requests`。实体卡 QSO 查询只返回申请所需字段，并从 `QslCardRequest`、QSO 占用与关联 `CardRecord` 实时计算公开进度，不新增重复持久化状态；状态码为 `AVAILABLE/REJECTED_REAPPLY/REVIEW_PENDING/CARD_CREATING/CARD_CREATION_FAILED/CARD_PENDING_ISSUE/CARD_ISSUED/CARD_PACKED/CARD_SENT/CARD_SIGNED`。“已有卡片”仅作为无法关联申请来源的待制卡旧数据提示，“已收卡片”不进入申请寄送状态链。接口不返回申请备注、审核说明、审核人、内部建卡错误、个人地址、邮箱或邮件状态；个人地址每次重新填写，提交后服务端按呼号、姓名、电话、邮编、地址和邮箱完整匹配复用或创建 `AddressBookEntry`，成功响应不返回地址内部资源名。卡片局只允许引用公开清单中的现有 `BureauEntry.metadata.name`，新增卡片局通过本台邮箱线下联系，不开放匿名卡片局写入。`GET /qso-public/grids` 从 `QsoRecord.spec.qth` 读取对方 QTH，仅当 QTH 整体为 4/6/8 位 Maidenhead 网格时纳入清单，6 位或 8 位统一截取前四位；地区文字、地址或混合文本跳过。同一四位网格下保留多条通联明细，返回去重呼号集合与通联日期、时间、时区、模式、频率、频段，不返回地址、备注、本台信息等敏感字段。`detailLevel（详情级别）` 可选 `full（完整）` 或 `brief（简略）`，不传默认为完整；简略模式只返回网格和呼号清单，不返回通联明细。接口不再设置返回数量上限，历史 `limit（返回数量上限）` 参数会被忽略。线上换卡申请额外按同呼号执行服务端冷却校验，冷却时间来自 `SystemSetting.spec.onlineExchangeRequestCooldownMinutes`，默认 5 分钟，填 0 表示关闭冷却；待审核申请直接拒绝重复提交，已通过或已拒绝申请仍需等待冷却期结束。线上换卡申请资源名由服务端扫描现有 `EX####` 并生成下一号，例如 `EX0001`、`EX0002`；历史 `exchange-request-*` 名称不参与新序列计算。前端“不创建卡片”占位记录使用 `NC####` 递增资源名，后台可持久化，前台作为空白卡片 ID 展示。
+
+线上换卡申请成功响应沿用 `requestName/callSign/reviewStatus/stationAddress/submittedAt` 字段。`stationAddress（本站通信地址展示文本）` 仅在已持久化的 `StationProfile.spec.myAddress` 非空时返回本站地址块，否则返回空字符串；页面显示“本站通信地址尚未配置，请联系管理员确认寄送信息。”。本站地址缺失不影响申请持久化与审核，未新增公开数据字段或权限。
 
 ### 7.2 公开页面
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useStationCallSignExample } from '../../composables/use-station-call-sign-example'
 import { VButton, VCard, VTabItem, VTabs } from '@halo-dev/components'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { appendQslAuditLog } from '../../api/qsl-audit-log-api'
@@ -122,6 +123,8 @@ interface AddressOptionItem extends OptionItem {
   callSign: string
   searchText: string
 }
+
+const exampleCallSign = useStationCallSignExample()
 
 const resourcePlural = 'card-records'
 const resourceKind = 'CardRecord'
@@ -527,7 +530,7 @@ const selectableAddressOptions = computed(() => {
 
 const batchEditFields = computed(() => {
   return [
-    { value: 'callSign', label: '对方呼号', inputType: 'text', placeholder: '例如：BI1KBU' },
+    { value: 'callSign', label: '对方呼号', inputType: 'text', placeholder: `例如：${exampleCallSign.value}` },
     {
       value: 'cardType',
       label: '卡片类型',
@@ -1816,7 +1819,7 @@ onMounted(() => {
               <label class="qsl-field">
                 <span class="qsl-field__label">呼号</span>
                 <div class="qsl-input-shell">
-                  <input v-model.trim="editForm.callSign" type="text" placeholder="例如：BI1KBU" />
+                  <input v-model.trim="editForm.callSign" type="text" :placeholder="`例如：${exampleCallSign}`" />
                 </div>
               </label>
 

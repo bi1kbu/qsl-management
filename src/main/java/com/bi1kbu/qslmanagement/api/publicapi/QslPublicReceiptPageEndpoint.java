@@ -7,6 +7,7 @@ import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
+import com.bi1kbu.qslmanagement.api.QslStationCallSignService;
 import com.bi1kbu.qslmanagement.front.QslPublicReceiptPageRenderService;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -23,15 +24,18 @@ public class QslPublicReceiptPageEndpoint implements CustomEndpoint {
     private final QslPublicRateLimitService publicRateLimitService;
     private final QslPublicApiService publicApiService;
     private final QslPublicReceiptPageRenderService pageRenderService;
+    private final QslStationCallSignService stationCallSignService;
 
     public QslPublicReceiptPageEndpoint(
         QslPublicRateLimitService publicRateLimitService,
         QslPublicApiService publicApiService,
-        QslPublicReceiptPageRenderService pageRenderService
+        QslPublicReceiptPageRenderService pageRenderService,
+        QslStationCallSignService stationCallSignService
     ) {
         this.publicRateLimitService = publicRateLimitService;
         this.publicApiService = publicApiService;
         this.pageRenderService = pageRenderService;
+        this.stationCallSignService = stationCallSignService;
     }
 
     @Override
@@ -54,7 +58,8 @@ public class QslPublicReceiptPageEndpoint implements CustomEndpoint {
         var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("receipt-public-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, cardId, remarks, embed, embedId)))
+            .then(stationCallSignService.getExampleCallSign())
+            .map(example -> pageRenderService.render(callSign, cardId, remarks, embed, embedId, example))
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))
@@ -72,7 +77,8 @@ public class QslPublicReceiptPageEndpoint implements CustomEndpoint {
 
         return publicRateLimitService.checkLimit("receipt-public-page", clientIp)
             .then(publicApiService.getReceiptPagePrefill(cardId, callSign))
-            .map(prefill -> pageRenderService.render(prefill.callSign(), prefill.cardId(), prefill.remarks(), embed, embedId))
+            .flatMap(prefill -> stationCallSignService.getExampleCallSign()
+                .map(example -> pageRenderService.render(prefill.callSign(), prefill.cardId(), prefill.remarks(), embed, embedId, example)))
             .flatMap(html -> ServerResponse.ok()
                 .contentType(MediaType.TEXT_HTML)
                 .bodyValue(html))

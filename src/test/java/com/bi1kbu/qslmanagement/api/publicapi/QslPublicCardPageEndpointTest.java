@@ -22,10 +22,10 @@ class QslPublicCardPageEndpointTest {
         var renderService = mock(QslPublicCardPageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.render("BI1KBU", true, "embed-001"))
+        when(renderService.render("BI1KBU", true, "embed-001", "BG1ABC"))
             .thenReturn("<html><body>页面</body></html>");
 
-        var endpoint = new QslPublicCardPageEndpoint(rateLimitService, renderService);
+        var endpoint = new QslPublicCardPageEndpoint(rateLimitService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -36,7 +36,7 @@ class QslPublicCardPageEndpointTest {
             .expectBody(String.class)
             .isEqualTo("<html><body>页面</body></html>");
 
-        verify(renderService).render("BI1KBU", true, "embed-001");
+        verify(renderService).render("BI1KBU", true, "embed-001", "BG1ABC");
     }
 
     @Test
@@ -45,10 +45,10 @@ class QslPublicCardPageEndpointTest {
         var renderService = mock(QslPublicCardPageRenderService.class);
 
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
-        when(renderService.render("BI1KBU", true, "embed-001"))
+        when(renderService.render("BI1KBU", true, "embed-001", "BG1ABC"))
             .thenReturn("<html><body>页面</body></html>");
 
-        var endpoint = new QslPublicCardPageEndpoint(rateLimitService, renderService);
+        var endpoint = new QslPublicCardPageEndpoint(rateLimitService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -56,7 +56,7 @@ class QslPublicCardPageEndpointTest {
             .exchange()
             .expectStatus().isOk();
 
-        verify(renderService).render("BI1KBU", true, "embed-001");
+        verify(renderService).render("BI1KBU", true, "embed-001", "BG1ABC");
     }
 
     @Test
@@ -70,7 +70,7 @@ class QslPublicCardPageEndpointTest {
         when(renderService.renderError("请求过于频繁，请稍后再试", false))
             .thenReturn("<html><body>限流</body></html>");
 
-        var endpoint = new QslPublicCardPageEndpoint(rateLimitService, renderService);
+        var endpoint = new QslPublicCardPageEndpoint(rateLimitService, renderService, exampleCallSignService());
         var client = WebTestClient.bindToRouterFunction(endpoint.endpoint()).build();
 
         client.get()
@@ -82,5 +82,12 @@ class QslPublicCardPageEndpointTest {
             .isEqualTo("<html><body>限流</body></html>");
 
         verify(renderService).renderError("请求过于频繁，请稍后再试", false);
+    }
+
+    private static com.bi1kbu.qslmanagement.api.QslStationCallSignService exampleCallSignService() {
+        var service = org.mockito.Mockito.mock(com.bi1kbu.qslmanagement.api.QslStationCallSignService.class);
+        org.mockito.Mockito.when(service.getExampleCallSign())
+            .thenReturn(reactor.core.publisher.Mono.just("BG1ABC"));
+        return service;
     }
 }

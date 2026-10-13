@@ -309,7 +309,7 @@ public class QslPublicApiService {
                             created.getMetadata().getName(),
                             callSign,
                             created.getStatus().getReviewStatus(),
-                            nullToEmpty(contact.stationAddress()),
+                            contact.stationAddressConfigured() ? nullToEmpty(contact.stationAddress()) : "",
                             QslApiSupport.nowText()
                         )));
             })));
@@ -1090,7 +1090,7 @@ public class QslPublicApiService {
             .map(stationProfile -> {
                 var spec = stationProfile.getSpec();
                 if (spec == null) {
-                    return new PublicStationContact("", "");
+                    return new PublicStationContact("", "", false);
                 }
                 var callSign = nullToEmpty(spec.getMyCallSign()).trim().toUpperCase(Locale.ROOT);
                 var name = nullToEmpty(spec.getMyName()).trim();
@@ -1109,10 +1109,11 @@ public class QslPublicApiService {
                 );
                 return new PublicStationContact(
                     stationAddressText,
-                    email
+                    email,
+                    !address.isBlank()
                 );
             })
-            .defaultIfEmpty(new PublicStationContact("", ""));
+            .defaultIfEmpty(new PublicStationContact("", "", false));
     }
 
     private String normalizeSceneType(String value) {
@@ -1346,7 +1347,8 @@ public class QslPublicApiService {
 
     public record PublicStationContact(
         String stationAddress,
-        String stationEmail
+        String stationEmail,
+        boolean stationAddressConfigured
     ) {
     }
 

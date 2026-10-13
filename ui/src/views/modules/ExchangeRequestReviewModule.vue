@@ -317,7 +317,7 @@ const updateReviewStatus = async (
     await loadRows()
     reviewReasonEditingId.value = ''
     reviewReasonDraft.value = ''
-    feedback.value = `${row.callSign} 的换卡申请已${status}。`
+    feedback.value = `${row.callSign} 的换卡申请${status}。`
   } catch (error) {
     feedback.value = `处理换卡申请失败：${error instanceof Error ? error.message : '未知错误'}`
   } finally {

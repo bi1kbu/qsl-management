@@ -7,6 +7,7 @@ import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslPublicApiService;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
+import com.bi1kbu.qslmanagement.api.QslStationCallSignService;
 import com.bi1kbu.qslmanagement.front.QslPublicOnlineExchangePageRenderService;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -23,15 +24,18 @@ public class QslPublicOnlineExchangePageEndpoint implements CustomEndpoint {
     private final QslPublicRateLimitService publicRateLimitService;
     private final QslPublicApiService publicApiService;
     private final QslPublicOnlineExchangePageRenderService pageRenderService;
+    private final QslStationCallSignService stationCallSignService;
 
     public QslPublicOnlineExchangePageEndpoint(
         QslPublicRateLimitService publicRateLimitService,
         QslPublicApiService publicApiService,
-        QslPublicOnlineExchangePageRenderService pageRenderService
+        QslPublicOnlineExchangePageRenderService pageRenderService,
+        QslStationCallSignService stationCallSignService
     ) {
         this.publicRateLimitService = publicRateLimitService;
         this.publicApiService = publicApiService;
         this.pageRenderService = pageRenderService;
+        this.stationCallSignService = stationCallSignService;
     }
 
     @Override
@@ -53,7 +57,8 @@ public class QslPublicOnlineExchangePageEndpoint implements CustomEndpoint {
         var embedId = queryParam(request, "embedId", "eid");
 
         return publicRateLimitService.checkLimit("exchange-online-page", clientIp)
-            .then(Mono.fromSupplier(() -> pageRenderService.render(callSign, remarks, embed, embedId)))
+            .then(stationCallSignService.getExampleCallSign())
+            .map(example -> pageRenderService.render(callSign, remarks, embed, embedId, example))
             .flatMap(this::html)
             .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
                 .contentType(MediaType.TEXT_HTML)
@@ -69,7 +74,8 @@ public class QslPublicOnlineExchangePageEndpoint implements CustomEndpoint {
 
         return publicRateLimitService.checkLimit("exchange-online-page", clientIp)
             .then(publicApiService.getOnlineExchangePagePrefill(cardId, callSign))
-            .map(prefill -> pageRenderService.render(prefill.callSign(), prefill.remarks(), embed, embedId))
+            .flatMap(prefill -> stationCallSignService.getExampleCallSign()
+                .map(example -> pageRenderService.render(prefill.callSign(), prefill.remarks(), embed, embedId, example)))
             .flatMap(this::html)
             .onErrorResume(QslApiException.class, error -> ServerResponse.status(error.getStatus())
                 .contentType(MediaType.TEXT_HTML)

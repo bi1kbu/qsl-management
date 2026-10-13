@@ -14,6 +14,8 @@ import com.bi1kbu.qslmanagement.extension.model.ExchangeRequest;
 import com.bi1kbu.qslmanagement.extension.model.StationProfile;
 import com.bi1kbu.qslmanagement.extension.model.SystemSetting;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.notification.Subscription;
 import run.halo.app.extension.ReactiveExtensionClient;
@@ -176,16 +178,100 @@ class QslNotificationMailServiceTest {
         when(client.fetch(eq(CardRecord.class), eq("C1002"))).thenReturn(Mono.just(cardRecord));
         when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default"))).thenReturn(Mono.just(systemSetting));
 
-        service.autoSendIfEnabled(
+        var result = service.applyAutomaticPolicy(
             "C1002",
             QslNotificationMailService.MailScene.CARD_CREATED,
             "admin",
-            "127.0.0.1"
+            "127.0.0.1",
+            "测试"
         ).block();
 
+        assertEquals("PENDING", result.status());
+        assertEquals("等待手动发送", result.message());
+        assertEquals("", cardSpec.getCreatedMailStatus());
         verify(notificationCenter, never()).subscribe(any(), any());
         verify(notificationReasonEmitter, never()).emit(anyString(), any());
         verify(client, never()).update(any(CardRecord.class));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "MANUAL,SENT", "MANUAL,SKIPPED",
+        "AUTO_SEND,SENT", "AUTO_SEND,SKIPPED",
+        "AUTO_SKIP,SENT", "AUTO_SKIP,SKIPPED"
+    })
+    void shouldPreservePersistedTerminalStatusWhenApplyingPolicy(String policy, String mailStatus) {
+        var client = mock(ReactiveExtensionClient.class);
+        var notificationCenter = mock(NotificationCenter.class);
+        var notificationReasonEmitter = mock(NotificationReasonEmitter.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslNotificationMailService(
+            client, notificationCenter, notificationReasonEmitter, auditService
+        );
+        var cardRecord = new CardRecord();
+        cardRecord.setMetadata(QslApiSupport.createMetadata("C1004"));
+        var cardSpec = new CardRecord.CardRecordSpec();
+        cardSpec.setSceneType("ONLINE_EYEBALL");
+        cardSpec.setCardSent(Boolean.TRUE);
+        cardSpec.setSentMailStatus(mailStatus);
+        cardSpec.setSentMailSentAt("SENT".equals(mailStatus) ? "2026-10-13 12:00:00" : "");
+        cardRecord.setSpec(cardSpec);
+        var systemSetting = new SystemSetting();
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setOnlineCardSentMailPolicy(policy);
+        systemSetting.setSpec(settingSpec);
+        when(client.fetch(eq(CardRecord.class), eq("C1004"))).thenReturn(Mono.just(cardRecord));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+
+        var result = service.applyAutomaticPolicy(
+            "C1004", QslNotificationMailService.MailScene.CARD_SENT, "admin", "127.0.0.1", "测试"
+        ).block();
+
+        assertEquals(mailStatus, result.status());
+        assertEquals(cardSpec.getSentMailSentAt(), result.sentAt());
+        assertEquals(mailStatus, cardSpec.getSentMailStatus());
+        verify(client, never()).update(any(CardRecord.class));
+        verify(notificationCenter, never()).subscribe(any(), any());
+        verify(notificationReasonEmitter, never()).emit(anyString(), any());
+        verify(auditService, never()).appendAuditLog(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldReturnPendingWithoutPersistingSkipBeforeBusinessConditionIsMet() {
+        var client = mock(ReactiveExtensionClient.class);
+        var notificationCenter = mock(NotificationCenter.class);
+        var notificationReasonEmitter = mock(NotificationReasonEmitter.class);
+        var auditService = mock(QslAuditService.class);
+        var service = new QslNotificationMailService(
+            client, notificationCenter, notificationReasonEmitter, auditService
+        );
+        var cardRecord = new CardRecord();
+        cardRecord.setMetadata(QslApiSupport.createMetadata("C1005"));
+        var cardSpec = new CardRecord.CardRecordSpec();
+        cardSpec.setSceneType("ONLINE_EYEBALL");
+        cardSpec.setCardSent(Boolean.FALSE);
+        cardSpec.setSentMailStatus("");
+        cardRecord.setSpec(cardSpec);
+        var systemSetting = new SystemSetting();
+        var settingSpec = new SystemSetting.SystemSettingSpec();
+        settingSpec.setOnlineCardSentMailPolicy("AUTO_SKIP");
+        systemSetting.setSpec(settingSpec);
+        when(client.fetch(eq(CardRecord.class), eq("C1005"))).thenReturn(Mono.just(cardRecord));
+        when(client.fetch(eq(SystemSetting.class), eq("qsl-system-setting-default")))
+            .thenReturn(Mono.just(systemSetting));
+
+        var result = service.applyAutomaticPolicy(
+            "C1005", QslNotificationMailService.MailScene.CARD_SENT, "admin", "127.0.0.1", "测试"
+        ).block();
+
+        assertEquals("PENDING", result.status());
+        assertEquals("当前记录尚未满足该场景自动处理条件。", result.message());
+        assertEquals("", cardSpec.getSentMailStatus());
+        verify(client, never()).update(any(CardRecord.class));
+        verify(notificationCenter, never()).subscribe(any(), any());
+        verify(notificationReasonEmitter, never()).emit(anyString(), any());
+        verify(auditService, never()).appendAuditLog(any(), any(), any(), any(), any(), any());
     }
 
     @Test

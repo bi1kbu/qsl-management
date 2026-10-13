@@ -3,6 +3,7 @@ package com.bi1kbu.qslmanagement.api.publicapi;
 import com.bi1kbu.qslmanagement.api.QslApiException;
 import com.bi1kbu.qslmanagement.api.QslPublicRateLimitService;
 import com.bi1kbu.qslmanagement.api.QslRequestIdentitySupport;
+import com.bi1kbu.qslmanagement.api.QslStationCallSignService;
 import com.bi1kbu.qslmanagement.front.QslPublicCardRequestPageRenderService;
 import java.nio.charset.StandardCharsets;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -22,13 +23,16 @@ public class QslPublicCardRequestPageWebFilter implements AdditionalWebFilter {
 
     private final QslPublicRateLimitService publicRateLimitService;
     private final QslPublicCardRequestPageRenderService pageRenderService;
+    private final QslStationCallSignService stationCallSignService;
 
     public QslPublicCardRequestPageWebFilter(
         QslPublicRateLimitService publicRateLimitService,
-        QslPublicCardRequestPageRenderService pageRenderService
+        QslPublicCardRequestPageRenderService pageRenderService,
+        QslStationCallSignService stationCallSignService
     ) {
         this.publicRateLimitService = publicRateLimitService;
         this.pageRenderService = pageRenderService;
+        this.stationCallSignService = stationCallSignService;
     }
 
     @Override
@@ -43,7 +47,8 @@ public class QslPublicCardRequestPageWebFilter implements AdditionalWebFilter {
         }
         var clientIp = QslRequestIdentitySupport.resolveClientIp(exchange);
         return publicRateLimitService.checkLimit("qsl-card-page", clientIp)
-            .then(writeHtml(exchange, HttpStatus.OK, pageRenderService.render()))
+            .then(stationCallSignService.getExampleCallSign())
+            .flatMap(example -> writeHtml(exchange, HttpStatus.OK, pageRenderService.render(example)))
             .onErrorResume(QslApiException.class,
                 error -> writeHtml(exchange, error.getStatus(), pageRenderService.renderError(error.getMessage())));
     }

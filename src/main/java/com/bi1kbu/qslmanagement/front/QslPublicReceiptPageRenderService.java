@@ -16,7 +16,8 @@ public class QslPublicReceiptPageRenderService {
         String rawCardId,
         String rawRemarks,
         boolean embed,
-        String rawEmbedId
+        String rawEmbedId,
+        String exampleCallSign
     ) {
         var callSign = normalizeCallSign(rawCallSign);
         var cardId = normalizeCardId(rawCardId);
@@ -32,7 +33,9 @@ public class QslPublicReceiptPageRenderService {
             .replace("__CARD_ID_JS__", escapeJs(cardId))
             .replace("__REMARKS_JS__", escapeJs(remarks))
             .replace("__EMBED_MODE__", Boolean.toString(embed))
-            .replace("__EMBED_ID__", escapeJs(embedId));
+            .replace("__EMBED_ID__", escapeJs(embedId))
+            .replace("placeholder=\"例如 __EXAMPLE_CALL_SIGN_HTML__\"",
+                "placeholder=\"例如 " + QslPublicPageRenderSupport.escapeHtml(exampleCallSign) + "\"");
     }
 
     public String renderError(String message, boolean embed) {
@@ -328,7 +331,7 @@ public class QslPublicReceiptPageRenderService {
                   <div class="qsl-form-grid">
                     <label class="qsl-field">
                       <span class="qsl-label">呼号（Call Sign）</span>
-                      <input id="qsl-call-sign-input" class="qsl-input" type="text" value="__CALL_SIGN_HTML__" maxlength="16" placeholder="例如 BI1KBU" />
+                      <input id="qsl-call-sign-input" class="qsl-input" type="text" value="__CALL_SIGN_HTML__" maxlength="16" placeholder="例如 __EXAMPLE_CALL_SIGN_HTML__" />
                     </label>
                     <label class="qsl-field">
                       <span class="qsl-label">卡片编号（Card ID）</span>

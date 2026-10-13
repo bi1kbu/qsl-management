@@ -1206,6 +1206,7 @@ class BridgeService:
         cfg = normalize_bridge_config(config)
         spec = _fetch_station_profile(cfg)
         return {
+            "my_call_sign": str(spec.get("myCallSign", "") or "").strip(),
             "my_name": str(spec.get("myName", "")).strip(),
             "my_phone": str(spec.get("myTelephone", "")).strip(),
             "my_postCode": str(spec.get("myPostalCode", "")).strip(),

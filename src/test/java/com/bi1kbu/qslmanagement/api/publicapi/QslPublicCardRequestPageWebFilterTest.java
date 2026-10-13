@@ -25,7 +25,8 @@ class QslPublicCardRequestPageWebFilterTest {
         when(rateLimitService.checkLimit(anyString(), anyString())).thenReturn(Mono.empty());
         var filter = new QslPublicCardRequestPageWebFilter(
             rateLimitService,
-            new QslPublicCardRequestPageRenderService()
+            new QslPublicCardRequestPageRenderService(),
+            exampleCallSignService()
         );
         var exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/qsl_card").build());
         var chainCalled = new AtomicBoolean(false);
@@ -95,7 +96,8 @@ class QslPublicCardRequestPageWebFilterTest {
         var rateLimitService = mock(QslPublicRateLimitService.class);
         var filter = new QslPublicCardRequestPageWebFilter(
             rateLimitService,
-            new QslPublicCardRequestPageRenderService()
+            new QslPublicCardRequestPageRenderService(),
+            exampleCallSignService()
         );
         var post = MockServerWebExchange.from(
             MockServerHttpRequest.method(HttpMethod.POST, "/qsl_card").build()
@@ -107,5 +109,12 @@ class QslPublicCardRequestPageWebFilterTest {
         filter.filter(unrelated, current -> { calls.incrementAndGet(); return Mono.empty(); }).block();
 
         assertEquals(2, calls.get());
+    }
+
+    private static com.bi1kbu.qslmanagement.api.QslStationCallSignService exampleCallSignService() {
+        var service = org.mockito.Mockito.mock(com.bi1kbu.qslmanagement.api.QslStationCallSignService.class);
+        org.mockito.Mockito.when(service.getExampleCallSign())
+            .thenReturn(reactor.core.publisher.Mono.just("BG1ABC"));
+        return service;
     }
 }
