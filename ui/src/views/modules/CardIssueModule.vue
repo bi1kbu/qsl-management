@@ -360,7 +360,6 @@ const callSignInput = ref('')
 const addressLookupInput = ref('')
 const searchedCallSign = ref('')
 const selectedAddressId = ref('')
-const selectedAddressEmail = ref('')
 const cardRows = ref<CardIssueCardRow[]>([])
 const addressRows = ref<CardIssueAddressRow[]>([])
 const bureauRows = ref<CardIssueAddressRow[]>([])
@@ -381,12 +380,32 @@ const pendingIssueCurrentPage = ref(1)
 const pendingIssuePageSize = ref(20)
 const pendingIssuePageSizeOptions: number[] = [20, 30, 50, 100]
 const systemSetting = ref<SystemSettingSpec>({})
+const busy = computed(
+  () =>
+    loading.value ||
+    issuing.value ||
+    bindingAddress.value ||
+    !!pendingIssueRowName.value ||
+    !!pendingEnvelopeRowName.value ||
+    !!pendingIssueMailRowName.value,
+)
 
 const normalizedKeyword = computed(() => searchedCallSign.value.trim().toUpperCase())
 const hasKeyword = computed(() => normalizedKeyword.value.length > 0)
 
 const normalizedAddressLookupKeyword = computed(() => addressLookupInput.value.trim().toUpperCase())
 const hasAddressKeyword = computed(() => normalizedAddressLookupKeyword.value.length > 0)
+
+watch(callSignInput, (value) => {
+  if (value.trim().toUpperCase() !== normalizedKeyword.value) {
+    searchedCallSign.value = ''
+    selectedAddressId.value = ''
+  }
+})
+
+watch(addressLookupInput, () => {
+  selectedAddressId.value = ''
+})
 
 const allAddressRows = computed(() => {
   if (!showAddressSection.value) {
@@ -416,17 +435,23 @@ const matchedCardRows = computed(() => {
   })
 })
 
-const queriedCardRows = computed(() => {
+const addressBindingTargetRows = computed(() => {
   if (!hasKeyword.value) {
     return []
   }
   return cardRows.value.filter((item) => {
-    const matchesCallSign = item.callSign.toUpperCase().includes(normalizedKeyword.value)
+    const matchesCallSign = item.callSign.trim().toUpperCase() === normalizedKeyword.value
     const matchesActivity =
       showOfflineActivity.value && activityFilter.value
         ? (item.spec.offlineActivityName || '') === activityFilter.value
         : true
-    return matchesCallSign && matchesActivity
+    return (
+      matchesCallSign &&
+      matchesActivity &&
+      !item.envelopePrinted &&
+      !item.cardSent &&
+      !item.receiptConfirmed
+    )
   })
 })
 
@@ -969,7 +994,6 @@ const loadSourceData = async () => {
     const selectedExists = allAddressRows.value.some((item) => item.id === selectedAddressId.value)
     if (!selectedExists) {
       selectedAddressId.value = ''
-      selectedAddressEmail.value = ''
     }
 
     if (!hasKeyword.value && !hasAddressKeyword.value) {
@@ -991,27 +1015,34 @@ const loadSourceData = async () => {
 }
 
 const applySearch = async () => {
+  if (busy.value) {
+    return
+  }
   searchedCallSign.value = callSignInput.value.trim().toUpperCase()
+  selectedAddressId.value = ''
   if (!searchedCallSign.value) {
     feedback.value = '请输入呼号后再查询。'
     return
   }
-  selectedAddressId.value = ''
-  selectedAddressEmail.value = ''
   await loadSourceData()
 }
 
 const clearSearch = () => {
+  if (busy.value) {
+    return
+  }
   callSignInput.value = ''
   searchedCallSign.value = ''
   addressLookupInput.value = ''
   activityFilter.value = ''
   selectedAddressId.value = ''
-  selectedAddressEmail.value = ''
   feedback.value = ''
 }
 
 const selectPendingIssueRow = async (row: CardIssueCardRow) => {
+  if (busy.value) {
+    return
+  }
   const callSign = row.callSign.trim().toUpperCase()
   if (!callSign) {
     return
@@ -1019,17 +1050,12 @@ const selectPendingIssueRow = async (row: CardIssueCardRow) => {
   const boundAddressId = row.addressEntryName.trim()
   const fallbackAddressId = `${callSign}-1`
   const addressKeyword = boundAddressId || fallbackAddressId
-  const boundAddressRow = allAddressRows.value.find(
-    (item) => item.id.trim().toUpperCase() === boundAddressId.toUpperCase(),
-  )
 
   callSignInput.value = callSign
   addressLookupInput.value = addressKeyword
   searchedCallSign.value = callSign
   activityFilter.value = row.spec.offlineActivityName?.trim() || ''
-  selectedAddressId.value = boundAddressRow?.id ?? ''
-  selectedAddressEmail.value =
-    boundAddressRow?.sourceType === 'ADDRESS' ? boundAddressRow.email.trim() : ''
+  selectedAddressId.value = ''
   await loadSourceData()
 }
 
@@ -1037,40 +1063,37 @@ const isAddressSelected = (id: string): boolean => {
   return selectedAddressId.value === id
 }
 
-const selectAddressRow = async (row: CardIssueAddressRow) => {
+const selectAddressRow = (row: CardIssueAddressRow) => {
+  if (busy.value) {
+    return
+  }
   selectedAddressId.value = row.id
-  selectedAddressEmail.value = row.sourceType === 'ADDRESS' ? row.email.trim() : ''
+  feedback.value = `已选定候选地址：${row.id}，核对目标卡片后点击“确认绑定地址”保存。`
+}
 
-  if (!hasKeyword.value || !queriedCardRows.value.length) {
-    feedback.value = `已选定地址：${row.id}`
+const confirmAddressBinding = async () => {
+  if (busy.value) {
+    return
+  }
+  // 固定本次提交的地址和目标，避免异步更新期间使用其他卡片的选择状态。
+  const address = selectedAddressRow.value
+  const targetRows = [...addressBindingTargetRows.value]
+  if (!address || !targetRows.length) {
+    feedback.value = '请查询完整呼号并选定地址；仅可绑定尚未打包、发出或签收的卡片。'
     return
   }
 
   bindingAddress.value = true
+  let savedCount = 0
+  let currentCardId = ''
   try {
-    const targetRows = [...queriedCardRows.value]
-    let changedCount = 0
     for (const cardRow of targetRows) {
-      const previousAddressId = cardRow.spec.addressEntryName.trim().toUpperCase()
-      const nextAddressId = row.id.trim().toUpperCase()
-      const addressChanged = previousAddressId !== nextAddressId
-
+      currentCardId = cardRow.id
+      const previousAddressId = cardRow.spec.addressEntryName
       const nextSpec: CardRecordSpec = {
         ...cardRow.spec,
-        addressEntryName: row.id,
-        mailTargetEmail: row.sourceType === 'ADDRESS' ? row.email.trim() : '',
-        envelopePrinted: addressChanged ? false : cardRow.spec.envelopePrinted,
-        createdMailStatus: addressChanged ? '' : cardRow.spec.createdMailStatus,
-        createdMailSentAt: addressChanged ? '' : cardRow.spec.createdMailSentAt,
-        createdMailLastError: addressChanged ? '' : cardRow.spec.createdMailLastError,
-      }
-
-      const nextStatus: CardRecordStatus = {
-        ...cardRow.status,
-        flowStatus:
-          addressChanged && cardRow.spec.cardIssued
-            ? maxCardFlowStatus(cardRow.status.flowStatus, '已制卡')
-            : cardRow.status.flowStatus,
+        addressEntryName: address.id,
+        mailTargetEmail: address.sourceType === 'ADDRESS' ? address.email.trim() : '',
       }
 
       await updateExtension<CardRecordSpec, CardRecordStatus>(cardRecordPlural, cardRow.id, {
@@ -1081,83 +1104,41 @@ const selectAddressRow = async (row: CardIssueAddressRow) => {
           version: cardRow.metadataVersion,
         },
         spec: nextSpec,
-        status: nextStatus,
+        status: cardRow.status,
       })
-
-      if (addressChanged) {
-        changedCount += 1
-      }
+      savedCount += 1
 
       await appendQslAuditLog({
         action: '绑定地址',
         resourceType: 'card-record',
         resourceName: cardRow.id,
-        detail: `呼号：${cardRow.callSign || '-'}，地址编号：${row.id}，地址变更：${addressChanged ? '是' : '否'}，打包重置：${addressChanged ? '是' : '否'}`,
+        detail: `呼号：${cardRow.callSign || '-'}，原地址编号：${previousAddressId || '-'}，新地址编号：${address.id}，本次目标卡片：${targetRows.map((item) => item.id).join('、')}`,
       })
     }
 
+    selectedAddressId.value = ''
     await loadSourceData()
-    feedback.value = `已绑定地址：${row.id}（共 ${targetRows.length} 条，重置打包 ${changedCount} 条）`
+    feedback.value = `已绑定地址：${address.id}（已保存 ${savedCount} 条）`
   } catch (error) {
-    feedback.value = `绑定地址失败：${error instanceof Error ? error.message : '未知错误'}`
+    await loadSourceData()
+    feedback.value = `绑定地址中止于 ${currentCardId}：已保存 ${savedCount}/${targetRows.length} 条，后续记录未处理。${error instanceof Error ? error.message : '未知错误'}`
   } finally {
     bindingAddress.value = false
   }
 }
 
 const clearSelectedAddress = () => {
+  if (busy.value) {
+    return
+  }
   selectedAddressId.value = ''
-  selectedAddressEmail.value = ''
   feedback.value = '已清空选定地址。'
 }
 
-const resolveDefaultAddressRow = (callSign: string): CardIssueAddressRow | null => {
-  const normalizedCallSign = callSign.trim().toUpperCase()
-  if (!normalizedCallSign) {
-    return null
-  }
-  const expectedId = `${normalizedCallSign}-1`
-  return addressRows.value.find((item) => item.id.trim().toUpperCase() === expectedId) ?? null
-}
-
-const resolveAddressBinding = (
-  spec: CardRecordSpec,
-): Pick<CardRecordSpec, 'addressEntryName' | 'mailTargetEmail'> => {
-  if (!selectedAddressId.value) {
-    const boundAddressId = spec.addressEntryName.trim()
-    if (boundAddressId) {
-      const boundAddressRow = allAddressRows.value.find(
-        (item) => item.id.trim().toUpperCase() === boundAddressId.toUpperCase(),
-      )
-      return {
-        addressEntryName: boundAddressId,
-        mailTargetEmail:
-          boundAddressRow?.sourceType === 'ADDRESS'
-            ? boundAddressRow.email.trim()
-            : spec.mailTargetEmail,
-      }
-    }
-
-    const defaultAddressRow = resolveDefaultAddressRow(spec.callSign)
-    if (defaultAddressRow) {
-      return {
-        addressEntryName: defaultAddressRow.id,
-        mailTargetEmail: defaultAddressRow.email.trim(),
-      }
-    }
-    return {
-      addressEntryName: spec.addressEntryName,
-      mailTargetEmail: spec.mailTargetEmail,
-    }
-  }
-
-  return {
-    addressEntryName: selectedAddressId.value,
-    mailTargetEmail: selectedAddressEmail.value,
-  }
-}
-
 const confirmCardIssue = async () => {
+  if (busy.value) {
+    return
+  }
   if (!hasKeyword.value) {
     feedback.value = '请先输入呼号并查询。'
     return
@@ -1211,7 +1192,7 @@ const confirmCardIssue = async () => {
 }
 
 const confirmCardIssueForRow = async (row: CardIssueCardRow) => {
-  if (row.cardIssued) {
+  if (busy.value || row.cardIssued) {
     return
   }
   pendingIssueRowName.value = row.id
@@ -1251,15 +1232,13 @@ const confirmCardIssueForRow = async (row: CardIssueCardRow) => {
 }
 
 const confirmEnvelopePrintedForRow = async (row: CardIssueCardRow) => {
-  if (!row.cardIssued || row.envelopePrinted) {
+  if (busy.value || !row.cardIssued || row.envelopePrinted) {
     return
   }
   pendingEnvelopeRowName.value = row.id
   try {
-    const binding = resolveAddressBinding(row.spec)
     const nextSpec: CardRecordSpec = {
       ...row.spec,
-      ...binding,
       envelopePrinted: true,
     }
     const nextStatus: CardRecordStatus = {
@@ -1298,6 +1277,7 @@ const confirmEnvelopePrintedForRow = async (row: CardIssueCardRow) => {
 
 const sendCreatedMailForRow = async (row: CardIssueCardRow) => {
   if (
+    busy.value ||
     !row.cardIssued ||
     !row.envelopePrinted ||
     ['SENT', 'SKIPPED'].includes(row.spec.createdMailStatus || '')
@@ -1322,6 +1302,7 @@ const sendCreatedMailForRow = async (row: CardIssueCardRow) => {
 
 const markCreatedMailAsSentForRow = async (row: CardIssueCardRow) => {
   if (
+    busy.value ||
     !row.cardIssued ||
     !row.envelopePrinted ||
     ['SENT', 'SKIPPED'].includes(row.spec.createdMailStatus || '')
@@ -1378,6 +1359,7 @@ onMounted(loadSourceData)
             <input
               v-model.trim="callSignInput"
               type="text"
+              :disabled="busy"
               placeholder="输入呼号后查询卡片信息"
               @keyup.enter="applySearch"
             />
@@ -1390,6 +1372,7 @@ onMounted(loadSourceData)
             <input
               v-model.trim="addressLookupInput"
               type="text"
+              :disabled="busy"
               placeholder="输入呼号或卡片局检索地址"
               @keyup.enter="applySearch"
             />
@@ -1399,7 +1382,7 @@ onMounted(loadSourceData)
         <label v-if="showOfflineActivity" class="qsl-field">
           <span class="qsl-field__label">活动筛选</span>
           <div class="qsl-input-shell">
-            <select v-model="activityFilter">
+            <select v-model="activityFilter" :disabled="busy">
               <option value="">全部活动</option>
               <option v-for="item in activityFilterOptions" :key="item" :value="item">
                 {{ item }}
@@ -1410,23 +1393,30 @@ onMounted(loadSourceData)
       </div>
 
       <div class="qsl-actions">
-        <VButton type="secondary" :disabled="loading || issuing" @click="applySearch">查询</VButton>
-        <VButton :disabled="loading || issuing" @click="clearSearch">清空</VButton>
+        <VButton type="secondary" :disabled="busy" @click="applySearch">查询</VButton>
+        <VButton :disabled="busy" @click="clearSearch">清空</VButton>
         <VButton
-          :disabled="loading || issuing || !hasKeyword || !matchedCardRows.length"
+          :disabled="busy || !hasKeyword || !matchedCardRows.length"
           @click="confirmCardIssue"
         >
           确认制卡
         </VButton>
         <VButton
           v-if="showAddressSection"
-          :disabled="loading || issuing || !selectedAddressId"
+          :disabled="busy || !selectedAddressId || !addressBindingTargetRows.length"
+          @click="confirmAddressBinding"
+        >
+          确认绑定地址
+        </VButton>
+        <VButton
+          v-if="showAddressSection"
+          :disabled="busy || !selectedAddressId"
           @click="clearSelectedAddress"
         >
           清空已选地址
         </VButton>
         <span v-if="showAddressSection && selectedAddressRow" class="qsl-selected-address">
-          已选地址：{{ selectedAddressRow.id }}
+          候选地址（待确认绑定）：{{ selectedAddressRow.id }}
           <template v-if="selectedAddressRow.sourceType === 'ADDRESS'"
             >（{{ selectedAddressRow.callSign || '-' }}）</template
           >
@@ -1434,6 +1424,11 @@ onMounted(loadSourceData)
         </span>
         <span v-if="feedback" class="qsl-feedback">{{ feedback }}</span>
       </div>
+      <p v-if="showAddressSection && hasKeyword" class="qsl-address-binding-targets">
+        目标卡片（本次地址绑定范围）：
+        {{ addressBindingTargetRows.map((row) => row.id).join('、') || '无可绑定卡片' }}。
+        仅包含呼号精确匹配且尚未打包、发出或签收的卡片；选定地址后需点击“确认绑定地址”保存。
+      </p>
     </VCard>
 
     <VCard title="卡片信息">
@@ -1521,12 +1516,7 @@ onMounted(loadSourceData)
           <VButton
             size="xs"
             type="secondary"
-            :disabled="
-              loading ||
-              issuing ||
-              bindingAddress ||
-              isAddressSelected(toCardIssueAddressRow(row).id)
-            "
+            :disabled="busy || isAddressSelected(toCardIssueAddressRow(row).id)"
             @click="selectAddressRow(toCardIssueAddressRow(row))"
           >
             {{ isAddressSelected(toCardIssueAddressRow(row).id) ? '已选定' : '选定地址' }}
@@ -1569,12 +1559,7 @@ onMounted(loadSourceData)
               v-if="!toCardIssueCardRow(row).cardIssued"
               size="xs"
               type="secondary"
-              :disabled="
-                pendingIssueRowName === toCardIssueCardRow(row).id ||
-                pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
-                pendingIssueMailRowName === toCardIssueCardRow(row).id ||
-                loading
-              "
+              :disabled="busy"
               @click="confirmCardIssueForRow(toCardIssueCardRow(row))"
             >
               确认制卡
@@ -1583,13 +1568,7 @@ onMounted(loadSourceData)
               v-if="!isOfflineExchangeScene && !toCardIssueCardRow(row).envelopePrinted"
               size="xs"
               type="secondary"
-              :disabled="
-                !toCardIssueCardRow(row).cardIssued ||
-                pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
-                pendingIssueRowName === toCardIssueCardRow(row).id ||
-                pendingIssueMailRowName === toCardIssueCardRow(row).id ||
-                loading
-              "
+              :disabled="busy || !toCardIssueCardRow(row).cardIssued"
               @click="confirmEnvelopePrintedForRow(toCardIssueCardRow(row))"
             >
               确认打包
@@ -1606,10 +1585,7 @@ onMounted(loadSourceData)
               :disabled="
                 !toCardIssueCardRow(row).cardIssued ||
                 !toCardIssueCardRow(row).envelopePrinted ||
-                pendingIssueMailRowName === toCardIssueCardRow(row).id ||
-                pendingIssueRowName === toCardIssueCardRow(row).id ||
-                pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
-                loading
+                busy
               "
               @click="sendCreatedMailForRow(toCardIssueCardRow(row))"
             >
@@ -1626,10 +1602,7 @@ onMounted(loadSourceData)
               :disabled="
                 !toCardIssueCardRow(row).cardIssued ||
                 !toCardIssueCardRow(row).envelopePrinted ||
-                pendingIssueMailRowName === toCardIssueCardRow(row).id ||
-                pendingIssueRowName === toCardIssueCardRow(row).id ||
-                pendingEnvelopeRowName === toCardIssueCardRow(row).id ||
-                loading
+                busy
               "
               @click="markCreatedMailAsSentForRow(toCardIssueCardRow(row))"
             >

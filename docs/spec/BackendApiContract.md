@@ -77,6 +77,12 @@ API 版本：`v1alpha1`
 | 审计日志 | `QslAuditLog` | `qsl-audit-logs` | `report-auditlog` |
 | 导入导出任务 | `ImportExportJob` | `import-export-jobs` | `import-export` |
 
+### 制卡签发写入范围（2026-10-17）
+
+制卡签发沿用 `PUT /apis/qsl-management.bi1kbu.com/v1alpha1/card-records/{name}`，携带 `metadata.version（资源版本）`，由 Halo Extension RBAC 验证登录身份与资源更新权限。界面菜单节点为 `card-issue:view/edit`；资源权限由既有 `qsl-management-card-record-view/edit` 等角色模板提供，编辑模板依赖查看模板，地址与卡片局读取沿用 `qsl-management-address-bureau-view`，未新增权限。
+
+“确认打包”仅改变当前卡片的打包与流转状态，保留地址及邮箱。候选地址仅在“确认绑定地址”提交时写入呼号精确匹配且未打包、未发出、未签收的卡片；审计保存原地址、新地址与目标编号。每个更新仍是独立请求，批次失败停止后续处理并显示已保存数量，不宣称批量事务原子性。后续邮件策略接口保持原合同；无新路由、模型迁移或历史邮件补发。
+
 ## 6. 控制台自定义 API
 
 基础路径：`/apis/console.api.qsl-management.bi1kbu.com/v1alpha1`
